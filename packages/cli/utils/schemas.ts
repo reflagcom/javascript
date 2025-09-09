@@ -56,6 +56,7 @@ export const EnvironmentQuerySchema = z
     envId: z.string().min(1).describe("Environment identifier"),
   })
   .strict();
+
 export type EnvironmentQuery = z.infer<typeof EnvironmentQuerySchema>;
 
 export const ExternalIdSchema = z

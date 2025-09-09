@@ -12,7 +12,7 @@ test("Acceptance", async ({ page }) => {
 
   // Mock API calls with assertions
   await page.route(`${API_BASE_URL}/features/evaluated*`, async (route) => {
-    successfulRequests.push("FEATURES");
+    successfulRequests.push("FLAGS");
     await route.fulfill({
       status: 200,
       body: JSON.stringify({
@@ -95,8 +95,8 @@ test("Acceptance", async ({ page }) => {
   // Golden path requests
   await page.evaluate(`
     ;(async () => {
-    const { BucketClient } = await import("/dist/bucket-browser-sdk.mjs");
-      const bucketClient = new BucketClient({
+    const { ReflagClient } = await import("/dist/reflag-browser-sdk.mjs");
+      const reflagClient = new ReflagClient({
         publishableKey: "${KEY}",
         user: {
           id: "foo",
@@ -107,9 +107,9 @@ test("Acceptance", async ({ page }) => {
           name: "bar corp",
         }
       });
-      await bucketClient.initialize();
-      await bucketClient.track("baz", { baz: true }, "foo", "bar");
-      await bucketClient.feedback({
+      await reflagClient.initialize();
+      await reflagClient.track("baz", { baz: true }, "foo", "bar");
+      await reflagClient.feedback({
         featureId: "featureId1",
         score: 5,
         comment: "test!",
@@ -121,7 +121,7 @@ test("Acceptance", async ({ page }) => {
 
   // Assert all API requests were made
   expect(successfulRequests).toEqual([
-    "FEATURES",
+    "FLAGS",
     "USER",
     "COMPANY",
     "EVENT",

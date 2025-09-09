@@ -32,9 +32,9 @@ export default class BatchBuffer<T> {
       "maxSize must be greater than 0",
     );
     ok(
-      (typeof options.intervalMs === "number" && options.intervalMs > 0) ||
+      (typeof options.intervalMs === "number" && options.intervalMs >= 0) ||
         typeof options.intervalMs !== "number",
-      "intervalMs must be greater than 0",
+      "intervalMs must be greater than or equal to 0",
     );
 
     this.flushHandler = options.flushHandler;
@@ -53,7 +53,7 @@ export default class BatchBuffer<T> {
 
     if (this.buffer.length >= this.maxSize) {
       await this.flush();
-    } else if (!this.timer) {
+    } else if (!this.timer && this.intervalMs > 0) {
       this.timer = setTimeout(() => this.flush(), this.intervalMs).unref();
     }
   }

@@ -9,13 +9,14 @@ import { handleError } from "../utils/errors.js";
 export const listAppsAction = async () => {
   const baseUrl = configStore.getConfig("baseUrl");
   const spinner = ora(`Loading apps from ${chalk.cyan(baseUrl)}...`).start();
+
   try {
-    const apps = await listApps();
+    const apps = listApps();
     spinner.succeed(`Loaded apps from ${chalk.cyan(baseUrl)}.`);
     console.table(apps.map(({ name, id, demo }) => ({ name, id, demo })));
   } catch (error) {
     spinner.fail("Failed to list apps.");
-    void handleError(error, "Apps List");
+    handleError(error, "Apps List");
   }
 };
 

@@ -50,50 +50,59 @@ describe("rateLimiter", () => {
     });
   });
 
-  describe("clear", () => {
-    it("should clear all events when 'all' is true", () => {
+  describe("clearStale", () => {
+    it("should clear expired events, but keep non-expired", () => {
       const rateLimiter = newRateLimiter(windowSizeMs);
+      rateLimiter.isAllowed("key1");
+      expect(rateLimiter.cacheSize()).toBe(1);
 
-      expect(rateLimiter.isAllowed("key1")).toBe(true);
-      expect(rateLimiter.isAllowed("key2")).toBe(true);
-      expect(rateLimiter.isAllowed("key1")).toBe(false);
+      vi.advanceTimersByTime(windowSizeMs / 2); // 500ms
+      rateLimiter.isAllowed("key2");
+      expect(rateLimiter.cacheSize()).toBe(2);
+
+      vi.advanceTimersByTime(windowSizeMs / 2 + 1); // 1001ms total
+      // at this point, key1 is stale, but key2 is not
+
+      rateLimiter.clearStale();
+      expect(rateLimiter.cacheSize()).toBe(1);
+
+      // key2 should still be in the cache, and thus rate-limited
       expect(rateLimiter.isAllowed("key2")).toBe(false);
-
-      rateLimiter.clear(true);
-
+      // key1 should have been removed, so it's allowed again
       expect(rateLimiter.isAllowed("key1")).toBe(true);
-      expect(rateLimiter.isAllowed("key2")).toBe(true);
-    });
-
-    it("should clear expired events when 'all' is false, but keep non-expired", () => {
-      const rateLimiter = newRateLimiter(windowSizeMs);
-      expect(rateLimiter.isAllowed("key1")).toBe(true);
-
-      vi.setSystemTime(new Date().getTime() + windowSizeMs + 1);
-      expect(rateLimiter.isAllowed("key2")).toBe(true);
-
-      rateLimiter.clear(false);
-
-      expect(rateLimiter.isAllowed("key1")).toBe(true);
-      expect(rateLimiter.isAllowed("key2")).toBe(false);
+      expect(rateLimiter.cacheSize()).toBe(2);
     });
   });
 
   it("should periodically clean up expired keys", () => {
+    const mathRandomSpy = vi.spyOn(Math, "random").mockReturnValue(0.5);
     const rateLimiter = newRateLimiter(windowSizeMs);
 
+    // Add key1, cache size is 1.
     rateLimiter.isAllowed("key1");
-    vi.advanceTimersByTime(windowSizeMs);
-    expect(rateLimiter.isAllowed("key1")).toBe(false);
+    expect(rateLimiter.cacheSize()).toBe(1);
 
+    // Advance time so key1 becomes stale.
     vi.advanceTimersByTime(windowSizeMs + 1);
-    expect(rateLimiter.isAllowed("key1")).toBe(true);
 
+    // Trigger another call for a different key.
+    // This should not clear anything, cache size becomes 2.
     rateLimiter.isAllowed("key2");
+    expect(rateLimiter.cacheSize()).toBe(2);
 
-    vi.advanceTimersByTime(windowSizeMs + 1);
+    // Mock random to trigger clearStale on the next call.
+    mathRandomSpy.mockReturnValue(0.005);
 
+    // This call for a new key ("key3") should trigger a cleanup.
+    // "key1" is stale and will be cleared. "key2" remains. "key3" is added.
+    // Cache size should go from 2 -> 1 (clear) -> 2 (add).
+    rateLimiter.isAllowed("key3");
+    expect(rateLimiter.cacheSize()).toBe(2);
+
+    // To confirm "key1" was cleared, we should be able to add it again.
     expect(rateLimiter.isAllowed("key1")).toBe(true);
-    expect(rateLimiter.isAllowed("key2")).toBe(true);
+    expect(rateLimiter.cacheSize()).toBe(3);
+
+    mathRandomSpy.mockRestore();
   });
 });

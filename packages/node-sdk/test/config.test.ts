@@ -7,12 +7,12 @@ describe("config tests", () => {
     const config = loadConfig("test/testConfig.json");
 
     expect(config).toEqual({
-      featureOverrides: {
-        myFeature: {
+      flagOverrides: {
+        myFlag: {
           isEnabled: true,
         },
-        myFeatureFalse: false,
-        myFeatureWithConfig: {
+        myFlagFalse: false,
+        myFlagWithConfig: {
           isEnabled: true,
           config: {
             key: "config-1",
@@ -27,22 +27,22 @@ describe("config tests", () => {
   });
 
   it("should load ENV VARS", () => {
-    process.env.BUCKET_SECRET_KEY = "mySecretKeyFromEnv";
-    process.env.BUCKET_OFFLINE = "true";
-    process.env.BUCKET_HOST = "http://localhost:4999";
-    process.env.BUCKET_FEATURES_ENABLED = "myNewFeature";
-    process.env.BUCKET_FEATURES_DISABLED = "myNewFeatureFalse";
+    process.env.REFLAG_SECRET_KEY = "mySecretKeyFromEnv";
+    process.env.REFLAG_OFFLINE = "true";
+    process.env.REFLAG_API_BASE_URL = "http://localhost:4999";
+    process.env.REFLAG_FLAGS_ENABLED = "myNewFlag";
+    process.env.REFLAG_FLAGS_DISABLED = "myNewFlagFalse";
 
     const config = loadConfig("test/testConfig.json");
     expect(config).toEqual({
-      featureOverrides: {
-        myFeature: {
+      flagOverrides: {
+        myFlag: {
           isEnabled: true,
         },
-        myFeatureFalse: false,
-        myNewFeature: true,
-        myNewFeatureFalse: false,
-        myFeatureWithConfig: {
+        myFlagFalse: false,
+        myNewFlag: true,
+        myNewFlagFalse: false,
+        myFlagWithConfig: {
           isEnabled: true,
           config: {
             key: "config-1",

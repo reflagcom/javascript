@@ -1,29 +1,6 @@
 import { authRequest } from "../utils/auth.js";
 import { KeyFormat } from "../utils/gen.js";
 
-export type BootstrapResponse = {
-  org: Org;
-  user: BucketUser;
-  segments: { [appId: string]: Segment[] };
-};
-
-export type Org = {
-  id: string;
-  name: string;
-  logoUrl: string;
-  apps: App[];
-  inviteKey: string;
-  createdAt: Date;
-  updatedAt: Date;
-  trialEndsAt: null;
-  suspendedAt: null;
-  accessLevel: string;
-  domain: null;
-  domainAutoJoin: boolean;
-  isGlobal: boolean;
-  featureKeyFormat: KeyFormat;
-};
-
 export type Environment = {
   id: string;
   name: string;
@@ -38,21 +15,22 @@ export type App = {
   environments: Environment[];
 };
 
-export type BucketUser = {
+export type ReflagUser = {
   id: string;
   email: string;
   name: string;
-  createdAt: Date;
-  updatedAt: Date;
-  avatarUrl: string;
-  isAdmin: boolean;
 };
 
-export type Segment = {
+export type Org = {
   id: string;
   name: string;
-  system: boolean;
-  isAllSegment: boolean;
+  apps: App[];
+  featureKeyFormat: KeyFormat;
+};
+
+export type BootstrapResponse = {
+  org: Org;
+  user: ReflagUser;
 };
 
 let bootstrapResponse: BootstrapResponse | null = null;
@@ -97,7 +75,7 @@ export function getApp(id: string): App {
   return app;
 }
 
-export function getBucketUser(): BucketUser {
+export function getReflagUser(): ReflagUser {
   if (!bootstrapResponse) {
     throw new Error("CLI has not been bootstrapped.");
   }
@@ -105,11 +83,4 @@ export function getBucketUser(): BucketUser {
     throw new Error("No user found.");
   }
   return bootstrapResponse.user;
-}
-
-export function listSegments(appId: string): Segment[] {
-  if (!bootstrapResponse) {
-    throw new Error("CLI has not been bootstrapped.");
-  }
-  return bootstrapResponse.segments[appId];
 }

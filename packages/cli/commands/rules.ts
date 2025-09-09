@@ -16,8 +16,8 @@ type RulesArgs = {
   yes?: boolean;
 };
 
-const BUCKET_SECTION_START = "<!-- BUCKET_START -->";
-const BUCKET_SECTION_END = "<!-- BUCKET_END -->";
+const REFLAG_SECTION_START = "<!-- REFLAG_START -->";
+const REFLAG_SECTION_END = "<!-- REFLAG_END -->";
 
 async function confirmOverwrite(
   filePath: string,
@@ -42,7 +42,7 @@ async function confirmOverwrite(
 }
 
 function wrapInMarkers(content: string): string {
-  return `${BUCKET_SECTION_START}\n\n${content}\n\n${BUCKET_SECTION_END}`;
+  return `${REFLAG_SECTION_START}\n\n${content}\n\n${REFLAG_SECTION_END}`;
 }
 
 function replaceOrAppendSection(
@@ -51,7 +51,7 @@ function replaceOrAppendSection(
 ): string {
   const wrappedContent = wrapInMarkers(newContent);
   const sectionRegex = new RegExp(
-    `${BUCKET_SECTION_START}[\\s\\S]*?${BUCKET_SECTION_END}`,
+    `${REFLAG_SECTION_START}[\\s\\S]*?${REFLAG_SECTION_END}`,
     "g",
   );
 
@@ -73,7 +73,7 @@ export const rulesAction = async ({
 
   // Determine destination and content based on format
   if (format === "cursor") {
-    destPath = join(projectPath, ".cursor", "rules", "bucket.mdc");
+    destPath = join(projectPath, ".cursor", "rules", "reflag.mdc");
     content = getCursorRules();
   } else if (format === "copilot") {
     destPath = join(projectPath, ".github", "copilot-instructions.md");
@@ -101,7 +101,7 @@ ${chalk.grey("These rules should be committed to your project's version control.
       );
     } catch (error) {
       spinner.fail("Failed to add rules.");
-      void handleError(error, "Rules");
+      handleError(error, "Rules");
     }
   } else {
     console.log("Skipping adding rules.");
@@ -111,7 +111,7 @@ ${chalk.grey("These rules should be committed to your project's version control.
 export function registerRulesCommand(cli: Command) {
   cli
     .command("rules")
-    .description("Add Bucket LLM rules to your project.")
+    .description("Add Reflag LLM rules to your project.")
     .addOption(rulesFormatOption)
     .addOption(yesOption)
     .action(rulesAction);

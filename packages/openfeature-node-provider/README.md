@@ -1,35 +1,48 @@
-# Bucket Node.js OpenFeature Provider
+# Reflag Node.js OpenFeature Provider
 
-The official OpenFeature Node.js provider for [Bucket](https://bucket.co) feature management service.
+The official OpenFeature Node.js provider for [Reflag](https://reflag.com) feature management service.
 
 ## Installation
 
 ```shell
-npm install @bucketco/openfeature-node-provider
+npm install @reflag/openfeature-node-provider
 ```
 
 ### Required peer dependencies
 
 The OpenFeature SDK is required as peer dependency.
 The minimum required version of `@openfeature/server-sdk` currently is `1.13.5`.
-The minimum required version of `@bucketco/node-sdk` currently is `2.0.0`.
+The minimum required version of `@reflag/node-sdk` currently is `2.0.0`.
 
 ```shell
-npm install @openfeature/server-sdk @bucketco/node-sdk
+npm install @openfeature/server-sdk @reflag/node-sdk
 ```
+
+## Migrating from Bucket OpenFeature SDK
+
+If you have been using the Bucket SDKs, the following list will help you migrate to Reflag SDK:
+
+- `Bucket*` classes, and types have been renamed to `Reflag*` (e.g. `BucketClient` is now `ReflagClient`)
+- All environment variables that were prefixed with `BUCKET_` are now prefixed with `REFLAG_`
+- The `BUCKET_HOST` environment variable and `host` option have been removed from `ReflagClient` constructor, use `REFLAG_API_BASE_URL` instead
+- The `BUCKET_FEATURES_ENABLED` and `BUCKET_FEATURES_DISABLED` have been renamed to `REFLAG_FLAGS_ENABLED` and `REFLAG_FLAGS_DISABLED`
+- The default configuration file has been renamed from `bucketConfig.json` to `reflag.config.json`
+- The `fallbackFeatures` property in client constructor and configuration files has been renamed to `fallbackFlags`
+- `featureKey` has been renamed to `flagKey` in all methods that accepts that argument
+- The SDKs will not emit `evaluate` and `evaluate-config` events anymore
 
 ## Usage
 
-The provider uses the [Bucket Node.js SDK](https://docs.bucket.co/quickstart/supported-languages-frameworks/node.js-sdk).
-The available options can be found in the [Bucket Node.js SDK](https://github.com/bucketco/bucket-javascript-sdk/tree/main/packages/node-sdk#initialization-options).
+The provider uses the [Reflag Node.js SDK](https://docs.reflag.com/quickstart/supported-languages-frameworks/node.js-sdk).
+The available options can be found in the [Reflag Node.js SDK](https://github.com/reflagcom/javascript/tree/main/packages/node-sdk#initialization-options).
 
 ### Example using the default configuration
 
 ```typescript
-import { BucketNodeProvider } from "@bucketco/openfeature-node-provider";
+import { ReflagNodeProvider } from "@reflag/openfeature-node-provider";
 import { OpenFeature } from "@openfeature/server-sdk";
 
-const provider = new BucketNodeProvider({ secretKey });
+const provider = new ReflagNodeProvider({ secretKey });
 
 await OpenFeature.setProviderAndWait(provider);
 
@@ -46,8 +59,8 @@ const requestContext = {
 
 const client = OpenFeature.getClient();
 
-const enterpriseFeatureEnabled = await client.getBooleanValue(
-  "enterpriseFeature",
+const enterpriseFlagEnabled = await client.getBooleanValue(
+  "enterpriseFlag",
   false,
   requestContext,
 );
@@ -55,7 +68,7 @@ const enterpriseFeatureEnabled = await client.getBooleanValue(
 
 ## Feature resolution methods
 
-The Bucket OpenFeature Provider implements the OpenFeature evaluation interface for different value types. Each method handles the resolution of feature flags according to the OpenFeature specification.
+The Reflag OpenFeature Provider implements the OpenFeature evaluation interface for different value types. Each method handles the resolution of flags according to the OpenFeature specification.
 
 ### Common behavior
 
@@ -74,7 +87,7 @@ All resolution methods share these behaviors:
 client.getBooleanValue("my-flag", false);
 ```
 
-Returns the feature's enabled state. This is the most common use case for feature flags.
+Returns the flags's enabled state. This is the most common use case for flags.
 
 #### String Resolution
 
@@ -82,7 +95,7 @@ Returns the feature's enabled state. This is the most common use case for featur
 client.getStringValue("my-flag", "default");
 ```
 
-Returns the feature's remote config key (also known as "variant"). Useful for multi-variate use cases.
+Returns the flags's remote config key (also known as "variant"). Useful for multi-variate use cases.
 
 #### Number Resolution
 
@@ -90,7 +103,7 @@ Returns the feature's remote config key (also known as "variant"). Useful for mu
 client.getNumberValue("my-flag", 0);
 ```
 
-Not directly supported by Bucket. Use `getObjectValue` instead for numeric configurations.
+Not directly supported by Reflag. Use `getObjectValue` instead for numeric configurations.
 
 #### Object Resolution
 
@@ -101,21 +114,21 @@ client.getObjectValue("my-flag", "string-value");
 client.getObjectValue("my-flag", 199);
 ```
 
-Returns the feature's remote config payload with type validation. This is the most flexible method,
+Returns the flag's remote config payload with type validation. This is the most flexible method,
 allowing for complex configuration objects or simple types.
 
-The object resolution performs runtime type checking between the default value and the feature payload to ensure type safety.
+The object resolution performs runtime type checking between the default value and the flag payload to ensure type safety.
 
 ## Translating Evaluation Context
 
-Bucket uses a context object of the following shape:
+Reflag uses a context object of the following shape:
 
 ```ts
 /**
  * Describes the current user context, company context, and other context.
- * This is used to determine if feature targeting matches and to track events.
+ * This is used to determine if flag targeting matches and to track events.
  **/
-export type BucketContext = {
+export type ReflagContext = {
   /**
    * The user context. If the user is set, the user ID is required.
    */
@@ -139,14 +152,14 @@ export type BucketContext = {
 };
 ```
 
-To use the Bucket Node.js OpenFeature provider, you must convert your OpenFeature contexts to Bucket contexts.
-You can achieve this by supplying a context translation function which takes the Open Feature context and returns
-a corresponding Bucket Context:
+To use the Reflag Node.js OpenFeature provider, you must convert your OpenFeature contexts to Reflag contexts.
+You can achieve this by supplying a context translation function which takes the OpenFeature context and returns
+a corresponding Reflag Context:
 
 ```ts
-import { BucketNodeProvider } from "@openfeature/bucket-node-provider";
+import { ReflagNodeProvider } from "@openfeature/reflag-node-provider";
 
-const contextTranslator = (context: EvaluationContext): BucketContext => {
+const contextTranslator = (context: EvaluationContext): ReflagContext => {
   return {
     user: {
       id: context.targetingKey ?? context["userId"]?.toString(),
@@ -164,33 +177,30 @@ const contextTranslator = (context: EvaluationContext): BucketContext => {
   };
 };
 
-const provider = new BucketNodeProvider({ secretKey, contextTranslator });
+const provider = new ReflagNodeProvider({ secretKey, contextTranslator });
 
 OpenFeature.setProvider(provider);
 ```
 
 ## Tracking feature adoption
 
-The Bucket OpenFeature provider supports the OpenFeature Tracking API.
+The Reflag OpenFeature provider supports the OpenFeature Tracking API.
 It's straight forward to start sending tracking events through OpenFeature.
 
 Simply call the "track" method on the OpenFeature client:
 
 ```typescript
-import { BucketNodeProvider } from "@bucketco/openfeature-node-provider";
+import { ReflagNodeProvider } from "@reflag/openfeature-node-provider";
 import { OpenFeature } from "@openfeature/server-sdk";
 
-const provider = new BucketNodeProvider({ secretKey });
+const provider = new ReflagNodeProvider({ secretKey });
 
 await OpenFeature.setProviderAndWait(provider);
 
 const client = OpenFeature.getClient();
 
 // `evaluationContext` is whatever you use to evaluate features based off
-const enterpriseFeatureEnabled = await client.track(
-  "huddles",
-  evaluationContext,
-);
+const enterpriseFlagEnabled = await client.track("huddles", evaluationContext);
 ```
 
 ## License

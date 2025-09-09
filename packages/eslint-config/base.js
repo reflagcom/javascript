@@ -7,8 +7,7 @@ const globals = require("globals");
 const tsPlugin = require("@typescript-eslint/eslint-plugin");
 const tsParser = require("@typescript-eslint/parser");
 const prettierConfig = require("eslint-config-prettier");
-const reactPlugin = require("eslint-plugin-react");
-const hooksPlugin = require("eslint-plugin-react-hooks");
+const vuePlugin = require("eslint-plugin-vue");
 
 module.exports = [
   {
@@ -24,13 +23,12 @@ module.exports = [
       "**/*.jsx",
       "**/*.ts",
       "**/*.tsx",
+      "**/*.vue",
     ],
     plugins: {
       import: importsPlugin,
       "unused-imports": unusedImportsPlugin,
       "simple-import-sort": sortImportsPlugin,
-      react: reactPlugin,
-      "react-hooks": hooksPlugin,
     },
     languageOptions: {
       globals: {
@@ -62,38 +60,6 @@ module.exports = [
     rules: {
       ...jsPlugin.configs.recommended.rules,
       ...importsPlugin.configs.recommended.rules,
-      ...reactPlugin.configs.recommended.rules,
-      ...hooksPlugin.configs.recommended.rules,
-
-      "react/jsx-key": [
-        "error",
-        {
-          checkFragmentShorthand: true,
-        },
-      ],
-      "react/self-closing-comp": ["error"],
-      "react/prefer-es6-class": ["error"],
-      "react/prefer-stateless-function": ["warn"],
-      "react/no-did-mount-set-state": ["error"],
-      "react/no-did-update-set-state": ["error"],
-      "react/jsx-filename-extension": [
-        "warn",
-        {
-          extensions: [".mdx", ".jsx", ".tsx"],
-        },
-      ],
-      "react/react-in-jsx-scope": ["off"],
-      "react/jsx-sort-props": [
-        "error",
-        {
-          callbacksLast: true,
-          shorthandFirst: false,
-          shorthandLast: true,
-          ignoreCase: true,
-          noSortAlphabetically: false,
-          reservedFirst: true,
-        },
-      ],
 
       // Imports
       "unused-imports/no-unused-vars": [
@@ -120,10 +86,10 @@ module.exports = [
             [
               `^(${builtinModules.join("|")})(/|$)`,
               "^react",
-              "^(?!@bucket)@?\\w",
+              "^(?!@reflag)@?\\w",
             ],
-            // Shared bucket packages.
-            ["^@bucketco/(.*)$"],
+            // Shared reflag packages.
+            ["^@reflag/(.*)$"],
             // Path aliased root, parent imports, and just `..`.
             ["^@/", "^\\.\\.(?!/?$)", "^\\.\\./?$"],
             // Relative imports, same-folder imports, and just `.`.
@@ -140,6 +106,7 @@ module.exports = [
     files: ["**/*.ts", "**/*.tsx"],
     plugins: {
       "@typescript-eslint": tsPlugin,
+      vue: vuePlugin,
     },
     languageOptions: {
       parser: tsParser,
@@ -190,6 +157,7 @@ module.exports = [
       "**/*.jsx",
       "**/*.ts",
       "**/*.tsx",
+      "**/*.vue",
     ],
     rules: {
       ...prettierConfig.rules,

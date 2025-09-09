@@ -1,11 +1,11 @@
 "use client";
 
-import { BucketBrowserSDKProvider } from "@bucketco/openfeature-browser-provider";
+import { ReflagBrowserSDKProvider } from "@reflag/openfeature-browser-provider";
 import { OpenFeature } from "@openfeature/react-sdk";
 
-const publishableKey = process.env.NEXT_PUBLIC_BUCKET_PUBLISHABLE_KEY;
+const publishableKey = process.env.NEXT_PUBLIC_REFLAG_PUBLISHABLE_KEY;
 
-let bucketProvider: BucketBrowserSDKProvider | null = null;
+let reflagProvider: ReflagBrowserSDKProvider | null = null;
 let initialized = false;
 
 export async function initOpenFeature() {
@@ -15,12 +15,12 @@ export async function initOpenFeature() {
   initialized = true;
 
   if (!publishableKey) {
-    console.error("No publishable key set for Bucket");
+    console.error("No publishable key set for Reflag");
     return;
   }
-  bucketProvider = new BucketBrowserSDKProvider({
+  reflagProvider = new ReflagBrowserSDKProvider({
     publishableKey,
-    fallbackFeatures: {
+    fallbackFlags: {
       huddle: {
         key: "zoom", // huddleMeetingProvider
         payload: {
@@ -29,10 +29,10 @@ export async function initOpenFeature() {
       },
     },
   });
-  return OpenFeature.setProviderAndWait(bucketProvider);
+  return OpenFeature.setProviderAndWait(reflagProvider);
 }
 
 export function track(event: string, attributes?: { [key: string]: any }) {
   console.log("Tracking event", event, attributes);
-  bucketProvider?.client?.track(event, attributes);
+  reflagProvider?.client?.track(event, attributes);
 }

@@ -21,7 +21,7 @@ export type Key = string;
 
 export type FeedbackOptions = {
   /**
-   * Enables automatic feedback prompting if it's set up in Bucket
+   * Enables automatic feedback prompting if it's set up in Reflag
    */
   enableAutoFeedback?: boolean;
 
@@ -68,9 +68,9 @@ export type RequestFeedbackData = Omit<
   onAfterSubmit?: (data: FeedbackSubmission) => void;
 
   /**
-   * Bucket feature key.
+   * Flag key.
    */
-  featureKey: string;
+  flagKey: string;
 };
 
 export type RequestFeedbackOptions = RequestFeedbackData & {
@@ -82,12 +82,12 @@ export type RequestFeedbackOptions = RequestFeedbackData & {
 
 export type UnassignedFeedback = {
   /**
-   * Bucket feature key.
+   * Flag key.
    */
-  featureKey: string;
+  flagKey: string;
 
   /**
-   * Bucket feedback ID
+   * Reflag feedback ID
    */
   feedbackId?: string;
 
@@ -108,15 +108,15 @@ export type UnassignedFeedback = {
   score?: number;
 
   /**
-   * User supplied comment about your feature.
+   * User supplied comment about your flag.
    */
   comment?: string;
 
   /**
-   * Bucket feedback prompt ID.
+   * Reflag feedback prompt ID.
    *
    * This only exists if the feedback was submitted
-   * as part of an automated prompt from Bucket.
+   * as part of an automated prompt from Reflag.
    *
    * Used for internal state management of automated
    * feedback.
@@ -166,7 +166,7 @@ export type FeedbackPrompt = {
   promptId: string;
 
   /**
-   * Feature ID from Bucket
+   * Feature ID from Reflag
    */
   featureId: string;
 };
@@ -184,7 +184,7 @@ export type FeedbackPromptReplyHandler = <T extends FeedbackPromptReply | null>(
 
 export type FeedbackPromptHandlerOpenFeedbackFormOptions = Omit<
   RequestFeedbackOptions,
-  "featureId" | "featureKey" | "userId" | "companyId" | "onClose" | "onDismiss"
+  "featureId" | "flagKey" | "userId" | "companyId" | "onClose" | "onDismiss"
 >;
 
 export type FeedbackPromptHandlerCallbacks = {
@@ -213,11 +213,11 @@ export const DEFAULT_FEEDBACK_CONFIG = {
   autoFeedbackEnabled: true,
 };
 
-// Payload can include featureId or featureKey, but the public API only exposes featureKey
+// Payload can include featureId or flagKey, but the public API only exposes flagKey
 // We use featureId internally because prompting is based on featureId
-type FeedbackPayload = Omit<Feedback, "featureKey"> & {
+type FeedbackPayload = Omit<Feedback, "flagKey"> & {
   featureId?: string;
-  featureKey?: string;
+  flagKey?: string;
 };
 
 export async function feedback(
@@ -238,11 +238,11 @@ export async function feedback(
   }
 
   const featureId = "featureId" in payload ? payload.featureId : undefined;
-  const featureKey = "featureKey" in payload ? payload.featureKey : undefined;
+  const flagKey = "flagKey" in payload ? payload.flagKey : undefined;
 
-  if (!featureId && !featureKey) {
+  if (!featureId && !flagKey) {
     logger.error(
-      "`feedback` call ignored. Neither `featureId` nor `featureKey` have been provided",
+      "`feedback` call ignored. Neither `featureId` nor `flagKey` have been provided",
     );
     return;
   }
@@ -250,10 +250,10 @@ export async function feedback(
   // set default source to sdk
   const feedbackPayload = {
     ...payload,
-    featureKey: undefined,
+    flagKey: undefined,
     source: payload.source ?? "sdk",
     featureId,
-    key: featureKey,
+    key: flagKey,
   };
 
   const res = await httpClient.post({

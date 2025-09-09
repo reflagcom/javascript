@@ -1,10 +1,10 @@
 {
-  "name": "@bucketco/react-sdk",
-  "version": "3.1.4",
+  "name": "@reflag/react-sdk",
+  "version": "1.0.0",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/bucketco/bucket-javascript-sdk.git"
+    "url": "https://github.com/reflagcom/javascript.git"
   },
   "publishConfig": {
     "access": "public"
@@ -24,17 +24,17 @@
   "files": [
     "dist"
   ],
-  "main": "./dist/bucket-react-sdk.umd.js",
+  "main": "./dist/reflag-react-sdk.umd.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/bucket-react-sdk.mjs",
-      "require": "./dist/bucket-react-sdk.umd.js",
+      "import": "./dist/reflag-react-sdk.mjs",
+      "require": "./dist/reflag-react-sdk.umd.js",
       "types": "./dist/index.d.ts"
     }
   },
   "dependencies": {
-    "@bucketco/browser-sdk": "3.1.2",
+    "@reflag/browser-sdk": "1.0.0",
     "canonical-json": "^0.0.4",
     "rollup": "^4.2.0"
   },
@@ -43,8 +43,8 @@
     "react-dom": "*"
   },
   "devDependencies": {
-    "@bucketco/eslint-config": "workspace:^",
-    "@bucketco/tsconfig": "workspace:^",
+    "@reflag/eslint-config": "^0.0.2",
+    "@reflag/tsconfig": "^0.0.2",
     "@testing-library/react": "^15.0.7",
     "@types/jsdom": "^21.1.6",
     "@types/node": "^22.12.0",

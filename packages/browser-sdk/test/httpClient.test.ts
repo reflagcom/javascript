@@ -3,9 +3,12 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { HttpClient } from "../src/httpClient";
 
 const cases = [
-  ["https://front.bucket.co", "https://front.bucket.co/path"],
-  ["https://front.bucket.co/", "https://front.bucket.co/path"],
-  ["https://front.bucket.co/basepath", "https://front.bucket.co/basepath/path"],
+  ["https://front.reflag.com", "https://front.reflag.com/path"],
+  ["https://front.reflag.com/", "https://front.reflag.com/path"],
+  [
+    "https://front.reflag.com/basepath",
+    "https://front.reflag.com/basepath/path",
+  ],
 ];
 
 test.each(cases)(

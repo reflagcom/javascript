@@ -1,0 +1,65 @@
+{
+  "name": "@reflag/vue-sdk",
+  "version": "1.0.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/reflagcom/javascript.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --project tsconfig.build.json && vite build",
+    "test": "vitest -c vite.config.mjs",
+    "test:ci": "vitest run -c vite.config.mjs --reporter=default --reporter=junit --outputFile=junit.xml",
+    "coverage": "vitest run --coverage",
+    "lint": "eslint .",
+    "lint:ci": "eslint --output-file eslint-report.json --format json .",
+    "prettier": "prettier --check .",
+    "format": "yarn lint --fix && yarn prettier --write",
+    "preversion": "yarn lint && yarn prettier && yarn vitest run -c vite.config.mjs && yarn build"
+  },
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/reflag-vue-sdk.umd.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/reflag-vue-sdk.mjs",
+      "require": "./dist/reflag-vue-sdk.umd.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "dependencies": {
+    "@reflag/browser-sdk": "1.0.0",
+    "canonical-json": "^0.2.0"
+  },
+  "peerDependencies": {
+    "vue": "^3.0.0"
+  },
+  "devDependencies": {
+    "@reflag/eslint-config": "^0.0.2",
+    "@reflag/tsconfig": "^0.0.2",
+    "@types/jsdom": "^21.1.6",
+    "@types/node": "^22.12.0",
+    "@vitejs/plugin-vue": "^5.2.4",
+    "@vue/test-utils": "^2.3.2",
+    "eslint": "^9.21.0",
+    "eslint-plugin-vue": "^9.28.0",
+    "jsdom": "^24.1.0",
+    "msw": "^2.3.5",
+    "prettier": "^3.5.2",
+    "rollup": "^4.2.0",
+    "rollup-preserve-directives": "^1.1.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.3",
+    "vite": "^5.0.13",
+    "vite-plugin-dts": "^4.5.4",
+    "vitest": "^2.0.4",
+    "vue": "^3.5.16",
+    "vue-eslint-parser": "^9.4.2"
+  }
+}

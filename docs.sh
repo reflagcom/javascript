@@ -16,7 +16,7 @@ typedoc --treatWarningsAsErrors
 SEDCOMMAND='s/globals.md#(.*)-[0-9]+/globals.md#\1/g'
 
 # Find all markdown files including globals.md
-FILES=$(find dist/docs/@bucketco -name "*.md")
+FILES=$(find dist/docs/@reflag -name "*.md")
 
 echo "Processing markdown files..."
 for file in $FILES

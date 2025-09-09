@@ -12,18 +12,18 @@ import {
 } from "@openfeature/server-sdk";
 
 import {
-  BucketClient,
   ClientOptions,
-  Context as BucketContext,
-} from "@bucketco/node-sdk";
+  Context as ReflagContext,
+  ReflagClient,
+} from "@reflag/node-sdk";
 
 type ProviderOptions = ClientOptions & {
-  contextTranslator?: (context: EvaluationContext) => BucketContext;
+  contextTranslator?: (context: EvaluationContext) => ReflagContext;
 };
 
 export const defaultContextTranslator = (
   context: EvaluationContext,
-): BucketContext => {
+): ReflagContext => {
   const user = {
     id: context.targetingKey ?? context["userId"]?.toString(),
     name: context["name"]?.toString(),
@@ -45,19 +45,19 @@ export const defaultContextTranslator = (
   };
 };
 
-export class BucketNodeProvider implements Provider {
+export class ReflagNodeProvider implements Provider {
   public readonly events = new OpenFeatureEventEmitter();
 
-  private _client: BucketClient;
+  private _client: ReflagClient;
 
-  private contextTranslator: (context: EvaluationContext) => BucketContext;
+  private contextTranslator: (context: EvaluationContext) => ReflagContext;
 
   public runsOn: Paradigm = "server";
 
   public status: ServerProviderStatus = ServerProviderStatus.NOT_READY;
 
   public metadata = {
-    name: "bucket-node",
+    name: "reflag-node",
   };
 
   get client() {
@@ -65,7 +65,7 @@ export class BucketNodeProvider implements Provider {
   }
 
   constructor({ contextTranslator, ...opts }: ProviderOptions) {
-    this._client = new BucketClient(opts);
+    this._client = new ReflagClient(opts);
     this.contextTranslator = contextTranslator ?? defaultContextTranslator;
   }
 
@@ -74,12 +74,12 @@ export class BucketNodeProvider implements Provider {
     this.status = ServerProviderStatus.READY;
   }
 
-  private resolveFeature<T extends JsonValue>(
+  private resolveFlag<T extends JsonValue>(
     flagKey: string,
     defaultValue: T,
-    context: BucketContext,
+    context: ReflagContext,
     resolveFn: (
-      feature: ReturnType<typeof this._client.getFeature>,
+      feature: ReturnType<typeof this._client.getFlag>,
     ) => Promise<ResolutionDetails<T>>,
   ): Promise<ResolutionDetails<T>> {
     if (this.status !== ServerProviderStatus.READY) {
@@ -87,7 +87,7 @@ export class BucketNodeProvider implements Provider {
         value: defaultValue,
         reason: StandardResolutionReasons.ERROR,
         errorCode: ErrorCode.PROVIDER_NOT_READY,
-        errorMessage: "Bucket client not initialized",
+        errorMessage: "Reflag client not initialized",
       });
     }
 
@@ -100,9 +100,9 @@ export class BucketNodeProvider implements Provider {
       });
     }
 
-    const features = this._client.getFeatures(context);
-    if (flagKey in features) {
-      return resolveFn(this._client.getFeature(context, flagKey));
+    const featureDefs = this._client.getFlagDefinitions();
+    if (featureDefs.some(({ key }) => key === flagKey)) {
+      return resolveFn(this._client.getFlag(context, flagKey));
     }
 
     return Promise.resolve({
@@ -118,7 +118,7 @@ export class BucketNodeProvider implements Provider {
     defaultValue: boolean,
     context: EvaluationContext,
   ): Promise<ResolutionDetails<boolean>> {
-    return this.resolveFeature(
+    return this.resolveFlag(
       flagKey,
       defaultValue,
       this.contextTranslator(context),
@@ -137,7 +137,7 @@ export class BucketNodeProvider implements Provider {
     defaultValue: string,
     context: EvaluationContext,
   ): Promise<ResolutionDetails<string>> {
-    return this.resolveFeature(
+    return this.resolveFlag(
       flagKey,
       defaultValue,
       this.contextTranslator(context),
@@ -167,7 +167,7 @@ export class BucketNodeProvider implements Provider {
       reason: StandardResolutionReasons.ERROR,
       errorCode: ErrorCode.GENERAL,
       errorMessage:
-        "Bucket doesn't support this method. Use `resolveObjectEvaluation` instead.",
+        "Reflag doesn't support this method. Use `resolveObjectEvaluation` instead.",
     });
   }
 
@@ -176,7 +176,7 @@ export class BucketNodeProvider implements Provider {
     defaultValue: T,
     context: EvaluationContext,
   ): Promise<ResolutionDetails<T>> {
-    return this.resolveFeature(
+    return this.resolveFlag(
       flagKey,
       defaultValue,
       this.contextTranslator(context),

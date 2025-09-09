@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - v*
 
 jobs:
   release:
@@ -18,7 +17,7 @@ jobs:
           cache: "yarn"
           cache-dependency-path: "**/yarn.lock"
           registry-url: "https://registry.npmjs.org"
-          scope: "@bucketco"
+          scope: "@reflag"
       - name: Install dependencies
         run: yarn install --immutable
       - name: Build packages
@@ -26,7 +25,7 @@ jobs:
       - name: npm login
         run: echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > .npmrc
         env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TOKEN: ${{ secrets.REFLAG_NPM_TOKEN }}
       - name: Publish
         run: yarn lerna publish from-package --no-private --yes
       - name: Build docs
@@ -34,17 +33,17 @@ jobs:
       - name: Checkout docs with SSH
         uses: actions/checkout@v3
         with:
-          repository: bucketco/docs
+          repository: reflagcom/docs
           ssh-key: ${{ secrets.DOCS_DEPLOY_KEY }}
-          path: bucket-docs
+          path: reflag-docs
       - name: Copy generated docs to docs repo
         run: |
-          rm -rf bucket-docs/sdk
-          cp -R dist/docs bucket-docs/sdk
+          rm -rf reflag-docs/sdk
+          cp -R dist/docs reflag-docs/sdk
       - name: Commit and push changes
         run: |
-          cd bucket-docs
+          cd reflag-docs
           git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@bucket.co"
+          git config user.email "github-actions[bot]@reflag.com"
           git add sdk
           git commit -m "Update documentation" && git push || echo "No docs changes to commit"

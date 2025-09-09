@@ -16,7 +16,7 @@ export function attachContainer(containerId: string) {
     document.body.appendChild(container);
 
     for (const event of propagatedEvents) {
-      container.addEventListener(event, stopPropagation);
+      container.addEventListener(event, stopPropagation, { passive: true });
     }
   }
 
@@ -59,7 +59,7 @@ export function parseUnanchoredPosition(position: {
         right: offsetX,
       };
     default:
-      console.error("[Bucket]", "Invalid placement", position.placement);
+      console.error("[Reflag]", "Invalid placement", position.placement);
       return parseUnanchoredPosition({ placement: "bottom-right" });
   }
 }

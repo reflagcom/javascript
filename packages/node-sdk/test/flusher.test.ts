@@ -133,7 +133,7 @@ describe("flusher", () => {
       await vi.advanceTimersByTimeAsync(1000);
 
       expect(mockConsoleError).toHaveBeenCalledWith(
-        "[Bucket SDK] Timeout while flushing events on process exit.",
+        "[Reflag SDK] Timeout while flushing events on process exit.",
       );
     });
 
@@ -154,7 +154,7 @@ describe("flusher", () => {
       getHandler("exit")();
 
       expect(mockConsoleError).toHaveBeenCalledWith(
-        "[Bucket SDK] Failed to finalize the flushing of events on process exit.",
+        "[Reflag SDK] Failed to finalize the flushing of events on process exit.",
       );
     });
 
@@ -167,7 +167,7 @@ describe("flusher", () => {
       getHandler("exit")();
 
       expect(mockConsoleError).toHaveBeenCalledWith(
-        "[Bucket SDK] Failed to finalize the flushing of events on process exit.",
+        "[Reflag SDK] Failed to finalize the flushing of events on process exit.",
       );
     });
 
@@ -189,7 +189,7 @@ describe("flusher", () => {
       await vi.runAllTimersAsync();
 
       expect(mockConsoleError).toHaveBeenCalledWith(
-        "[Bucket SDK] An error occurred while flushing events on process exit.",
+        "[Reflag SDK] An error occurred while flushing events on process exit.",
         expect.any(Error),
       );
     });

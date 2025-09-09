@@ -1,7 +1,7 @@
 "use client";
 
 import React, { ReactNode } from "react";
-import { BucketProvider } from "@bucketco/react-sdk";
+import { ReflagProvider } from "@reflag/react-sdk";
 
 type Props = {
   publishableKey: string;
@@ -10,13 +10,13 @@ type Props = {
 
 export const Providers = ({ publishableKey, children }: Props) => {
   return (
-    <BucketProvider
+    <ReflagProvider
       publishableKey={publishableKey}
       company={{ id: "acme_inc" }}
       user={{ id: "john doe" }}
-      fallbackFeatures={["fallback-feature"]}
+      fallbackFlags={["fallback-feature"]}
     >
       {children}
-    </BucketProvider>
+    </ReflagProvider>
   );
 };

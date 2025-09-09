@@ -21,9 +21,9 @@ export default defineConfig({
     lib: {
       // Could also be a dictionary or array of multiple entry points
       entry: resolve(__dirname, "src/index.ts"),
-      name: "BucketOpenFeatureBrowserProvider",
+      name: "ReflagOpenFeatureBrowserProvider",
       // the proper extensions will be added
-      fileName: "bucket-openfeature-browser-provider",
+      fileName: "reflag-openfeature-browser-provider",
     },
   },
 });

@@ -257,16 +257,28 @@ function DialogArrow({
 
 export function DialogHeader({
   children,
+  innerRef,
 }: {
   children: preact.ComponentChildren;
+  innerRef?: Ref<HTMLElement>;
 }) {
-  return <header class="dialog-header">{children}</header>;
+  return (
+    <header ref={innerRef} class="dialog-header">
+      {children}
+    </header>
+  );
 }
 
 export function DialogContent({
   children,
+  innerRef,
 }: {
   children: preact.ComponentChildren;
+  innerRef?: Ref<HTMLDivElement>;
 }) {
-  return <div class="dialog-content">{children}</div>;
+  return (
+    <div ref={innerRef} class="dialog-content">
+      {children}
+    </div>
+  );
 }

@@ -2,25 +2,25 @@
   position: fixed;
   width: 210px;
   padding: 16px 22px 10px;
-  font-size: var(--bucket-feedback-dialog-font-size, 1rem);
+  font-size: var(--reflag-feedback-dialog-font-size, 1rem);
   font-family: var(
-    --bucket-feedback-dialog-font-family,
+    --reflag-feedback-dialog-font-family,
     InterVariable,
     Inter,
     system-ui,
     Open Sans,
     sans-serif
   );
-  color: var(--bucket-feedback-dialog-color, #1e1f24);
+  color: var(--reflag-feedback-dialog-color, #1e1f24);
   border: 1px solid;
-  border-color: var(--bucket-feedback-dialog-border, #d8d9df);
-  border-radius: var(--bucket-feedback-dialog-border-radius, 6px);
+  border-color: var(--reflag-feedback-dialog-border, #d8d9df);
+  border-radius: var(--reflag-feedback-dialog-border-radius, 6px);
   box-shadow: var(
-    --bucket-feedback-dialog-box-shadow,
+    --reflag-feedback-dialog-box-shadow,
     0 10px 15px -3px rgba(0, 0, 0, 0.1),
     0 4px 6px -2px rgba(0, 0, 0, 0.05)
   );
-  background-color: var(--bucket-feedback-dialog-background-color, #fff);
+  background-color: var(--reflag-feedback-dialog-background-color, #fff);
   z-index: 2147410000;
 
   &:not(.modal) {
@@ -33,20 +33,20 @@
 }
 
 .arrow {
-  background-color: var(--bucket-feedback-dialog-background-color, #fff);
-  box-shadow: var(--bucket-feedback-dialog-border, #d8d9df) -1px -1px 1px 0px;
+  background-color: var(--reflag-feedback-dialog-background-color, #fff);
+  box-shadow: var(--reflag-feedback-dialog-border, #d8d9df) -1px -1px 1px 0px;
 
   &.bottom {
-    box-shadow: var(--bucket-feedback-dialog-border, #d8d9df) -1px -1px 1px 0px;
+    box-shadow: var(--reflag-feedback-dialog-border, #d8d9df) -1px -1px 1px 0px;
   }
   &.top {
-    box-shadow: var(--bucket-feedback-dialog-border, #d8d9df) 1px 1px 1px 0px;
+    box-shadow: var(--reflag-feedback-dialog-border, #d8d9df) 1px 1px 1px 0px;
   }
   &.left {
-    box-shadow: var(--bucket-feedback-dialog-border, #d8d9df) 1px -1px 1px 0px;
+    box-shadow: var(--reflag-feedback-dialog-border, #d8d9df) 1px -1px 1px 0px;
   }
   &.right {
-    box-shadow: var(--bucket-feedback-dialog-border, #d8d9df) -1px 1px 1px 0px;
+    box-shadow: var(--reflag-feedback-dialog-border, #d8d9df) -1px 1px 1px 0px;
   }
 }
 
@@ -69,7 +69,7 @@
   justify-content: center;
   align-items: center;
 
-  color: var(--bucket-feedback-dialog-color, #1e1f24);
+  color: var(--reflag-feedback-dialog-color, #1e1f24);
 
   svg {
     position: absolute;
@@ -85,7 +85,7 @@
 
 .plug a {
   opacity: 0.5;
-  color: var(--bucket-feedback-dialog-color, #1e1f24);
+  color: var(--reflag-feedback-dialog-color, #1e1f24);
   text-decoration: none;
 
   transition: opacity 200ms;

@@ -1,14 +1,14 @@
-import { BucketClient, CheckEvent, RawFeatures } from "../../src";
+import { ReflagClient, CheckEvent, RawFlags } from "../../src";
 
 const urlParams = new URLSearchParams(window.location.search);
 const publishableKey = urlParams.get("publishableKey");
-const featureKey = urlParams.get("featureKey") ?? "huddles";
+const flagKey = urlParams.get("flagKey") ?? "huddles";
 
 if (!publishableKey) {
   throw Error("publishableKey is missing");
 }
 
-const bucket = new BucketClient({
+const reflag = new ReflagClient({
   publishableKey,
   user: { id: "42" },
   company: { id: "1" },
@@ -20,22 +20,22 @@ const bucket = new BucketClient({
 
 document
   .getElementById("startHuddle")
-  ?.addEventListener("click", () => bucket.track(featureKey));
+  ?.addEventListener("click", () => reflag.track(flagKey));
 document.getElementById("giveFeedback")?.addEventListener("click", (event) =>
-  bucket.requestFeedback({
-    featureKey,
+  reflag.requestFeedback({
+    flagKey,
     position: { type: "POPOVER", anchor: event.currentTarget as HTMLElement },
   }),
 );
 
-bucket.initialize().then(() => {
-  console.log("Bucket initialized");
+reflag.initialize().then(() => {
+  console.log("Reflag initialized");
   const loadingElem = document.getElementById("loading");
   if (loadingElem) loadingElem.style.display = "none";
 });
 
-bucket.on("featuresUpdated", (features: RawFeatures) => {
-  const { isEnabled } = features[featureKey];
+reflag.on("flagsUpdated", (flags: RawFlags) => {
+  const { isEnabled } = flags[flagKey];
 
   const startHuddleElem = document.getElementById("start-huddle");
   if (isEnabled) {

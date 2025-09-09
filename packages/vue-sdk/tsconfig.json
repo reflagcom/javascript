@@ -1,0 +1,11 @@
+{
+  "extends": "@reflag/tsconfig/library",
+  "compilerOptions": {
+    "lib": [],
+    "outDir": "./dist/",
+    "declarationDir": "./dist/types",
+    "declarationMap": true
+  },
+  "include": ["src", "src/**/*.d.ts"],
+  "typeRoots": ["./node_modules/@types"]
+}

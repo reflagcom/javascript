@@ -9,11 +9,11 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@bucketco/react-sdk": "workspace:^",
     "@openfeature/core": "1.3.0",
     "@openfeature/react-sdk": "^0.4.5",
     "@openfeature/web-sdk": "^1.2.3",
-    "next": "14.2.21",
+    "@reflag/react-sdk": "workspace:^",
+    "next": "14.2.26",
     "react": "^18",
     "react-dom": "^18"
   },

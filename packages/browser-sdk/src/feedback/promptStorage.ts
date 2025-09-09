@@ -5,7 +5,7 @@ export const markPromptMessageCompleted = (
   promptId: string,
   expiresAt: Date,
 ) => {
-  Cookies.set(`bucket-prompt-${userId}`, promptId, {
+  Cookies.set(`reflag-prompt-${userId}`, promptId, {
     expires: expiresAt,
     sameSite: "strict",
     secure: true,
@@ -16,7 +16,9 @@ export const checkPromptMessageCompleted = (
   userId: string,
   promptId: string,
 ) => {
-  const id = Cookies.get(`bucket-prompt-${userId}`);
+  const id =
+    Cookies.get(`reflag-prompt-${userId}`) ||
+    Cookies.get(`bucket-prompt-${userId}`); // Legacy cookie name
   return id === promptId;
 };
 
@@ -26,7 +28,7 @@ export const rememberAuthToken = (
   token: string,
   expiresAt: Date,
 ) => {
-  Cookies.set(`bucket-token-${userId}`, JSON.stringify({ channel, token }), {
+  Cookies.set(`reflag-token-${userId}`, JSON.stringify({ channel, token }), {
     expires: expiresAt,
     sameSite: "strict",
     secure: true,
@@ -34,7 +36,7 @@ export const rememberAuthToken = (
 };
 
 export const getAuthToken = (userId: string) => {
-  const val = Cookies.get(`bucket-token-${userId}`);
+  const val = Cookies.get(`reflag-token-${userId}`);
   if (!val) {
     return undefined;
   }
@@ -57,5 +59,5 @@ export const getAuthToken = (userId: string) => {
 };
 
 export const forgetAuthToken = (userId: string) => {
-  Cookies.remove(`bucket-token-${userId}`);
+  Cookies.remove(`reflag-token-${userId}`);
 };

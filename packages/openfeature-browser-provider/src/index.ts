@@ -11,7 +11,7 @@ import {
   TrackingEventDetails,
 } from "@openfeature/web-sdk";
 
-import { BucketClient, Feature, InitOptions } from "@bucketco/browser-sdk";
+import { Flag, InitOptions, ReflagClient } from "@reflag/browser-sdk";
 
 export type ContextTranslationFn = (
   context?: EvaluationContext,
@@ -38,12 +38,12 @@ export function defaultContextTranslator(
   };
 }
 
-export class BucketBrowserSDKProvider implements Provider {
+export class ReflagBrowserSDKProvider implements Provider {
   readonly metadata: ProviderMetadata = {
-    name: "bucket-browser-provider",
+    name: "reflag-browser-provider",
   };
 
-  private _client?: BucketClient;
+  private _client?: ReflagClient;
 
   private readonly _clientOptions: InitOptions;
   private readonly _contextTranslator: ContextTranslationFn;
@@ -73,7 +73,7 @@ export class BucketBrowserSDKProvider implements Provider {
   }
 
   async initialize(context?: EvaluationContext): Promise<void> {
-    const client = new BucketClient({
+    const client = new ReflagClient({
       ...this._clientOptions,
       ...this._contextTranslator(context),
     });
@@ -101,23 +101,23 @@ export class BucketBrowserSDKProvider implements Provider {
     await this.initialize(newContext);
   }
 
-  private resolveFeature<T extends JsonValue>(
+  private resolveFlag<T extends JsonValue>(
     flagKey: string,
     defaultValue: T,
-    resolveFn: (feature: Feature) => ResolutionDetails<T>,
+    resolveFn: (feature: Flag) => ResolutionDetails<T>,
   ): ResolutionDetails<T> {
     if (!this._client) {
       return {
         value: defaultValue,
         reason: StandardResolutionReasons.DEFAULT,
         errorCode: ErrorCode.PROVIDER_NOT_READY,
-        errorMessage: "Bucket client not initialized",
+        errorMessage: "Reflag client not initialized",
       } satisfies ResolutionDetails<T>;
     }
 
-    const features = this._client.getFeatures();
+    const features = this._client.getFlags();
     if (flagKey in features) {
-      return resolveFn(this._client.getFeature(flagKey));
+      return resolveFn(this._client.getFlag(flagKey));
     }
 
     return {
@@ -129,7 +129,7 @@ export class BucketBrowserSDKProvider implements Provider {
   }
 
   resolveBooleanEvaluation(flagKey: string, defaultValue: boolean) {
-    return this.resolveFeature(flagKey, defaultValue, (feature) => {
+    return this.resolveFlag(flagKey, defaultValue, (feature) => {
       return {
         value: feature.isEnabled,
         variant: feature.config.key,
@@ -144,7 +144,7 @@ export class BucketBrowserSDKProvider implements Provider {
       reason: StandardResolutionReasons.ERROR,
       errorCode: ErrorCode.GENERAL,
       errorMessage:
-        "Bucket doesn't support this method. Use `resolveObjectEvaluation` instead.",
+        "Reflag doesn't support this method. Use `resolveObjectEvaluation` instead.",
     };
   }
 
@@ -152,7 +152,7 @@ export class BucketBrowserSDKProvider implements Provider {
     flagKey: string,
     defaultValue: string,
   ): ResolutionDetails<string> {
-    return this.resolveFeature(flagKey, defaultValue, (feature) => {
+    return this.resolveFlag(flagKey, defaultValue, (feature) => {
       if (!feature.config.key) {
         return {
           value: defaultValue,
@@ -172,7 +172,7 @@ export class BucketBrowserSDKProvider implements Provider {
     flagKey: string,
     defaultValue: T,
   ) {
-    return this.resolveFeature(flagKey, defaultValue, (feature) => {
+    return this.resolveFlag(flagKey, defaultValue, (feature) => {
       const expType = typeof defaultValue;
 
       const payloadType = typeof feature.config.payload;

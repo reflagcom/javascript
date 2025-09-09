@@ -1,0 +1,118 @@
+.search-input {
+  background: transparent;
+  border: none;
+  color: white;
+  width: 100%;
+  font-size: var(--text-size);
+
+  &::placeholder {
+    color: var(--gray500);
+  }
+
+  &::-webkit-search-cancel-button {
+    -webkit-appearance: none;
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    margin-left: 10px;
+    background:
+      linear-gradient(
+        45deg,
+        rgba(0, 0, 0, 0) 0%,
+        rgba(0, 0, 0, 0) 43%,
+        #fff 45%,
+        #fff 55%,
+        rgba(0, 0, 0, 0) 57%,
+        rgba(0, 0, 0, 0) 100%
+      ),
+      linear-gradient(
+        135deg,
+        transparent 0%,
+        transparent 43%,
+        #fff 45%,
+        #fff 55%,
+        transparent 57%,
+        transparent 100%
+      );
+    cursor: pointer;
+  }
+}
+
+.flags-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.flag-row {
+  opacity: 0;
+  transform: translateY(-7px);
+  transition-property: opacity, transform;
+  transition-duration: 0.075s;
+  transition-timing-function: cubic-bezier(0.75, -0.015, 0.565, 1.055);
+
+  &.show-on-open {
+    opacity: 1;
+    transform: translateY(0);
+    /* stagger effect where first item (i=0) has no delay,
+       and delay is based on item count (n) so total animation time always is 509ms */
+    transition-delay: calc(0.05s * var(--i) / max(var(--n) - 1, 1));
+  }
+
+  &.not-visible {
+    visibility: hidden;
+  }
+}
+
+.flag-empty-cell {
+  width: 100%;
+  color: var(--gray500);
+  padding: 6px 0;
+}
+
+.flag-name-cell {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: auto;
+  padding: 6px 6px 6px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  .flag-icon {
+    height: 15px;
+    width: 15px;
+    color: var(--dimmed-color);
+  }
+}
+
+.flag-link {
+  color: var(--text-color);
+  text-decoration: none;
+
+  &:hover,
+  &:focus-visible {
+    text-decoration: underline;
+  }
+}
+
+.flag-reset-cell {
+  width: 32px;
+  padding: 6px 0;
+  text-align: right;
+}
+
+.reset {
+  color: var(--gray500);
+  text-decoration: none;
+
+  &:hover,
+  &:focus-visible {
+    text-decoration: underline;
+  }
+}
+
+.flag-switch-cell {
+  padding: 6px 0 6px 6px;
+  width: 0;
+}

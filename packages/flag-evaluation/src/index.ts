@@ -85,6 +85,8 @@ type ContextFilterOperator =
   | "LT"
   | "AFTER"
   | "BEFORE"
+  | "DATE_AFTER"
+  | "DATE_BEFORE"
   | "SET"
   | "NOT_SET"
   | "IS_TRUE"
@@ -116,12 +118,13 @@ export interface ContextFilter {
   field: string;
   operator: ContextFilterOperator;
   values?: string[];
+  valueSet?: Set<string>;
 }
 
 /**
- * Represents a filter configuration to enable percentage-based rollout of a feature or functionality.
+ * Represents a filter configuration to enable percentage-based rollout of a flag or functionality.
  *
- * This type defines the necessary parameters to control access to a feature
+ * This type defines the necessary parameters to control access to a flag
  * by evaluating a specific attribute and applying it against a defined percentage threshold.
  *
  * Properties:
@@ -202,25 +205,43 @@ export interface Rule<T extends RuleValue> {
  * @return {Record<string, string>} A flattened JSON object with "stringified" keys and values.
  */
 export function flattenJSON(data: object): Record<string, string> {
-  if (Object.keys(data).length === 0) return {};
-  const result: Record<string, any> = {};
-  function recurse(cur: any, prop: string) {
-    if (Object(cur) !== cur) {
-      result[prop] = cur;
-    } else if (Array.isArray(cur)) {
-      const l = cur.length;
-      for (let i = 0; i < l; i++)
-        recurse(cur[i], prop ? prop + "." + i : "" + i);
-      if (l == 0) result[prop] = [];
+  const result: Record<string, string> = {};
+
+  if (Object.keys(data).length === 0) {
+    return result;
+  }
+
+  function recurse(value: any, prop: string) {
+    if (value === undefined) {
+      return;
+    }
+
+    if (value === null) {
+      result[prop] = "";
+    } else if (typeof value !== "object") {
+      result[prop] = String(value);
+    } else if (Array.isArray(value)) {
+      if (value.length === 0) {
+        result[prop] = "";
+      }
+
+      for (let i = 0; i < value.length; i++) {
+        recurse(value[i], prop ? prop + "." + i : "" + i);
+      }
     } else {
       let isEmpty = true;
-      for (const p in cur) {
+
+      for (const p in value) {
         isEmpty = false;
-        recurse(cur[p], prop ? prop + "." + p : p);
+        recurse(value[p], prop ? prop + "." + p : p);
       }
-      if (isEmpty) result[prop] = {};
+
+      if (isEmpty) {
+        result[prop] = "";
+      }
     }
   }
+
   recurse(data, "");
   return result;
 }
@@ -286,6 +307,7 @@ export function evaluate(
   fieldValue: string,
   operator: ContextFilterOperator,
   values: string[],
+  valueSet?: Set<string>,
 ): boolean {
   const value = values[0];
 
@@ -302,7 +324,7 @@ export function evaluate(
         );
         return false;
       }
-      return fieldValue > value;
+      return Number(fieldValue) > Number(value);
     case "LT":
       if (isNaN(Number(fieldValue)) || isNaN(Number(value))) {
         console.error(
@@ -310,7 +332,7 @@ export function evaluate(
         );
         return false;
       }
-      return fieldValue < value;
+      return Number(fieldValue) < Number(value);
     case "AFTER":
     case "BEFORE": {
       // more/less than `value` days ago
@@ -322,18 +344,34 @@ export function evaluate(
         ? fieldValueDate > daysAgo.getTime()
         : fieldValueDate < daysAgo.getTime();
     }
+    case "DATE_AFTER":
+    case "DATE_BEFORE": {
+      const fieldValueDate = new Date(fieldValue).getTime();
+      const valueDate = new Date(value).getTime();
+      if (isNaN(fieldValueDate) || isNaN(valueDate)) {
+        console.error(
+          `${operator} operator requires valid date values: ${fieldValue}, ${value}`,
+        );
+        return false;
+      }
+      return operator === "DATE_AFTER"
+        ? fieldValueDate >= valueDate
+        : fieldValueDate <= valueDate;
+    }
     case "SET":
-      return fieldValue != "";
+      return fieldValue !== "";
     case "NOT_SET":
-      return fieldValue == "";
+      return fieldValue === "";
     case "IS":
       return fieldValue === value;
     case "IS_NOT":
       return fieldValue !== value;
     case "ANY_OF":
-      return values.includes(fieldValue);
+      return valueSet ? valueSet.has(fieldValue) : values.includes(fieldValue);
     case "NOT_ANY_OF":
-      return !values.includes(fieldValue);
+      return valueSet
+        ? !valueSet.has(fieldValue)
+        : !values.includes(fieldValue);
     case "IS_TRUE":
       return fieldValue == "true";
     case "IS_FALSE":
@@ -353,15 +391,20 @@ function evaluateRecursively(
     case "constant":
       return filter.value;
     case "context":
-      if (!(filter.field in context)) {
+      if (
+        !(filter.field in context) &&
+        filter.operator !== "SET" &&
+        filter.operator !== "NOT_SET"
+      ) {
         missingContextFieldsSet.add(filter.field);
         return false;
       }
 
       return evaluate(
-        context[filter.field],
+        context[filter.field] ?? "",
         filter.operator,
         filter.values || [],
+        filter.valueSet,
       );
     case "rolloutPercentage": {
       if (!(filter.partialRolloutAttribute in context)) {
@@ -399,34 +442,34 @@ function evaluateRecursively(
 }
 
 /**
- * Represents the parameters required for evaluating rules against a specific feature in a given context.
+ * Represents the parameters required for evaluating rules against a specific flag in a given context.
  *
  * @template T - The type of the rule value used in evaluation.
  *
- * @property {string} featureKey - The key that identifies the specific feature to be evaluated.
+ * @property {string} flagKey - The key that identifies the specific flag to be evaluated.
  * @property {Rule<T>[]} rules - An array of rules used for evaluation.
  * @property {Record<string, unknown>} context - The contextual data used during the evaluation process.
  */
 export interface EvaluationParams<T extends RuleValue> {
-  featureKey: string;
+  flagKey: string;
   rules: Rule<T>[];
   context: Record<string, unknown>;
 }
 
 /**
- * Represents the result of an evaluation process for a specific feature and its associated rules.
+ * Represents the result of an evaluation process for a specific flag and its associated rules.
  *
  * @template T - The type of the rule value being evaluated.
  *
- * @property {string} featureKey - The unique key identifying the feature being evaluated.
- * @property {T | undefined} value - The resolved value of the feature, if the evaluation is successful.
+ * @property {string} flagKey - The unique key identifying the flag being evaluated.
+ * @property {T | undefined} value - The resolved value of the flag, if the evaluation is successful.
  * @property {Record<string, any>} context - The contextual information used during the evaluation process.
  * @property {boolean[]} ruleEvaluationResults - Array indicating the success or failure of each rule evaluated.
  * @property {string} [reason] - Optional field providing additional explanation regarding the evaluation result.
  * @property {string[]} [missingContextFields] - Optional array of context fields that were required but not provided during the evaluation.
  */
 export interface EvaluationResult<T extends RuleValue> {
-  featureKey: string;
+  flagKey: string;
   value: T | undefined;
   context: Record<string, any>;
   ruleEvaluationResults: boolean[];
@@ -434,9 +477,9 @@ export interface EvaluationResult<T extends RuleValue> {
   missingContextFields?: string[];
 }
 
-export function evaluateFeatureRules<T extends RuleValue>({
+export function evaluateFlagRules<T extends RuleValue>({
   context,
-  featureKey,
+  flagKey,
   rules,
 }: EvaluationParams<T>): EvaluationResult<T> {
   const flatContext = flattenJSON(context);
@@ -453,7 +496,7 @@ export function evaluateFeatureRules<T extends RuleValue>({
     firstMatchedRuleIndex > -1 ? rules[firstMatchedRuleIndex] : undefined;
   return {
     value: firstMatchedRule?.value,
-    featureKey,
+    flagKey,
     context: flatContext,
     ruleEvaluationResults,
     reason:
@@ -461,5 +504,49 @@ export function evaluateFeatureRules<T extends RuleValue>({
         ? `rule #${firstMatchedRuleIndex} matched`
         : "no matched rules",
     missingContextFields,
+  };
+}
+
+export function newEvaluator<T extends RuleValue>(rules: Rule<T>[]) {
+  function translateRule(rule: RuleFilter): RuleFilter {
+    if (rule.type === "group") {
+      return {
+        ...rule,
+        filters: rule.filters.map(translateRule),
+      };
+    }
+
+    if (
+      rule.type === "context" &&
+      (rule.operator === "ANY_OF" || rule.operator === "NOT_ANY_OF")
+    ) {
+      return {
+        ...rule,
+        valueSet: new Set(rule.values ?? []),
+      };
+    }
+
+    return { ...rule };
+  }
+
+  const translatedRules = rules.map((rule) => {
+    const { filter } = rule;
+    const translatedFilter = translateRule(filter);
+
+    return {
+      ...rule,
+      filter: translatedFilter,
+    };
+  });
+
+  return function evaluateOptimized(
+    context: Record<string, unknown>,
+    flagKey: string,
+  ) {
+    return evaluateFlagRules({
+      context,
+      flagKey,
+      rules: translatedRules,
+    });
   };
 }

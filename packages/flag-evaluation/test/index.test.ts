@@ -2,15 +2,16 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
   evaluate,
-  evaluateFeatureRules,
+  evaluateFlagRules,
   EvaluationParams,
   flattenJSON,
   hashInt,
+  newEvaluator,
   unflattenJSON,
 } from "../src";
 
-const feature = {
-  featureKey: "feature",
+const flag = {
+  flagKey: "flag",
   rules: [
     {
       value: true,
@@ -36,10 +37,10 @@ const feature = {
   ],
 } satisfies Omit<EvaluationParams<true>, "context">;
 
-describe("evaluate feature targeting integration ", () => {
+describe("evaluate flag targeting integration ", () => {
   it("evaluates all kinds of filters", async () => {
-    const res = evaluateFeatureRules({
-      featureKey: "feature",
+    const res = evaluateFlagRules({
+      flagKey: "flag",
       rules: [
         {
           value: true,
@@ -101,7 +102,7 @@ describe("evaluate feature targeting integration ", () => {
       context: {
         "company.id": "company1",
       },
-      featureKey: "feature",
+      flagKey: "flag",
       missingContextFields: [],
       reason: "rule #0 matched",
       ruleEvaluationResults: [true],
@@ -109,8 +110,8 @@ describe("evaluate feature targeting integration ", () => {
   });
 
   it("evaluates flag when there's no matching rule", async () => {
-    const res = evaluateFeatureRules({
-      ...feature,
+    const res = evaluateFlagRules({
+      ...flag,
       context: {
         company: {
           id: "wrong value",
@@ -123,7 +124,7 @@ describe("evaluate feature targeting integration ", () => {
       context: {
         "company.id": "wrong value",
       },
-      featureKey: "feature",
+      flagKey: "flag",
       missingContextFields: [],
       reason: "no matched rules",
       ruleEvaluationResults: [false],
@@ -137,8 +138,8 @@ describe("evaluate feature targeting integration ", () => {
       },
     };
 
-    const res = evaluateFeatureRules({
-      ...feature,
+    const res = evaluateFlagRules({
+      ...flag,
       context,
     });
 
@@ -147,7 +148,7 @@ describe("evaluate feature targeting integration ", () => {
       context: {
         "company.id": "company1",
       },
-      featureKey: "feature",
+      flagKey: "flag",
       missingContextFields: [],
       reason: "rule #0 matched",
       ruleEvaluationResults: [true],
@@ -155,8 +156,8 @@ describe("evaluate feature targeting integration ", () => {
   });
 
   it("evaluates flag with missing values", async () => {
-    const res = evaluateFeatureRules({
-      featureKey: "feature",
+    const res = evaluateFlagRules({
+      flagKey: "flag",
       rules: [
         {
           value: { custom: "value" },
@@ -190,7 +191,7 @@ describe("evaluate feature targeting integration ", () => {
         some_field: "",
       },
       value: { custom: "value" },
-      featureKey: "feature",
+      flagKey: "flag",
       missingContextFields: [],
       reason: "rule #0 matched",
       ruleEvaluationResults: [true],
@@ -198,8 +199,8 @@ describe("evaluate feature targeting integration ", () => {
   });
 
   it("returns list of missing context keys ", async () => {
-    const res = evaluateFeatureRules({
-      ...feature,
+    const res = evaluateFlagRules({
+      ...flag,
       context: {},
     });
 
@@ -207,21 +208,21 @@ describe("evaluate feature targeting integration ", () => {
       context: {},
       value: undefined,
       reason: "no matched rules",
-      featureKey: "feature",
+      flagKey: "flag",
       missingContextFields: ["company.id"],
       ruleEvaluationResults: [false],
     });
   });
 
   it("fails evaluation and includes key in missing keys when rollout attribute is missing from context", async () => {
-    const res = evaluateFeatureRules({
-      featureKey: "myfeature",
+    const res = evaluateFlagRules({
+      flagKey: "flag-1",
       rules: [
         {
           value: 123,
           filter: {
             type: "rolloutPercentage" as const,
-            key: "myfeature",
+            key: "flag-1",
             partialRolloutAttribute: "happening.id",
             partialRolloutThreshold: 50000,
           },
@@ -231,12 +232,472 @@ describe("evaluate feature targeting integration ", () => {
     });
 
     expect(res).toEqual({
-      featureKey: "myfeature",
+      flagKey: "flag-1",
       context: {},
       value: undefined,
       reason: "no matched rules",
       missingContextFields: ["happening.id"],
       ruleEvaluationResults: [false],
+    });
+  });
+
+  it("evaluates optimized rule evaluations correctly", async () => {
+    const res = newEvaluator([
+      {
+        value: true,
+        filter: {
+          type: "group",
+          operator: "and",
+          filters: [
+            {
+              type: "context",
+              field: "company.id",
+              operator: "IS",
+              values: ["company1"],
+            },
+            {
+              type: "rolloutPercentage",
+              key: "flag",
+              partialRolloutAttribute: "company.id",
+              partialRolloutThreshold: 99999,
+            },
+            {
+              type: "group",
+              operator: "or",
+              filters: [
+                {
+                  type: "context",
+                  field: "company.id",
+                  operator: "ANY_OF",
+                  values: ["company2"],
+                },
+                {
+                  type: "negation",
+                  filter: {
+                    type: "context",
+                    field: "company.id",
+                    operator: "IS",
+                    values: ["company3"],
+                  },
+                },
+              ],
+            },
+            {
+              type: "negation",
+              filter: {
+                type: "constant",
+                value: false,
+              },
+            },
+          ],
+        },
+      },
+    ])(
+      {
+        "company.id": "company1",
+      },
+      "flag",
+    );
+
+    expect(res).toEqual({
+      value: true,
+      context: {
+        "company.id": "company1",
+      },
+      flagKey: "flag",
+      missingContextFields: [],
+      reason: "rule #0 matched",
+      ruleEvaluationResults: [true],
+    });
+  });
+
+  describe("SET and NOT_SET operators", () => {
+    it("should handle `SET` operator with missing field value", () => {
+      const res = evaluateFlagRules({
+        flagKey: "test_flag",
+        rules: [
+          {
+            value: true,
+            filter: {
+              type: "context",
+              field: "user.name",
+              operator: "SET",
+              values: [],
+            },
+          },
+        ],
+        context: {},
+      });
+
+      expect(res).toEqual({
+        flagKey: "test_flag",
+        value: undefined,
+        context: {},
+        ruleEvaluationResults: [false],
+        reason: "no matched rules",
+        missingContextFields: [],
+      });
+    });
+
+    it("should handle `NOT_SET` operator with missing field value", () => {
+      const res = evaluateFlagRules({
+        flagKey: "test_flag",
+        rules: [
+          {
+            value: true,
+            filter: {
+              type: "context",
+              field: "user.name",
+              operator: "NOT_SET",
+              values: [],
+            },
+          },
+        ],
+        context: {},
+      });
+
+      expect(res).toEqual({
+        flagKey: "test_flag",
+        value: true,
+        context: {},
+        ruleEvaluationResults: [true],
+        reason: "rule #0 matched",
+        missingContextFields: [],
+      });
+    });
+
+    it("should handle `SET` operator with empty string field value", () => {
+      const res = evaluateFlagRules({
+        flagKey: "test_flag",
+        rules: [
+          {
+            value: true,
+            filter: {
+              type: "context",
+              field: "user.name",
+              operator: "SET",
+              values: [],
+            },
+          },
+        ],
+        context: {
+          user: {
+            name: "",
+          },
+        },
+      });
+
+      expect(res).toEqual({
+        flagKey: "test_flag",
+        value: undefined,
+        context: {
+          "user.name": "",
+        },
+        ruleEvaluationResults: [false],
+        reason: "no matched rules",
+        missingContextFields: [],
+      });
+    });
+
+    it("should handle `NOT_SET` operator with empty string field value", () => {
+      const res = evaluateFlagRules({
+        flagKey: "test_flag",
+        rules: [
+          {
+            value: true,
+            filter: {
+              type: "context",
+              field: "user.name",
+              operator: "NOT_SET",
+              values: [],
+            },
+          },
+        ],
+        context: {
+          user: {
+            name: "",
+          },
+        },
+      });
+
+      expect(res).toEqual({
+        flagKey: "test_flag",
+        value: true,
+        context: {
+          "user.name": "",
+        },
+        ruleEvaluationResults: [true],
+        reason: "rule #0 matched",
+        missingContextFields: [],
+      });
+    });
+  });
+
+  it.each([
+    {
+      context: { "company.id": "company1" },
+      expected: true,
+    },
+    {
+      context: { "company.id": "company2" },
+      expected: true,
+    },
+    {
+      context: { "company.id": "company3" },
+      expected: false,
+    },
+  ])(
+    "%#: evaluates optimized rule evaluations correctly",
+    async ({ context, expected }) => {
+      const evaluator = newEvaluator([
+        {
+          value: true,
+          filter: {
+            type: "group",
+            operator: "and",
+            filters: [
+              {
+                type: "context",
+                field: "company.id",
+                operator: "ANY_OF",
+                values: ["company1", "company2"],
+              },
+            ],
+          },
+        },
+      ]);
+
+      const res = evaluator(context, "flag-1");
+      expect(res.value ?? false).toEqual(expected);
+    },
+  );
+
+  describe("DATE_AFTER and DATE_BEFORE in flag rules", () => {
+    it("should evaluate DATE_AFTER operator in flag rules", () => {
+      const res = evaluateFlagRules({
+        flagKey: "time_based_flag",
+        rules: [
+          {
+            value: "enabled",
+            filter: {
+              type: "context",
+              field: "user.createdAt",
+              operator: "DATE_AFTER",
+              values: ["2024-01-01"],
+            },
+          },
+        ],
+        context: {
+          user: {
+            createdAt: "2024-06-15",
+          },
+        },
+      });
+
+      expect(res).toEqual({
+        flagKey: "time_based_flag",
+        value: "enabled",
+        context: {
+          "user.createdAt": "2024-06-15",
+        },
+        ruleEvaluationResults: [true],
+        reason: "rule #0 matched",
+        missingContextFields: [],
+      });
+    });
+
+    it("should evaluate DATE_BEFORE operator in flag rules", () => {
+      const res = evaluateFlagRules({
+        flagKey: "legacy_flag",
+        rules: [
+          {
+            value: "enabled",
+            filter: {
+              type: "context",
+              field: "user.lastLogin",
+              operator: "DATE_BEFORE",
+              values: ["2024-12-31"],
+            },
+          },
+        ],
+        context: {
+          user: {
+            lastLogin: "2024-01-15",
+          },
+        },
+      });
+
+      expect(res).toEqual({
+        flagKey: "legacy_flag",
+        value: "enabled",
+        context: {
+          "user.lastLogin": "2024-01-15",
+        },
+        ruleEvaluationResults: [true],
+        reason: "rule #0 matched",
+        missingContextFields: [],
+      });
+    });
+
+    it("should handle complex rules with DATE_AFTER and DATE_BEFORE in groups", () => {
+      const res = evaluateFlagRules({
+        flagKey: "time_window_flag",
+        rules: [
+          {
+            value: "active",
+            filter: {
+              type: "group",
+              operator: "and",
+              filters: [
+                {
+                  type: "context",
+                  field: "event.startDate",
+                  operator: "DATE_AFTER",
+                  values: ["2024-01-01"],
+                },
+                {
+                  type: "context",
+                  field: "event.endDate",
+                  operator: "DATE_BEFORE",
+                  values: ["2024-12-31"],
+                },
+              ],
+            },
+          },
+        ],
+        context: {
+          event: {
+            startDate: "2024-06-01",
+            endDate: "2024-11-30",
+          },
+        },
+      });
+
+      expect(res).toEqual({
+        flagKey: "time_window_flag",
+        value: "active",
+        context: {
+          "event.startDate": "2024-06-01",
+          "event.endDate": "2024-11-30",
+        },
+        ruleEvaluationResults: [true],
+        reason: "rule #0 matched",
+        missingContextFields: [],
+      });
+    });
+
+    it("should fail when DATE_AFTER condition is not met", () => {
+      const res = evaluateFlagRules({
+        flagKey: "future_flag",
+        rules: [
+          {
+            value: "enabled",
+            filter: {
+              type: "context",
+              field: "user.signupDate",
+              operator: "DATE_AFTER",
+              values: ["2024-12-01"],
+            },
+          },
+        ],
+        context: {
+          user: {
+            signupDate: "2024-01-15", // Too early
+          },
+        },
+      });
+
+      expect(res).toEqual({
+        flagKey: "future_flag",
+        value: undefined,
+        context: {
+          "user.signupDate": "2024-01-15",
+        },
+        ruleEvaluationResults: [false],
+        reason: "no matched rules",
+        missingContextFields: [],
+      });
+    });
+
+    it("should fail when DATE_BEFORE condition is not met", () => {
+      const res = evaluateFlagRules({
+        flagKey: "past_flag",
+        rules: [
+          {
+            value: "enabled",
+            filter: {
+              type: "context",
+              field: "user.lastActivity",
+              operator: "DATE_BEFORE",
+              values: ["2024-01-01"],
+            },
+          },
+        ],
+        context: {
+          user: {
+            lastActivity: "2024-06-15", // Too late
+          },
+        },
+      });
+
+      expect(res).toEqual({
+        flagKey: "past_flag",
+        value: undefined,
+        context: {
+          "user.lastActivity": "2024-06-15",
+        },
+        ruleEvaluationResults: [false],
+        reason: "no matched rules",
+        missingContextFields: [],
+      });
+    });
+
+    it("should work with optimized evaluator", () => {
+      const evaluator = newEvaluator([
+        {
+          value: "time_sensitive",
+          filter: {
+            type: "group",
+            operator: "and",
+            filters: [
+              {
+                type: "context",
+                field: "user.subscriptionDate",
+                operator: "DATE_AFTER",
+                values: ["2024-01-01"],
+              },
+              {
+                type: "context",
+                field: "user.trialEndDate",
+                operator: "DATE_BEFORE",
+                values: ["2024-12-31"],
+              },
+            ],
+          },
+        },
+      ]);
+
+      const res = evaluator(
+        {
+          user: {
+            subscriptionDate: "2024-03-15",
+            trialEndDate: "2024-09-30",
+          },
+        },
+        "subscription_flag",
+      );
+
+      expect(res).toEqual({
+        flagKey: "subscription_flag",
+        value: "time_sensitive",
+        context: {
+          "user.subscriptionDate": "2024-03-15",
+          "user.trialEndDate": "2024-09-30",
+        },
+        ruleEvaluationResults: [true],
+        reason: "rule #0 matched",
+        missingContextFields: [],
+      });
     });
   });
 });
@@ -266,15 +727,21 @@ describe("operator evaluation", () => {
 
     ["value", "SET", "", true],
     ["", "SET", "", false],
+    ["value", "NOT_SET", "", false],
+    ["", "NOT_SET", "", true],
 
     // non numeric values should return false
     ["value", "GT", "value", false],
     ["value", "GT", "0", false],
     ["1", "GT", "0", true],
+    ["2", "GT", "10", false],
+    ["10", "GT", "2", true],
 
     ["value", "LT", "value", false],
     ["value", "LT", "0", false],
     ["0", "LT", "1", true],
+    ["2", "LT", "10", true],
+    ["10", "LT", "2", false],
 
     ["start VALUE end", "CONTAINS", "value", true],
     ["alue", "CONTAINS", "value", false],
@@ -295,6 +762,65 @@ describe("operator evaluation", () => {
       expect(res).toEqual(expected);
     });
   }
+
+  describe("DATE_AFTER and DATE_BEFORE operators", () => {
+    const dateTests = [
+      // DATE_AFTER tests
+      ["2024-01-15", "DATE_AFTER", "2024-01-10", true], // After
+      ["2024-01-10", "DATE_AFTER", "2024-01-10", true], // Same date (>=)
+      ["2024-01-05", "DATE_AFTER", "2024-01-10", false], // Before
+      ["2024-12-31", "DATE_AFTER", "2024-01-01", true], // Much later
+      ["2023-01-01", "DATE_AFTER", "2024-01-01", false], // Much earlier
+
+      // DATE_BEFORE tests
+      ["2024-01-05", "DATE_BEFORE", "2024-01-10", true], // Before
+      ["2024-01-10", "DATE_BEFORE", "2024-01-10", true], // Same date (<=)
+      ["2024-01-15", "DATE_BEFORE", "2024-01-10", false], // After
+      ["2023-01-01", "DATE_BEFORE", "2024-01-01", true], // Much earlier
+      ["2024-12-31", "DATE_BEFORE", "2024-01-01", false], // Much later
+
+      // Edge cases with different date formats
+      ["2024-01-10T10:30:00Z", "DATE_AFTER", "2024-01-10T10:00:00Z", true], // ISO format with time
+      ["2024-01-10T09:30:00Z", "DATE_BEFORE", "2024-01-10T10:00:00Z", true], // ISO format with time
+      [
+        "2024-01-10T10:30:00.123Z",
+        "DATE_AFTER",
+        "2024-01-10T10:00:00.000Z",
+        true,
+      ], // ISO format with time and milliseconds
+      [
+        "2024-01-10T09:30:00.123Z",
+        "DATE_BEFORE",
+        "2024-01-10T10:00:00.000Z",
+        true,
+      ], // ISO format with time and milliseconds
+      ["01/15/2024", "DATE_AFTER", "01/10/2024", true], // US format
+      ["01/05/2024", "DATE_BEFORE", "01/10/2024", true], // US format
+    ] as const;
+
+    for (const [fieldValue, operator, filterValue, expected] of dateTests) {
+      it(`evaluates '${fieldValue}' ${operator} '${filterValue}' = ${expected}`, () => {
+        const res = evaluate(fieldValue, operator, [filterValue]);
+        expect(res).toEqual(expected);
+      });
+    }
+
+    it("handles invalid date formats gracefully", () => {
+      // Invalid dates should result in NaN comparisons and return false
+      expect(evaluate("invalid-date", "DATE_AFTER", ["2024-01-10"])).toBe(
+        false,
+      );
+      expect(evaluate("2024-01-10", "DATE_AFTER", ["invalid-date"])).toBe(
+        false,
+      );
+      expect(evaluate("invalid-date", "DATE_BEFORE", ["2024-01-10"])).toBe(
+        false,
+      );
+      expect(evaluate("2024-01-10", "DATE_BEFORE", ["invalid-date"])).toBe(
+        false,
+      );
+    });
+  });
 });
 
 describe("rollout hash", () => {
@@ -412,8 +938,8 @@ describe("flattenJSON", () => {
 
     expect(output).toEqual({
       "a.b": "string",
-      "a.c": 123,
-      "a.d": true,
+      "a.c": "123",
+      "a.d": "true",
     });
   });
 
@@ -439,7 +965,7 @@ describe("flattenJSON", () => {
     const output = flattenJSON(input);
 
     expect(output).toEqual({
-      a: [],
+      a: "",
     });
   });
 
@@ -492,6 +1018,148 @@ describe("flattenJSON", () => {
 
     expect(output).toEqual({
       "a.b": "",
+    });
+  });
+
+  it("should handle null values", () => {
+    const input = {
+      a: null,
+      b: {
+        c: null,
+      },
+    };
+
+    const output = flattenJSON(input);
+
+    expect(output).toEqual({
+      a: "",
+      "b.c": "",
+    });
+  });
+
+  it("should skip undefined values", () => {
+    const input = {
+      a: "value",
+      b: undefined,
+      c: {
+        d: undefined,
+        e: "another value",
+      },
+    };
+
+    const output = flattenJSON(input);
+
+    expect(output).toEqual({
+      a: "value",
+      "c.e": "another value",
+    });
+  });
+
+  it("should handle empty nested objects", () => {
+    const input = {
+      a: {},
+      b: {
+        c: {},
+        d: "value",
+      },
+    };
+
+    const output = flattenJSON(input);
+
+    expect(output).toEqual({
+      a: "",
+      "b.c": "",
+      "b.d": "value",
+    });
+  });
+
+  it("should handle top-level primitive values", () => {
+    const input = {
+      a: "simple",
+      b: 42,
+      c: true,
+      d: false,
+    };
+
+    const output = flattenJSON(input);
+
+    expect(output).toEqual({
+      a: "simple",
+      b: "42",
+      c: "true",
+      d: "false",
+    });
+  });
+
+  it("should handle arrays with null and undefined values", () => {
+    const input = {
+      a: ["value1", null, undefined, "value4"],
+    };
+
+    const output = flattenJSON(input);
+
+    expect(output).toEqual({
+      "a.0": "value1",
+      "a.1": "",
+      "a.3": "value4",
+    });
+  });
+
+  it("should handle deeply nested empty structures", () => {
+    const input = {
+      a: {
+        b: {
+          c: {},
+          d: [],
+        },
+      },
+    };
+
+    const output = flattenJSON(input);
+
+    expect(output).toEqual({
+      "a.b.c": "",
+      "a.b.d": "",
+    });
+  });
+
+  it("should handle keys with special characters", () => {
+    const input = {
+      "key.with.dots": "value1",
+      "key-with-dashes": "value2",
+      "key with spaces": "value3",
+    };
+
+    const output = flattenJSON(input);
+
+    expect(output).toEqual({
+      "key.with.dots": "value1",
+      "key-with-dashes": "value2",
+      "key with spaces": "value3",
+    });
+  });
+
+  it("should handle edge case numbers and booleans", () => {
+    const input = {
+      zero: 0,
+      negativeNumber: -42,
+      float: 3.14,
+      infinity: Infinity,
+      negativeInfinity: -Infinity,
+      nan: NaN,
+      falseValue: false,
+    };
+
+    const output = flattenJSON(input);
+
+    expect(output).toEqual({
+      zero: "0",
+      negativeNumber: "-42",
+      float: "3.14",
+      infinity: "Infinity",
+      negativeInfinity: "-Infinity",
+      nan: "NaN",
+      falseValue: "false",
     });
   });
 });

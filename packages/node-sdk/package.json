@@ -1,10 +1,10 @@
 {
-  "name": "@bucketco/node-sdk",
-  "version": "1.8.3",
+  "name": "@reflag/node-sdk",
+  "version": "1.0.0",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/bucketco/bucket-javascript-sdk.git"
+    "url": "https://github.com/reflagcom/javascript.git"
   },
   "scripts": {
     "dev": "vite",
@@ -29,8 +29,8 @@
   "types": "./dist/types/src/index.d.ts",
   "devDependencies": {
     "@babel/core": "~7.24.7",
-    "@bucketco/eslint-config": "~0.0.2",
-    "@bucketco/tsconfig": "~0.0.2",
+    "@reflag/eslint-config": "~0.0.2",
+    "@reflag/tsconfig": "~0.0.2",
     "@types/node": "^22.12.0",
     "@vitest/coverage-v8": "~1.6.0",
     "c8": "~10.1.0",
@@ -44,6 +44,6 @@
     "vitest": "~1.6.0"
   },
   "dependencies": {
-    "@bucketco/flag-evaluation": "0.1.2"
+    "@reflag/flag-evaluation": "1.0.0"
   }
 }

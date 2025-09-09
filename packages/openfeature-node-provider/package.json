@@ -1,10 +1,10 @@
 {
-  "name": "@bucketco/openfeature-node-provider",
-  "version": "0.3.1",
+  "name": "@reflag/openfeature-node-provider",
+  "version": "1.0.0",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/bucketco/bucket-javascript-sdk.git"
+    "url": "https://github.com/reflagcom/javascript.git"
   },
   "scripts": {
     "dev": "vite",
@@ -35,10 +35,10 @@
   },
   "devDependencies": {
     "@babel/core": "~7.24.7",
-    "@bucketco/eslint-config": "~0.0.2",
-    "@bucketco/tsconfig": "~0.0.2",
     "@openfeature/core": "^1.5.0",
     "@openfeature/server-sdk": ">=1.16.1",
+    "@reflag/eslint-config": "~0.0.2",
+    "@reflag/tsconfig": "~0.0.2",
     "@types/node": "^22.12.0",
     "eslint": "^9.21.0",
     "flush-promises": "~1.0.2",
@@ -50,7 +50,7 @@
     "vitest": "~1.6.0"
   },
   "dependencies": {
-    "@bucketco/node-sdk": "1.6.0"
+    "@reflag/node-sdk": "1.0.0"
   },
   "peerDependencies": {
     "@openfeature/server-sdk": ">=1.16.1"

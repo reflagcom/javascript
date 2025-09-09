@@ -1,10 +1,10 @@
 import { DefaultBodyType, http, StrictRequest } from "msw";
 import { beforeEach, describe, expect, test, vi, vitest } from "vitest";
 
-import { BucketClient } from "../src";
+import { ReflagClient } from "../src";
 import { HttpClient } from "../src/httpClient";
 
-import { getFeatures } from "./mocks/handlers";
+import { getFlags } from "./mocks/handlers";
 import { server } from "./mocks/server";
 
 const KEY = "123";
@@ -22,15 +22,15 @@ beforeEach(() => {
 
 describe("init", () => {
   test("will accept setup with key and debug logger", async () => {
-    const bucketInstance = new BucketClient({
+    const reflagInstance = new ReflagClient({
       publishableKey: KEY,
       user: { id: 42 },
       company: { id: 42 },
       logger,
     });
-    const spyInit = vi.spyOn(bucketInstance, "initialize");
+    const spyInit = vi.spyOn(reflagInstance, "initialize");
 
-    await bucketInstance.initialize();
+    await reflagInstance.initialize();
     expect(spyInit).toHaveBeenCalled();
     expect(logger.debug).toHaveBeenCalled();
   });
@@ -43,30 +43,30 @@ describe("init", () => {
         "https://example.com/features/evaluated",
         ({ request }: { request: StrictRequest<DefaultBodyType> }) => {
           usedSpecialHost = true;
-          return getFeatures({ request });
+          return getFlags({ request });
         },
       ),
     );
-    const bucketInstance = new BucketClient({
+    const reflagInstance = new ReflagClient({
       publishableKey: KEY,
       user: { id: "foo" },
       apiBaseUrl: "https://example.com",
     });
-    await bucketInstance.initialize();
+    await reflagInstance.initialize();
 
     expect(usedSpecialHost).toBe(true);
   });
 
   test("automatically does user/company tracking", async () => {
-    const user = vitest.spyOn(BucketClient.prototype as any, "user");
-    const company = vitest.spyOn(BucketClient.prototype as any, "company");
+    const user = vitest.spyOn(ReflagClient.prototype as any, "user");
+    const company = vitest.spyOn(ReflagClient.prototype as any, "company");
 
-    const bucketInstance = new BucketClient({
+    const reflagInstance = new ReflagClient({
       publishableKey: KEY,
       user: { id: "foo" },
       company: { id: "bar" },
     });
-    await bucketInstance.initialize();
+    await reflagInstance.initialize();
 
     expect(user).toHaveBeenCalled();
     expect(company).toHaveBeenCalled();
@@ -75,7 +75,7 @@ describe("init", () => {
   test("can disable tracking and auto. feedback surveys", async () => {
     const post = vitest.spyOn(HttpClient.prototype as any, "post");
 
-    const bucketInstance = new BucketClient({
+    const reflagInstance = new ReflagClient({
       publishableKey: KEY,
       user: { id: "foo" },
       apiBaseUrl: "https://example.com",
@@ -84,23 +84,23 @@ describe("init", () => {
         enableAutoFeedback: false,
       },
     });
-    await bucketInstance.initialize();
-    await bucketInstance.track("test");
+    await reflagInstance.initialize();
+    await reflagInstance.track("test");
 
     expect(post).not.toHaveBeenCalled();
   });
 
   test("passes credentials correctly to httpClient", async () => {
     const credentials = "include";
-    const bucketInstance = new BucketClient({
+    const reflagInstance = new ReflagClient({
       publishableKey: KEY,
       user: { id: "foo" },
       credentials,
     });
 
-    await bucketInstance.initialize();
+    await reflagInstance.initialize();
 
-    expect(bucketInstance["httpClient"]["fetchOptions"].credentials).toBe(
+    expect(reflagInstance["httpClient"]["fetchOptions"].credentials).toBe(
       credentials,
     );
   });

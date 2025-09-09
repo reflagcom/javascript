@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { Features } from "@/components/Flags";
+import { Flags } from "@/components/Flags";
 
 export default function Home() {
   return (
@@ -36,7 +36,7 @@ export default function Home() {
         />
       </div>
 
-      <Features />
+      <Flags />
 
       <div className="mb-32 grid text-center lg:mb-0 lg:w-full lg:max-w-5xl lg:grid-cols-4 lg:text-left">
         <a

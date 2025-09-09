@@ -8,17 +8,18 @@ import equal from "fast-deep-equal";
 import { findUp } from "find-up";
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 
 import {
   CONFIG_FILE_NAME,
   DEFAULT_API_URL,
   DEFAULT_BASE_URL,
   DEFAULT_TYPES_OUTPUT,
+  MODULE_ROOT,
   SCHEMA_URL,
 } from "../utils/constants.js";
 import { ConfigValidationError, handleError } from "../utils/errors.js";
 import { stripTrailingSlash } from "../utils/urls.js";
+import { current as currentVersion } from "../utils/version.js";
 
 export const typeFormats = ["react", "node"] as const;
 export type TypeFormat = (typeof typeFormats)[number];
@@ -43,11 +44,6 @@ const defaultConfig: Config = {
   appId: undefined,
   typesOutput: [{ path: DEFAULT_TYPES_OUTPUT, format: "react" }],
 };
-
-const moduleRoot = fileURLToPath(import.meta.url).substring(
-  0,
-  fileURLToPath(import.meta.url).lastIndexOf("cli") + 3,
-);
 
 // Helper to normalize typesOutput to array format
 export function normalizeTypesOutput(
@@ -75,32 +71,26 @@ class ConfigStore {
   protected async createValidator() {
     try {
       // Using current config store file, resolve the schema.json path
-      const schemaPath = join(moduleRoot, "schema.json");
+      const schemaPath = join(MODULE_ROOT, "schema.json");
       const content = await readFile(schemaPath, "utf-8");
       const parsed = parseJSON(content) as unknown as Config;
+
       const ajv = new Ajv();
       this.validateConfig = ajv.compile(parsed);
     } catch {
-      void handleError(new Error("Failed to load the config schema"), "Config");
+      handleError(new Error("Failed to load the config schema"), "Config");
     }
   }
 
   protected async loadConfigFile() {
     if (!this.validateConfig) {
-      void handleError(new Error("Failed to load the config schema"), "Config");
-      return;
+      handleError(new Error("Failed to load the config schema"), "Config");
     }
 
     // Load the client version from the module's package.json metadata
     try {
-      const moduleMetadata = await readFile(
-        join(moduleRoot, "package.json"),
-        "utf-8",
-      );
-      const moduleMetadataParsed = parseJSON(moduleMetadata) as unknown as {
-        version: string;
-      };
-      this.clientVersion = moduleMetadataParsed.version;
+      const { version } = await currentVersion();
+      this.clientVersion = version;
     } catch {
       // Should not be the case, but ignore if no package.json is found
     }
@@ -126,7 +116,7 @@ class ConfigStore {
         parsed.typesOutput = normalizeTypesOutput(parsed.typesOutput);
 
       if (!this.validateConfig!(parsed)) {
-        void handleError(
+        handleError(
           new ConfigValidationError(this.validateConfig!.errors),
           "Config",
         );

@@ -51,10 +51,14 @@
 /* Toolbar */
 
 .toolbar {
-  --brand300: #a39dfc;
-  --brand400: #847cfb;
+  --brand300: #9cc4d3;
+  --brand400: #77adc1;
   --gray500: #787c91;
+  --gray600: #3c3d49;
+  --gray700: #22232a;
+  --gray800: #17181c;
   --black: #1e1f24;
+  --white: white;
 
   --bg-color: hsla(230, 9%, 8%, 0.85);
   --bg-light-color: hsla(230, 9%, 6%, 0.85);
@@ -101,10 +105,10 @@
   min-width: 220px;
   padding: 0;
 
-  --visible-features: 15;
+  --visible-flags: 15;
   max-height: min(
     calc(100vh - 36px - 35px),
-    calc(45px + (var(--visible-features) * 27px))
+    calc(45px + (var(--visible-flags) * 27px))
   );
   height: auto;
 

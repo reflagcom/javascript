@@ -1,23 +1,23 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Bucket cli schema",
+  "title": "Reflag cli schema",
   "type": "object",
   "properties": {
     "baseUrl": {
       "type": "string",
       "pattern": "^https?://.*",
-      "description": "Base URL for the API. Defaults to https://app.bucket.co."
+      "description": "Base URL for the API. Defaults to https://app.reflag.com."
     },
     "apiUrl": {
       "type": "string",
       "pattern": "^https?://.*",
-      "description": "API URL for the API. Defaults to https://app.bucket.co/api."
+      "description": "API URL for the API. Defaults to https://app.reflag.com/api."
     },
     "appId": {
       "type": "string",
       "minLength": 14,
       "maxLength": 14,
-      "description": "Mandatory ID for the Bucket app. You can find it by calling bucket apps list."
+      "description": "Mandatory ID for the Reflag app. You can find it by calling reflag apps list."
     },
     "typesOutput": {
       "type": "array",

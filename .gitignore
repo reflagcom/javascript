@@ -41,4 +41,4 @@ junit.xml
 
 .next
 eslint-report.json
-bucket.config.json
+reflag.config.json

@@ -15,20 +15,21 @@
   position: absolute;
 }
 
+.switch-track {
+  position: relative;
+  transition: background 0.1s ease;
+  background: var(--gray600);
+  border-radius: 999px;
+  transition: transform 0.1s ease-out;
+}
+
 .switch-input:focus-visible + .switch-track {
   outline: none;
   box-shadow: 0 0 0 1px #fff;
 }
 
-.switch-track {
-  position: relative;
-  transition: background 0.1s ease;
-  background: #606476;
-  border-radius: 999px;
-}
-
 .switch[data-enabled="true"] .switch-track {
-  background: #847cfb;
+  background: white;
 }
 
 .switch-dot {
@@ -36,6 +37,10 @@
   border-radius: 50%;
   position: absolute;
   top: 1px;
-  transition: transform 0.1s ease-in-out;
+  transition: transform 0.1s ease-out;
   box-shadow: 0 0px 5px rgba(0, 0, 0, 0.2);
+}
+
+.switch[data-enabled="true"] .switch-dot {
+  background: var(--black);
 }

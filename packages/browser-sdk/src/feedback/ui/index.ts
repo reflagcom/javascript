@@ -26,7 +26,7 @@ function attachDialogContainer() {
     document.body.appendChild(container);
 
     for (const event of propagatedEvents) {
-      container.addEventListener(event, stopPropagation);
+      container.addEventListener(event, stopPropagation, { passive: true });
     }
   }
 
@@ -53,7 +53,7 @@ export function openFeedbackForm(options: OpenFeedbackFormOptions): void {
   if (position.type === "POPOVER") {
     if (!position.anchor) {
       console.warn(
-        "[Bucket]",
+        "[Reflag]",
         "Unable to open popover. Anchor must be a defined DOM-element",
       );
       return;
@@ -61,7 +61,7 @@ export function openFeedbackForm(options: OpenFeedbackFormOptions): void {
 
     if (!document.body.contains(position.anchor)) {
       console.warn(
-        "[Bucket]",
+        "[Reflag]",
         "Unable to open popover. Anchor must be an attached DOM-element",
       );
       return;

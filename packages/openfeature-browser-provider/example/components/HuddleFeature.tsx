@@ -7,12 +7,12 @@ import {
 } from "@openfeature/react-sdk";
 import { track } from "@/app/featureManagement";
 
-const featureKey = "huddle";
+const flagKey = "huddle";
 
 export const HuddleFeature = () => {
-  const isEnabled = useBooleanFlagValue(featureKey, false);
+  const isEnabled = useBooleanFlagValue(flagKey, false);
   const { variant: huddleMeetingProvider, value: config } =
-    useObjectFlagDetails(featureKey, {
+    useObjectFlagDetails(flagKey, {
       joinUrl: "https://zoom.us/join",
     });
 
@@ -32,7 +32,7 @@ export const HuddleFeature = () => {
       </pre>
       <button
         className="border-solid m-auto max-w-60 border-2 border-indigo-600 rounded-lg p-2 mt-4 disabled:opacity-50"
-        onClick={() => track(featureKey)}
+        onClick={() => track(flagKey)}
       >
         Track usage
       </button>

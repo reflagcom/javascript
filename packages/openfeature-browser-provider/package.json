@@ -1,11 +1,11 @@
 {
-  "name": "@bucketco/openfeature-browser-provider",
-  "version": "0.5.1",
+  "name": "@reflag/openfeature-browser-provider",
+  "version": "1.0.0",
   "packageManager": "yarn@4.1.1",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/bucketco/bucket-javascript-sdk.git"
+    "url": "https://github.com/reflagcom/javascript.git"
   },
   "publishConfig": {
     "access": "public"
@@ -25,23 +25,23 @@
   "files": [
     "dist"
   ],
-  "main": "./dist/bucket-openfeature-browser-provider.umd.js",
+  "main": "./dist/reflag-openfeature-browser-provider.umd.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/bucket-openfeature-browser-provider.mjs",
-      "require": "./dist/bucket-openfeature-browser-provider.umd.js"
+      "import": "./dist/reflag-openfeature-browser-provider.mjs",
+      "require": "./dist/reflag-openfeature-browser-provider.umd.js"
     }
   },
   "dependencies": {
-    "@bucketco/browser-sdk": "3.1.2"
+    "@reflag/browser-sdk": "1.0.0"
   },
   "devDependencies": {
-    "@bucketco/eslint-config": "0.0.2",
-    "@bucketco/tsconfig": "0.0.2",
     "@openfeature/core": "1.5.0",
     "@openfeature/web-sdk": "^1.3.0",
+    "@reflag/eslint-config": "0.0.2",
+    "@reflag/tsconfig": "0.0.2",
     "@types/node": "^22.12.0",
     "eslint": "^9.21.0",
     "jsdom": "^24.1.0",

@@ -6,5 +6,6 @@ export default defineWorkspace([
   "./packages/openfeature-node-provider/vite.config.js",
   "./packages/node-sdk/vite.config.js",
   "./packages/react-sdk/vite.config.mjs",
+  "./packages/vue-sdk/vite.config.mjs",
   "./packages/cli/vite.config.js",
 ]);

@@ -5,7 +5,7 @@ import chalk from "chalk";
 export class MissingAppIdError extends Error {
   constructor() {
     super(
-      "App ID is required. Please provide it with --appId or in the config file. Use `bucket apps list` to see available apps.",
+      "App ID is required. Please provide it with --appId or in the config file. Use `reflag apps list` to see available apps.",
     );
     this.name = "MissingAppIdError";
   }
@@ -34,17 +34,37 @@ export class ConfigValidationError extends Error {
   }
 }
 
-export async function handleError(error: unknown, tag: string) {
+type ResponseErrorData = {
+  error?: {
+    message?: string;
+    code?: string;
+  };
+  validationErrors?: { path: string[]; message: string }[];
+};
+
+export class ResponseError extends Error {
+  public readonly data: ResponseErrorData;
+
+  constructor(response: ResponseErrorData) {
+    super(response.error?.message ?? response.error?.code);
+    this.data = response;
+    this.name = "ResponseError";
+  }
+}
+
+export function handleError(error: unknown, tag: string): never {
   tag = chalk.bold(`\n[${tag}] error:`);
 
   if (error instanceof ExitPromptError) {
     process.exit(0);
-  } else if (error instanceof Response) {
-    const data = await error.json();
-    console.error(chalk.red(tag, data.error?.message ?? data.error?.code));
-    if (data.validationErrors) {
+  } else if (error instanceof ResponseError) {
+    console.error(
+      chalk.red(tag, error.data.error?.message ?? error.data.error?.code),
+    );
+
+    if (error.data.validationErrors) {
       console.table(
-        data.validationErrors.map(
+        error.data.validationErrors.map(
           ({ path, message }: { path: string[]; message: string }) => ({
             path: path.join("."),
             error: message,
@@ -54,11 +74,15 @@ export async function handleError(error: unknown, tag: string) {
     }
   } else if (error instanceof Error) {
     console.error(chalk.red(tag, error.message));
-    if (error.cause) console.error(error.cause);
+
+    if (error.cause) {
+      console.error(error.cause);
+    }
   } else if (typeof error === "string") {
     console.error(chalk.red(tag, error));
   } else {
     console.error(chalk.red(tag ?? "An unknown error occurred:", error));
   }
+
   process.exit(1);
 }

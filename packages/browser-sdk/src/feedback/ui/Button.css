@@ -13,31 +13,31 @@
   justify-content: center;
   border: none;
   cursor: pointer;
-  font-family: var(--bucket-feedback-dialog-font-family);
+  font-family: var(--reflag-feedback-dialog-font-family);
   font-size: 12px;
   font-weight: 500;
   box-shadow:
     0 1px 2px 0 rgba(0, 0, 0, 0.06),
     0 1px 1px 0 rgba(0, 0, 0, 0.01);
-  border-radius: var(--bucket-feedback-dialog-border-radius, 6px);
+  border-radius: var(--reflag-feedback-dialog-border-radius, 6px);
   transition-duration: 200ms;
   transition-property:
     background-color, border-color, color, opacity, box-shadow, transform;
 
   &.primary {
     background-color: var(
-      --bucket-feedback-dialog-primary-button-background-color,
+      --reflag-feedback-dialog-primary-button-background-color,
       white
     );
-    color: var(--bucket-feedback-dialog-primary-button-color, #1e1f24);
+    color: var(--reflag-feedback-dialog-primary-button-color, #1e1f24);
     border: 1px solid
-      var(--bucket-feedback-dialog-primary-border-color, #d8d9df);
+      var(--reflag-feedback-dialog-primary-border-color, #d8d9df);
   }
 
   &:disabled {
     opacity: 0.5;
     cursor: not-allowed;
-    border-color: var(--bucket-feedback-dialog-primary-border-color, #d8d9df);
+    border-color: var(--reflag-feedback-dialog-primary-border-color, #d8d9df);
 
     transition-duration: 200ms;
     transition-property:
@@ -47,7 +47,7 @@
   &:focus {
     outline: none;
     border-color: var(
-      --bucket-feedback-dialog-input-focus-border-color,
+      --reflag-feedback-dialog-input-focus-border-color,
       #787c91
     );
   }

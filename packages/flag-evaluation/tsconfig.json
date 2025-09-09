@@ -1,5 +1,5 @@
 {
-  "extends": "@bucketco/tsconfig/library",
+  "extends": "@reflag/tsconfig/library",
   "compilerOptions": {
     "lib": [],
     "outDir": "./dist/"

@@ -17,7 +17,6 @@ const ANIMATION_SPEED = 400;
 
 function getFeedbackDataFromForm(el: HTMLFormElement) {
   const formData = new FormData(el);
-  console.log("comment", (formData.get("comment")?.toString() || "").trim());
   return {
     score: Number(formData.get("score")?.toString()),
     comment: (formData.get("comment")?.toString() || "").trim(),
@@ -67,11 +66,9 @@ export const FeedbackForm: FunctionComponent<FeedbackFormProps> = ({
     // Validation logic
     if (requireSatisfactionScore) {
       if (!data.score) return;
-    } else {
-      if (!data.comment) {
-        setError("Comment is required");
-        return;
-      }
+    } else if (!data.comment) {
+      setError("Comment is required");
+      return;
     }
     setError("");
     try {
@@ -96,15 +93,12 @@ export const FeedbackForm: FunctionComponent<FeedbackFormProps> = ({
   const expandedContentRef = useRef<HTMLDivElement>(null);
   const submittedRef = useRef<HTMLDivElement>(null);
 
-  console.log("formRef", formRef.current);
-
   const transitionToDefault = useCallback(() => {
     if (containerRef.current === null) return;
     if (headerRef.current === null) return;
     if (expandedContentRef.current === null) return;
 
-    containerRef.current.style.maxHeight =
-      headerRef.current.clientHeight + "px";
+    containerRef.current.style.maxHeight = `${headerRef.current.clientHeight}px`;
 
     expandedContentRef.current.style.position = "absolute";
     expandedContentRef.current.style.opacity = "0";
@@ -116,11 +110,11 @@ export const FeedbackForm: FunctionComponent<FeedbackFormProps> = ({
     if (headerRef.current === null) return;
     if (expandedContentRef.current === null) return;
 
-    containerRef.current.style.maxHeight =
+    containerRef.current.style.maxHeight = `${
       headerRef.current.clientHeight + // Header height
       expandedContentRef.current.clientHeight + // Comment + Button Height
-      10 + // Gap height
-      "px";
+      10 // Gap height
+    }px`;
 
     expandedContentRef.current.style.position = "relative";
     expandedContentRef.current.style.opacity = "1";
@@ -134,8 +128,7 @@ export const FeedbackForm: FunctionComponent<FeedbackFormProps> = ({
 
     formRef.current.style.opacity = "0";
     formRef.current.style.pointerEvents = "none";
-    containerRef.current.style.maxHeight =
-      submittedRef.current.clientHeight + "px";
+    containerRef.current.style.maxHeight = `${submittedRef.current.clientHeight}px`;
 
     // Fade in "submitted" step once container has resized
     setTimeout(() => {
@@ -183,14 +176,14 @@ export const FeedbackForm: FunctionComponent<FeedbackFormProps> = ({
           onFocusCapture={onInteraction}
           onSubmit={handleSubmit}
         >
-          <div class="title" id="bucket-feedback-score-label">
+          <div class="title" id="reflag-feedback-score-label">
             {question}
           </div>
           <div ref={expandedContentRef} class="form-expanded-content">
             <div class="form-control">
               <textarea
                 class="textarea"
-                id="bucket-feedback-comment-label"
+                id="reflag-feedback-comment-label"
                 name="comment"
                 placeholder={t.QuestionPlaceholder}
                 rows={4}
@@ -198,7 +191,7 @@ export const FeedbackForm: FunctionComponent<FeedbackFormProps> = ({
             </div>
             <div
               ref={headerRef}
-              aria-labelledby="bucket-feedback-score-label"
+              aria-labelledby="reflag-feedback-score-label"
               class="form-control"
               role="group"
             >

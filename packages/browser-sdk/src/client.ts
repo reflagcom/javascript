@@ -1,10 +1,4 @@
 import {
-  CheckEvent,
-  FallbackFeatureOverride,
-  FeaturesClient,
-  RawFeatures,
-} from "./feature/features";
-import {
   AutoFeedback,
   Feedback,
   feedback,
@@ -13,9 +7,15 @@ import {
   RequestFeedbackOptions,
 } from "./feedback/feedback";
 import * as feedbackLib from "./feedback/ui";
+import {
+  CheckEvent,
+  FallbackFlagOverride,
+  FlagsClient,
+  RawFlags,
+} from "./flag/flags";
 import { ToolbarPosition } from "./ui/types";
 import { API_BASE_URL, APP_BASE_URL, SSE_REALTIME_BASE_URL } from "./config";
-import { BucketContext, CompanyContext, UserContext } from "./context";
+import { CompanyContext, ReflagContext, UserContext } from "./context";
 import { HookArgs, HooksManager } from "./hooksManager";
 import { HttpClient } from "./httpClient";
 import { Logger, loggerWithPrefix, quietConsoleLogger } from "./logger";
@@ -143,21 +143,21 @@ export type PayloadContext = {
 };
 
 /**
- * BucketClient configuration.
+ * ReflagClient configuration.
  */
 export interface Config {
   /**
-   * Base URL of Bucket servers.
+   * Base URL of Reflag servers.
    */
   apiBaseUrl: string;
 
   /**
-   * Base URL of the Bucket web app.
+   * Base URL of the Reflag web app.
    */
   appBaseUrl: string;
 
   /**
-   * Base URL of Bucket servers for SSE connections used by AutoFeedback.
+   * Base URL of Reflag servers for SSE connections used by AutoFeedback.
    */
   sseBaseUrl: string;
 
@@ -165,6 +165,11 @@ export interface Config {
    * Whether to enable tracking.
    */
   enableTracking: boolean;
+
+  /**
+   * Whether to enable offline mode.
+   */
+  offline: boolean;
 }
 
 /**
@@ -178,12 +183,12 @@ export type ToolbarOptions =
     };
 
 /**
- * Feature definitions.
+ * Flag definitions.
  */
-export type FeatureDefinitions = Readonly<Array<string>>;
+export type FlagDefinitions = Readonly<Array<string>>;
 
 /**
- * BucketClient initialization options.
+ * ReflagClient initialization options.
  */
 export type InitOptions = {
   /**
@@ -192,14 +197,14 @@ export type InitOptions = {
   publishableKey: string;
 
   /**
-   * User related context. If you provide `id` Bucket will enrich the evaluation context with
-   * user attributes on Bucket servers.
+   * User related context. If you provide `id` Reflag will enrich the evaluation context with
+   * user attributes on Reflag servers.
    */
   user?: UserContext;
 
   /**
-   * Company related context. If you provide `id` Bucket will enrich the evaluation context with
-   * company attributes on Bucket servers.
+   * Company related context. If you provide `id` Reflag will enrich the evaluation context with
+   * company attributes on Reflag servers.
    */
   company?: CompanyContext;
 
@@ -219,40 +224,45 @@ export type InitOptions = {
   logger?: Logger;
 
   /**
-   * Base URL of Bucket servers. You can override this to use your mocked server.
+   * Base URL of Reflag servers. You can override this to use your mocked server.
    */
   apiBaseUrl?: string;
 
   /**
-   * Base URL of the Bucket web app. Links open ín this app by default.
+   * Base URL of the Reflag web app. Links open ín this app by default.
    */
   appBaseUrl?: string;
 
   /**
-   * Feature keys for which `isEnabled` should fallback to true
-   * if SDK fails to fetch features from Bucket servers. If a record
+   * Whether to enable offline mode. Defaults to `false`.
+   */
+  offline?: boolean;
+
+  /**
+   * Flag keys for which `isEnabled` should fallback to true
+   * if SDK fails to fetch flags from Reflag servers. If a record
    * is supplied instead of array, the values of each key represent the
    * configuration values and `isEnabled` is assume `true`.
    */
-  fallbackFeatures?: string[] | Record<string, FallbackFeatureOverride>;
+  fallbackFlags?: string[] | Record<string, FallbackFlagOverride>;
 
   /**
-   * Timeout in milliseconds when fetching features
+   * Timeout in milliseconds when fetching flags
    */
   timeoutMs?: number;
 
   /**
-   * If set to true stale features will be returned while refetching features
+   * If set to true stale flags will be returned while refetching flags
    */
   staleWhileRevalidate?: boolean;
 
   /**
-   * If set, features will be cached between page loads for this duration
+   * If set, flags will be cached between page loads for this duration
    */
   expireTimeMs?: number;
 
   /**
-   * Stale features will be returned if staleWhileRevalidate is true if no new features can be fetched
+   * Stale flags will be returned if staleWhileRevalidate is true if no new flags can be fetched
    */
   staleTimeMs?: number;
 
@@ -264,7 +274,7 @@ export type InitOptions = {
   credentials?: "include" | "same-origin" | "omit";
 
   /**
-   * Base URL of Bucket servers for SSE connections used by AutoFeedback.
+   * Base URL of Reflag servers for SSE connections used by AutoFeedback.
    */
   sseBaseUrl?: string;
 
@@ -294,12 +304,13 @@ const defaultConfig: Config = {
   appBaseUrl: APP_BASE_URL,
   sseBaseUrl: SSE_REALTIME_BASE_URL,
   enableTracking: true,
+  offline: false,
 };
 
 /**
- * A remotely managed configuration value for a feature.
+ * A remotely managed configuration value for a flag.
  */
-export type FeatureRemoteConfig =
+export type FlagRemoteConfig =
   | {
       /**
        * The key of the matched configuration value.
@@ -314,30 +325,42 @@ export type FeatureRemoteConfig =
   | { key: undefined; payload: undefined };
 
 /**
- * Represents a feature.
+ * Represents a flag.
  */
-export interface Feature {
+export interface Flag {
   /**
-   * Result of feature flag evaluation.
+   * Result of flag flag evaluation.
+   * Note: Does not take local overrides into account.
    */
   isEnabled: boolean;
 
   /*
    * Optional user-defined configuration.
    */
-  config: FeatureRemoteConfig;
+  config: FlagRemoteConfig;
 
   /**
-   * Function to send analytics events for this feature.
+   * Function to send analytics events for this flag.
    */
   track: () => Promise<Response | undefined>;
 
   /**
-   * Function to request feedback for this feature.
+   * Function to request feedback for this flag.
    */
   requestFeedback: (
-    options: Omit<RequestFeedbackData, "featureKey" | "featureId">,
+    options: Omit<RequestFeedbackData, "flagKey" | "featureId">,
   ) => void;
+
+  /**
+   * The current override status of isEnabled for the flag.
+   */
+  isEnabledOverride: boolean | null;
+
+  /**
+   * Set the override status for isEnabled for the flag.
+   * Set to `null` to remove the override.
+   */
+  setIsEnabledOverride(isEnabled: boolean | null): void;
 }
 
 function shouldShowToolbar(opts: InitOptions) {
@@ -349,30 +372,30 @@ function shouldShowToolbar(opts: InitOptions) {
 }
 
 /**
- * BucketClient lets you interact with the Bucket API.
+ * ReflagClient lets you interact with the Reflag API.
  */
-export class BucketClient {
+export class ReflagClient {
   private readonly publishableKey: string;
-  private readonly context: BucketContext;
+  private readonly context: ReflagContext;
   private config: Config;
   private requestFeedbackOptions: Partial<RequestFeedbackOptions>;
   private readonly httpClient: HttpClient;
 
   private readonly autoFeedback: AutoFeedback | undefined;
   private autoFeedbackInit: Promise<void> | undefined;
-  private readonly featuresClient: FeaturesClient;
+  private readonly flagsClient: FlagsClient;
 
   public readonly logger: Logger;
 
   private readonly hooks: HooksManager;
 
   /**
-   * Create a new BucketClient instance.
+   * Create a new ReflagClient instance.
    */
   constructor(opts: InitOptions) {
     this.publishableKey = opts.publishableKey;
     this.logger =
-      opts?.logger ?? loggerWithPrefix(quietConsoleLogger, "[Bucket]");
+      opts?.logger ?? loggerWithPrefix(quietConsoleLogger, "[Reflag]");
     this.context = {
       user: opts?.user?.id ? opts.user : undefined,
       company: opts?.company?.id ? opts.company : undefined,
@@ -384,6 +407,7 @@ export class BucketClient {
       appBaseUrl: opts?.appBaseUrl ?? defaultConfig.appBaseUrl,
       sseBaseUrl: opts?.sseBaseUrl ?? defaultConfig.sseBaseUrl,
       enableTracking: opts?.enableTracking ?? defaultConfig.enableTracking,
+      offline: opts?.offline ?? defaultConfig.offline,
     };
 
     this.requestFeedbackOptions = {
@@ -397,7 +421,7 @@ export class BucketClient {
       credentials: opts?.credentials,
     });
 
-    this.featuresClient = new FeaturesClient(
+    this.flagsClient = new FlagsClient(
       this.httpClient,
       // API expects `other` and we have `otherContext`.
       {
@@ -409,12 +433,14 @@ export class BucketClient {
       {
         expireTimeMs: opts.expireTimeMs,
         staleTimeMs: opts.staleTimeMs,
-        fallbackFeatures: opts.fallbackFeatures,
+        fallbackFlags: opts.fallbackFlags,
         timeoutMs: opts.timeoutMs,
+        offline: this.config.offline,
       },
     );
 
     if (
+      !this.config.offline &&
       this.context?.user &&
       !isNode && // do not prompt on server-side
       opts?.feedback?.enableAutoFeedback !== false // default to on
@@ -439,7 +465,7 @@ export class BucketClient {
     if (shouldShowToolbar(opts)) {
       this.logger.info("opening toolbar toggler");
       showToolbarToggle({
-        bucketClient: this,
+        reflagClient: this,
         position:
           typeof opts.toolbar === "object" ? opts.toolbar.position : undefined,
       });
@@ -447,17 +473,18 @@ export class BucketClient {
 
     // Register hooks
     this.hooks = new HooksManager();
-    this.featuresClient.onUpdated(() => {
-      this.hooks.trigger("featuresUpdated", this.featuresClient.getFeatures());
+    this.flagsClient.onUpdated(() => {
+      this.hooks.trigger("flagsUpdated", this.flagsClient.getFlags());
     });
   }
 
   /**
-   * Initialize the Bucket SDK.
+   * Initialize the Reflag SDK.
    *
    * Must be called before calling other SDK methods.
    */
   async initialize() {
+    const start = Date.now();
     if (this.autoFeedback) {
       // do not block on automated feedback surveys initialization
       this.autoFeedbackInit = this.autoFeedback.initialize().catch((e) => {
@@ -465,7 +492,7 @@ export class BucketClient {
       });
     }
 
-    await this.featuresClient.initialize();
+    await this.flagsClient.initialize();
     if (this.context.user && this.config.enableTracking) {
       this.user().catch((e) => {
         this.logger.error("error sending user", e);
@@ -477,6 +504,13 @@ export class BucketClient {
         this.logger.error("error sending company", e);
       });
     }
+
+    this.logger.info(
+      "Reflag initialized in " +
+        Math.round(Date.now() - start) +
+        "ms" +
+        (this.config.offline ? " (offline mode)" : ""),
+    );
   }
 
   /**
@@ -525,7 +559,7 @@ export class BucketClient {
   async updateUser(user: { [key: string]: string | number | undefined }) {
     if (user.id && user.id !== this.context.user?.id) {
       this.logger.warn(
-        "ignoring attempt to update the user ID. Re-initialize the BucketClient with a new user ID instead.",
+        "ignoring attempt to update the user ID. Re-initialize the ReflagClient with a new user ID instead.",
       );
       return;
     }
@@ -536,7 +570,7 @@ export class BucketClient {
       id: user.id ?? this.context.user?.id,
     };
     void this.user();
-    await this.featuresClient.setContext(this.context);
+    await this.flagsClient.setContext(this.context);
   }
 
   /**
@@ -549,7 +583,7 @@ export class BucketClient {
   async updateCompany(company: { [key: string]: string | number | undefined }) {
     if (company.id && company.id !== this.context.company?.id) {
       this.logger.warn(
-        "ignoring attempt to update the company ID. Re-initialize the BucketClient with a new company ID instead.",
+        "ignoring attempt to update the company ID. Re-initialize the ReflagClient with a new company ID instead.",
       );
       return;
     }
@@ -559,7 +593,7 @@ export class BucketClient {
       id: company.id ?? this.context.company?.id,
     };
     void this.company();
-    await this.featuresClient.setContext(this.context);
+    await this.flagsClient.setContext(this.context);
   }
 
   /**
@@ -576,11 +610,11 @@ export class BucketClient {
       ...this.context.otherContext,
       ...otherContext,
     };
-    await this.featuresClient.setContext(this.context);
+    await this.flagsClient.setContext(this.context);
   }
 
   /**
-   * Track an event in Bucket.
+   * Track an event in Reflag.
    *
    * @param eventName The name of the event.
    * @param attributes Any attributes you want to attach to the event.
@@ -592,6 +626,10 @@ export class BucketClient {
     }
     if (!this.config.enableTracking) {
       this.logger.warn("'track' call ignored. 'enableTracking' is false");
+      return;
+    }
+
+    if (this.config.offline) {
       return;
     }
 
@@ -616,15 +654,20 @@ export class BucketClient {
   }
 
   /**
-   * Submit user feedback to Bucket. Must include either `score` or `comment`, or both.
+   * Submit user feedback to Reflag. Must include either `score` or `comment`, or both.
    *
    * @param payload The feedback details to submit.
    * @returns The server response.
    */
   async feedback(payload: Feedback) {
+    if (this.config.offline) {
+      return;
+    }
+
     const userId =
       payload.userId ||
       (this.context.user?.id ? String(this.context.user?.id) : undefined);
+
     const companyId =
       payload.companyId ||
       (this.context.company?.id ? String(this.context.company?.id) : undefined);
@@ -637,9 +680,9 @@ export class BucketClient {
   }
 
   /**
-   * Display the Bucket feedback form UI programmatically.
+   * Display the Reflag feedback form UI programmatically.
    *
-   * This can be used to collect feedback from users in Bucket in cases where Automated Feedback Surveys isn't appropriate.
+   * This can be used to collect feedback from users in Reflag in cases where Automated Feedback Surveys isn't appropriate.
    *
    * @param options
    */
@@ -651,15 +694,15 @@ export class BucketClient {
       return;
     }
 
-    if (!options.featureKey) {
+    if (!options.flagKey) {
       this.logger.error(
-        "`requestFeedback` call ignored. No `featureKey` provided",
+        "`requestFeedback` call ignored. No `flagKey` provided",
       );
       return;
     }
 
     const feedbackData = {
-      featureKey: options.featureKey,
+      flagKey: options.flagKey,
       companyId:
         options.companyId ||
         (this.context.company?.id
@@ -672,7 +715,7 @@ export class BucketClient {
     // to prevent the same click from closing it.
     setTimeout(() => {
       feedbackLib.openFeedbackForm({
-        key: options.featureKey,
+        key: options.flagKey,
         title: options.title,
         position: options.position || this.requestFeedbackOptions.position,
         translations:
@@ -707,23 +750,39 @@ export class BucketClient {
   }
 
   /**
-   * Returns a map of enabled features.
-   * Accessing a feature will *not* send a check event
-   * and `isEnabled` does not take any feature overrides
-   * into account.
-   *
-   * @returns Map of features.
+   * @deprecated Use `getFlags` instead.
    */
-  getFeatures(): RawFeatures {
-    return this.featuresClient.getFeatures();
+  getFeatures() {
+    return this.getFlags();
   }
 
   /**
-   * Return a feature. Accessing `isEnabled` or `config` will automatically send a `check` event.
-   * @returns A feature.
+   * Returns a map of enabled flags.
+   * Accessing a flag will *not* send a check event
+   * and `isEnabled` does not take any flag overrides
+   * into account.
+   *
+   * @returns Map of flags.
    */
-  getFeature(key: string): Feature {
-    const f = this.getFeatures()[key];
+  getFlags(): RawFlags {
+    return this.flagsClient.getFlags();
+  }
+
+  /**
+   * @deprecated Use `getFlag` instead.
+   */
+  getFeature(flagKey: string) {
+    return this.getFlag(flagKey);
+  }
+
+  /**
+   * Return a flag. Accessing `isEnabled` or `config` will automatically send a `check` event.
+   *
+   * @param flagKey - The key of the flag to get.
+   * @returns A flag.
+   */
+  getFlag(flagKey: string): Flag {
+    const f = this.getFlags()[flagKey];
 
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this;
@@ -740,7 +799,7 @@ export class BucketClient {
         self
           .sendCheckEvent({
             action: "check-is-enabled",
-            key,
+            key: flagKey,
             version: f?.targetingVersion,
             ruleEvaluationResults: f?.ruleEvaluationResults,
             missingContextFields: f?.missingContextFields,
@@ -755,7 +814,7 @@ export class BucketClient {
         self
           .sendCheckEvent({
             action: "check-config",
-            key,
+            key: flagKey,
             version: f?.config?.version,
             ruleEvaluationResults: f?.config?.ruleEvaluationResults,
             missingContextFields: f?.config?.missingContextFields,
@@ -770,38 +829,24 @@ export class BucketClient {
 
         return config;
       },
-      track: () => this.track(key),
+      track: () => this.track(flagKey),
       requestFeedback: (
-        options: Omit<RequestFeedbackData, "featureKey" | "featureId">,
+        options: Omit<RequestFeedbackData, "flagKey" | "featureId">,
       ) => {
         this.requestFeedback({
-          featureKey: key,
+          flagKey,
           ...options,
         });
+      },
+      isEnabledOverride: this.flagsClient.getFlagOverride(flagKey),
+      setIsEnabledOverride(isEnabled: boolean | null) {
+        self.flagsClient.setFlagOverride(flagKey, isEnabled);
       },
     };
   }
 
-  /**
-   * @internal
-   */
-  setFeatureOverride(key: string, isEnabled: boolean | null) {
-    this.featuresClient.setFeatureOverride(key, isEnabled);
-  }
-
-  /**
-   * @internal
-   */
-  getFeatureOverride(key: string): boolean | null {
-    return this.featuresClient.getFeatureOverride(key);
-  }
-
   private sendCheckEvent(checkEvent: CheckEvent) {
-    return this.featuresClient.sendCheckEvent(checkEvent, () => {
-      this.hooks.trigger(
-        checkEvent.action == "check-config" ? "configCheck" : "enabledCheck",
-        checkEvent,
-      );
+    return this.flagsClient.sendCheckEvent(checkEvent, () => {
       this.hooks.trigger("check", checkEvent);
     });
   }
@@ -818,17 +863,21 @@ export class BucketClient {
       this.autoFeedback.stop();
     }
 
-    this.featuresClient.stop();
+    this.flagsClient.stop();
   }
 
   /**
-   * Send attributes to Bucket for the current user
+   * Send attributes to Reflag for the current user
    */
   private async user() {
     if (!this.context.user) {
       this.logger.warn(
         "`user` call ignored. No user context provided at initialization",
       );
+      return;
+    }
+
+    if (this.config.offline) {
       return;
     }
 
@@ -845,7 +894,7 @@ export class BucketClient {
   }
 
   /**
-   * Send attributes to Bucket for the current company.
+   * Send attributes to Reflag for the current company.
    */
   private async company() {
     if (!this.context.user) {
@@ -859,6 +908,10 @@ export class BucketClient {
       this.logger.warn(
         "`company` call ignored. No company context provided at initialization",
       );
+      return;
+    }
+
+    if (this.config.offline) {
       return;
     }
 

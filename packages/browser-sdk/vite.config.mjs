@@ -21,9 +21,9 @@ export default defineConfig({
     lib: {
       // Could also be a dictionary or array of multiple entry points
       entry: resolve(__dirname, "src/index.ts"),
-      name: "BucketBrowserSDK",
+      name: "ReflagBrowserSDK",
       // the proper extensions will be added
-      fileName: "bucket-browser-sdk",
+      fileName: "reflag-browser-sdk",
     },
     rollupOptions: {
       // make sure to externalize deps that shouldn't be bundled
@@ -33,7 +33,7 @@ export default defineConfig({
         // Provide global variables to use in the UMD build
         // for externalized deps
         globals: {
-          BucketClient: "BucketClient",
+          ReflagClient: "ReflagClient",
         },
       },
     },

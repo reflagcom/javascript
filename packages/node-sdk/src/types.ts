@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-empty-object-type */
 
-import { RuleFilter } from "@bucketco/flag-evaluation";
+import { newEvaluator, RuleFilter } from "@reflag/flag-evaluation";
 
 /**
  * Describes the meta context associated with tracking.
@@ -20,7 +20,7 @@ export type Attributes = Record<string, any>;
 /**
  * Describes a feature event. Can be "check" or "evaluate".
  **/
-export type FeatureEvent = {
+export type FlagEvent = {
   /**
    * The action that was performed.
    **/
@@ -63,7 +63,7 @@ export type FeatureEvent = {
 /**
  * A remotely managed configuration value for a feature.
  */
-export type RawFeatureRemoteConfig = {
+export type RawFlagRemoteConfig = {
   /**
    * The key of the matched configuration value.
    */
@@ -93,7 +93,7 @@ export type RawFeatureRemoteConfig = {
 /**
  * Describes a feature.
  */
-export interface RawFeature {
+export interface RawFlag {
   /**
    * The key of the feature.
    */
@@ -112,7 +112,7 @@ export interface RawFeature {
   /**
    * The remote configuration value for the feature.
    */
-  config?: RawFeatureRemoteConfig;
+  config?: RawFlagRemoteConfig;
 
   /**
    * The rule results of the evaluation (optional).
@@ -125,12 +125,12 @@ export interface RawFeature {
   missingContextFields?: string[];
 }
 
-export type EmptyFeatureRemoteConfig = { key: undefined; payload: undefined };
+export type EmptyFlagRemoteConfig = { key: undefined; payload: undefined };
 
 /**
  * A remotely managed configuration value for a feature.
  */
-export type FeatureRemoteConfig =
+export type FlagRemoteConfig =
   | {
       /**
        * The key of the matched configuration value.
@@ -142,13 +142,13 @@ export type FeatureRemoteConfig =
        */
       payload: any;
     }
-  | EmptyFeatureRemoteConfig;
+  | EmptyFlagRemoteConfig;
 
 /**
  * Describes a feature
  */
-export interface Feature<
-  TConfig extends FeatureType["config"] = EmptyFeatureRemoteConfig,
+export interface Flag<
+  TConfig extends FlagType["config"] = EmptyFlagRemoteConfig,
 > {
   /**
    * The key of the feature.
@@ -167,22 +167,22 @@ export interface Feature<
     | ({
         key: string;
       } & TConfig)
-    | EmptyFeatureRemoteConfig;
+    | EmptyFlagRemoteConfig;
 
   /**
-   * Track feature usage in Bucket.
+   * Track feature usage in Reflag.
    */
   track(): Promise<void>;
 }
 
-export type FeatureType = {
+export type FlagType = {
   config?: {
     payload: any;
   };
 };
 
-export type FeatureOverride =
-  | (FeatureType & {
+export type FlagOverride =
+  | (FlagType & {
       isEnabled: boolean;
       config?: {
         key: string;
@@ -193,7 +193,7 @@ export type FeatureOverride =
 /**
  * Describes a feature definition.
  */
-export type FeatureDefinition = {
+export type FlagDefinition = {
   /**
    * The key of the feature.
    */
@@ -236,7 +236,7 @@ export type FeatureDefinition = {
     /**
      * The variants of the remote configuration.
      */
-    variants: FeatureConfigVariant[];
+    variants: FlagConfigVariant[];
   };
 };
 
@@ -244,47 +244,47 @@ export type FeatureDefinition = {
  * Describes a collection of evaluated features.
  *
  * @remarks
- * You should extend the Features interface to define the available features.
+ * You should extend the Flags interface to define the available features.
  */
-export interface Features {}
+export interface Flags {}
 
 /**
  * Describes a collection of evaluated feature.
  *
  * @remarks
- * This types falls back to a generic Record<string, Feature> if the Features interface
+ * This types falls back to a generic Record<string, Flag> if the Flags interface
  * has not been extended.
  *
  */
-export type TypedFeatures = keyof Features extends never
-  ? Record<string, Feature>
+export type TypedFlags = keyof Flags extends never
+  ? Record<string, Flag>
   : {
-      [FeatureKey in keyof Features]: Features[FeatureKey] extends FeatureType
-        ? Feature<Features[FeatureKey]["config"]>
-        : Feature;
+      [FlagKey in keyof Flags]: Flags[FlagKey] extends FlagType
+        ? Flag<Flags[FlagKey]["config"]>
+        : Flag;
     };
 
-export type TypedFeatureKey = keyof TypedFeatures;
+export type TypedFlagKey = keyof TypedFlags;
 
 /**
  * Describes the feature overrides.
  */
-export type FeatureOverrides = Partial<
-  keyof Features extends never
-    ? Record<string, FeatureOverride>
+export type FlagOverrides = Partial<
+  keyof Flags extends never
+    ? Record<string, FlagOverride>
     : {
-        [FeatureKey in keyof Features]: Features[FeatureKey] extends FeatureOverride
-          ? Features[FeatureKey]
-          : Exclude<FeatureOverride, "config">;
+        [FlagKey in keyof Flags]: Flags[FlagKey] extends FlagOverride
+          ? Flags[FlagKey]
+          : Exclude<FlagOverride, "config">;
       }
 >;
 
-export type FeatureOverridesFn = (context: Context) => FeatureOverrides;
+export type FlagOverridesFn = (context: Context) => FlagOverrides;
 
 /**
  * Describes a remote feature config variant.
  */
-export type FeatureConfigVariant = {
+export type FlagConfigVariant = {
   /**
    * The filter for the variant.
    */
@@ -306,7 +306,7 @@ export type FeatureConfigVariant = {
  *
  * @internal
  */
-export type FeatureAPIResponse = {
+export type FlagAPIResponse = {
   /**
    * The key of the feature.
    */
@@ -349,7 +349,7 @@ export type FeatureAPIResponse = {
     /**
      * The variants of the remote configuration.
      */
-    variants: FeatureConfigVariant[];
+    variants: FlagConfigVariant[];
   };
 };
 
@@ -358,11 +358,22 @@ export type FeatureAPIResponse = {
  *
  * @internal
  */
-export type FeaturesAPIResponse = {
+export type FlagsAPIResponse = {
   /**
    * The feature definitions.
    */
-  features: FeatureAPIResponse[];
+  features: FlagAPIResponse[];
+};
+
+/**
+ * (Internal) Flag definitions with the addition of a pre-prepared
+ * evaluators functions for the rules.
+ *
+ * @internal
+ */
+export type CachedFlagDefinition = FlagAPIResponse & {
+  enabledEvaluator: ReturnType<typeof newEvaluator<boolean>>;
+  configEvaluator: ReturnType<typeof newEvaluator<any>> | undefined;
 };
 
 /**
@@ -370,11 +381,11 @@ export type FeaturesAPIResponse = {
  *
  * @internal
  */
-export type EvaluatedFeaturesAPIResponse = {
+export type EvaluatedFlagsAPIResponse = {
   /**
    * True if request successful.
    */
-  success: boolean;
+  success: true;
 
   /**
    * True if additional context for user or company was found and used for evaluation on the remote server.
@@ -384,7 +395,7 @@ export type EvaluatedFeaturesAPIResponse = {
   /**
    * The feature definitions.
    */
-  features: RawFeature[];
+  features: Record<string, RawFlag>;
 };
 
 /**
@@ -500,6 +511,13 @@ export type Cache<T> = {
    * @returns The value or `undefined` if the value is not available.
    **/
   refresh: () => Promise<T | undefined>;
+
+  /**
+   * If a refresh is in progress, wait for it to complete.
+   *
+   * @returns A promise that resolves when the refresh is complete.
+   **/
+  waitRefresh: () => Promise<void> | undefined;
 };
 
 /**
@@ -527,7 +545,8 @@ export type BatchBufferOptions<T> = {
 
   /**
    * The interval in milliseconds at which the buffer is flushed.
-   *
+   * @remarks
+   * If `0`, the buffer is flushed only when `maxSize` is reached.
    * @defaultValue `1000`
    **/
   intervalMs?: number;
@@ -540,13 +559,15 @@ export type BatchBufferOptions<T> = {
   flushOnExit?: boolean;
 };
 
+export type CacheStrategy = "periodically-update" | "in-request";
+
 /**
  * Defines the options for the SDK client.
  *
  **/
 export type ClientOptions = {
   /**
-   * The secret key used to authenticate with the Bucket API.
+   * The secret key used to authenticate with the Reflag API.
    **/
   secretKey?: string;
 
@@ -578,9 +599,9 @@ export type ClientOptions = {
    * If a record is supplied instead of array, the values of each key are either the
    * configuration values or the boolean value `true`.
    **/
-  fallbackFeatures?:
-    | TypedFeatureKey[]
-    | Record<TypedFeatureKey, Exclude<FeatureOverride, false>>;
+  fallbackFlags?:
+    | TypedFlagKey[]
+    | Record<TypedFlagKey, Exclude<FlagOverride, false>>;
 
   /**
    * The HTTP client to use for sending requests (optional). Default is the built-in fetch client.
@@ -597,7 +618,7 @@ export type ClientOptions = {
    * Number of times to retry fetching feature definitions (optional).
    * Default is 3 times.
    **/
-  featuresFetchRetries?: number;
+  flagsFetchRetries?: number;
 
   /**
    * The options for the batch buffer (optional).
@@ -607,28 +628,38 @@ export type ClientOptions = {
 
   /**
    * If a filename is specified, feature targeting results be overridden with
-   * the values from this file. The file should be a JSON object with feature
+   * the values from this file. The file should be a JSON object with flag
    * keys as keys, and boolean or object as values.
    *
    * If a function is specified, the function will be called with the context
-   * and should return a record of feature keys and boolean or object values.
+   * and should return a record of flag keys and boolean or object values.
    *
-   * Defaults to "bucketFeatures.json".
+   * Defaults to "reflagFlags.json".
    **/
-  featureOverrides?: string | ((context: Context) => FeatureOverrides);
+  flagOverrides?: string | ((context: Context) => FlagOverrides);
 
   /**
-   * In offline mode, no data is sent or fetched from the the Bucket API.
+   * In offline mode, no data is sent or fetched from the the Reflag API.
    * This is useful for testing or development.
    */
   offline?: boolean;
 
   /**
+   * If set to `false`, no evaluation events will be emitted.
+   */
+  emitEvaluationEvents?: boolean;
+
+  /**
    * The path to the config file. If supplied, the config file will be loaded.
-   * Defaults to `bucket.json` when NODE_ENV is not production. Can also be
-   * set through the environment variable BUCKET_CONFIG_FILE.
+   * Defaults to `reflag.config.json` when NODE_ENV is not production. Can also be
+   * set through the environment variable REFLAG_CONFIG_FILE.
    */
   configFile?: string;
+
+  /**
+   * The cache strategy to use for the client (optional, defaults to "periodically-update").
+   **/
+  cacheStrategy?: CacheStrategy;
 };
 
 /**

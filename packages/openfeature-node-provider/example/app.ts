@@ -1,7 +1,7 @@
 import express from "express";
-import "./bucket";
+import "./reflag";
 import { EvaluationContext, OpenFeature } from "@openfeature/server-sdk";
-import { CreateTodosConfig } from "./bucket";
+import { CreateTodosConfig } from "./reflag";
 
 // In the following, we assume that targetingKey is a unique identifier for the user.
 type Context = EvaluationContext & {
@@ -42,9 +42,9 @@ app.get("/", (_req, res) => {
 
 app.get("/todos", async (req, res) => {
   // Return todos if the feature is enabled for the user
-  // We use the `getFeatures` method to check if the user has the "show-todo" feature enabled.
-  // Note that "show-todo" is a feature that we defined in the `Features` interface in the `bucket.ts` file.
-  // and that the indexing for feature name below is type-checked at compile time.
+  // We use the `getFlag` method to check if the user has the "show-todo" feature enabled.
+  // Note that "show-todo" is a flag that we defined in the `Flags` interface in the `reflag.ts` file.
+  // and that the indexing for flag name below is type-checked at compile time.
   const ofClient = OpenFeature.getClient();
   const isEnabled = await ofClient.getBooleanValue(
     "show-todos",

@@ -59,14 +59,6 @@ describe("BatchBuffer", () => {
             maxSize: -1,
           } as any),
       ).toThrow("maxSize must be greater than 0");
-
-      expect(
-        () =>
-          new BatchBuffer({
-            flushHandler: mockFlushHandler,
-            intervalMs: 0,
-          } as any),
-      ).toThrow("intervalMs must be greater than 0");
     });
 
     it("should initialize with specified values", () => {

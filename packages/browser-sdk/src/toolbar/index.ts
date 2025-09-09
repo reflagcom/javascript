@@ -1,6 +1,6 @@
 import { h, render } from "preact";
 
-import { BucketClient } from "../client";
+import { ReflagClient } from "../client";
 import { toolbarContainerId } from "../ui/constants";
 import { ToolbarPosition } from "../ui/types";
 import { attachContainer } from "../ui/utils";
@@ -8,7 +8,7 @@ import { attachContainer } from "../ui/utils";
 import Toolbar from "./Toolbar";
 
 type showToolbarToggleOptions = {
-  bucketClient: BucketClient;
+  reflagClient: ReflagClient;
   position?: ToolbarPosition;
 };
 

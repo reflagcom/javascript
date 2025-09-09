@@ -1,8 +1,8 @@
 {
-  "featureOverrides": {
-    "myFeature": { "isEnabled": true },
-    "myFeatureFalse": false,
-    "myFeatureWithConfig": {
+  "flagOverrides": {
+    "myFlag": { "isEnabled": true },
+    "myFlagFalse": false,
+    "myFlagWithConfig": {
       "isEnabled": true,
       "config": {
         "key": "config-1",

@@ -25,11 +25,11 @@ export function subscribe(
     } catch (error) {
       if (error instanceof TimeoutError) {
         console.error(
-          "[Bucket SDK] Timeout while flushing events on process exit.",
+          "[Reflag SDK] Timeout while flushing events on process exit.",
         );
       } else {
         console.error(
-          "[Bucket SDK] An error occurred while flushing events on process exit.",
+          "[Reflag SDK] An error occurred while flushing events on process exit.",
           error,
         );
       }
@@ -55,7 +55,7 @@ export function subscribe(
   process.on("exit", () => {
     if (!state) {
       console.error(
-        "[Bucket SDK] Failed to finalize the flushing of events on process exit.",
+        "[Reflag SDK] Failed to finalize the flushing of events on process exit.",
       );
     }
   });

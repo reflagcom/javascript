@@ -5,7 +5,7 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
-    <title>Bucket Browser SDK</title>
+    <title>Reflag Browser SDK</title>
   </head>
   <body style="background-color: black">
     <div id="app"></div>
@@ -14,7 +14,7 @@
     <script>
       const urlParams = new URLSearchParams(window.location.search);
       const publishableKey = urlParams.get("publishableKey");
-      const featureKey = urlParams.get("featureKey") ?? "huddles";
+      const flagKey = urlParams.get("flagKey") ?? "huddles";
     </script>
     <style>
       body {
@@ -27,17 +27,17 @@
     </style>
     <div id="start-huddle" style="display: none">
       <button
-        onClick="bucket.requestFeedback({featureKey, requireSatisfactionScore: false, position: {type: 'POPOVER', anchor: event.currentTarget}})"
+        onClick="bucket.requestFeedback({flagKey, requireSatisfactionScore: false, position: {type: 'POPOVER', anchor: event.currentTarget}})"
       >
         Give feedback!
       </button>
-      <button onClick="bucket.track(featureKey)">Start huddle</button>
+      <button onClick="reflag.track(flagKey)">Start huddle</button>
     </div>
 
     <script type="module">
-      import { BucketClient } from "./src/index.ts";
+      import { ReflagClient } from "./src/index.ts";
 
-      window.bucket = new BucketClient({
+      window.reflag = new ReflagClient({
         publishableKey,
         user: { id: "42" },
         company: { id: "1" },
@@ -49,21 +49,21 @@
         },
       });
 
-      bucket.initialize().then(() => {
-        console.log("Bucket initialized");
+      reflag.initialize().then(() => {
+        console.log("Reflag initialized");
         document.getElementById("loading").style.display = "none";
       });
 
-      bucket.on("check", (check) =>
+      reflag.on("check", (check) =>
         console.log(`Check event for ${check.key}`),
       );
 
-      bucket.on("featuresUpdated", (features) => {
-        console.log("Features updated");
-        const feature = bucket.getFeature(featureKey);
+      reflag.on("flagsUpdated", (flags) => {
+        console.log("Flags updated");
+        const flag = reflag.getFlag(flagKey);
 
         const startHuddleElem = document.getElementById("start-huddle");
-        if (feature.isEnabled) {
+        if (flag.isEnabled) {
           // show the start-huddle button
           if (startHuddleElem) startHuddleElem.style.display = "block";
         } else {

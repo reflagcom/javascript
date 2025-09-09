@@ -55,7 +55,7 @@ vi.mock("../src/feedback/promptStorage", () => {
 
 function setupAuthNock(success: boolean | number) {
   server.use(
-    http.get("https://front.bucket.co/feedback/prompting-auth", async () => {
+    http.get("https://front.reflag.com/feedback/prompting-auth", async () => {
       if (success === true) {
         return HttpResponse.json({ success: true, ...tokenRequest });
       } else if (success === false) {

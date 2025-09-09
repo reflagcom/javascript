@@ -7,7 +7,7 @@ import { FeedbackTranslations } from "../../src/feedback/ui/types";
 import { feedbackContainerId, propagatedEvents } from "../../src/ui/constants";
 
 const KEY = randomUUID();
-const API_HOST = `https://front.bucket.co`;
+const API_HOST = `https://front.reflag.com`;
 
 const WINDOW_WIDTH = 1280;
 const WINDOW_HEIGHT = 720;
@@ -46,11 +46,11 @@ async function getOpenedWidgetContainer(
   // Golden path requests
   await page.evaluate(`
     ;(async () => {
-      const { BucketClient } = await import("/dist/bucket-browser-sdk.mjs");
-      const bucket = new BucketClient({publishableKey: "${KEY}", user: {id: "foo"}, company: {id: "bar"}, ...${JSON.stringify(initOptions ?? {})}});
-      await bucket.initialize();
-      await bucket.requestFeedback({
-        featureKey: "feature1",
+      const { ReflagClient } = await import("/dist/reflag-browser-sdk.mjs");
+      const reflag = new ReflagClient({publishableKey: "${KEY}", user: {id: "foo"}, company: {id: "bar"}, ...${JSON.stringify(initOptions ?? {})}});
+      await reflag.initialize();
+      await reflag.requestFeedback({
+        flagKey: "flag1",
         title: "baz",
       });
     })()
@@ -83,14 +83,14 @@ async function getGiveFeedbackPageContainer(
   // Golden path requests
   await page.evaluate(`
     ;(async () => {
-      const { BucketClient } = await import("/dist/bucket-browser-sdk.mjs");
-      const bucket = new BucketClient({publishableKey: "${KEY}", user: {id: "foo"}, company: {id: "bar"}, ...${JSON.stringify(initOptions ?? {})}});
-      await bucket.initialize();
+      const { ReflagClient } = await import("/dist/reflag-browser-sdk.mjs");
+      const reflag = new ReflagClient({publishableKey: "${KEY}", user: {id: "foo"}, company: {id: "bar"}, ...${JSON.stringify(initOptions ?? {})}});
+      await reflag.initialize();
       console.log("setup clicky", document.querySelector("#give-feedback-button"))
       document.querySelector("#give-feedback-button")?.addEventListener("click", () => {
         console.log("cliked!");
-        bucket.requestFeedback({
-          featureKey: "feature1",
+        reflag.requestFeedback({
+          flagKey: "flag1",
           title: "baz",
         });
       });
@@ -103,12 +103,12 @@ async function getGiveFeedbackPageContainer(
 async function setScore(container: Locator, score: number) {
   await new Promise((resolve) => setTimeout(resolve, 50)); // allow react to update its state
   await container
-    .locator(`#bucket-feedback-score-${score}`)
+    .locator(`#reflag-feedback-score-${score}`)
     .dispatchEvent("click");
 }
 
 async function setComment(container: Locator, comment: string) {
-  await container.locator("#bucket-feedback-comment-label").fill(comment);
+  await container.locator("#reflag-feedback-comment-label").fill(comment);
 }
 
 async function submitForm(container: Locator) {
@@ -116,11 +116,11 @@ async function submitForm(container: Locator) {
 }
 
 test.beforeEach(async ({ page, browserName }) => {
-  // Log any calls to front.bucket.co which aren't mocked by subsequent
+  // Log any calls to front.reflag.com which aren't mocked by subsequent
   // `page.route` calls. With page.route, the last matching mock takes
   // precedence, so this logs any which may have been missed, and responds
   // with a 200 to prevent an internet request.
-  await page.route(/^https:\/\/front.bucket\.co.*/, async (route) => {
+  await page.route(/^https:\/\/front\.reflag\.com.*/, async (route) => {
     const meta = `${route.request().method()} ${route.request().url()}`;
 
     console.debug(`\n Unmocked request:        [${browserName}] > ${meta}`);
@@ -250,7 +250,7 @@ test("Sends a request when choosing a score immediately", async ({ page }) => {
     .poll(() => sentJSON)
     .toEqual({
       companyId: "bar",
-      key: "feature1",
+      key: "flag1",
       score: expectedScore,
       question: "baz",
       userId: "foo",
@@ -309,7 +309,7 @@ test("Updates the score on every change", async ({ page }) => {
     .toEqual({
       feedbackId: "123",
       companyId: "bar",
-      key: "feature1",
+      key: "flag1",
       question: "baz",
       score: 3,
       userId: "foo",
@@ -369,7 +369,7 @@ test("Sends a request with both the score and comment when submitting", async ({
     score: expectedScore,
     companyId: "bar",
     question: "baz",
-    key: "feature1",
+    key: "flag1",
     feedbackId: "123",
     userId: "foo",
     source: "widget",

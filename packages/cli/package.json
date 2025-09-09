@@ -1,16 +1,16 @@
 {
-  "name": "@bucketco/cli",
+  "name": "@reflag/cli",
   "version": "1.0.1",
   "packageManager": "yarn@4.1.1",
-  "description": "CLI for Bucket service",
+  "description": "CLI for Reflag service",
   "main": "./dist/index.js",
   "type": "module",
   "license": "MIT",
-  "author": "Bucket.",
-  "homepage": "https://docs.bucket.co/",
+  "author": "Reflag.",
+  "homepage": "https://docs.reflag.com/",
   "repository": {
     "type": "git",
-    "url": "https://github.com/bucketco/bucket-javascript-sdk.git"
+    "url": "https://github.com/reflagcom/javascript.git"
   },
   "publishConfig": {
     "access": "public"
@@ -19,7 +19,7 @@
     "node": ">=18.0.0"
   },
   "bin": {
-    "bucket": "./dist/index.js"
+    "reflag": "./dist/index.js"
   },
   "files": [
     "dist",
@@ -30,7 +30,7 @@
   },
   "scripts": {
     "build": "tsc && shx chmod +x dist/index.js",
-    "bucket": "yarn build && ./dist/index.js",
+    "reflag": "yarn build && ./dist/index.js",
     "test": "vitest -c vite.config.js",
     "test:ci": "vitest run -c vite.config.js --reporter=default --reporter=junit --outputFile=junit.xml",
     "coverage": "vitest run --coverage",
@@ -52,14 +52,16 @@
     "find-up": "^7.0.0",
     "open": "^10.1.0",
     "ora": "^8.1.0",
+    "semver": "^7.7.2",
     "slug": "^10.0.0",
     "zod": "^3.24.2"
   },
   "devDependencies": {
-    "@bucketco/eslint-config": "workspace:^",
-    "@bucketco/tsconfig": "workspace:^",
+    "@reflag/eslint-config": "^0.0.2",
+    "@reflag/tsconfig": "^0.0.2",
     "@types/express": "^5.0.0",
     "@types/node": "^22.5.1",
+    "@types/semver": "^7.7.0",
     "@types/slug": "^5.0.9",
     "eslint": "^9.21.0",
     "prettier": "^3.5.2",

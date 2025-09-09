@@ -23,11 +23,11 @@ export const initAction = async (args: InitArgs = {}) => {
     const configPath = configStore.getConfigPath();
     if (configPath && !args.overwrite) {
       throw new Error(
-        "Bucket is already initialized. Use --overwrite to overwrite.",
+        "Reflag is already initialized. Use --overwrite to overwrite.",
       );
     }
 
-    console.log("\nWelcome to Bucket!\n");
+    console.log("\nWelcome to ◪ Reflag!\n");
     const baseUrl = configStore.getConfig("baseUrl");
 
     // Load apps
@@ -36,8 +36,7 @@ export const initAction = async (args: InitArgs = {}) => {
     spinner.succeed(`Loaded apps from ${chalk.cyan(baseUrl)}.`);
   } catch (error) {
     spinner?.fail("Loading apps failed.");
-    void handleError(error, "Initialization");
-    return;
+    handleError(error, "Initialization");
   }
 
   try {
@@ -83,19 +82,20 @@ export const initAction = async (args: InitArgs = {}) => {
     // Create config file
     spinner = ora("Creating configuration...").start();
     await configStore.saveConfigFile(args.overwrite);
+
     spinner.succeed(
       `Configuration created at ${chalk.cyan(relative(process.cwd(), configStore.getConfigPath()!))}.`,
     );
   } catch (error) {
     spinner?.fail("Configuration creation failed.");
-    void handleError(error, "Initialization");
+    handleError(error, "Initialization");
   }
 };
 
 export function registerInitCommand(cli: Command) {
   cli
     .command("init")
-    .description("Initialize a new Bucket configuration.")
+    .description("Initialize a new Reflag configuration.")
     .addOption(overwriteOption)
     .action(initAction);
 }

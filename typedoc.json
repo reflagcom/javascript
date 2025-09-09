@@ -11,7 +11,8 @@
   "entryPoints": [
     "packages/browser-sdk/",
     "packages/node-sdk/",
-    "packages/react-sdk/"
+    "packages/react-sdk/",
+    "packages/vue-sdk/"
   ],
   "packageOptions": {
     "entryPoints": ["src/index.ts"]

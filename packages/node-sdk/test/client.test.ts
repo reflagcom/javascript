@@ -10,33 +10,25 @@ import {
   vi,
 } from "vitest";
 
-import { evaluateFeatureRules } from "@bucketco/flag-evaluation";
+import { flattenJSON } from "@reflag/flag-evaluation";
 
-import { BoundBucketClient, BucketClient } from "../src";
+import { BoundReflagClient, ReflagClient } from "../src";
 import {
   API_BASE_URL,
   API_TIMEOUT_MS,
   BATCH_INTERVAL_MS,
   BATCH_MAX_SIZE,
-  FEATURE_EVENT_RATE_LIMITER_WINDOW_SIZE_MS,
-  FEATURES_REFETCH_MS,
+  FLAG_EVENT_RATE_LIMITER_WINDOW_SIZE_MS,
+  FLAGS_REFETCH_MS,
   SDK_VERSION,
   SDK_VERSION_HEADER_NAME,
 } from "../src/config";
 import fetchClient from "../src/fetch-http-client";
 import { subscribe as triggerOnExit } from "../src/flusher";
 import { newRateLimiter } from "../src/rate-limiter";
-import { ClientOptions, Context, FeaturesAPIResponse } from "../src/types";
+import { ClientOptions, Context, FlagsAPIResponse } from "../src/types";
 
 const BULK_ENDPOINT = "https://api.example.com/bulk";
-
-vi.mock("@bucketco/flag-evaluation", async (importOriginal) => {
-  const original = (await importOriginal()) as any;
-  return {
-    ...original,
-    evaluateFeatureRules: vi.fn(),
-  };
-});
 
 vi.mock("../src/rate-limiter", async (importOriginal) => {
   const original = (await importOriginal()) as any;
@@ -64,7 +56,7 @@ const company = {
 };
 
 const event = {
-  event: "feature-event",
+  event: "flag-event",
   attrs: { key: "value" },
 };
 
@@ -77,15 +69,15 @@ const logger = {
 };
 const httpClient = { post: vi.fn(), get: vi.fn() };
 
-const fallbackFeatures = ["key"];
+const fallbackFlags = ["key"];
 
 const validOptions: ClientOptions = {
   secretKey: "validSecretKeyWithMoreThan22Chars",
   apiBaseUrl: "https://api.example.com/",
   logger,
   httpClient,
-  fallbackFeatures,
-  featuresFetchRetries: 2,
+  fallbackFlags,
+  flagsFetchRetries: 2,
   batchOptions: {
     maxSize: 99,
     intervalMs: 10001,
@@ -100,11 +92,11 @@ const expectedHeaders = {
   Authorization: `Bearer ${validOptions.secretKey}`,
 };
 
-const featureDefinitions: FeaturesAPIResponse = {
+const flagDefinitions: FlagsAPIResponse = {
   features: [
     {
-      key: "feature1",
-      description: "Feature 1",
+      key: "flag1",
+      description: "Flag 1",
       targeting: {
         version: 1,
         rules: [
@@ -135,8 +127,8 @@ const featureDefinitions: FeaturesAPIResponse = {
       },
     },
     {
-      key: "feature2",
-      description: "Feature 2",
+      key: "flag2",
+      description: "Flag 2",
       targeting: {
         version: 2,
         rules: [
@@ -155,7 +147,7 @@ const featureDefinitions: FeaturesAPIResponse = {
                   partialRolloutThreshold: 0.5,
                   partialRolloutAttribute: "attributeKey",
                   type: "rolloutPercentage" as const,
-                  key: "feature2",
+                  key: "flag2",
                 },
               ],
             },
@@ -166,70 +158,47 @@ const featureDefinitions: FeaturesAPIResponse = {
   ],
 };
 
-const evaluatedFeatures = [
-  {
-    feature: { key: "feature1", version: 1 },
-    value: true,
-    context: {},
-    config: {
-      key: "config-1",
-      payload: { something: "else" },
-      ruleEvaluationResults: [true],
-      missingContextFields: [],
-    },
-    ruleEvaluationResults: [true],
-    missingContextFields: [],
-  },
-  {
-    feature: { key: "feature2", version: 2 },
-    value: false,
-    context: {},
-    ruleEvaluationResults: [false],
-    missingContextFields: ["something"],
-  },
-];
-
-describe("BucketClient", () => {
+describe("ReflagClient", () => {
   afterEach(() => {
     vi.clearAllMocks();
   });
 
   describe("constructor", () => {
     it("should initialize with no options", async () => {
-      const secretKeyEnv = process.env.BUCKET_SECRET_KEY;
-      process.env.BUCKET_SECRET_KEY = "validSecretKeyWithMoreThan22Chars";
+      const secretKeyEnv = process.env.REFLAG_SECRET_KEY;
+      process.env.REFLAG_SECRET_KEY = "validSecretKeyWithMoreThan22Chars";
       try {
-        const bucketInstance = new BucketClient();
-        expect(bucketInstance).toBeInstanceOf(BucketClient);
+        const reflagInstance = new ReflagClient();
+        expect(reflagInstance).toBeInstanceOf(ReflagClient);
       } finally {
-        process.env.BUCKET_SECRET_KEY = secretKeyEnv;
+        process.env.REFLAG_SECRET_KEY = secretKeyEnv;
       }
     });
 
-    it("should accept fallback features as an array", async () => {
-      const bucketInstance = new BucketClient({
+    it("should accept fallback flags as an array", async () => {
+      const reflagInstance = new ReflagClient({
         secretKey: "validSecretKeyWithMoreThan22Chars",
-        fallbackFeatures: ["feature1", "feature2"],
+        fallbackFlags: ["flag1", "flag2"],
       });
 
-      expect(bucketInstance["_config"].fallbackFeatures).toEqual({
-        feature1: {
+      expect(reflagInstance["_config"].fallbackFlags).toEqual({
+        flag1: {
           isEnabled: true,
-          key: "feature1",
+          key: "flag1",
         },
-        feature2: {
+        flag2: {
           isEnabled: true,
-          key: "feature2",
+          key: "flag2",
         },
       });
     });
 
-    it("should accept fallback features as an object", async () => {
-      const bucketInstance = new BucketClient({
+    it("should accept fallback flags as an object", async () => {
+      const reflagInstance = new ReflagClient({
         secretKey: "validSecretKeyWithMoreThan22Chars",
-        fallbackFeatures: {
-          feature1: true,
-          feature2: {
+        fallbackFlags: {
+          flag1: true,
+          flag2: {
             isEnabled: true,
             config: {
               key: "config1",
@@ -239,14 +208,14 @@ describe("BucketClient", () => {
         },
       });
 
-      expect(bucketInstance["_config"].fallbackFeatures).toStrictEqual({
-        feature1: {
-          key: "feature1",
+      expect(reflagInstance["_config"].fallbackFlags).toStrictEqual({
+        flag1: {
+          key: "flag1",
           config: undefined,
           isEnabled: true,
         },
-        feature2: {
-          key: "feature2",
+        flag2: {
+          key: "flag2",
           isEnabled: true,
           config: {
             key: "config1",
@@ -257,14 +226,12 @@ describe("BucketClient", () => {
     });
 
     it("should create a client instance with valid options", () => {
-      const client = new BucketClient(validOptions);
+      const client = new ReflagClient(validOptions);
 
-      expect(client).toBeInstanceOf(BucketClient);
+      expect(client).toBeInstanceOf(ReflagClient);
       expect(client["_config"].apiBaseUrl).toBe("https://api.example.com/");
-      expect(client["_config"].refetchInterval).toBe(FEATURES_REFETCH_MS);
-      expect(client["_config"].staleWarningInterval).toBe(
-        FEATURES_REFETCH_MS * 5,
-      );
+      expect(client["_config"].refetchInterval).toBe(FLAGS_REFETCH_MS);
+      expect(client["_config"].staleWarningInterval).toBe(FLAGS_REFETCH_MS * 5);
       expect(client.logger).toBeDefined();
       expect(client.httpClient).toBe(validOptions.httpClient);
       expect(client["_config"].headers).toEqual(expectedHeaders);
@@ -273,17 +240,17 @@ describe("BucketClient", () => {
         intervalMs: 10001,
       });
 
-      expect(client["_config"].fallbackFeatures).toEqual({
+      expect(client["_config"].fallbackFlags).toEqual({
         key: {
           key: "key",
           isEnabled: true,
         },
       });
-      expect(client["_config"].featuresFetchRetries).toBe(2);
+      expect(client["_config"].flagsFetchRetries).toBe(2);
     });
 
     it("should route messages to the supplied logger", () => {
-      const client = new BucketClient(validOptions);
+      const client = new ReflagClient(validOptions);
 
       const actualLogger = client.logger!;
       actualLogger.debug("debug message");
@@ -306,18 +273,16 @@ describe("BucketClient", () => {
     });
 
     it("should create a client instance with default values for optional fields", () => {
-      const client = new BucketClient({
+      const client = new ReflagClient({
         secretKey: "validSecretKeyWithMoreThan22Chars",
       });
 
       expect(client["_config"].apiBaseUrl).toBe(API_BASE_URL);
-      expect(client["_config"].refetchInterval).toBe(FEATURES_REFETCH_MS);
-      expect(client["_config"].staleWarningInterval).toBe(
-        FEATURES_REFETCH_MS * 5,
-      );
+      expect(client["_config"].refetchInterval).toBe(FLAGS_REFETCH_MS);
+      expect(client["_config"].staleWarningInterval).toBe(FLAGS_REFETCH_MS * 5);
       expect(client.httpClient).toBe(fetchClient);
       expect(client["_config"].headers).toEqual(expectedHeaders);
-      expect(client["_config"].fallbackFeatures).toBeUndefined();
+      expect(client["_config"].fallbackFlags).toBeUndefined();
       expect(client["batchBuffer"]).toMatchObject({
         maxSize: BATCH_MAX_SIZE,
         intervalMs: BATCH_INTERVAL_MS,
@@ -326,17 +291,17 @@ describe("BucketClient", () => {
 
     it("should throw an error if options are invalid", () => {
       let invalidOptions: any = null;
-      expect(() => new BucketClient(invalidOptions)).toThrow(
+      expect(() => new ReflagClient(invalidOptions)).toThrow(
         "options must be an object",
       );
 
       invalidOptions = { ...validOptions, secretKey: "shortKey" };
-      expect(() => new BucketClient(invalidOptions)).toThrow(
+      expect(() => new ReflagClient(invalidOptions)).toThrow(
         "invalid secretKey specified",
       );
 
       invalidOptions = { ...validOptions, host: 123 };
-      expect(() => new BucketClient(invalidOptions)).toThrow(
+      expect(() => new ReflagClient(invalidOptions)).toThrow(
         "host must be a string",
       );
 
@@ -344,7 +309,7 @@ describe("BucketClient", () => {
         ...validOptions,
         logger: "invalidLogger" as any,
       };
-      expect(() => new BucketClient(invalidOptions)).toThrow(
+      expect(() => new ReflagClient(invalidOptions)).toThrow(
         "logger must be an object",
       );
 
@@ -352,7 +317,7 @@ describe("BucketClient", () => {
         ...validOptions,
         httpClient: "invalidHttpClient" as any,
       };
-      expect(() => new BucketClient(invalidOptions)).toThrow(
+      expect(() => new ReflagClient(invalidOptions)).toThrow(
         "httpClient must be an object",
       );
 
@@ -360,30 +325,30 @@ describe("BucketClient", () => {
         ...validOptions,
         batchOptions: "invalid" as any,
       };
-      expect(() => new BucketClient(invalidOptions)).toThrow(
+      expect(() => new ReflagClient(invalidOptions)).toThrow(
         "batchOptions must be an object",
       );
 
       invalidOptions = {
         ...validOptions,
-        fallbackFeatures: "invalid" as any,
+        fallbackFlags: "invalid" as any,
       };
-      expect(() => new BucketClient(invalidOptions)).toThrow(
-        "fallbackFeatures must be an array or object",
+      expect(() => new ReflagClient(invalidOptions)).toThrow(
+        "fallbackFlags must be an array or object",
       );
     });
 
-    it("should create a new feature events rate-limiter", () => {
-      const client = new BucketClient(validOptions);
+    it("should create a new flag events rate-limiter", () => {
+      const client = new ReflagClient(validOptions);
 
       expect(client["rateLimiter"]).toBeDefined();
       expect(newRateLimiter).toHaveBeenCalledWith(
-        FEATURE_EVENT_RATE_LIMITER_WINDOW_SIZE_MS,
+        FLAG_EVENT_RATE_LIMITER_WINDOW_SIZE_MS,
       );
     });
 
     it("should not register an exit flush handler if `batchOptions.flushOnExit` is false", () => {
-      new BucketClient({
+      new ReflagClient({
         ...validOptions,
         batchOptions: { ...validOptions.batchOptions, flushOnExit: false },
       });
@@ -392,7 +357,7 @@ describe("BucketClient", () => {
     });
 
     it("should not register an exit flush handler if `offline` is true", () => {
-      new BucketClient({
+      new ReflagClient({
         ...validOptions,
         offline: true,
       });
@@ -403,7 +368,7 @@ describe("BucketClient", () => {
     it.each([undefined, true])(
       "should register an exit flush handler if `batchOptions.flushOnExit` is `%s`",
       (flushOnExit) => {
-        new BucketClient({
+        new ReflagClient({
           ...validOptions,
           batchOptions: { ...validOptions.batchOptions, flushOnExit },
         });
@@ -420,7 +385,7 @@ describe("BucketClient", () => {
     ])(
       "should build the URLs correctly %s -> %s",
       async (apiBaseUrl, expectedUrl) => {
-        const client = new BucketClient({
+        const client = new ReflagClient({
           ...validOptions,
           apiBaseUrl,
         });
@@ -438,7 +403,7 @@ describe("BucketClient", () => {
   });
 
   describe("bindClient", () => {
-    const client = new BucketClient(validOptions);
+    const client = new ReflagClient(validOptions);
     const context = {
       user,
       company,
@@ -447,7 +412,7 @@ describe("BucketClient", () => {
 
     beforeEach(() => {
       vi.mocked(httpClient.post).mockResolvedValue({ body: { success: true } });
-      client["rateLimiter"].clear(true);
+      client["rateLimiter"].clearStale(true);
     });
 
     it("should return a new client instance with the `user`, `company` and `other` set", async () => {
@@ -458,7 +423,7 @@ describe("BucketClient", () => {
       expect(newClient.company).toEqual(company);
       expect(newClient.otherContext).toEqual(otherContext);
 
-      expect(newClient).toBeInstanceOf(BoundBucketClient);
+      expect(newClient).toBeInstanceOf(BoundReflagClient);
       expect(newClient).not.toBe(client); // Ensure a new instance is returned
       expect(newClient["_options"]).toEqual({
         enableTracking: true,
@@ -466,7 +431,7 @@ describe("BucketClient", () => {
       });
     });
 
-    it("should update user in Bucket when called", async () => {
+    it("should update user in Reflag when called", async () => {
       client.bindClient({ user: context.user });
       await client.flush();
 
@@ -488,7 +453,7 @@ describe("BucketClient", () => {
       expect(httpClient.post).toHaveBeenCalledOnce();
     });
 
-    it("should update company in Bucket when called", async () => {
+    it("should update company in Reflag when called", async () => {
       client.bindClient({ company: context.company, meta: { active: true } });
       await client.flush();
 
@@ -512,7 +477,7 @@ describe("BucketClient", () => {
       expect(httpClient.post).toHaveBeenCalledOnce();
     });
 
-    it("should not update `company` or `user` in Bucket when `enableTracking` is `false`", async () => {
+    it("should not update `company` or `user` in Reflag when `enableTracking` is `false`", async () => {
       client.bindClient({
         user: context.user,
         company: context.company,
@@ -565,10 +530,10 @@ describe("BucketClient", () => {
   });
 
   describe("updateUser", () => {
-    const client = new BucketClient(validOptions);
+    const client = new ReflagClient(validOptions);
 
     beforeEach(() => {
-      client["rateLimiter"].clear(true);
+      client["rateLimiter"].clearStale(true);
     });
 
     // try with both string and number IDs
@@ -650,10 +615,10 @@ describe("BucketClient", () => {
   });
 
   describe("updateCompany", () => {
-    const client = new BucketClient(validOptions);
+    const client = new ReflagClient(validOptions);
 
     beforeEach(() => {
-      client["rateLimiter"].clear(true);
+      client["rateLimiter"].clearStale(true);
     });
 
     test.each([
@@ -744,16 +709,16 @@ describe("BucketClient", () => {
   });
 
   describe("track", () => {
-    const client = new BucketClient(validOptions);
+    const client = new ReflagClient(validOptions);
 
     beforeEach(() => {
-      client["rateLimiter"].clear(true);
+      client["rateLimiter"].clearStale(true);
     });
 
     test.each([
       { id: "user123", age: 1, name: "John" },
       { id: 42, age: 1, name: "John" },
-    ])("should successfully track the feature usage", async (testUser) => {
+    ])("should successfully track the flag usage", async (testUser) => {
       const response = {
         status: 200,
         body: { success: true },
@@ -783,7 +748,7 @@ describe("BucketClient", () => {
             context: {
               active: true,
             },
-            event: "feature-event",
+            event: "flag-event",
             type: "event",
             userId: testUser.id,
             companyId: company.id,
@@ -797,7 +762,7 @@ describe("BucketClient", () => {
       );
     });
 
-    it("should successfully track the feature usage including user and company", async () => {
+    it("should successfully track the flag usage including user and company", async () => {
       httpClient.post.mockResolvedValue({
         status: 200,
         body: { success: true },
@@ -824,7 +789,7 @@ describe("BucketClient", () => {
             context: {
               active: true,
             },
-            event: "feature-event",
+            event: "flag-event",
             companyId: "otherCompanyId",
             type: "event",
             userId: "user123",
@@ -902,12 +867,12 @@ describe("BucketClient", () => {
 
   describe("user", () => {
     it("should return the undefined if user was not set", () => {
-      const client = new BucketClient(validOptions).bindClient({ company });
+      const client = new ReflagClient(validOptions).bindClient({ company });
       expect(client.user).toBeUndefined();
     });
 
     it("should return the user if user was associated", () => {
-      const client = new BucketClient(validOptions).bindClient({ user });
+      const client = new ReflagClient(validOptions).bindClient({ user });
 
       expect(client.user).toEqual(user);
     });
@@ -915,12 +880,12 @@ describe("BucketClient", () => {
 
   describe("company", () => {
     it("should return the undefined if company was not set", () => {
-      const client = new BucketClient(validOptions).bindClient({ user });
+      const client = new ReflagClient(validOptions).bindClient({ user });
       expect(client.company).toBeUndefined();
     });
 
     it("should return the user if company was associated", () => {
-      const client = new BucketClient(validOptions).bindClient({ company });
+      const client = new ReflagClient(validOptions).bindClient({ company });
 
       expect(client.company).toEqual(company);
     });
@@ -928,12 +893,12 @@ describe("BucketClient", () => {
 
   describe("otherContext", () => {
     it("should return the undefined if custom context was not set", () => {
-      const client = new BucketClient(validOptions).bindClient({ company });
+      const client = new ReflagClient(validOptions).bindClient({ company });
       expect(client.otherContext).toBeUndefined();
     });
 
     it("should return the user if custom context was associated", () => {
-      const client = new BucketClient(validOptions).bindClient({
+      const client = new ReflagClient(validOptions).bindClient({
         other: otherContext,
       });
 
@@ -943,13 +908,13 @@ describe("BucketClient", () => {
 
   describe("initialize", () => {
     it("should initialize the client", async () => {
-      const client = new BucketClient(validOptions);
+      const client = new ReflagClient(validOptions);
 
       const get = vi
-        .spyOn(client["featuresCache"], "get")
+        .spyOn(client["flagsCache"], "get")
         .mockReturnValue(undefined);
       const refresh = vi
-        .spyOn(client["featuresCache"], "refresh")
+        .spyOn(client["flagsCache"], "refresh")
         .mockResolvedValue(undefined);
 
       await client.initialize();
@@ -960,8 +925,8 @@ describe("BucketClient", () => {
       expect(get).not.toHaveBeenCalled();
     });
 
-    it("should call the backend to obtain features", async () => {
-      const client = new BucketClient(validOptions);
+    it("should call the backend to obtain flags", async () => {
+      const client = new ReflagClient(validOptions);
 
       httpClient.get.mockResolvedValue({
         ok: true,
@@ -980,7 +945,7 @@ describe("BucketClient", () => {
 
   describe("flush", () => {
     it("should flush all bulk data", async () => {
-      const client = new BucketClient(validOptions);
+      const client = new ReflagClient(validOptions);
 
       await client.updateUser(user.id, { attributes: { age: 2 } });
       await client.updateUser(user.id, { attributes: { age: 3 } });
@@ -1012,7 +977,7 @@ describe("BucketClient", () => {
     });
 
     it("should not flush all bulk data if `offline` is true", async () => {
-      const client = new BucketClient({
+      const client = new ReflagClient({
         ...validOptions,
         offline: true,
       });
@@ -1024,9 +989,8 @@ describe("BucketClient", () => {
     });
   });
 
-  describe("getFeature", () => {
-    let client: BucketClient;
-    let featureEvalSequence: Record<string, boolean>;
+  describe("getFlag", () => {
+    let client: ReflagClient;
 
     beforeEach(async () => {
       httpClient.get.mockResolvedValue({
@@ -1034,43 +998,11 @@ describe("BucketClient", () => {
         status: 200,
         body: {
           success: true,
-          ...featureDefinitions,
+          ...flagDefinitions,
         },
       });
 
-      client = new BucketClient(validOptions);
-
-      featureEvalSequence = {};
-      vi.mocked(evaluateFeatureRules).mockImplementation(
-        ({ featureKey, context }) => {
-          const evalFeature = evaluatedFeatures.find(
-            (f) => f.feature.key === featureKey,
-          )!;
-
-          if (featureEvalSequence[featureKey]) {
-            return {
-              value: evalFeature.config && {
-                key: evalFeature.config.key,
-                payload: evalFeature.config.payload,
-              },
-              featureKey,
-              context: context,
-              ruleEvaluationResults:
-                evalFeature.config?.ruleEvaluationResults || [],
-              missingContextFields: evalFeature.config?.missingContextFields,
-            };
-          }
-
-          featureEvalSequence[featureKey] = true;
-          return {
-            value: evalFeature.value,
-            featureKey,
-            context: context,
-            ruleEvaluationResults: evalFeature.ruleEvaluationResults,
-            missingContextFields: evalFeature.missingContextFields,
-          };
-        },
-      );
+      client = new ReflagClient(validOptions);
 
       httpClient.post.mockResolvedValue({
         status: 200,
@@ -1078,19 +1010,19 @@ describe("BucketClient", () => {
       });
     });
 
-    it("returns a feature", async () => {
+    it("returns a flag", async () => {
       await client.initialize();
-      const feature = client.getFeature(
+      const flag = client.getFlag(
         {
           company,
           user,
           other: otherContext,
         },
-        "feature1",
+        "flag1",
       );
 
-      expect(feature).toStrictEqual({
-        key: "feature1",
+      expect(flag).toStrictEqual({
+        key: "flag1",
         isEnabled: true,
         config: {
           key: "config-1",
@@ -1107,9 +1039,9 @@ describe("BucketClient", () => {
         other: otherContext,
       };
 
-      // test that the feature is returned
+      // test that the flag is returned
       await client.initialize();
-      const feature = client.getFeature(
+      const flag = client.getFlag(
         {
           ...context,
           meta: {
@@ -1117,10 +1049,100 @@ describe("BucketClient", () => {
           },
           enableTracking: true,
         },
-        "feature1",
+        "flag1",
       );
 
-      await feature.track();
+      await flag.track();
+      await client.flush();
+
+      expect(httpClient.post).toHaveBeenCalledWith(
+        BULK_ENDPOINT,
+        expectedHeaders,
+        [
+          {
+            attributes: {
+              employees: 100,
+              name: "Acme Inc.",
+            },
+            companyId: "company123",
+            context: {
+              active: true,
+            },
+            type: "company",
+            userId: undefined,
+          },
+          {
+            attributes: {
+              age: 1,
+              name: "John",
+            },
+            context: {
+              active: true,
+            },
+            type: "user",
+            userId: "user123",
+          },
+          {
+            type: "feature-flag-event",
+            action: "evaluate",
+            key: "flag1",
+            targetingVersion: 1,
+            evalContext: flattenJSON(context),
+            evalResult: true,
+            evalRuleResults: [true],
+            evalMissingFields: [],
+          },
+          {
+            type: "feature-flag-event",
+            action: "evaluate-config",
+            key: "flag1",
+            targetingVersion: 1,
+            evalContext: flattenJSON(context),
+            evalResult: {
+              key: "config-1",
+              payload: {
+                something: "else",
+              },
+            },
+            evalRuleResults: [true],
+            evalMissingFields: [],
+          },
+          {
+            type: "event",
+            event: "flag1",
+            userId: user.id,
+            companyId: company.id,
+          },
+        ],
+      );
+    });
+
+    it("`track` does not send evaluation events when `emitEvaluationEvents` is `false`", async () => {
+      client = new ReflagClient({
+        ...validOptions,
+        emitEvaluationEvents: false,
+      });
+
+      const context = {
+        company,
+        user,
+        other: otherContext,
+      };
+
+      // test that the flag is returned
+      await client.initialize();
+      const flag = client.getFlag(
+        {
+          ...context,
+          meta: {
+            active: true,
+          },
+          enableTracking: true,
+        },
+        "flag1",
+      );
+
+      await flag.track();
       await client.flush();
 
       expect(httpClient.post).toHaveBeenCalledWith(
@@ -1150,43 +1172,8 @@ describe("BucketClient", () => {
             userId: "user123",
           },
           {
-            type: "feature-flag-event",
-            action: "evaluate",
-            key: "feature1",
-            targetingVersion: 1,
-            evalContext: context,
-            evalResult: true,
-            evalRuleResults: [true],
-            evalMissingFields: [],
-          },
-          {
-            type: "feature-flag-event",
-            action: "evaluate-config",
-            key: "feature1",
-            targetingVersion: 1,
-            evalContext: context,
-            evalResult: {
-              key: "config-1",
-              payload: {
-                something: "else",
-              },
-            },
-            evalRuleResults: [true],
-            evalMissingFields: [],
-          },
-          {
-            type: "feature-flag-event",
-            action: "evaluate",
-            key: "feature2",
-            targetingVersion: 2,
-            evalContext: context,
-            evalResult: false,
-            evalRuleResults: [false],
-            evalMissingFields: ["something"],
-          },
-          {
             type: "event",
-            event: "feature1",
+            event: "flag1",
             userId: user.id,
             companyId: company.id,
           },
@@ -1201,48 +1188,69 @@ describe("BucketClient", () => {
         other: otherContext,
       };
 
-      // test that the feature is returned
+      // test that the flag is returned
       await client.initialize();
-      const feature = client.getFeature(context, "feature1");
+      const flag = client.getFlag(context, "flag1");
 
       // trigger `check` event
-      expect(feature.isEnabled).toBe(true);
+      expect(flag.isEnabled).toBe(true);
 
       await client.flush();
+      const checkEvents = httpClient.post.mock.calls
+        .flatMap((call) => call[2])
+        .filter((e) => e.action === "check");
 
-      expect(httpClient.post).toHaveBeenCalledWith(
-        BULK_ENDPOINT,
-        expectedHeaders,
-        [
-          expect.objectContaining({ type: "company" }),
-          expect.objectContaining({ type: "user" }),
-          expect.objectContaining({
-            type: "feature-flag-event",
-            action: "evaluate",
-            key: "feature1",
-          }),
-          expect.objectContaining({
-            type: "feature-flag-event",
-            action: "evaluate-config",
-            key: "feature1",
-          }),
-          expect.objectContaining({
-            type: "feature-flag-event",
-            action: "evaluate",
-            key: "feature2",
-          }),
-          {
-            type: "feature-flag-event",
-            action: "check",
-            key: "feature1",
-            targetingVersion: 1,
-            evalResult: true,
-            evalContext: context,
-            evalRuleResults: [true],
-            evalMissingFields: [],
-          },
-        ],
+      expect(checkEvents).toStrictEqual([
+        {
+          type: "feature-flag-event",
+          action: "check",
+          key: "flag1",
+          targetingVersion: 1,
+          evalResult: true,
+          evalContext: context,
+          evalRuleResults: [true],
+          evalMissingFields: [],
+        },
+      ]);
+    });
+
+    it("`isEnabled` warns about missing context fields", async () => {
+      const context = {
+        company,
+        user,
+        other: otherContext,
+      };
+
+      // test that the flag is returned
+      await client.initialize();
+      const flag = client.getFlag(context, "flag2");
+
+      // trigger the warning
+      expect(flag.isEnabled).toBe(false);
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        "flag targeting rules might not be correctly evaluated due to missing context fields.",
+        {
+          flag2: ["attributeKey"],
+        },
       );
+    });
+
+    it("`isEnabled` should not warn about missing context fields if not needed", async () => {
+      const context = {
+        company,
+        user,
+        other: otherContext,
+      };
+
+      // test that the flag is returned
+      await client.initialize();
+      const flag = client.getFlag(context, "flag1");
+
+      // should not trigger the warning
+      expect(flag.isEnabled).toBe(true);
+
+      expect(logger.warn).not.toHaveBeenCalled();
     });
 
     it("`config` sends `check` event", async () => {
@@ -1252,120 +1260,128 @@ describe("BucketClient", () => {
         other: otherContext,
       };
 
-      // test that the feature is returned
+      // test that the flag is returned
       await client.initialize();
-      const feature = client.getFeature(context, "feature1");
+      const flag = client.getFlag(context, "flag1");
 
       // trigger `check` event
-      expect(feature.config).toBeDefined();
+      expect(flag.config).toBeDefined();
 
       await client.flush();
 
-      expect(httpClient.post).toHaveBeenCalledWith(
-        BULK_ENDPOINT,
-        expectedHeaders,
-        [
-          expect.objectContaining({ type: "company" }),
-          expect.objectContaining({ type: "user" }),
-          expect.objectContaining({
-            type: "feature-flag-event",
-            action: "evaluate",
-            key: "feature1",
-          }),
-          expect.objectContaining({
-            type: "feature-flag-event",
-            action: "evaluate-config",
-            key: "feature1",
-          }),
-          expect.objectContaining({
-            type: "feature-flag-event",
-            action: "evaluate",
-            key: "feature2",
-          }),
-          {
-            type: "feature-flag-event",
-            action: "check-config",
-            key: "feature1",
-            evalResult: {
-              key: "config-1",
-              payload: {
-                something: "else",
-              },
+      const checkEvents = httpClient.post.mock.calls
+        .flatMap((call) => call[2])
+        .filter((e) => e.action === "check-config");
+
+      expect(checkEvents).toStrictEqual([
+        {
+          type: "feature-flag-event",
+          action: "check-config",
+          key: "flag1",
+          evalResult: {
+            key: "config-1",
+            payload: {
+              something: "else",
             },
-            targetingVersion: 1,
-            evalContext: context,
-            evalRuleResults: [true],
-            evalMissingFields: [],
           },
-        ],
-      );
+          targetingVersion: 1,
+          evalContext: context,
+          evalRuleResults: [true],
+          evalMissingFields: [],
+        },
+      ]);
     });
 
-    it("everything works for unknown features", async () => {
+    it("sends events for unknown flags", async () => {
       const context: Context = {
         company,
         user,
         other: otherContext,
       };
 
-      // test that the feature is returned
+      // test that the flag is returned
       await client.initialize();
-      const feature = client.getFeature(context, "unknown-feature");
+      const flag = client.getFlag(context, "unknown-flag");
 
       // trigger `check` event
-      expect(feature.isEnabled).toBe(false);
-      await feature.track();
+      expect(flag.isEnabled).toBe(false);
+      await flag.track();
       await client.flush();
 
-      expect(httpClient.post).toHaveBeenCalledWith(
-        BULK_ENDPOINT,
-        expectedHeaders,
-        [
-          expect.objectContaining({
-            type: "company",
-          }),
-          expect.objectContaining({
-            type: "user",
-          }),
-          expect.objectContaining({
-            type: "feature-flag-event",
-            action: "evaluate",
-            key: "feature1",
-          }),
-          expect.objectContaining({
-            type: "feature-flag-event",
-            action: "evaluate-config",
-            key: "feature1",
-          }),
-          expect.objectContaining({
-            type: "feature-flag-event",
-            action: "evaluate",
-            key: "feature2",
-          }),
-          {
-            type: "feature-flag-event",
-            action: "check",
-            key: "unknown-feature",
-            targetingVersion: undefined,
-            evalContext: context,
-            evalResult: false,
-            evalRuleResults: undefined,
-            evalMissingFields: undefined,
+      const checkEvents = httpClient.post.mock.calls
+        .flatMap((call) => call[2])
+        .filter((e) => e.type === "feature-flag-event");
+
+      expect(checkEvents).toStrictEqual([
+        {
+          type: "feature-flag-event",
+          action: "check",
+          key: "unknown-flag",
+          targetingVersion: undefined,
+          evalContext: context,
+          evalResult: false,
+          evalRuleResults: undefined,
+          evalMissingFields: undefined,
+        },
+      ]);
+    });
+
+    it("sends company/user and track events", async () => {
+      const context: Context = {
+        company,
+        user,
+        other: otherContext,
+      };
+
+      // test that the flag is returned
+      await client.initialize();
+      const flag = client.getFlag(context, "flag1");
+
+      // trigger `check` event
+      await flag.track();
+      await client.flush();
+
+      const checkEvents = httpClient.post.mock.calls
+        .flatMap((call) => call[2])
+        .filter(
+          (e) =>
+            e.type === "company" || e.type === "user" || e.type === "event",
+        );
+
+      expect(checkEvents).toStrictEqual([
+        {
+          type: "company",
+          companyId: "company123",
+          attributes: {
+            employees: 100,
+            name: "Acme Inc.",
           },
-          {
-            type: "event",
-            event: "unknown-feature",
-            userId: user.id,
-            companyId: company.id,
+          userId: undefined, // this is a bug, will fix in separate PR
+          context: undefined,
+        },
+        {
+          type: "user",
+          userId: "user123",
+          attributes: {
+            age: 1,
+            name: "John",
           },
-        ],
-      );
+          context: undefined,
+        },
+        {
+          type: "event",
+          event: "flag1",
+          userId: user.id,
+          companyId: company.id,
+          context: undefined,
+          attributes: undefined,
+        },
+      ]);
     });
   });
 
-  describe("getFeatures", () => {
-    let client: BucketClient;
-    let featureEvalSequence: Record<string, boolean>;
+  describe("getFlags", () => {
+    let client: ReflagClient;
 
     beforeEach(async () => {
       httpClient.get.mockResolvedValue({
@@ -1373,45 +1389,13 @@ describe("BucketClient", () => {
         status: 200,
         body: {
           success: true,
-          ...featureDefinitions,
+          ...flagDefinitions,
         },
       });
 
-      client = new BucketClient(validOptions);
+      client = new ReflagClient(validOptions);
 
-      featureEvalSequence = {};
-      vi.mocked(evaluateFeatureRules).mockImplementation(
-        ({ featureKey, context }) => {
-          const evalFeature = evaluatedFeatures.find(
-            (f) => f.feature.key === featureKey,
-          )!;
-
-          if (featureEvalSequence[featureKey]) {
-            return {
-              value: evalFeature.config && {
-                key: evalFeature.config.key,
-                payload: evalFeature.config.payload,
-              },
-              featureKey,
-              context: context,
-              ruleEvaluationResults:
-                evalFeature.config?.ruleEvaluationResults || [],
-              missingContextFields: evalFeature.config?.missingContextFields,
-            };
-          }
-
-          featureEvalSequence[featureKey] = true;
-          return {
-            value: evalFeature.value,
-            featureKey,
-            context: context,
-            ruleEvaluationResults: evalFeature.ruleEvaluationResults,
-            missingContextFields: evalFeature.missingContextFields,
-          };
-        },
-      );
-
-      client["rateLimiter"].clear(true);
+      client["rateLimiter"].clearStale(true);
 
       httpClient.post.mockResolvedValue({
         ok: true,
@@ -1420,19 +1404,19 @@ describe("BucketClient", () => {
       });
     });
 
-    it("should return evaluated features", async () => {
+    it("should return evaluated flags", async () => {
       httpClient.post.mockClear(); // not interested in updates
 
       await client.initialize();
-      const result = client.getFeatures({
+      const result = client.getFlags({
         company,
         user,
         other: otherContext,
       });
 
       expect(result).toStrictEqual({
-        feature1: {
-          key: "feature1",
+        flag1: {
+          key: "flag1",
           isEnabled: true,
           config: {
             key: "config-1",
@@ -1442,8 +1426,8 @@ describe("BucketClient", () => {
           },
           track: expect.any(Function),
         },
-        feature2: {
-          key: "feature2",
+        flag2: {
+          key: "flag2",
           isEnabled: false,
           config: { key: undefined, payload: undefined },
           track: expect.any(Function),
@@ -1452,177 +1436,36 @@ describe("BucketClient", () => {
 
       await client.flush();
 
-      expect(evaluateFeatureRules).toHaveBeenCalledTimes(3);
       expect(httpClient.post).toHaveBeenCalledTimes(1);
-
-      expect(httpClient.post).toHaveBeenCalledWith(
-        BULK_ENDPOINT,
-        expectedHeaders,
-        [
-          expect.objectContaining({ type: "company" }),
-          expect.objectContaining({ type: "user" }),
-          {
-            type: "feature-flag-event",
-            action: "evaluate",
-            key: "feature1",
-            targetingVersion: 1,
-            evalContext: {
-              company,
-              user,
-              other: otherContext,
-            },
-            evalResult: true,
-            evalRuleResults: [true],
-            evalMissingFields: [],
-          },
-          {
-            type: "feature-flag-event",
-            action: "evaluate-config",
-            key: "feature1",
-            targetingVersion: 1,
-            evalContext: {
-              company,
-              user,
-              other: otherContext,
-            },
-            evalResult: {
-              key: "config-1",
-              payload: {
-                something: "else",
-              },
-            },
-            evalRuleResults: [true],
-            evalMissingFields: [],
-          },
-          {
-            type: "feature-flag-event",
-            action: "evaluate",
-            key: "feature2",
-            targetingVersion: 2,
-            evalContext: {
-              company,
-              user,
-              other: otherContext,
-            },
-            evalResult: false,
-            evalRuleResults: [false],
-            evalMissingFields: ["something"],
-          },
-          {
-            action: "check-config",
-            evalContext: {
-              company,
-              user,
-              other: otherContext,
-            },
-            evalResult: {
-              key: undefined,
-              payload: undefined,
-            },
-            key: "feature2",
-            type: "feature-flag-event",
-            targetingVersion: undefined,
-            evalRuleResults: undefined,
-            evalMissingFields: undefined,
-          },
-          {
-            action: "check",
-            evalContext: {
-              company,
-              user,
-              other: otherContext,
-            },
-            evalResult: false,
-            key: "feature2",
-            targetingVersion: 2,
-            type: "feature-flag-event",
-            evalMissingFields: ["something"],
-            evalRuleResults: [false],
-          },
-          {
-            action: "check-config",
-            evalContext: {
-              company,
-              user,
-              other: otherContext,
-            },
-            evalResult: {
-              key: "config-1",
-              payload: {
-                something: "else",
-              },
-            },
-            key: "feature1",
-            targetingVersion: 1,
-            type: "feature-flag-event",
-            evalRuleResults: [true],
-            evalMissingFields: [],
-          },
-          {
-            action: "check",
-            evalContext: {
-              company,
-              user,
-              other: otherContext,
-            },
-            evalResult: true,
-            key: "feature1",
-            targetingVersion: 1,
-            type: "feature-flag-event",
-            evalRuleResults: [true],
-            evalMissingFields: [],
-          },
-        ],
-      );
-    });
-
-    it("should warn about missing context fields", async () => {
-      httpClient.post.mockClear();
-
-      await client.initialize();
-      client.getFeatures({
-        company,
-        user,
-        other: otherContext,
-      });
-
-      expect(logger.warn).toHaveBeenCalledWith(
-        "feature/remote config targeting rules might not be correctly evaluated due to missing context fields.",
-        {
-          feature2: ["something"],
-        },
-      );
     });
 
     it("should properly define the rate limiter key", async () => {
       const isAllowedSpy = vi.spyOn(client["rateLimiter"], "isAllowed");
 
       await client.initialize();
-      client.getFeatures({ user, company, other: otherContext });
+      client.getFlags({ user, company, other: otherContext });
 
       expect(isAllowedSpy).toHaveBeenCalledWith("1GHpP+QfYperQ0AtD8bWPiRE4H0=");
     });
 
-    it("should return evaluated features when only user is defined", async () => {
+    it("should return evaluated flags when only user is defined", async () => {
       httpClient.post.mockClear(); // not interested in updates
 
       await client.initialize();
-      const features = client.getFeatures({ user });
+      const flags = client.getFlags({ user });
 
-      expect(features).toStrictEqual({
-        feature1: {
-          isEnabled: true,
-          key: "feature1",
+      expect(flags).toStrictEqual({
+        flag1: {
+          isEnabled: false,
+          key: "flag1",
           config: {
-            key: "config-1",
-            payload: {
-              something: "else",
-            },
+            key: undefined,
+            payload: undefined,
           },
           track: expect.any(Function),
         },
-        feature2: {
-          key: "feature2",
+        flag2: {
+          key: "flag2",
           isEnabled: false,
           config: { key: undefined, payload: undefined },
           track: expect.any(Function),
@@ -1631,83 +1474,18 @@ describe("BucketClient", () => {
 
       await client.flush();
 
-      expect(evaluateFeatureRules).toHaveBeenCalledTimes(3);
       expect(httpClient.post).toHaveBeenCalledTimes(1);
-
-      expect(httpClient.post).toHaveBeenCalledWith(
-        BULK_ENDPOINT,
-        expectedHeaders,
-        [
-          expect.objectContaining({ type: "user" }),
-          expect.objectContaining({
-            type: "feature-flag-event",
-            action: "evaluate",
-            key: "feature1",
-            evalContext: {
-              user,
-            },
-          }),
-          expect.objectContaining({
-            type: "feature-flag-event",
-            action: "evaluate-config",
-            key: "feature1",
-            evalContext: {
-              user,
-            },
-          }),
-          expect.objectContaining({
-            type: "feature-flag-event",
-            action: "evaluate",
-            key: "feature2",
-            evalContext: {
-              user,
-            },
-          }),
-          expect.objectContaining({
-            type: "feature-flag-event",
-            action: "check-config",
-            evalContext: {
-              user,
-            },
-            key: "feature2",
-          }),
-          expect.objectContaining({
-            type: "feature-flag-event",
-            action: "check",
-            evalContext: {
-              user,
-            },
-            key: "feature2",
-          }),
-          expect.objectContaining({
-            type: "feature-flag-event",
-            action: "check-config",
-            evalContext: {
-              user,
-            },
-            key: "feature1",
-          }),
-          expect.objectContaining({
-            type: "feature-flag-event",
-            action: "check",
-            evalContext: {
-              user,
-            },
-            key: "feature1",
-          }),
-        ],
-      );
     });
 
-    it("should return evaluated features when only company is defined", async () => {
+    it("should return evaluated flags when only company is defined", async () => {
       await client.initialize();
-      const features = client.getFeatures({ company });
+      const flags = client.getFlags({ company });
 
       // expect will trigger the `isEnabled` getter and send a `check` event
-      expect(features).toStrictEqual({
-        feature1: {
+      expect(flags).toStrictEqual({
+        flag1: {
           isEnabled: true,
-          key: "feature1",
+          key: "flag1",
           config: {
             key: "config-1",
             payload: {
@@ -1716,8 +1494,8 @@ describe("BucketClient", () => {
           },
           track: expect.any(Function),
         },
-        feature2: {
-          key: "feature2",
+        flag2: {
+          key: "flag2",
           isEnabled: false,
           config: { key: undefined, payload: undefined },
           track: expect.any(Function),
@@ -1726,83 +1504,18 @@ describe("BucketClient", () => {
 
       await client.flush();
 
-      expect(evaluateFeatureRules).toHaveBeenCalledTimes(3);
       expect(httpClient.post).toHaveBeenCalledTimes(1);
-
-      expect(httpClient.post).toHaveBeenCalledWith(
-        BULK_ENDPOINT,
-        expectedHeaders,
-        [
-          expect.objectContaining({ type: "company" }),
-          expect.objectContaining({
-            type: "feature-flag-event",
-            action: "evaluate",
-            key: "feature1",
-            evalContext: {
-              company,
-            },
-          }),
-          expect.objectContaining({
-            type: "feature-flag-event",
-            action: "evaluate-config",
-            key: "feature1",
-            evalContext: {
-              company,
-            },
-          }),
-          expect.objectContaining({
-            type: "feature-flag-event",
-            action: "evaluate",
-            key: "feature2",
-            evalContext: {
-              company,
-            },
-          }),
-          expect.objectContaining({
-            type: "feature-flag-event",
-            action: "check-config",
-            key: "feature2",
-            evalContext: {
-              company,
-            },
-          }),
-          expect.objectContaining({
-            type: "feature-flag-event",
-            action: "check",
-            key: "feature2",
-            evalContext: {
-              company,
-            },
-          }),
-          expect.objectContaining({
-            type: "feature-flag-event",
-            action: "check-config",
-            key: "feature1",
-            evalContext: {
-              company,
-            },
-          }),
-          expect.objectContaining({
-            type: "feature-flag-event",
-            action: "check",
-            key: "feature1",
-            evalContext: {
-              company,
-            },
-          }),
-        ],
-      );
     });
 
     it("should not send flag events when `enableTracking` is `false`", async () => {
       await client.initialize();
-      const features = client.getFeatures({ company, enableTracking: false });
+      const flags = client.getFlags({ company, enableTracking: false });
 
       // expect will trigger the `isEnabled` getter and send a `check` event
-      expect(features).toStrictEqual({
-        feature1: {
+      expect(flags).toStrictEqual({
+        flag1: {
           isEnabled: true,
-          key: "feature1",
+          key: "flag1",
           config: {
             key: "config-1",
             payload: {
@@ -1811,8 +1524,8 @@ describe("BucketClient", () => {
           },
           track: expect.any(Function),
         },
-        feature2: {
-          key: "feature2",
+        flag2: {
+          key: "flag2",
           isEnabled: false,
           config: { key: undefined, payload: undefined },
           track: expect.any(Function),
@@ -1821,227 +1534,207 @@ describe("BucketClient", () => {
 
       await client.flush();
 
-      expect(evaluateFeatureRules).toHaveBeenCalledTimes(3);
       expect(httpClient.post).not.toHaveBeenCalled();
     });
 
-    it("should return evaluated features when only other context is defined", async () => {
+    it("should return evaluated flags when only other context is defined", async () => {
       await client.initialize();
-      client.getFeatures({ other: otherContext });
+      const flags = client.getFlags({ other: otherContext });
+
+      expect(flags).toStrictEqual({
+        flag1: {
+          isEnabled: false,
+          key: "flag1",
+          config: {
+            key: undefined,
+            payload: undefined,
+          },
+          track: expect.any(Function),
+        },
+        flag2: {
+          key: "flag2",
+          isEnabled: false,
+          config: { key: undefined, payload: undefined },
+          track: expect.any(Function),
+        },
+      });
 
       await client.flush();
 
-      expect(evaluateFeatureRules).toHaveBeenCalledTimes(3);
       expect(httpClient.post).toHaveBeenCalledTimes(1);
-
-      expect(httpClient.post).toHaveBeenCalledWith(
-        BULK_ENDPOINT,
-        expectedHeaders,
-        [
-          {
-            type: "feature-flag-event",
-            action: "evaluate",
-            key: "feature1",
-            targetingVersion: 1,
-            evalContext: {
-              other: otherContext,
-            },
-            evalResult: true,
-            evalRuleResults: [true],
-            evalMissingFields: [],
-          },
-          {
-            type: "feature-flag-event",
-            action: "evaluate-config",
-            evalContext: {
-              other: otherContext,
-            },
-            evalResult: {
-              key: "config-1",
-              payload: {
-                something: "else",
-              },
-            },
-            key: "feature1",
-            targetingVersion: 1,
-            evalMissingFields: [],
-            evalRuleResults: [true],
-          },
-          {
-            type: "feature-flag-event",
-            action: "evaluate",
-            key: "feature2",
-            targetingVersion: 2,
-            evalContext: {
-              other: otherContext,
-            },
-            evalResult: false,
-            evalRuleResults: [false],
-            evalMissingFields: ["something"],
-          },
-        ],
-      );
     });
 
     it("should send `track` with user and company if provided", async () => {
       await client.initialize();
-      const feature1 = client.getFeature({ company, user }, "feature1");
+      const flags = client.getFlags({ company, user });
       await client.flush();
 
-      await feature1.track();
+      await flags.flag1.track();
       await client.flush();
 
       expect(httpClient.post).toHaveBeenCalledTimes(2);
-      expect(httpClient.post).toHaveBeenNthCalledWith(
-        1,
-        BULK_ENDPOINT,
-        expectedHeaders,
-        [
-          expect.objectContaining({
-            type: "company",
-          }),
-          expect.objectContaining({
-            type: "user",
-          }),
-          expect.objectContaining({
-            type: "feature-flag-event",
-            action: "evaluate",
-            key: "feature1",
-            evalContext: {
-              company,
-              user,
-            },
-          }),
-          expect.objectContaining({
-            type: "feature-flag-event",
-            action: "evaluate-config",
-            key: "feature1",
-            evalContext: {
-              company,
-              user,
-            },
-          }),
-          expect.objectContaining({
-            type: "feature-flag-event",
-            action: "evaluate",
-            key: "feature2",
-          }),
-        ],
+      // second call includes the track event
+      const events = httpClient.post.mock.calls[1][2].filter(
+        (e: any) => e.type === "event",
       );
-      expect(httpClient.post).toHaveBeenNthCalledWith(
-        2,
-        BULK_ENDPOINT,
-        expectedHeaders,
-        [
-          {
-            companyId: "company123",
-            event: "feature1",
-            type: "event",
-            userId: "user123",
-          },
-        ],
-      );
+
+      expect(events).toStrictEqual([
+        {
+          event: "flag1",
+          type: "event",
+          userId: "user123",
+          companyId: "company123",
+          attributes: undefined,
+          context: undefined,
+        },
+      ]);
     });
 
     it("should send `track` with user if provided", async () => {
       await client.initialize();
-      const feature = client.getFeature({ user }, "feature1");
+      const flags = client.getFlags({ user });
 
       await client.flush();
-      await feature.track();
+      await flags.flag1.track();
       await client.flush();
 
       expect(httpClient.post).toHaveBeenCalledTimes(2);
-      expect(httpClient.post).toHaveBeenNthCalledWith(
-        1,
-        BULK_ENDPOINT,
-        expectedHeaders,
-        [
-          expect.objectContaining({
-            type: "user",
-          }),
-          expect.objectContaining({
-            type: "feature-flag-event",
-            action: "evaluate",
-            key: "feature1",
-            evalContext: {
-              user,
-            },
-          }),
-          expect.objectContaining({
-            type: "feature-flag-event",
-            action: "evaluate-config",
-            key: "feature1",
-            evalContext: {
-              user,
-            },
-          }),
-          expect.objectContaining({
-            type: "feature-flag-event",
-            key: "feature2",
-            action: "evaluate",
-          }),
-        ],
+
+      const emptyEvents = httpClient.post.mock.calls[0][2].filter(
+        (e: any) => e.type === "event",
       );
-      expect(httpClient.post).toHaveBeenNthCalledWith(
-        2,
-        BULK_ENDPOINT,
-        expectedHeaders,
-        [
-          {
-            event: "feature1",
-            type: "event",
-            userId: "user123",
-          },
-        ],
+
+      expect(emptyEvents).toStrictEqual([]);
+
+      // second call includes the track event
+      const events = httpClient.post.mock.calls[1][2].filter(
+        (e: any) => e.type === "event",
       );
+
+      expect(events).toStrictEqual([
+        {
+          event: "flag1",
+          type: "event",
+          userId: "user123",
+          companyId: undefined,
+          attributes: undefined,
+          context: undefined,
+        },
+      ]);
     });
 
-    it("should not send `track` with only company if provided", async () => {
+    it("should not send `track` with only company if no user is provided", async () => {
       // we do not accept track events without a userId
       await client.initialize();
-      const feature = client.getFeature({ company }, "feature1");
+      const flag = client.getFlags({ company });
 
-      await feature.track();
+      await flag.flag1.track();
       await client.flush();
 
       expect(httpClient.post).toHaveBeenCalledTimes(1);
-      expect(httpClient.post).toHaveBeenCalledWith(
-        BULK_ENDPOINT,
-        expectedHeaders,
-        [
-          expect.objectContaining({
-            type: "company",
-          }),
-          expect.objectContaining({
-            type: "feature-flag-event",
-            action: "evaluate",
-            evalContext: {
-              company,
-            },
-          }),
-          expect.objectContaining({
-            type: "feature-flag-event",
-            action: "evaluate-config",
-            evalContext: {
-              company,
-            },
-          }),
-          expect.objectContaining({
-            type: "feature-flag-event",
-            action: "evaluate",
-          }),
-        ],
+      const events = httpClient.post.mock.calls[0][2].filter(
+        (e: any) => e.type === "event",
       );
+
+      expect(events).toStrictEqual([]);
     });
 
-    it("should use fallback features when `getFeatureDefinitions` returns `undefined`", async () => {
+    it("`isEnabled` does not send `check` event", async () => {
+      const context = {
+        company,
+        user,
+        other: otherContext,
+      };
+
+      // test that the flag is returned
+      await client.initialize();
+      const flag = client.getFlags(context);
+
+      // trigger `check` event
+      expect(flag.flag1.isEnabled).toBe(true);
+
+      await client.flush();
+      const checkEvents = httpClient.post.mock.calls
+        .flatMap((call) => call[2])
+        .filter((e) => e.action === "check");
+
+      expect(checkEvents).toStrictEqual([]);
+    });
+
+    it("`config` does not send `check` event", async () => {
+      const context = {
+        company,
+        user,
+        other: otherContext,
+      };
+
+      // test that the flag is returned
+      await client.initialize();
+      const flag = client.getFlags(context);
+
+      // attempt to trigger `check` event
+      expect(flag.flag1.config).toBeDefined();
+
+      await client.flush();
+
+      const checkEvents = httpClient.post.mock.calls
+        .flatMap((call) => call[2])
+        .filter((e) => e.action === "check-config");
+
+      expect(checkEvents).toStrictEqual([]);
+    });
+
+    it("sends company/user events", async () => {
+      const context: Context = {
+        company,
+        user,
+        other: otherContext,
+      };
+
+      // test that the flag is returned
+      await client.initialize();
+      client.getFlags(context);
+
+      // trigger `check` event
+      await client.flush();
+
+      const checkEvents = httpClient.post.mock.calls
+        .flatMap((call) => call[2])
+        .filter(
+          (e) =>
+            e.type === "company" || e.type === "user" || e.type === "event",
+        );
+
+      expect(checkEvents).toStrictEqual([
+        {
+          type: "company",
+          companyId: "company123",
+          attributes: {
+            employees: 100,
+            name: "Acme Inc.",
+          },
+          userId: undefined, // this is a bug, will fix in separate PR
+          context: undefined,
+        },
+        {
+          type: "user",
+          userId: "user123",
+          attributes: {
+            age: 1,
+            name: "John",
+          },
+          context: undefined,
+        },
+      ]);
+    });
+
+    it("should use fallback flags when `getFlagDefinitions` returns `undefined`", async () => {
       httpClient.get.mockResolvedValue({
         success: false,
       });
 
       await client.initialize();
-      const result = client.getFeature(
+      const result = client.getFlag(
         { user: { id: "user123" }, enableTracking: true },
         "key",
       );
@@ -2055,7 +1748,7 @@ describe("BucketClient", () => {
 
       expect(logger.warn).toHaveBeenCalledWith(
         expect.stringMatching(
-          "no feature definitions available, using fallback features",
+          "no flag definitions available, using fallback flags",
         ),
       );
 
@@ -2082,11 +1775,12 @@ describe("BucketClient", () => {
       );
     });
 
-    it("should not fail if sendFeatureEvent fails to send evaluate event", async () => {
+    it("should not fail if sendFlagEvent fails to send evaluate event", async () => {
       httpClient.post.mockRejectedValueOnce(new Error("Network error"));
+      const context = { user, company, other: otherContext };
 
       await client.initialize();
-      const features = client.getFeatures({});
+      const flags = client.getFlags(context);
 
       await client.flush();
 
@@ -2095,9 +1789,9 @@ describe("BucketClient", () => {
         expect.any(Error),
       );
 
-      expect(features).toStrictEqual({
-        feature1: {
-          key: "feature1",
+      expect(flags).toStrictEqual({
+        flag1: {
+          key: "flag1",
           isEnabled: true,
           config: {
             key: "config-1",
@@ -2107,8 +1801,8 @@ describe("BucketClient", () => {
           },
           track: expect.any(Function),
         },
-        feature2: {
-          key: "feature2",
+        flag2: {
+          key: "flag2",
           isEnabled: false,
           config: { key: undefined, payload: undefined },
           track: expect.any(Function),
@@ -2116,7 +1810,7 @@ describe("BucketClient", () => {
       });
     });
 
-    it("should not fail if sendFeatureEvent fails to send check event", async () => {
+    it("should not fail if sendFlagEvent fails to send check event", async () => {
       httpClient.post.mockResolvedValue({
         status: 200,
         body: { success: true },
@@ -2124,12 +1818,13 @@ describe("BucketClient", () => {
 
       await client.initialize();
       httpClient.post.mockRejectedValue(new Error("Network error"));
+      const context = { user, company, other: otherContext };
 
-      const result = client.getFeatures({});
+      const result = client.getFlags(context);
 
-      // Trigger a feature check
-      expect(result.feature1).toStrictEqual({
-        key: "feature1",
+      // Trigger a flag check
+      expect(result.flag1).toStrictEqual({
+        key: "flag1",
         isEnabled: true,
         track: expect.any(Function),
         config: {
@@ -2148,14 +1843,14 @@ describe("BucketClient", () => {
       );
     });
 
-    it("should use feature overrides", async () => {
+    it("should use flag overrides", async () => {
       await client.initialize();
       const context = { user, company, other: otherContext };
 
-      const pristineResults = client.getFeatures(context);
+      const pristineResults = client.getFlags(context);
       expect(pristineResults).toStrictEqual({
-        feature1: {
-          key: "feature1",
+        flag1: {
+          key: "flag1",
           isEnabled: true,
           config: {
             key: "config-1",
@@ -2165,20 +1860,81 @@ describe("BucketClient", () => {
           },
           track: expect.any(Function),
         },
-        feature2: {
-          key: "feature2",
+        flag2: {
+          key: "flag2",
           isEnabled: false,
           config: { key: undefined, payload: undefined },
           track: expect.any(Function),
         },
       });
 
-      client.featureOverrides = (_context: Context) => {
+      client.flagOverrides = {
+        flag1: false,
+      };
+      const flags = client.getFlags(context);
+
+      expect(flags).toStrictEqual({
+        flag1: {
+          key: "flag1",
+          isEnabled: false,
+          config: { key: undefined, payload: undefined },
+          track: expect.any(Function),
+        },
+        flag2: {
+          key: "flag2",
+          isEnabled: false,
+          config: { key: undefined, payload: undefined },
+          track: expect.any(Function),
+        },
+      });
+
+      client.clearFlagOverrides();
+      const flags2 = client.getFlags(context);
+
+      expect(flags2).toStrictEqual({
+        ...pristineResults,
+        flag1: {
+          ...pristineResults.flag1,
+          track: expect.any(Function),
+        },
+        flag2: {
+          ...pristineResults.flag2,
+          track: expect.any(Function),
+        },
+      });
+    });
+
+    it("should use flag overrides from function", async () => {
+      await client.initialize();
+      const context = { user, company, other: otherContext };
+
+      const pristineResults = client.getFlags(context);
+      expect(pristineResults).toStrictEqual({
+        flag1: {
+          key: "flag1",
+          isEnabled: true,
+          config: {
+            key: "config-1",
+            payload: {
+              something: "else",
+            },
+          },
+          track: expect.any(Function),
+        },
+        flag2: {
+          key: "flag2",
+          isEnabled: false,
+          config: { key: undefined, payload: undefined },
+          track: expect.any(Function),
+        },
+      });
+
+      client.flagOverrides = (_context: Context) => {
         expect(context).toStrictEqual(context);
         return {
-          feature1: { isEnabled: false },
-          feature2: true,
-          feature3: {
+          flag1: { isEnabled: false },
+          flag2: true,
+          flag3: {
             isEnabled: true,
             config: {
               key: "config-1",
@@ -2187,23 +1943,23 @@ describe("BucketClient", () => {
           },
         };
       };
-      const features = client.getFeatures(context);
+      const flags = client.getFlags(context);
 
-      expect(features).toStrictEqual({
-        feature1: {
-          key: "feature1",
+      expect(flags).toStrictEqual({
+        flag1: {
+          key: "flag1",
           isEnabled: false,
           config: { key: undefined, payload: undefined },
           track: expect.any(Function),
         },
-        feature2: {
-          key: "feature2",
+        flag2: {
+          key: "flag2",
           isEnabled: true,
           config: { key: undefined, payload: undefined },
           track: expect.any(Function),
         },
-        feature3: {
-          key: "feature3",
+        flag3: {
+          key: "flag3",
           isEnabled: true,
           config: {
             key: "config-1",
@@ -2215,8 +1971,8 @@ describe("BucketClient", () => {
     });
   });
 
-  describe("getFeaturesRemote", () => {
-    let client: BucketClient;
+  describe("getFlagsRemote", () => {
+    let client: ReflagClient;
 
     beforeEach(async () => {
       httpClient.get.mockResolvedValue({
@@ -2226,8 +1982,8 @@ describe("BucketClient", () => {
           success: true,
           remoteContextUsed: true,
           features: {
-            feature1: {
-              key: "feature1",
+            flag1: {
+              key: "flag1",
               targetingVersion: 1,
               isEnabled: true,
               config: {
@@ -2239,14 +1995,14 @@ describe("BucketClient", () => {
               },
               missingContextFields: ["something", "funny"],
             },
-            feature2: {
-              key: "feature2",
+            flag2: {
+              key: "flag2",
               targetingVersion: 2,
               isEnabled: false,
               missingContextFields: ["another"],
             },
-            feature3: {
-              key: "feature3",
+            flag3: {
+              key: "flag3",
               targetingVersion: 5,
               isEnabled: true,
             },
@@ -2254,21 +2010,21 @@ describe("BucketClient", () => {
         },
       });
 
-      client = new BucketClient(validOptions);
+      client = new ReflagClient(validOptions);
     });
 
     afterEach(() => {
       httpClient.get.mockClear();
     });
 
-    it("should return evaluated features", async () => {
-      const result = await client.getFeaturesRemote("c1", "u1", {
+    it("should return evaluated flags", async () => {
+      const result = await client.getFlagsRemote("c1", "u1", {
         other: otherContext,
       });
 
       expect(result).toStrictEqual({
-        feature1: {
-          key: "feature1",
+        flag1: {
+          key: "flag1",
           isEnabled: true,
           config: {
             key: "config-1",
@@ -2276,14 +2032,14 @@ describe("BucketClient", () => {
           },
           track: expect.any(Function),
         },
-        feature2: {
-          key: "feature2",
+        flag2: {
+          key: "flag2",
           isEnabled: false,
           config: { key: undefined, payload: undefined },
           track: expect.any(Function),
         },
-        feature3: {
-          key: "feature3",
+        flag3: {
+          key: "flag3",
           isEnabled: true,
           config: { key: undefined, payload: undefined },
           track: expect.any(Function),
@@ -2300,7 +2056,7 @@ describe("BucketClient", () => {
     });
 
     it("should not try to append the context if it's empty", async () => {
-      await client.getFeaturesRemote();
+      await client.getFlagsRemote();
 
       expect(httpClient.get).toHaveBeenCalledTimes(1);
 
@@ -2310,22 +2066,10 @@ describe("BucketClient", () => {
         API_TIMEOUT_MS,
       );
     });
-
-    it("should warn if missing context fields", async () => {
-      await client.getFeaturesRemote();
-      expect(logger.warn).toHaveBeenCalledWith(
-        "feature/remote config targeting rules might not be correctly evaluated due to missing context fields.",
-        {
-          feature1: ["something", "funny"],
-          "feature1.config": ["funny"],
-          feature2: ["another"],
-        },
-      );
-    });
   });
 
-  describe("getFeatureRemote", () => {
-    let client: BucketClient;
+  describe("getFlagRemote", () => {
+    let client: ReflagClient;
 
     beforeEach(async () => {
       httpClient.get.mockResolvedValue({
@@ -2335,8 +2079,8 @@ describe("BucketClient", () => {
           success: true,
           remoteContextUsed: true,
           features: {
-            feature1: {
-              key: "feature1",
+            flag1: {
+              key: "flag1",
               targetingVersion: 1,
               isEnabled: true,
               config: {
@@ -2352,20 +2096,20 @@ describe("BucketClient", () => {
         },
       });
 
-      client = new BucketClient(validOptions);
+      client = new ReflagClient(validOptions);
     });
 
     afterEach(() => {
       httpClient.get.mockClear();
     });
 
-    it("should return evaluated feature", async () => {
-      const result = await client.getFeatureRemote("feature1", "c1", "u1", {
+    it("should return evaluated flag", async () => {
+      const result = await client.getFlagRemote("flag1", "c1", "u1", {
         other: otherContext,
       });
 
       expect(result).toStrictEqual({
-        key: "feature1",
+        key: "flag1",
         isEnabled: true,
         track: expect.any(Function),
         config: {
@@ -2377,39 +2121,28 @@ describe("BucketClient", () => {
       expect(httpClient.get).toHaveBeenCalledTimes(1);
 
       expect(httpClient.get).toHaveBeenCalledWith(
-        "https://api.example.com/features/evaluated?context.other.custom=context&context.other.key=value&context.user.id=c1&context.company.id=u1&key=feature1",
+        "https://api.example.com/features/evaluated?context.other.custom=context&context.other.key=value&context.user.id=c1&context.company.id=u1&key=flag1",
         expectedHeaders,
         API_TIMEOUT_MS,
       );
     });
 
     it("should not try to append the context if it's empty", async () => {
-      await client.getFeatureRemote("feature1");
+      await client.getFlagRemote("flag1");
 
       expect(httpClient.get).toHaveBeenCalledWith(
-        "https://api.example.com/features/evaluated?key=feature1",
+        "https://api.example.com/features/evaluated?key=flag1",
         expectedHeaders,
         API_TIMEOUT_MS,
-      );
-    });
-
-    it("should warn if missing context fields", async () => {
-      await client.getFeatureRemote("feature1");
-      expect(logger.warn).toHaveBeenCalledWith(
-        "feature/remote config targeting rules might not be correctly evaluated due to missing context fields.",
-        {
-          feature1: ["one", "two"],
-          "feature1.config": ["two"],
-        },
       );
     });
   });
 
   describe("offline mode", () => {
-    let client: BucketClient;
+    let client: ReflagClient;
 
     beforeEach(async () => {
-      client = new BucketClient({
+      client = new ReflagClient({
         ...validOptions,
         offline: true,
       });
@@ -2417,7 +2150,7 @@ describe("BucketClient", () => {
     });
 
     it("should send not send or fetch anything", async () => {
-      client.getFeatures({});
+      client.getFlags({});
 
       expect(httpClient.get).toHaveBeenCalledTimes(0);
       expect(httpClient.post).toHaveBeenCalledTimes(0);
@@ -2425,7 +2158,7 @@ describe("BucketClient", () => {
   });
 });
 
-describe("BoundBucketClient", () => {
+describe("BoundReflagClient", () => {
   beforeAll(() => {
     const response = {
       status: 200,
@@ -2438,22 +2171,22 @@ describe("BoundBucketClient", () => {
       status: 200,
       body: {
         success: true,
-        ...featureDefinitions,
+        ...flagDefinitions,
       },
     });
   });
-  const client = new BucketClient(validOptions);
+  const client = new ReflagClient(validOptions);
 
   beforeEach(async () => {
     await flushPromises();
     await client.flush();
 
     vi.mocked(httpClient.post).mockClear();
-    client["rateLimiter"].clear(true);
+    client["rateLimiter"].clearStale(true);
   });
 
   it("should create a client instance", () => {
-    expect(client).toBeInstanceOf(BucketClient);
+    expect(client).toBeInstanceOf(ReflagClient);
   });
 
   it("should return a new client instance with merged attributes", () => {
@@ -2490,9 +2223,9 @@ describe("BoundBucketClient", () => {
       boundClient.bindClient({ other: otherContext }).otherContext,
     ).toEqual(otherContext);
 
-    boundClient.getFeatures();
+    boundClient.getFlags();
 
-    await boundClient.track("feature");
+    await boundClient.track("flag");
     await client.flush();
 
     expect(httpClient.post).toHaveBeenCalledWith(
@@ -2501,7 +2234,7 @@ describe("BoundBucketClient", () => {
       [
         expect.objectContaining({ type: "user" }),
         {
-          event: "feature",
+          event: "flag",
           type: "event",
           userId: "user123",
         },
@@ -2512,8 +2245,8 @@ describe("BoundBucketClient", () => {
   it("should add company ID from the context if not explicitly supplied", async () => {
     const boundClient = client.bindClient({ user, company });
 
-    boundClient.getFeatures();
-    await boundClient.track("feature");
+    boundClient.getFlags();
+    await boundClient.track("flag");
 
     await client.flush();
 
@@ -2525,7 +2258,7 @@ describe("BoundBucketClient", () => {
         expect.objectContaining({ type: "user" }),
         {
           companyId: "company123",
-          event: "feature",
+          event: "flag",
           type: "event",
           userId: "user123",
         },
@@ -2540,9 +2273,9 @@ describe("BoundBucketClient", () => {
       enableTracking: false,
     });
 
-    const { track } = boundClient.getFeature("feature2");
+    const { track } = boundClient.getFlag("flag2");
     await track();
-    await boundClient.track("feature1");
+    await boundClient.track("flag1");
 
     await client.flush();
 
@@ -2557,13 +2290,13 @@ describe("BoundBucketClient", () => {
 
     await client.initialize();
 
-    boundClient.getFeatures();
-    boundClient.getFeature("feature1");
+    boundClient.getFlags();
+    boundClient.getFlag("flag1");
 
     await boundClient.flush();
   });
 
-  describe("getFeatureRemote/getFeaturesRemote", () => {
+  describe("getFlagRemote/getFlagsRemote", () => {
     beforeEach(async () => {
       httpClient.get.mockClear();
       httpClient.get.mockResolvedValue({
@@ -2573,8 +2306,8 @@ describe("BoundBucketClient", () => {
           success: true,
           remoteContextUsed: true,
           features: {
-            feature1: {
-              key: "feature1",
+            flag1: {
+              key: "flag1",
               targetingVersion: 1,
               isEnabled: true,
               config: {
@@ -2585,8 +2318,8 @@ describe("BoundBucketClient", () => {
                 missingContextFields: ["else"],
               },
             },
-            feature2: {
-              key: "feature2",
+            flag2: {
+              key: "flag2",
               targetingVersion: 2,
               isEnabled: false,
               missingContextFields: ["something"],
@@ -2596,24 +2329,24 @@ describe("BoundBucketClient", () => {
       });
     });
 
-    it("should return evaluated features", async () => {
+    it("should return evaluated flags", async () => {
       const boundClient = client.bindClient({
         user,
         company,
         other: otherContext,
       });
 
-      const result = await boundClient.getFeaturesRemote();
+      const result = await boundClient.getFlagsRemote();
 
       expect(result).toStrictEqual({
-        feature1: {
-          key: "feature1",
+        flag1: {
+          key: "flag1",
           isEnabled: true,
           config: { key: "config-1", payload: { something: "else" } },
           track: expect.any(Function),
         },
-        feature2: {
-          key: "feature2",
+        flag2: {
+          key: "flag2",
           isEnabled: false,
           config: { key: undefined, payload: undefined },
           track: expect.any(Function),
@@ -2629,17 +2362,17 @@ describe("BoundBucketClient", () => {
       );
     });
 
-    it("should return evaluated feature", async () => {
+    it("should return evaluated flag", async () => {
       const boundClient = client.bindClient({
         user,
         company,
         other: otherContext,
       });
 
-      const result = await boundClient.getFeatureRemote("feature1");
+      const result = await boundClient.getFlagRemote("flag1");
 
       expect(result).toStrictEqual({
-        key: "feature1",
+        key: "flag1",
         isEnabled: true,
         config: { key: "config-1", payload: { something: "else" } },
         track: expect.any(Function),
@@ -2648,7 +2381,7 @@ describe("BoundBucketClient", () => {
       expect(httpClient.get).toHaveBeenCalledTimes(1);
 
       expect(httpClient.get).toHaveBeenCalledWith(
-        "https://api.example.com/features/evaluated?context.user.id=user123&context.user.age=1&context.user.name=John&context.company.id=company123&context.company.employees=100&context.company.name=Acme+Inc.&context.other.custom=context&context.other.key=value&key=feature1",
+        "https://api.example.com/features/evaluated?context.user.id=user123&context.user.age=1&context.user.name=John&context.company.id=company123&context.company.employees=100&context.company.name=Acme+Inc.&context.other.custom=context&context.other.key=value&key=flag1",
         expectedHeaders,
         API_TIMEOUT_MS,
       );

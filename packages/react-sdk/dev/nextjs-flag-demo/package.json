@@ -9,7 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@bucketco/react-sdk": "workspace:^",
+    "@reflag/react-sdk": "workspace:^",
     "next": "14.2.21",
     "react": "^18",
     "react-dom": "^18"

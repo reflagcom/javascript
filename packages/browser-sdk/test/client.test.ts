@@ -1,31 +1,31 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { BucketClient } from "../src/client";
-import { FeaturesClient } from "../src/feature/features";
+import { ReflagClient } from "../src/client";
+import { FlagsClient } from "../src/flag/flags";
 import { HttpClient } from "../src/httpClient";
 
-import { featuresResult } from "./mocks/handlers";
+import { flagsResult } from "./mocks/handlers";
 
-describe("BucketClient", () => {
-  let client: BucketClient;
+describe("ReflagClient", () => {
+  let client: ReflagClient;
   const httpClientPost = vi.spyOn(HttpClient.prototype as any, "post");
+  const httpClientGet = vi.spyOn(HttpClient.prototype as any, "get");
 
-  const featureClientSetContext = vi.spyOn(
-    FeaturesClient.prototype,
-    "setContext",
-  );
+  const flagClientSetContext = vi.spyOn(FlagsClient.prototype, "setContext");
 
   beforeEach(() => {
-    client = new BucketClient({
+    client = new ReflagClient({
       publishableKey: "test-key",
       user: { id: "user1" },
       company: { id: "company1" },
     });
+
+    vi.clearAllMocks();
   });
 
   describe("updateUser", () => {
     it("should update the user context", async () => {
-      // and send new user data and trigger feature update
+      // and send new user data and trigger flag update
       const updatedUser = { name: "New User" };
 
       await client.updateUser(updatedUser);
@@ -38,13 +38,13 @@ describe("BucketClient", () => {
           attributes: { name: updatedUser.name },
         },
       });
-      expect(featureClientSetContext).toHaveBeenCalledWith(client["context"]);
+      expect(flagClientSetContext).toHaveBeenCalledWith(client["context"]);
     });
   });
 
   describe("updateCompany", () => {
     it("should update the company context", async () => {
-      // send new company data and trigger feature update
+      // send new company data and trigger flag update
       const updatedCompany = { name: "New Company" };
 
       await client.updateCompany(updatedCompany);
@@ -61,17 +61,17 @@ describe("BucketClient", () => {
           attributes: { name: updatedCompany.name },
         },
       });
-      expect(featureClientSetContext).toHaveBeenCalledWith(client["context"]);
+      expect(flagClientSetContext).toHaveBeenCalledWith(client["context"]);
     });
   });
 
-  describe("getFeature", () => {
+  describe("getFlag", () => {
     it("takes overrides into account", async () => {
       await client.initialize();
-      expect(featuresResult["featureA"].isEnabled).toBe(true);
-      expect(client.getFeature("featureA").isEnabled).toBe(true);
-      client.setFeatureOverride("featureA", false);
-      expect(client.getFeature("featureA").isEnabled).toBe(false);
+      expect(flagsResult["flagA"].isEnabled).toBe(true);
+      expect(client.getFlag("flagA").isEnabled).toBe(true);
+      client.getFlag("flagA").setIsEnabledOverride(false);
+      expect(client.getFlag("flagA").isEnabled).toBe(false);
     });
   });
 
@@ -81,17 +81,13 @@ describe("BucketClient", () => {
       const userHook = vi.fn();
       const companyHook = vi.fn();
       const checkHook = vi.fn();
-      const checkHookIsEnabled = vi.fn();
-      const checkHookConfig = vi.fn();
-      const featuresUpdated = vi.fn();
+      const flagsUpdated = vi.fn();
 
       client.on("track", trackHook);
       client.on("user", userHook);
       client.on("company", companyHook);
       client.on("check", checkHook);
-      client.on("configCheck", checkHookConfig);
-      client.on("enabledCheck", checkHookIsEnabled);
-      client.on("featuresUpdated", featuresUpdated);
+      client.on("flagsUpdated", flagsUpdated);
 
       await client.track("test-event");
       expect(trackHook).toHaveBeenCalledWith({
@@ -108,47 +104,41 @@ describe("BucketClient", () => {
       expect(companyHook).toHaveBeenCalledWith(client["context"].company);
 
       // eslint-disable-next-line @typescript-eslint/no-unused-expressions -- special getter triggering event
-      client.getFeature("featureA").isEnabled;
-      expect(checkHookIsEnabled).toHaveBeenCalled();
+      client.getFlag("flagA").isEnabled;
       expect(checkHook).toHaveBeenCalled();
 
       checkHook.mockReset();
 
       // eslint-disable-next-line @typescript-eslint/no-unused-expressions -- special getter triggering event
-      client.getFeature("featureA").config;
-      expect(checkHookConfig).toHaveBeenCalled();
+      client.getFlag("flagA").config;
       expect(checkHook).toHaveBeenCalled();
 
-      expect(featuresUpdated).not.toHaveBeenCalled();
+      expect(flagsUpdated).not.toHaveBeenCalled();
       await client.updateOtherContext({ key: "value" });
-      expect(featuresUpdated).toHaveBeenCalled();
+      expect(flagsUpdated).toHaveBeenCalled();
 
       // Remove hooks
       client.off("track", trackHook);
       client.off("user", userHook);
       client.off("company", companyHook);
       client.off("check", checkHook);
-      client.off("configCheck", checkHookConfig);
-      client.off("enabledCheck", checkHookIsEnabled);
-      client.off("featuresUpdated", featuresUpdated);
+      client.off("flagsUpdated", flagsUpdated);
 
       // Reset mocks
       trackHook.mockReset();
       userHook.mockReset();
       companyHook.mockReset();
       checkHook.mockReset();
-      checkHookIsEnabled.mockReset();
-      checkHookConfig.mockReset();
-      featuresUpdated.mockReset();
+      flagsUpdated.mockReset();
 
       // Trigger events again
       await client.track("test-event");
       await client["user"]();
       await client["company"]();
       // eslint-disable-next-line @typescript-eslint/no-unused-expressions -- special getter triggering event
-      client.getFeature("featureA").isEnabled;
+      client.getFlag("flagA").isEnabled;
       // eslint-disable-next-line @typescript-eslint/no-unused-expressions -- special getter triggering event
-      client.getFeature("featureA").config;
+      client.getFlag("flagA").config;
       await client.updateOtherContext({ key: "value" });
 
       // Ensure hooks are not called
@@ -156,9 +146,29 @@ describe("BucketClient", () => {
       expect(userHook).not.toHaveBeenCalled();
       expect(companyHook).not.toHaveBeenCalled();
       expect(checkHook).not.toHaveBeenCalled();
-      expect(checkHookIsEnabled).not.toHaveBeenCalled();
-      expect(checkHookConfig).not.toHaveBeenCalled();
-      expect(featuresUpdated).not.toHaveBeenCalled();
+      expect(flagsUpdated).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("offline mode", () => {
+    it("should not make HTTP calls when offline", async () => {
+      client = new ReflagClient({
+        publishableKey: "test-key",
+        user: { id: "user1" },
+        company: { id: "company1" },
+        offline: true,
+        feedback: { enableAutoFeedback: true },
+      });
+
+      await client.initialize();
+      await client.track("offline-event");
+      await client.feedback({ flagKey: "flagA", score: 5 });
+      await client.updateUser({ name: "New User" });
+      await client.updateCompany({ name: "New Company" });
+      await client.stop();
+
+      expect(httpClientPost).not.toHaveBeenCalled();
+      expect(httpClientGet).not.toHaveBeenCalled();
     });
   });
 });

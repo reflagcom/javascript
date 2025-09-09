@@ -5,13 +5,13 @@ import { configStore } from "../stores/config.js";
 import { CONFIG_FILE_NAME } from "../utils/constants.js";
 import {
   appIdOption,
-  featureKeyOption,
-  featureNameArgument,
+  flagKeyOption,
+  flagNameArgument,
   typesFormatOption,
   typesOutOption,
 } from "../utils/options.js";
 
-import { createFeatureAction, generateTypesAction } from "./features.js";
+import { createFlagAction, generateTypesAction } from "./flags.js";
 import { initAction } from "./init.js";
 
 type NewArgs = {
@@ -24,7 +24,7 @@ export const newAction = async (name: string | undefined, { key }: NewArgs) => {
   if (!(await findUp(CONFIG_FILE_NAME))) {
     await initAction();
   }
-  await createFeatureAction(name, {
+  await createFlagAction(name, {
     key,
   });
   await generateTypesAction();
@@ -34,13 +34,13 @@ export function registerNewCommand(cli: Command) {
   cli
     .command("new")
     .description(
-      "Initialize the Bucket CLI, authenticates, and creates a new feature.",
+      "Initialize the Reflag CLI, authenticates, and creates a new flag.",
     )
     .addOption(appIdOption)
     .addOption(typesOutOption)
     .addOption(typesFormatOption)
-    .addOption(featureKeyOption)
-    .addArgument(featureNameArgument)
+    .addOption(flagKeyOption)
+    .addArgument(flagNameArgument)
     .action(newAction);
 
   // Update the config with the cli override values

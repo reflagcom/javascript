@@ -21,7 +21,7 @@
 
   > .button {
     border: 1px solid;
-    border-color: var(--bucket-feedback-dialog-input-border-color, #d8d9df);
+    border-color: var(--reflag-feedback-dialog-input-border-color, #d8d9df);
 
     padding: 0px 7px;
 
@@ -40,8 +40,8 @@
       pointer-events: none;
       opacity: 0;
 
-      background: var(--bucket-feedback-dialog-tooltip-background-color, #000);
-      color: var(--bucket-feedback-dialog-tooltip-color, #fff);
+      background: var(--reflag-feedback-dialog-tooltip-background-color, #000);
+      color: var(--reflag-feedback-dialog-tooltip-color, #fff);
       padding: 6px 8px;
       border-radius: 4px;
       font-size: 13px;
@@ -62,7 +62,7 @@
   width: 10px;
   height: 10px;
   background-color: var(
-    --bucket-feedback-dialog-tooltip-background-color,
+    --reflag-feedback-dialog-tooltip-background-color,
     #000
   );
   transform: rotate(45deg);
