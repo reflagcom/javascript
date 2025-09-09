@@ -15,22 +15,25 @@
       const urlParams = new URLSearchParams(window.location.search);
       const publishableKey = urlParams.get("publishableKey");
       const flagKey = urlParams.get("flagKey") ?? "huddles";
+
+      const onFeedbackClick = (e) => {
+        reflag.requestFeedback({
+          flagKey,
+          inputMode: "comment-and-score",
+          position: { type: "POPOVER", anchor: e.currentTarget },
+        });
+      };
     </script>
     <style>
       body {
         font-family: sans-serif;
       }
       #start-huddle {
-        border: 1px solid black;
-        padding: 10px;
+        margin: 100px;
       }
     </style>
     <div id="start-huddle" style="display: none">
-      <button
-        onClick="bucket.requestFeedback({flagKey, requireSatisfactionScore: false, position: {type: 'POPOVER', anchor: event.currentTarget}})"
-      >
-        Give feedback!
-      </button>
+      <button onClick="onFeedbackClick(event)">Give feedback!</button>
       <button onClick="reflag.track(flagKey)">Start huddle</button>
     </div>
 

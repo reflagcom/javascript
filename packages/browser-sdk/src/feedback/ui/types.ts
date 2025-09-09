@@ -5,17 +5,11 @@ export type WithRequired<T, K extends keyof T> = T & { [P in K]-?: T[P] };
 export interface FeedbackSubmission {
   question: string;
   feedbackId?: string;
-  score: number;
-  comment: string;
+  score?: number;
+  comment?: string;
 }
 
-export interface FeedbackScoreSubmission {
-  feedbackId?: string;
-  question: string;
-  score: number;
-}
-
-export interface OnScoreSubmitResult {
+export interface OnSubmitResult {
   feedbackId: string;
 }
 
@@ -35,22 +29,11 @@ export interface OpenFeedbackFormOptions {
   translations?: Partial<FeedbackTranslations>;
 
   /**
-   * If true, the comment field is shown immediately and a score is not required.
-   * If false, the comment field is shown immediately and the comment is required instead of the score.
-   * Defaults to true (score required).
+   * Decides which user input options are shown in the widget
    */
-  requireSatisfactionScore?: boolean;
+  inputMode?: "comment-and-score" | "comment-only" | "score-only";
 
-  /**
-   * Open the form with both the score and comment fields visible.
-   * Defaults to `false`
-   */
-  openWithCommentVisible?: boolean;
-
-  onSubmit: (data: FeedbackSubmission) => Promise<void> | void;
-  onScoreSubmit?: (
-    data: FeedbackScoreSubmission,
-  ) => Promise<OnScoreSubmitResult>;
+  onSubmit: (data: FeedbackSubmission) => Promise<OnSubmitResult | void>;
   onClose?: () => void;
   onDismiss?: () => void;
 }

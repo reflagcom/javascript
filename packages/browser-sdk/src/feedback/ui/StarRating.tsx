@@ -9,6 +9,7 @@ import { VerySatisfied } from "../../ui/icons/VerySatisfied";
 import {
   arrow,
   offset,
+  size,
   useFloating,
 } from "../../ui/packages/floating-ui-preact-dom";
 
@@ -18,35 +19,35 @@ const scores = [
   {
     color: "var(--reflag-feedback-dialog-rating-1-color, #dd6b20)",
     bg: "var(--reflag-feedback-dialog-rating-1-background-color, #fbd38d)",
-    icon: <VeryDissatisfied />,
+    icon: <VeryDissatisfied width="18" height="18" />,
     getLabel: (t: FeedbackTranslations) => t.ScoreVeryDissatisfiedLabel,
     value: 1,
   },
   {
     color: "var(--reflag-feedback-dialog-rating-2-color, #ed8936)",
     bg: "var(--reflag-feedback-dialog-rating-2-background-color, #feebc8)",
-    icon: <Dissatisfied />,
+    icon: <Dissatisfied width="18" height="18" />,
     getLabel: (t: FeedbackTranslations) => t.ScoreDissatisfiedLabel,
     value: 2,
   },
   {
     color: "var(--reflag-feedback-dialog-rating-3-color, #787c91)",
     bg: "var(--reflag-feedback-dialog-rating-3-background-color, #e9e9ed)",
-    icon: <Neutral />,
+    icon: <Neutral width="18" height="18" />,
     getLabel: (t: FeedbackTranslations) => t.ScoreNeutralLabel,
     value: 3,
   },
   {
     color: "var(--reflag-feedback-dialog-rating-4-color, #48bb78)",
     bg: "var(--reflag-feedback-dialog-rating-4-background-color, #c6f6d5)",
-    icon: <Satisfied />,
+    icon: <Satisfied width="18" height="18" />,
     getLabel: (t: FeedbackTranslations) => t.ScoreSatisfiedLabel,
     value: 4,
   },
   {
     color: "var(--reflag-feedback-dialog-rating-5-color, #38a169)",
     bg: "var(--reflag-feedback-dialog-rating-5-background-color, #9ae6b4)",
-    icon: <VerySatisfied />,
+    icon: <VerySatisfied width="18" height="18" />,
     getLabel: (t: FeedbackTranslations) => t.ScoreVerySatisfiedLabel,
     value: 5,
   },
@@ -129,6 +130,7 @@ const Score = ({
       arrow({
         element: arrowRef,
       }),
+      size(),
     ],
   });
 

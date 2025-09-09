@@ -22,7 +22,6 @@
   > .button {
     border: 1px solid;
     border-color: var(--reflag-feedback-dialog-input-border-color, #d8d9df);
-
     padding: 0px 7px;
 
     &:not(:first-of-type) {
