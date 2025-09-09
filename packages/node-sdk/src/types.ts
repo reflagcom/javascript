@@ -18,13 +18,13 @@ export type TrackingMeta = {
 export type Attributes = Record<string, any>;
 
 /**
- * Describes a feature event. Can be "check" or "evaluate".
+ * Describes a feature event. Can be "check" .
  **/
 export type FlagEvent = {
   /**
    * The action that was performed.
    **/
-  action: "evaluate" | "evaluate-config" | "check" | "check-config";
+  action: "check" | "check-config";
 
   /**
    * The feature key.
