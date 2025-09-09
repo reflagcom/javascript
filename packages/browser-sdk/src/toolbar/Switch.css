@@ -24,8 +24,8 @@
 }
 
 .switch-input:focus-visible + .switch-track {
-  outline: none;
-  box-shadow: 0 0 0 1px #fff;
+  outline: 1px solid #fff;
+  outline-offset: 1px;
 }
 
 .switch[data-enabled="true"] .switch-track {

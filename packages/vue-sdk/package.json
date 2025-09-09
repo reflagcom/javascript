@@ -1,6 +1,6 @@
 {
   "name": "@reflag/vue-sdk",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -34,7 +34,7 @@
     }
   },
   "dependencies": {
-    "@reflag/browser-sdk": "1.0.0",
+    "@reflag/browser-sdk": "1.1.0",
     "canonical-json": "^0.2.0"
   },
   "peerDependencies": {

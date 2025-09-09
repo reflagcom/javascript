@@ -1,6 +1,6 @@
 import { ReflagClient, CheckEvent, RawFlags } from "../../src";
 
-const urlParams = new URLSearchParams(window.location.search);
+const urlParams = new URLSearchParams(window?.location?.search);
 const publishableKey = urlParams.get("publishableKey");
 const flagKey = urlParams.get("flagKey") ?? "huddles";
 

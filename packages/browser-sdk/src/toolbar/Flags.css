@@ -4,6 +4,7 @@
   color: white;
   width: 100%;
   font-size: var(--text-size);
+  height: 28px;
 
   &::placeholder {
     color: var(--gray500);
@@ -44,29 +45,19 @@
 }
 
 .flag-row {
-  opacity: 0;
-  transform: translateY(-7px);
-  transition-property: opacity, transform;
-  transition-duration: 0.075s;
-  transition-timing-function: cubic-bezier(0.75, -0.015, 0.565, 1.055);
-
-  &.show-on-open {
-    opacity: 1;
-    transform: translateY(0);
-    /* stagger effect where first item (i=0) has no delay,
-       and delay is based on item count (n) so total animation time always is 509ms */
-    transition-delay: calc(0.05s * var(--i) / max(var(--n) - 1, 1));
-  }
-
   &.not-visible {
     visibility: hidden;
   }
 }
 
-.flag-empty-cell {
-  width: 100%;
+.flags-table-empty {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
   color: var(--gray500);
-  padding: 6px 0;
+  padding: 12px 12px;
+  line-height: 1.5;
 }
 
 .flag-name-cell {

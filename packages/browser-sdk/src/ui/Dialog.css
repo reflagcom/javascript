@@ -2,7 +2,7 @@
 
 @keyframes scale {
   from {
-    transform: scale(0.9);
+    transform: scale(0.95);
   }
   to {
     transform: scale(1);
@@ -44,8 +44,8 @@
 
   &[open] {
     animation: /* easeOutQuint */
-      scale 150ms cubic-bezier(0.22, 1, 0.36, 1),
-      fade 150ms cubic-bezier(0.22, 1, 0.36, 1);
+      scale 100ms cubic-bezier(0.22, 1, 0.36, 1),
+      fade 100ms cubic-bezier(0.22, 1, 0.36, 1);
 
     &::backdrop {
       animation: fade 150ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -61,20 +61,32 @@
 
   &[open] {
     animation: /* easeOutQuint */
-      scale 150ms cubic-bezier(0.22, 1, 0.36, 1),
-      fade 150ms cubic-bezier(0.22, 1, 0.36, 1);
+      scale 100ms cubic-bezier(0.22, 1, 0.36, 1),
+      fade 100ms cubic-bezier(0.22, 1, 0.36, 1);
   }
-  &.bottom {
-    transform-origin: top center;
+  &.top-start {
+    transform-origin: bottom left;
   }
-  &.top {
-    transform-origin: bottom center;
+  &.top-end {
+    transform-origin: bottom right;
   }
-  &.left {
-    transform-origin: right center;
+  &.right-start {
+    transform-origin: left top;
   }
-  &.right {
-    transform-origin: left center;
+  &.right-end {
+    transform-origin: left bottom;
+  }
+  &.bottom-start {
+    transform-origin: top left;
+  }
+  &.bottom-end {
+    transform-origin: top right;
+  }
+  &.left-start {
+    transform-origin: right top;
+  }
+  &.left-end {
+    transform-origin: right bottom;
   }
 }
 
@@ -104,10 +116,15 @@
 }
 
 .dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1px;
   border-bottom: 1px solid var(--border-color);
-  padding: 7px 12px;
+  padding: 3px 12px;
 }
 
 .dialog-content {
+  position: relative;
   padding: 7px 12px;
 }

@@ -1,27 +1,26 @@
-import { h } from "preact";
-import { useEffect, useState } from "preact/hooks";
+import { Fragment, h } from "preact";
 
 import { Switch } from "./Switch";
 import { FlagItem } from "./Toolbar";
+
+const isFound = (flagKey: string, searchQuery: string | null) => {
+  return flagKey.toLocaleLowerCase().includes(searchQuery ?? "");
+};
 
 export function FlagsTable({
   flags,
   searchQuery,
   appBaseUrl,
-  isOpen,
   setIsEnabledOverride,
 }: {
   flags: FlagItem[];
   searchQuery: string | null;
   appBaseUrl: string;
-  isOpen: boolean;
   setIsEnabledOverride: (key: string, isEnabled: boolean | null) => void;
 }) {
   const hasFlags = flags.length > 0;
   const hasShownFlags = flags.some((flag) =>
-    flag.flagKey
-      .toLocaleLowerCase()
-      .includes(searchQuery?.toLocaleLowerCase() ?? ""),
+    isFound(flag.flagKey, searchQuery),
   );
 
   // List flags that match the search query first then alphabetically
@@ -29,11 +28,23 @@ export function FlagsTable({
     searchQuery === null
       ? flags
       : [...flags].sort((a, b) => {
-          const aMatches = a.flagKey.includes(searchQuery);
-          const bMatches = b.flagKey.includes(searchQuery);
+          const aMatches = isFound(a.flagKey, searchQuery);
+          const bMatches = isFound(b.flagKey, searchQuery);
 
           // If both match or both don't match, sort alphabetically
           if (aMatches === bMatches) {
+            const aStartsWith = a.flagKey
+              .toLocaleLowerCase()
+              .startsWith(searchQuery);
+            const bStartsWith = b.flagKey
+              .toLocaleLowerCase()
+              .startsWith(searchQuery);
+
+            // If one starts with search query and the other doesn't, prioritize the one that starts with it
+            if (aStartsWith && !bStartsWith) return -1;
+            if (bStartsWith && !aStartsWith) return 1;
+
+            // Otherwise sort alphabetically
             return a.flagKey.localeCompare(b.flagKey);
           }
 
@@ -42,36 +53,31 @@ export function FlagsTable({
         });
 
   return (
-    <table class="flags-table" style={{ "--n": searchedFlags.length }}>
-      <tbody>
-        {(!hasFlags || !hasShownFlags) && (
-          <tr>
-            <td class="flag-empty-cell" colSpan={3}>
-              No flags {!hasShownFlags ? `matching "${searchQuery} "` : ""}
-              found
-            </td>
-          </tr>
-        )}
-        {searchedFlags.map((flag, index) => (
-          <FlagRow
-            key={flag.flagKey}
-            appBaseUrl={appBaseUrl}
-            flag={flag}
-            index={index}
-            isNotVisible={
-              searchQuery !== null &&
-              !flag.flagKey
-                .toLocaleLowerCase()
-                .includes(searchQuery.toLocaleLowerCase())
-            }
-            isOpen={isOpen}
-            setEnabledOverride={(override) =>
-              setIsEnabledOverride(flag.flagKey, override)
-            }
-          />
-        ))}
-      </tbody>
-    </table>
+    <Fragment>
+      {(!hasFlags || !hasShownFlags) && (
+        <div class="flags-table-empty">
+          No flags {hasFlags ? `matching "${searchQuery}"` : "found"}
+        </div>
+      )}
+      <table class="flags-table">
+        <tbody>
+          {searchedFlags.map((flag, index) => (
+            <FlagRow
+              key={flag.flagKey}
+              appBaseUrl={appBaseUrl}
+              flag={flag}
+              index={index}
+              isNotVisible={
+                searchQuery !== null && !isFound(flag.flagKey, searchQuery)
+              }
+              setEnabledOverride={(override) =>
+                setIsEnabledOverride(flag.flagKey, override)
+              }
+            />
+          ))}
+        </tbody>
+      </table>
+    </Fragment>
   );
 }
 
@@ -79,30 +85,19 @@ function FlagRow({
   setEnabledOverride,
   appBaseUrl,
   flag,
-  isOpen,
   index,
   isNotVisible,
 }: {
   flag: FlagItem;
   appBaseUrl: string;
   setEnabledOverride: (isEnabled: boolean | null) => void;
-  isOpen: boolean;
   index: number;
   isNotVisible: boolean;
 }) {
-  const [showOnOpen, setShowOnOpen] = useState(isOpen);
-  useEffect(() => {
-    setShowOnOpen(isOpen);
-  }, [isOpen]);
   return (
     <tr
       key={flag.flagKey}
-      class={[
-        "flag-row",
-        showOnOpen ? "show-on-open" : undefined,
-        isNotVisible ? "not-visible" : undefined,
-      ].join(" ")}
-      style={{ "--i": index }}
+      class={["flag-row", isNotVisible ? "not-visible" : undefined].join(" ")}
     >
       <td class="flag-name-cell">
         <a

@@ -11,20 +11,20 @@
 
   from {
     opacity: 0;
-    transform: translate3d(0, 1000px, 0) scaleY(5);
+    transform: translate3d(0, 50px, 0) scaleY(2);
   }
 
   60% {
     opacity: 1;
-    transform: translate3d(0, -10px, 0) scaleY(0.9);
+    transform: translate3d(0, -6px, 0) scaleY(0.9);
   }
 
   75% {
-    transform: translate3d(0, 5px, 0) scaleY(0.95);
+    transform: translate3d(0, 3px, 0) scaleY(0.95);
   }
 
   90% {
-    transform: translate3d(0, -3px, 0) scaleY(0.985);
+    transform: translate3d(0, -2px, 0) scaleY(0.985);
   }
 
   to {
@@ -57,18 +57,20 @@
   --gray600: #3c3d49;
   --gray700: #22232a;
   --gray800: #17181c;
+  --gray900: #0e0e11;
+  --gray950: #09090b;
   --black: #1e1f24;
   --white: white;
 
-  --bg-color: hsla(230, 9%, 8%, 0.85);
-  --bg-light-color: hsla(230, 9%, 6%, 0.85);
-  --border-color: hsla(0, 0%, 100%, 0.1);
-  --dimmed-color: hsla(230, 9%, 40%, 1);
-  --bg-blur: 3px;
+  --bg-color: var(--gray900);
+  --bg-light-color: var(--gray700);
+  --border-color: var(--gray700);
+  --dimmed-color: var(--gray500);
 
   --logo-color: white;
   --text-color: white;
   --text-size: 13px;
+  --text-small-size: 12px;
   font-family:
     system-ui,
     -apple-system,
@@ -92,17 +94,16 @@
   color: #ffffff;
   box-sizing: border-box;
   background: var(--bg-color);
-  backdrop-filter: blur(var(--bg-blur));
-  -webkit-backdrop-filter: blur(var(--bg-blur));
 
   border: 0;
   box-shadow:
-    0px 10px 15px -3px rgba(0, 0, 0, 0.1),
-    0px 4px 6px -2px rgba(0, 0, 0, 0.05),
-    inset 0px 1px rgba(255, 255, 255, 0.1);
+    0 10px 15px -3px rgba(0, 0, 0, 0.15),
+    0 4px 6px -2px rgba(0, 0, 0, 0.1),
+    0 -1px rgba(255, 255, 255, 0.1),
+    0 0 0 1px var(--border-color);
   border-radius: 7px;
   z-index: 999999;
-  min-width: 220px;
+  min-width: 240px;
   padding: 0;
 
   --visible-flags: 15;
@@ -126,6 +127,7 @@
 
   &::-webkit-scrollbar {
     width: 8px;
+    height: 8px;
   }
   &::-webkit-scrollbar-track {
     background: transparent;
@@ -155,13 +157,12 @@
 
   color: var(--logo-color);
   background: var(--bg-color);
-  backdrop-filter: blur(var(--bg-blur));
-  -webkit-backdrop-filter: blur(var(--bg-blur));
 
   box-shadow:
-    0px 10px 15px -3px rgba(0, 0, 0, 0.15),
-    0px 4px 6px -2px rgba(0, 0, 0, 0.1),
-    inset 0px 1px rgba(255, 255, 255, 0.1);
+    0 10px 15px -3px rgba(0, 0, 0, 0.15),
+    0 4px 6px -2px rgba(0, 0, 0, 0.1),
+    0 -1px rgba(255, 255, 255, 0.1),
+    0 0 0 1px var(--border-color);
   border-radius: 999px;
 
   cursor: pointer;
@@ -170,14 +171,11 @@
   justify-content: center;
   align-items: center;
 
-  animation: bounceInUp 1s ease-out;
+  animation: bounceInUp 0.2s ease-out;
 
-  transition:
-    color 0.1s ease,
-    background 0.1s ease;
+  transition: background 0.1s ease;
 
   &.open {
-    color: var(--gray500);
     background: var(--bg-light-color);
   }
 
@@ -198,4 +196,74 @@
       animation: gelatine 0.5s;
     }
   }
+}
+
+.toolbar-header-button {
+  background: none;
+  border: none;
+  color: var(--dimmed-color);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background-color 0.1s ease;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  width: 28px;
+
+  &:hover {
+    background-color: var(--bg-light-color);
+    color: var(--text-color);
+  }
+
+  &:focus-visible {
+    outline: 1px solid #fff;
+    outline-offset: 0px;
+  }
+
+  & + .button-tooltip {
+    pointer-events: none;
+    opacity: 0;
+
+    background: var(--bg-color);
+    color: var(--text-color);
+    padding: 6px 8px;
+    border-radius: 4px;
+    font-size: 13px;
+  }
+
+  &:hover + .button-tooltip {
+    opacity: 1;
+  }
+}
+
+[data-tooltip] {
+  position: relative;
+}
+
+[data-tooltip]:after {
+  content: attr(data-tooltip);
+  position: absolute;
+  right: 100%;
+  top: 0%;
+  margin-right: 3px;
+  user-select: none;
+  pointer-events: none;
+  background-color: var(--bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 0px 6px;
+  height: 28px;
+  line-height: 26px;
+  color: var(--text-color);
+  font-size: var(--text-small-size);
+  font-weight: normal;
+  width: max-content;
+  display: none;
+  box-sizing: border-box;
+}
+
+[data-tooltip]:hover:after {
+  display: block;
 }
