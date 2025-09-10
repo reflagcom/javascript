@@ -5,17 +5,11 @@ export type WithRequired<T, K extends keyof T> = T & { [P in K]-?: T[P] };
 export interface FeedbackSubmission {
   question: string;
   feedbackId?: string;
-  score: number;
-  comment: string;
+  score?: number;
+  comment?: string;
 }
 
-export interface FeedbackScoreSubmission {
-  feedbackId?: string;
-  question: string;
-  score: number;
-}
-
-export interface OnScoreSubmitResult {
+export interface OnSubmitResult {
   feedbackId: string;
 }
 
@@ -35,15 +29,11 @@ export interface OpenFeedbackFormOptions {
   translations?: Partial<FeedbackTranslations>;
 
   /**
-   * Open the form with both the score and comment fields visible.
-   * Defaults to `false`
+   * Decides which user input options are shown in the widget
    */
-  openWithCommentVisible?: boolean;
+  inputMode?: "comment-and-score" | "comment-only" | "score-only";
 
-  onSubmit: (data: FeedbackSubmission) => Promise<void> | void;
-  onScoreSubmit?: (
-    data: FeedbackScoreSubmission,
-  ) => Promise<OnScoreSubmitResult>;
+  onSubmit: (data: FeedbackSubmission) => Promise<OnSubmitResult | void>;
   onClose?: () => void;
   onDismiss?: () => void;
 }
@@ -57,7 +47,6 @@ export type FeedbackTranslations = {
    */
   DefaultQuestionLabel: string;
   QuestionPlaceholder: string;
-  ScoreStatusDescription: string;
   ScoreStatusLoading: string;
   ScoreStatusReceived: string;
   ScoreVeryDissatisfiedLabel: string;

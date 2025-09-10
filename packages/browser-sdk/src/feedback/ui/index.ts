@@ -63,7 +63,11 @@ export function openFeedbackForm(options: OpenFeedbackFormOptions): void {
   openInstances++;
 
   render(
-    h(FeedbackDialog, { ...options, position, key: openInstances.toString() }),
+    h(FeedbackDialog, {
+      ...options,
+      position,
+      key: openInstances.toString(),
+    }),
     shadowRoot,
   );
 }
