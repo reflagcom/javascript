@@ -14,32 +14,6 @@ Install via npm:
 npm i @reflag/react-sdk
 ```
 
-## Migrating from Bucket SDK
-
-If you have been using the Bucket SDKs, the following list will help you migrate to Reflag SDK:
-
-- `Bucket*` classes, and types have been renamed to `Reflag*` (e.g. `BucketClient` is now `ReflagClient`)
-- `Feature*` classes, and types have been renamed to `Feature*` (e.g. `Feature` is now `Flag`, `RawFeatures` is now `RawFlags`)
-- When using strongly-typed flags, the new `Flags` interface replaced `Features` interface
-- All methods that contained `feature` in the name have been renamed to use the `flag` terminology (e.g. `getFeature` is `getFlag`)
-- The `fallbackFeatures` property in client constructor and configuration files has been renamed to `fallbackFlags`
-- `featureKey` has been renamed to `flagKey` in all methods that accepts that argument
-- The SDKs will not emit `evaluate` and `evaluate-config` events anymore
-- The new cookies that are stored in the client's browser are now `reflag-*` prefixed instead og `bucket-*`
-- The `featuresUpdated` hook has been renamed to `flagsUpdated`
-- The `checkIsEnabled` and `checkConfig` hooks have been removed, use `check` from now on
-
-To ease in transition to Reflag SDK, some of the old methods have been preserved as aliases to the new methods:
-
-- `getFeature` method is an alias for `getFlag`
-- `getFeatures` method is an alias for `getFlags`
-- `useFeature` method is an alias for `useFlag`
-- `featuresUpdated` hook is an alias for `flagsUpdated`
-
-If you are running with strict Content Security Policies active on your website, you will need change them as follows:
-
-- `connect-src https://front.bucket.co` to `connect-src https://front.reflag.com`
-
 ## Get started
 
 ### 1. Add the `ReflagProvider` context provider
@@ -133,16 +107,16 @@ A number of special attributes exist:
 - `avatar` -- the URL for `user`/`company` avatar image.
 
 ```tsx
- <ReflagProvider
-    publishableKey={YOUR_PUBLISHABLE_KEY}
-    user={{ id: "user_123", name: "John Doe", email: "john@acme.com" }}
-    company={{ id: "company_123", name: "Acme, Inc" }}
-    otherContext={{ completedSteps: [1, 4, 7] }}
-  >
-    <LoadingReflag>
+<ReflagProvider
+  publishableKey={YOUR_PUBLISHABLE_KEY}
+  user={{ id: "user_123", name: "John Doe", email: "john@acme.com" }}
+  company={{ id: "company_123", name: "Acme, Inc" }}
+  otherContext={{ completedSteps: [1, 4, 7] }}
+>
+  <LoadingReflag>
     {/* children here are shown when loading finishes */}
-    </LoadingReflag>
-  <ReflagProvider>
+  </LoadingReflag>
+</ReflagProvider>
 ```
 
 To retrieve flags along with their targeting information, use `useFlag(key: string)` hook (described in a section below).
@@ -229,20 +203,20 @@ The `<ReflagProvider>` initializes the Reflag SDK, fetches flags and starts list
 
   ```tsx
   function LoadingReflag({ children }) {
-    const { isLoading } = useFlag("myFlag")
+    const { isLoading } = useFlag("myFlag");
     if (isLoading) {
-      return <Spinner />
+      return <Spinner />;
     }
 
-    return children
+    return children;
   }
 
   //-- Initialize the Reflag provider
   <ReflagProvider publishableKey={YOUR_PUBLISHABLE_KEY} /*...*/>
     <LoadingReflag>
-    {/* children here are shown when loading finishes */}
+      {/* children here are shown when loading finishes */}
     </LoadingReflag>
-  <ReflagProvider>
+  </ReflagProvider>;
   ```
 
 - `enableTracking`: Set to `false` to stop sending tracking events and user/company updates to Reflag. Useful when you're impersonating a user (defaults to `true`),
@@ -306,13 +280,13 @@ function StartHuddleButton() {
 
 ### `useTrack()`
 
-`useTrack()` lets you send custom events to Reflag. Use this whenever a user _uses_ a feature. Create [features](https://docs.reflag.com/introduction/concepts/feature) in Reflag based off of these events to analyze feature usage.
-Returns a function to send custom events to Reflag. Use this whenever a user _uses_ a feature. These events can be used to analyze feature usage and create new flags in Reflag.
+`useTrack()` lets you send custom events to Reflag. Use this whenever a user _uses_ a feature. These events can be used to analyze feature usage in Reflag.
 
 ```tsx
 import { useTrack } from "@reflag/react-sdk";
 
 function StartHuddle() {
+  const { track } = useTrack();
   <div>
     <button onClick={() => track("Huddle Started", { huddleType: "voice" })}>
       Start voice huddle!
@@ -323,10 +297,7 @@ function StartHuddle() {
 
 ### `useRequestFeedback()`
 
-Returns a function that lets you open up a dialog to ask for feedback on a specific feature. This is useful for collecting targeted feedback about specific features.
-
-`useRequestFeedback()` returns a function that lets you open up a dialog to ask for feedback on a specific feature.
-See [Automated Feedback Surveys](https://docs.reflag.com/product-handbook/live-satisfaction) for how to do this automatically, without code.
+`useRequestFeedback()` returns a function that lets you open up a dialog to ask for feedback on a specific feature. This is useful for collecting targeted feedback about specific features as part of roll out. See [Automated Feedback Surveys](https://docs.reflag.com/product-handbook/live-satisfaction) for how to do this automatically, without code.
 
 When using the `useRequestFeedback` you must pass the flag key to `requestFeedback`.
 The example below shows how to use `position` to ensure the popover appears next to the "Give feedback!" button.
@@ -453,6 +424,32 @@ function LoggingWrapper({ children }: { children: ReactNode }) {
   return children;
 }
 ```
+
+## Migrating from Bucket SDK
+
+If you have been using the Bucket SDKs, the following list will help you migrate to Reflag SDK:
+
+- `Bucket*` classes, and types have been renamed to `Reflag*` (e.g. `BucketClient` is now `ReflagClient`)
+- `Feature*` classes, and types have been renamed to `Flag*` (e.g. `Feature` is now `Flag`, `RawFeatures` is now `RawFlags`)
+- When using strongly-typed flags, the new `Flags` interface replaced `Features` interface
+- All methods that contained `feature` in the name have been renamed to use the `flag` terminology (e.g. `getFeature` is `getFlag`)
+- The `fallbackFeatures` property in client constructor and configuration files has been renamed to `fallbackFlags`
+- `featureKey` has been renamed to `flagKey` in all methods that accepts that argument
+- The SDKs will not emit `evaluate` and `evaluate-config` events anymore
+- The new cookies that are stored in the client's browser are now `reflag-*` prefixed instead of `bucket-*`
+- The `featuresUpdated` hook has been renamed to `flagsUpdated`
+- The `checkIsEnabled` and `checkConfig` hooks have been removed, use `check` from now on
+
+To ease in transition to Reflag SDK, some of the old methods have been preserved as aliases to the new methods:
+
+- `getFeature` method is an alias for `getFlag`
+- `getFeatures` method is an alias for `getFlags`
+- `useFeature` method is an alias for `useFlag`
+- `featuresUpdated` hook is an alias for `flagsUpdated`
+
+If you are running with strict Content Security Policies active on your website, you will need change them as follows:
+
+- `connect-src https://front.bucket.co` to `connect-src https://front.reflag.com`
 
 ## Content Security Policy (CSP)
 
