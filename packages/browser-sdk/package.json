@@ -15,6 +15,7 @@
     "build": "tsc --project tsconfig.build.json && vite build",
     "test": "tsc --project tsconfig.json && vitest -c vitest.config.ts",
     "test:e2e": "yarn build && playwright test",
+    "test:e2e-ui": "yarn build && playwright test --ui",
     "test:ci": "tsc --project tsconfig.json && vitest run -c vitest.config.ts --reporter=default --reporter=junit --outputFile=junit.xml && yarn test:e2e",
     "coverage": "vitest run --coverage",
     "lint": "eslint .",
