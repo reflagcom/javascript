@@ -22,10 +22,8 @@ export type {
 } from "./feedback/feedback";
 export type { DEFAULT_TRANSLATIONS } from "./feedback/ui/config/defaultTranslations";
 export type {
-  FeedbackScoreSubmission,
   FeedbackSubmission,
   FeedbackTranslations,
-  OnScoreSubmitResult,
   OpenFeedbackFormOptions,
 } from "./feedback/ui/types";
 export type {

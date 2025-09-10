@@ -90,6 +90,10 @@ const reflag = new ReflagClient({
         position: POSITION_CONFIG, // See positioning section
         translations: TRANSLATION_KEYS, // See internationalization section
 
+        // Decides which user input options are shown in the widget
+        // Default: "comment-and-score"
+        inputMode: "comment-and-score" | "comment-only" | "score-only";
+
         // Trigger side effects with the collected data,
         // for example posting it back into your own CRM
         onAfterSubmit: (feedback) => {
@@ -147,6 +151,10 @@ reflagClient.requestFeedback({
 
   position: POSITION_CONFIG, // [Optional] see the positioning section
   translations: TRANSLATION_KEYS // [Optional] see the internationalization section
+
+  // [Optional] Decides which user input options are shown in the widget
+  // Default: "comment-and-score"
+  inputMode: "comment-and-score" | "comment-only" | "score-only";
 
   // [Optional] trigger side effects with the collected data,
   // for example sending the feedback to your own CRM
