@@ -54,22 +54,6 @@ Other supported languages/frameworks are in the [Supported languages](https://do
 
 You can also [use the HTTP API directly](https://docs.reflag.com/api/http-api)
 
-## Migrating from Bucket SDK
-
-If you have been using the Bucket SDKs, the following list will help you migrate to Reflag SDK:
-
-- `Bucket*` classes, and types have been renamed to `Reflag*` (e.g. `BucketClient` is now `ReflagClient`)
-- `Feature*` classes, and types have been renamed to `Feature*` (e.g. `Feature` is now `Flag`, `RawFeatures` is now `RawFlags`)
-- When using strongly-typed flags, the new `Flags` interface replaced `Features` interface
-- All methods that contained `feature` in the name have been renamed to use the `flag` terminology (e.g. `getFeature` is `getFlag`)
-- All environment variables that were prefixed with `BUCKET_` are now prefixed with `REFLAG_`
-- The `BUCKET_HOST` environment variable and `host` option have been removed from `ReflagClient` constructor, use `REFLAG_API_BASE_URL` instead
-- The `BUCKET_FEATURES_ENABLED` and `BUCKET_FEATURES_DISABLED` have been renamed to `REFLAG_FLAGS_ENABLED` and `REFLAG_FLAGS_DISABLED`
-- The default configuration file has been renamed from `bucketConfig.json` to `reflag.config.json`
-- The `fallbackFeatures` property in client constructor and configuration files has been renamed to `fallbackFlags`
-- `featureKey` has been renamed to `flagKey` in all methods that accepts that argument
-- The SDKs will not emit `evaluate` and `evaluate-config` events anymore
-
 ## Basic usage
 
 To get started you need to obtain your secret key from the [environment settings](https://app.reflag.com/env-current/settings/app-environments)
@@ -98,9 +82,9 @@ export const reflagClient = new ReflagClient();
 // Initialize the client and begin fetching flag targeting definitions.
 // You must call this method prior to any calls to `getFlags()`,
 // otherwise an empty object will be returned.
-reflagClient.initialize().then({
-  console.log("Reflag initialized!")
-})
+reflagClient.initialize().then(() => {
+  console.log("Reflag initialized!");
+});
 ```
 
 Once the client is initialized, you can obtain flags along with the `isEnabled`
@@ -255,7 +239,7 @@ export default {
 };
 ```
 
-See [examples/cloudflare-worker](examples/cloudflare-worker/src/index.ts) for a deployable example.
+See [examples/cloudflare-worker](https://github.com/reflagcom/javascript/tree/main/packages/node-sdk/examples/cloudflare-worker/src/index.ts) for a deployable example.
 
 Reflag maintains a cached set of flag definitions in the memory of your worker which it uses to decide which flags to turn on for which users/companies.
 
@@ -277,14 +261,11 @@ fallback behavior:
 
    ```typescript
    // Network errors during tracking are logged but don't affect your application
-   const { track } = client.getFlag("my-flag");
+   const { isEnabled, track } = client.getFlag("my-flag");
    if (isEnabled) {
-     try {
-       await track();
-     } catch (error) {
-       // The SDK already logged this error
-       // Your application can continue normally
-     }
+     // network errors are caught internally and logged and never bubbled up to your application
+     // no need to try/catch around "track" or "getFlag"
+     await track();
    }
    ```
 
@@ -633,12 +614,12 @@ app.use((req, res, next) => {
   // mechanism in a real-world application
   const user = {
     id: req.user?.id,
-    name: req.user?.name
+    name: req.user?.name,
     email: req.user?.email
   }
 
   const company = {
-    id: req.user?.companyId
+    id: req.user?.companyId,
     name: req.user?.companyName
   }
 
@@ -655,7 +636,7 @@ app.use((req, res, next) => {
 
 // Now use res.locals.boundReflagClient in your handlers
 app.get("/todos", async (_req, res) => {
-  const { track, isEnabled } = res.locals.reflagUser.getFlag("show-todos");
+  const { track, isEnabled } = res.locals.boundReflagClient.getFlag("show-todos");
 
   if (!isEnabled) {
     res.status(403).send({"error": "flag inaccessible"})
@@ -834,6 +815,22 @@ import { sha256 } from 'crypto-hash';
 
 client.updateUser({ userId: await sha256("john_doe"), ... });
 ```
+
+## Migrating from Bucket SDK
+
+If you have been using the Bucket SDKs previously, the following list will help you migrate to Reflag SDK:
+
+- `Bucket*` classes, and types have been renamed to `Reflag*` (e.g. `BucketClient` is now `ReflagClient`)
+- `Feature*` classes, and types have been renamed to `Flag*` (e.g. `Feature` is now `Flag`, `RawFeatures` is now `RawFlags`)
+- When using strongly-typed flags, the new `Flags` interface replaced `Features` interface
+- All methods that contained `feature` in the name have been renamed to use the `flag` terminology (e.g. `getFeature` is `getFlag`)
+- All environment variables that were prefixed with `BUCKET_` are now prefixed with `REFLAG_`
+- The `BUCKET_HOST` environment variable and `host` option have been removed from `ReflagClient` constructor, use `REFLAG_API_BASE_URL` instead
+- The `BUCKET_FEATURES_ENABLED` and `BUCKET_FEATURES_DISABLED` have been renamed to `REFLAG_FLAGS_ENABLED` and `REFLAG_FLAGS_DISABLED`
+- The default configuration file has been renamed from `bucketConfig.json` to `reflag.config.json`
+- The `fallbackFeatures` property in client constructor and configuration files has been renamed to `fallbackFlags`
+- `featureKey` has been renamed to `flagKey` in all methods that accepts that argument
+- The SDKs will not emit `evaluate` and `evaluate-config` events anymore
 
 ## Typescript
 
