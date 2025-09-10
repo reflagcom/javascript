@@ -24,6 +24,7 @@ export type { DEFAULT_TRANSLATIONS } from "./feedback/ui/config/defaultTranslati
 export type {
   FeedbackSubmission,
   FeedbackTranslations,
+  OnSubmitResult,
   OpenFeedbackFormOptions,
 } from "./feedback/ui/types";
 export type {
