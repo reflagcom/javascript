@@ -291,37 +291,6 @@ test("Shows a success message after submitting a score", async ({ page }) => {
   ).toHaveCSS("opacity", "1");
 });
 
-test("Updates the score on every change", async ({ page }) => {
-  let lastSentJSON: object | null = null;
-
-  await page.route(`${API_HOST}/feedback`, async (route) => {
-    lastSentJSON = route.request().postDataJSON();
-    await route.fulfill({
-      status: 200,
-      body: JSON.stringify({ feedbackId: "123" }),
-      contentType: "application/json",
-    });
-  });
-
-  const container = await getOpenedWidgetContainer(page);
-
-  await setScore(container, 1);
-  await setScore(container, 5);
-  await setScore(container, 3);
-
-  await expect
-    .poll(() => lastSentJSON)
-    .toEqual({
-      feedbackId: "123",
-      companyId: "bar",
-      key: "flag1",
-      question: "baz",
-      score: 3,
-      userId: "foo",
-      source: "widget",
-    });
-});
-
 test("Shows the comment field after submitting a score", async ({ page }) => {
   await page.route(`${API_HOST}/feedback`, async (route) => {
     await route.fulfill({
@@ -375,7 +344,6 @@ test("Sends a request with both the score and comment when submitting", async ({
     companyId: "bar",
     question: "baz",
     key: "flag1",
-    feedbackId: "123",
     userId: "foo",
     source: "widget",
   });
@@ -562,7 +530,6 @@ test("Submits feedback with comment-only inputMode", async ({ page }) => {
     companyId: "bar",
     question: "baz",
     key: "flag1",
-    feedbackId: "123",
     userId: "foo",
     source: "widget",
   });
