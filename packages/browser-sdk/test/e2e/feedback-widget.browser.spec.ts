@@ -3,7 +3,10 @@ import { expect, Locator, Page, test } from "@playwright/test";
 
 import { InitOptions } from "../../src/client";
 import { DEFAULT_TRANSLATIONS } from "../../src/feedback/ui/config/defaultTranslations";
-import { FeedbackTranslations } from "../../src/feedback/ui/types";
+import {
+  FeedbackTranslations,
+  OpenFeedbackFormOptions,
+} from "../../src/feedback/ui/types";
 import { feedbackContainerId, propagatedEvents } from "../../src/ui/constants";
 
 const KEY = randomUUID();
@@ -25,6 +28,7 @@ function pick<T>(options: T[]): T {
 async function getOpenedWidgetContainer(
   page: Page,
   initOptions: Omit<InitOptions, "publishableKey"> = {},
+  feedbackOptions: Omit<OpenFeedbackFormOptions, "key" | "onSubmit"> = {},
 ) {
   await page.goto("http://localhost:8001/test/e2e/empty.html");
 
@@ -52,6 +56,7 @@ async function getOpenedWidgetContainer(
       await reflag.requestFeedback({
         flagKey: "flag1",
         title: "baz",
+        ...${JSON.stringify(feedbackOptions ?? {})},
       });
     })()
   `);
@@ -443,4 +448,195 @@ test("Blocks event propagation to the containing document", async ({
 
   // No events are allowed to fire, object should be empty
   expect(firedEvents).toEqual({});
+});
+
+test("Shows both comment field and score rating with inputMode: comment-and-score", async ({
+  page,
+}) => {
+  const container = await getOpenedWidgetContainer(page, {
+    feedback: {
+      ui: {
+        position: {
+          type: "DIALOG",
+          placement: "top-left",
+        },
+      },
+    },
+  });
+
+  await expect(container).toBeAttached();
+
+  // Both comment field and score rating should be visible
+  await expect(container.locator('textarea[name="comment"]')).toBeVisible();
+  await expect(container.locator('[role="group"]')).toBeVisible();
+  await expect(container.locator("#reflag-feedback-score-1")).toBeVisible();
+  await expect(container.locator("#reflag-feedback-score-5")).toBeVisible();
+});
+
+test("Shows only comment field with inputMode: comment-only", async ({
+  page,
+}) => {
+  const container = await getOpenedWidgetContainer(
+    page,
+    {
+      feedback: {
+        ui: {
+          position: {
+            type: "DIALOG",
+            placement: "top-left",
+          },
+        },
+      },
+    },
+    {
+      inputMode: "comment-only",
+    },
+  );
+
+  await expect(container).toBeAttached();
+
+  // Comment field should be visible
+  await expect(container.locator('textarea[name="comment"]')).toBeVisible();
+
+  // Score rating should NOT be visible
+  await expect(container.locator('[role="group"]')).not.toBeVisible();
+  await expect(container.locator("#reflag-feedback-score-1")).not.toBeVisible();
+  await expect(container.locator("#reflag-feedback-score-5")).not.toBeVisible();
+});
+
+test("Shows only score rating with inputMode: score-only", async ({ page }) => {
+  const container = await getOpenedWidgetContainer(
+    page,
+    {
+      feedback: {
+        ui: {
+          position: {
+            type: "DIALOG",
+            placement: "top-left",
+          },
+        },
+      },
+    },
+    {
+      inputMode: "score-only",
+    },
+  );
+
+  await expect(container).toBeAttached();
+
+  // Score rating should be visible
+  await expect(container.locator('[role="group"]')).toBeVisible();
+  await expect(container.locator("#reflag-feedback-score-1")).toBeVisible();
+  await expect(container.locator("#reflag-feedback-score-5")).toBeVisible();
+
+  // Comment field should NOT be visible
+  await expect(container.locator('textarea[name="comment"]')).not.toBeVisible();
+});
+
+test("Submits feedback with comment-only inputMode", async ({ page }) => {
+  const expectedComment = `Comment only feedback: ${Math.random()}`;
+  let sentJSON: object | null = null;
+
+  await page.route(`${API_HOST}/feedback`, async (route) => {
+    sentJSON = route.request().postDataJSON();
+    await route.fulfill({
+      status: 200,
+      body: JSON.stringify({ feedbackId: "123" }),
+      contentType: "application/json",
+    });
+  });
+
+  const container = await getOpenedWidgetContainer(
+    page,
+    {},
+    {
+      inputMode: "comment-only",
+    },
+  );
+
+  await setComment(container, expectedComment);
+  await submitForm(container);
+
+  expect(sentJSON).toEqual({
+    comment: expectedComment,
+    companyId: "bar",
+    question: "baz",
+    key: "flag1",
+    feedbackId: "123",
+    userId: "foo",
+    source: "widget",
+  });
+});
+
+test("Submits feedback with score-only inputMode", async ({ page }) => {
+  const expectedScore = pick([1, 2, 3, 4, 5]);
+  let sentJSON: object | null = null;
+
+  await page.route(`${API_HOST}/feedback`, async (route) => {
+    sentJSON = route.request().postDataJSON();
+    await route.fulfill({
+      status: 200,
+      body: JSON.stringify({ feedbackId: "123" }),
+      contentType: "application/json",
+    });
+  });
+
+  const container = await getOpenedWidgetContainer(
+    page,
+    {},
+    {
+      inputMode: "score-only",
+    },
+  );
+
+  await setScore(container, expectedScore);
+
+  await expect
+    .poll(() => sentJSON)
+    .toEqual({
+      companyId: "bar",
+      key: "flag1",
+      score: expectedScore,
+      question: "baz",
+      userId: "foo",
+      source: "widget",
+    });
+});
+
+test("Validates required fields for comment-only inputMode", async ({
+  page,
+}) => {
+  const container = await getOpenedWidgetContainer(
+    page,
+    {},
+    {
+      inputMode: "comment-only",
+    },
+  );
+
+  // Try to submit without comment
+  await submitForm(container);
+
+  // Should show validation error
+  await expect(container.locator(".error")).toBeVisible();
+  await expect(container.locator(".error")).toContainText(
+    "Comment is required",
+  );
+});
+
+test("Validates required fields for score-only inputMode", async ({ page }) => {
+  const container = await getOpenedWidgetContainer(
+    page,
+    {},
+    {
+      inputMode: "score-only",
+    },
+  );
+
+  // Try to submit without score
+  await submitForm(container);
+
+  // Should show validation error
+  await expect(container.locator(".error")).toBeVisible();
+  await expect(container.locator(".error")).toContainText("Score is required");
 });
