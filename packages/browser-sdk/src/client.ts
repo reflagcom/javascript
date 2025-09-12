@@ -10,6 +10,7 @@ import * as feedbackLib from "./feedback/ui";
 import {
   CheckEvent,
   FallbackFlagOverride,
+  FetchedFlags,
   FlagsClient,
   RawFlags,
 } from "./flag/flags";
@@ -239,6 +240,12 @@ export type InitOptions = {
   offline?: boolean;
 
   /**
+   * An object containing pre-fetched flags to be used instead of fetching them from the server.
+   * This is intended to be used with the Node-SDK getFlagsForBootstrap method.
+   */
+  flags?: FetchedFlags;
+
+  /**
    * Flag keys for which `isEnabled` should fallback to true
    * if SDK fails to fetch flags from Reflag servers. If a record
    * is supplied instead of array, the values of each key represent the
@@ -431,6 +438,7 @@ export class ReflagClient {
       },
       this.logger,
       {
+        flags: opts.flags,
         expireTimeMs: opts.expireTimeMs,
         staleTimeMs: opts.staleTimeMs,
         fallbackFlags: opts.fallbackFlags,
@@ -482,8 +490,10 @@ export class ReflagClient {
    * Initialize the Reflag SDK.
    *
    * Must be called before calling other SDK methods.
+   *
+   * @param bootstrap - Whether to bootstrap the client, fetching flags, sending user, and company events.
    */
-  async initialize() {
+  async initialize(bootstrap = true) {
     const start = Date.now();
     if (this.autoFeedback) {
       // do not block on automated feedback surveys initialization
@@ -492,17 +502,20 @@ export class ReflagClient {
       });
     }
 
-    await this.flagsClient.initialize();
-    if (this.context.user && this.config.enableTracking) {
-      this.user().catch((e) => {
-        this.logger.error("error sending user", e);
-      });
-    }
+    if (bootstrap) {
+      await this.flagsClient.initialize();
 
-    if (this.context.company && this.config.enableTracking) {
-      this.company().catch((e) => {
-        this.logger.error("error sending company", e);
-      });
+      if (this.context.user && this.config.enableTracking) {
+        this.user().catch((e) => {
+          this.logger.error("error sending user", e);
+        });
+      }
+
+      if (this.context.company && this.config.enableTracking) {
+        this.company().catch((e) => {
+          this.logger.error("error sending company", e);
+        });
+      }
     }
 
     this.logger.info(
