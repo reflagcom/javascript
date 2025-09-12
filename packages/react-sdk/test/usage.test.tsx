@@ -17,6 +17,8 @@ import { ReflagClient } from "@reflag/browser-sdk";
 
 import { version } from "../package.json";
 import {
+  BootstrappedFlags,
+  ReflagBootstrappedProvider,
   ReflagProps,
   ReflagProvider,
   useClient,
@@ -49,6 +51,19 @@ function getProvider(props: Partial<ReflagProps> = {}) {
       otherContext={otherContext}
       publishableKey={publishableKey}
       user={user}
+      {...props}
+    />
+  );
+}
+
+function getBootstrapProvider(
+  bootstrapFlags?: BootstrappedFlags,
+  props: Partial<Omit<ReflagProps, "user" | "company" | "otherContext">> = {},
+) {
+  return (
+    <ReflagBootstrappedProvider
+      flags={bootstrapFlags}
+      publishableKey={publishableKey}
       {...props}
     />
   );
@@ -494,6 +509,316 @@ describe("useClient", () => {
 
     await waitFor(async () => {
       expect(clientFn.current).toBeDefined();
+    });
+
+    unmount();
+  });
+});
+
+describe("<ReflagBootstrappedProvider />", () => {
+  test("calls initialize with pre-fetched flags", () => {
+    const on = vi.fn();
+
+    const newReflagClient = vi.fn().mockReturnValue({
+      initialize: vi.fn().mockResolvedValue(undefined),
+      on,
+    });
+
+    const bootstrapFlags: BootstrappedFlags = {
+      context: {
+        user: { id: "456", name: "test" },
+        company: { id: "123", name: "test" },
+        otherContext: { test: "test" },
+      },
+      flags: {
+        abc: {
+          key: "abc",
+          isEnabled: true,
+          targetingVersion: 1,
+          config: {
+            key: "gpt3",
+            payload: { model: "gpt-something", temperature: 0.5 },
+            version: 2,
+          },
+        },
+        def: {
+          key: "def",
+          isEnabled: true,
+          targetingVersion: 2,
+        },
+      },
+    };
+
+    const provider = getBootstrapProvider(bootstrapFlags, {
+      publishableKey: "KEY",
+      apiBaseUrl: "https://apibaseurl.com",
+      sseBaseUrl: "https://ssebaseurl.com",
+      enableTracking: false,
+      appBaseUrl: "https://appbaseurl.com",
+      staleTimeMs: 1001,
+      timeoutMs: 1002,
+      expireTimeMs: 1003,
+      staleWhileRevalidate: true,
+      fallbackFlags: ["flag2"],
+      feedback: { enableAutoFeedback: true },
+      toolbar: { show: true },
+      newReflagClient,
+    });
+
+    render(provider);
+
+    expect(newReflagClient.mock.calls.at(0)).toStrictEqual([
+      {
+        publishableKey: "KEY",
+        user: {
+          id: "456",
+          name: "test",
+        },
+        company: {
+          id: "123",
+          name: "test",
+        },
+        otherContext: {
+          test: "test",
+        },
+        flags: {
+          abc: {
+            key: "abc",
+            isEnabled: true,
+            targetingVersion: 1,
+            config: {
+              key: "gpt3",
+              payload: { model: "gpt-something", temperature: 0.5 },
+              version: 2,
+            },
+          },
+          def: {
+            key: "def",
+            isEnabled: true,
+            targetingVersion: 2,
+          },
+        },
+        apiBaseUrl: "https://apibaseurl.com",
+        appBaseUrl: "https://appbaseurl.com",
+        sseBaseUrl: "https://ssebaseurl.com",
+        logger: undefined,
+        enableTracking: false,
+        expireTimeMs: 1003,
+        fallbackFlags: ["flag2"],
+        feedback: {
+          enableAutoFeedback: true,
+        },
+        staleTimeMs: 1001,
+        staleWhileRevalidate: true,
+        timeoutMs: 1002,
+        toolbar: {
+          show: true,
+        },
+        sdkVersion: `react-sdk/${version}`,
+      },
+    ]);
+
+    expect(on).toBeTruthy();
+  });
+
+  test("calls initialize with false parameter for bootstrap mode", () => {
+    const initialize = vi.fn().mockResolvedValue(undefined);
+
+    const newReflagClient = vi.fn().mockReturnValue({
+      initialize,
+      on: vi.fn(),
+    });
+
+    const bootstrapFlags: BootstrappedFlags = {
+      context: {
+        user: { id: "456", name: "test" },
+        company: { id: "123", name: "test" },
+        otherContext: { test: "test" },
+      },
+      flags: {
+        abc: {
+          key: "abc",
+          isEnabled: true,
+          targetingVersion: 1,
+        },
+      },
+    };
+
+    const provider = getBootstrapProvider(bootstrapFlags, {
+      newReflagClient,
+    });
+
+    render(provider);
+
+    expect(initialize).toHaveBeenCalledWith(false);
+  });
+
+  test("does not initialize when no flags are provided", () => {
+    const initialize = vi.fn().mockResolvedValue(undefined);
+
+    const newReflagClient = vi.fn().mockReturnValue({
+      initialize,
+      on: vi.fn(),
+    });
+
+    const provider = getBootstrapProvider(undefined, {
+      newReflagClient,
+    });
+
+    render(provider);
+
+    expect(initialize).not.toHaveBeenCalled();
+    expect(newReflagClient).not.toHaveBeenCalled();
+  });
+
+  test("shows loading component initially and hides it after initialization", async () => {
+    const bootstrapFlags: BootstrappedFlags = {
+      context: {
+        user: { id: "456", name: "test" },
+        company: { id: "123", name: "test" },
+        otherContext: { test: "test" },
+      },
+      flags: {
+        abc: {
+          key: "abc",
+          isEnabled: true,
+          targetingVersion: 1,
+        },
+      },
+    };
+
+    const { queryByTestId } = render(
+      getBootstrapProvider(bootstrapFlags, {
+        loadingComponent: <span data-testid="loading">Loading...</span>,
+      }),
+    );
+
+    // Loading component should be visible initially
+    expect(queryByTestId("loading")).not.toBeNull();
+
+    // Wait for loading to complete
+    await waitFor(() => {
+      expect(queryByTestId("loading")).toBeNull();
+    });
+  });
+
+  test("shows loading component when no flags are provided", () => {
+    const { queryByTestId } = render(
+      getBootstrapProvider(undefined, {
+        loadingComponent: <span data-testid="loading">Loading...</span>,
+        children: <span data-testid="content">Content</span>,
+      }),
+    );
+
+    // Loading should be visible when no flags are provided since no client is initialized
+    expect(queryByTestId("loading")).not.toBeNull();
+    expect(queryByTestId("content")).toBeNull();
+  });
+});
+
+describe("useFlag with ReflagBootstrappedProvider", () => {
+  test("returns bootstrapped flag values immediately", async () => {
+    const bootstrapFlags: BootstrappedFlags = {
+      context: {
+        user: { id: "456", name: "test" },
+        company: { id: "123", name: "test" },
+        otherContext: { test: "test" },
+      },
+      flags: {
+        abc: {
+          key: "abc",
+          isEnabled: true,
+          targetingVersion: 1,
+          config: {
+            key: "gpt3",
+            payload: { model: "gpt-something", temperature: 0.5 },
+            version: 2,
+          },
+        },
+        def: {
+          key: "def",
+          isEnabled: true,
+          targetingVersion: 2,
+        },
+      },
+    };
+
+    const { result, unmount } = renderHook(() => useFlag("abc"), {
+      wrapper: ({ children }) =>
+        getBootstrapProvider(bootstrapFlags, { children }),
+    });
+
+    // Initially loading
+    expect(result.current.isLoading).toBe(true);
+
+    await waitFor(() => {
+      expect(result.current).toStrictEqual({
+        key: "abc",
+        isEnabled: true,
+        isLoading: false,
+        config: {
+          key: "gpt3",
+          payload: { model: "gpt-something", temperature: 0.5 },
+        },
+        track: expect.any(Function),
+        requestFeedback: expect.any(Function),
+      });
+    });
+
+    unmount();
+  });
+
+  test("returns disabled flag for non-existent flags", async () => {
+    const bootstrapFlags: BootstrappedFlags = {
+      context: {
+        user: { id: "456", name: "test" },
+        company: { id: "123", name: "test" },
+        otherContext: { test: "test" },
+      },
+      flags: {
+        abc: {
+          key: "abc",
+          isEnabled: true,
+          targetingVersion: 1,
+        },
+      },
+    };
+
+    const { result, unmount } = renderHook(() => useFlag("nonexistent"), {
+      wrapper: ({ children }) =>
+        getBootstrapProvider(bootstrapFlags, { children }),
+    });
+
+    await waitFor(() => {
+      expect(result.current).toStrictEqual({
+        key: "nonexistent",
+        isEnabled: false,
+        isLoading: false,
+        config: {
+          key: undefined,
+          payload: undefined,
+        },
+        track: expect.any(Function),
+        requestFeedback: expect.any(Function),
+      });
+    });
+
+    unmount();
+  });
+
+  test("returns loading state when no flags are bootstrapped", async () => {
+    const { result, unmount } = renderHook(() => useFlag("abc"), {
+      wrapper: ({ children }) => getBootstrapProvider(undefined, { children }),
+    });
+
+    // Should remain in loading state since no client is initialized
+    expect(result.current).toStrictEqual({
+      key: "abc",
+      isEnabled: false,
+      isLoading: true,
+      config: { key: undefined, payload: undefined },
+      track: expect.any(Function),
+      requestFeedback: expect.any(Function),
     });
 
     unmount();

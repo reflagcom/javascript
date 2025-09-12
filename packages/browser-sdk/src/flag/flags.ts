@@ -68,9 +68,6 @@ export type FetchedFlag = {
 
 const FLAGS_UPDATED_EVENT = "flagsUpdated";
 
-/**
- * @internal
- */
 export type FetchedFlags = Record<string, FetchedFlag | undefined>;
 
 export type RawFlag = FetchedFlag & {
@@ -176,7 +173,7 @@ export interface CheckEvent {
   missingContextFields?: string[];
 }
 
-type context = {
+type Context = {
   user?: Record<string, any>;
   company?: Record<string, any>;
   other?: Record<string, any>;
@@ -207,8 +204,9 @@ function getOverridesCache(): OverridesFlags {
  * @internal
  */
 export class FlagsClient {
+  private initialized = false;
   private cache: FlagCache;
-  private fetchedFlags: FetchedFlags;
+  private fetchedFlags: FetchedFlags = {};
   private flagOverrides: OverridesFlags = {};
 
   private flags: RawFlags = {};
@@ -222,9 +220,10 @@ export class FlagsClient {
 
   constructor(
     private httpClient: HttpClient,
-    private context: context,
+    private context: Context,
     logger: Logger,
     options?: {
+      flags?: FetchedFlags;
       fallbackFlags?: Record<string, FallbackFlagOverride> | string[];
       timeoutMs?: number;
       staleTimeMs?: number;
@@ -234,7 +233,6 @@ export class FlagsClient {
       offline?: boolean;
     },
   ) {
-    this.fetchedFlags = {};
     this.logger = loggerWithPrefix(logger, "[Flags]");
     this.cache = options?.cache
       ? options.cache
@@ -280,14 +278,22 @@ export class FlagsClient {
       this.logger.warn("error getting flag overrides from cache", e);
       this.flagOverrides = {};
     }
+
+    if (options?.flags) {
+      this.initialized = true;
+      this.fetchedFlags = options.flags;
+      this.flags = this.mergeFlags(this.fetchedFlags, this.flagOverrides);
+    }
   }
 
   async initialize() {
-    const flags = (await this.maybeFetchFlags()) || {};
-    this.setFetchedFlags(flags);
+    if (!this.initialized) {
+      this.initialized = true;
+      this.setFetchedFlags((await this.maybeFetchFlags()) || {});
+    }
   }
 
-  async setContext(context: context) {
+  async setContext(context: Context) {
     this.context = context;
     await this.initialize();
   }
@@ -397,21 +403,20 @@ export class FlagsClient {
     return checkEvent.value;
   }
 
-  private triggerFlagsUpdated() {
+  private mergeFlags(fetchedFlags: FetchedFlags, overrides: OverridesFlags) {
     const mergedFlags: RawFlags = {};
-
     // merge fetched flags with overrides into `this.flags`
-    for (const key in this.fetchedFlags) {
-      const fetchedFlag = this.fetchedFlags[key];
+    for (const key in fetchedFlags) {
+      const fetchedFlag = fetchedFlags[key];
       if (!fetchedFlag) continue;
-      const isEnabledOverride = this.flagOverrides[key] ?? null;
-      mergedFlags[key] = {
-        ...fetchedFlag,
-        isEnabledOverride,
-      };
+      const isEnabledOverride = overrides[key] ?? null;
+      mergedFlags[key] = { ...fetchedFlag, isEnabledOverride };
     }
+    return mergedFlags;
+  }
 
-    this.flags = mergedFlags;
+  private triggerFlagsUpdated() {
+    this.flags = this.mergeFlags(this.fetchedFlags, this.flagOverrides);
 
     this.eventTarget.dispatchEvent(new Event(FLAGS_UPDATED_EVENT));
   }

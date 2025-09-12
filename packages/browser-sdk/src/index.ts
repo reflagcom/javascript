@@ -32,6 +32,7 @@ export type {
   CheckEvent,
   FallbackFlagOverride,
   FetchedFlag,
+  FetchedFlags,
   RawFlag,
   RawFlags,
 } from "./flag/flags";

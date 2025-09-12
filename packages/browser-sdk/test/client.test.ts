@@ -171,4 +171,114 @@ describe("ReflagClient", () => {
       expect(httpClientGet).not.toHaveBeenCalled();
     });
   });
+
+  describe("bootstrap parameter", () => {
+    const flagsClientInitialize = vi.spyOn(FlagsClient.prototype, "initialize");
+
+    beforeEach(() => {
+      flagsClientInitialize.mockClear();
+    });
+
+    it("should skip flagsClient.initialize() when bootstrap is false", async () => {
+      client = new ReflagClient({
+        publishableKey: "test-key",
+        user: { id: "user1" },
+        company: { id: "company1" },
+        feedback: { enableAutoFeedback: false }, // Disable to avoid HTTP calls
+      });
+
+      await client.initialize(false);
+
+      expect(flagsClientInitialize).not.toHaveBeenCalled();
+      expect(httpClientPost).not.toHaveBeenCalled(); // No user/company tracking
+    });
+
+    it("should use pre-fetched flags and skip initialization when flags are provided", async () => {
+      const preFetchedFlags = {
+        testFlag: {
+          key: "testFlag",
+          isEnabled: true,
+          targetingVersion: 1,
+        },
+      };
+
+      // Create a spy to monitor maybeFetchFlags which should not be called if already initialized
+      const maybeFetchFlags = vi.spyOn(
+        FlagsClient.prototype as any,
+        "maybeFetchFlags",
+      );
+
+      client = new ReflagClient({
+        publishableKey: "test-key",
+        user: { id: "user1" },
+        company: { id: "company1" },
+        flags: preFetchedFlags,
+        feedback: { enableAutoFeedback: false }, // Disable to avoid HTTP calls
+      });
+
+      // FlagsClient should be initialized in constructor when flags are provided
+      expect(client["flagsClient"]["initialized"]).toBe(true);
+      expect(client.getFlags()).toEqual({
+        testFlag: {
+          key: "testFlag",
+          isEnabled: true,
+          targetingVersion: 1,
+          isEnabledOverride: null,
+        },
+      });
+
+      maybeFetchFlags.mockClear();
+
+      await client.initialize();
+
+      // maybeFetchFlags should not be called since flagsClient is already initialized
+      expect(maybeFetchFlags).not.toHaveBeenCalled();
+    });
+
+    it("should combine pre-fetched flags with bootstrap=false correctly", async () => {
+      const preFetchedFlags = {
+        testFlag: {
+          key: "testFlag",
+          isEnabled: true,
+          targetingVersion: 1,
+          config: {
+            key: "config1",
+            version: 1,
+            payload: { value: "test" },
+          },
+        },
+      };
+
+      client = new ReflagClient({
+        publishableKey: "test-key",
+        user: { id: "user1" },
+        company: { id: "company1" },
+        flags: preFetchedFlags,
+        feedback: { enableAutoFeedback: false }, // Disable to avoid HTTP calls
+      });
+
+      await client.initialize(false);
+
+      // Should not call flagsClient.initialize() because bootstrap is false
+      expect(flagsClientInitialize).not.toHaveBeenCalled();
+      // Should not make any HTTP calls for user/company tracking
+      expect(httpClientPost).not.toHaveBeenCalled();
+      // Should have the pre-fetched flags available
+      expect(client.getFlags()).toEqual({
+        testFlag: {
+          key: "testFlag",
+          isEnabled: true,
+          targetingVersion: 1,
+          config: {
+            key: "config1",
+            version: 1,
+            payload: { value: "test" },
+          },
+          isEnabledOverride: null,
+        },
+      });
+      // Should be able to use the flag
+      expect(client.getFlag("testFlag").isEnabled).toBe(true);
+    });
+  });
 });

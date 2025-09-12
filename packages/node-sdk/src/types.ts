@@ -125,6 +125,11 @@ export interface RawFlag {
   missingContextFields?: string[];
 }
 
+export type BootstrappedFlags = {
+  context: Context;
+  flags: Record<TypedFlagKey, RawFlag>;
+};
+
 export type EmptyFlagRemoteConfig = { key: undefined; payload: undefined };
 
 /**
