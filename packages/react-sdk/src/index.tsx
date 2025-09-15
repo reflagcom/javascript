@@ -239,10 +239,16 @@ export function ReflagProvider({
   );
 }
 
+/**
+ * Props for the ReflagBootstrappedProvider.
+ */
 type ReflagBootstrappedProps = Omit<
   ReflagProps,
   "user" | "company" | "otherContext"
 > & {
+  /**
+   * Pre-fetched flags to be used instead of fetching them from the server.
+   */
   flags?: BootstrappedFlags;
 };
 
