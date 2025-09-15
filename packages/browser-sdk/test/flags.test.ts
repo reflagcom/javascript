@@ -409,7 +409,7 @@ describe("FlagsClient", () => {
         },
         testLogger,
         {
-          flags: preFetchedFlags,
+          bootstrappedFlags: preFetchedFlags,
         },
       );
 
@@ -459,7 +459,7 @@ describe("FlagsClient", () => {
         },
         testLogger,
         {
-          flags: preFetchedFlags,
+          bootstrappedFlags: preFetchedFlags,
         },
       );
 
@@ -499,7 +499,7 @@ describe("FlagsClient", () => {
         },
         testLogger,
         {
-          flags: preFetchedFlags,
+          bootstrappedFlags: preFetchedFlags,
         },
       );
 
@@ -541,7 +541,7 @@ describe("FlagsClient", () => {
         },
         testLogger,
         {
-          flags: preFetchedFlags,
+          bootstrappedFlags: preFetchedFlags,
           fallbackFlags: ["fallbackFlag"],
         },
       );

@@ -292,7 +292,7 @@ export function ReflagBootstrappedProvider({
 
     const client = newReflagClient({
       ...config,
-      flags: flags.flags,
+      bootstrappedFlags: flags.flags,
       user: flags.context.user,
       company: flags.context.company,
       otherContext: flags.context.otherContext,
@@ -304,7 +304,7 @@ export function ReflagBootstrappedProvider({
     clientRef.current = client;
 
     client
-      .initialize(false)
+      .initialize()
       .catch((e) => {
         client.logger.error("failed to initialize client", e);
       })

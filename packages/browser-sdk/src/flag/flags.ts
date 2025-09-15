@@ -223,7 +223,7 @@ export class FlagsClient {
     private context: Context,
     logger: Logger,
     options?: {
-      flags?: FetchedFlags;
+      bootstrappedFlags?: FetchedFlags;
       fallbackFlags?: Record<string, FallbackFlagOverride> | string[];
       timeoutMs?: number;
       staleTimeMs?: number;
@@ -279,18 +279,19 @@ export class FlagsClient {
       this.flagOverrides = {};
     }
 
-    if (options?.flags) {
+    if (options?.bootstrappedFlags) {
       this.initialized = true;
-      this.fetchedFlags = options.flags;
+      this.fetchedFlags = options.bootstrappedFlags;
       this.flags = this.mergeFlags(this.fetchedFlags, this.flagOverrides);
     }
   }
 
   async initialize() {
-    if (!this.initialized) {
-      this.initialized = true;
-      this.setFetchedFlags((await this.maybeFetchFlags()) || {});
+    if (this.initialized) {
+      this.logger.error("flags client already initialized");
     }
+    this.setFetchedFlags((await this.maybeFetchFlags()) || {});
+    this.initialized = true;
   }
 
   async setContext(context: Context) {

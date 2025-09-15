@@ -171,6 +171,16 @@ export interface Config {
    * Whether to enable offline mode.
    */
   offline: boolean;
+
+  /**
+   * Whether the client is bootstrapped.
+   */
+  bootstrapped: boolean;
+
+  /**
+   * Whether the client is initialized.
+   */
+  initialized: boolean;
 }
 
 /**
@@ -243,7 +253,7 @@ export type InitOptions = {
    * An object containing pre-fetched flags to be used instead of fetching them from the server.
    * This is intended to be used with the Node-SDK getFlagsForBootstrap method.
    */
-  flags?: FetchedFlags;
+  bootstrappedFlags?: FetchedFlags;
 
   /**
    * Flag keys for which `isEnabled` should fallback to true
@@ -312,6 +322,8 @@ const defaultConfig: Config = {
   sseBaseUrl: SSE_REALTIME_BASE_URL,
   enableTracking: true,
   offline: false,
+  bootstrapped: false,
+  initialized: false,
 };
 
 /**
@@ -415,6 +427,8 @@ export class ReflagClient {
       sseBaseUrl: opts?.sseBaseUrl ?? defaultConfig.sseBaseUrl,
       enableTracking: opts?.enableTracking ?? defaultConfig.enableTracking,
       offline: opts?.offline ?? defaultConfig.offline,
+      bootstrapped: !!opts.bootstrappedFlags,
+      initialized: false,
     };
 
     this.requestFeedbackOptions = {
@@ -438,7 +452,7 @@ export class ReflagClient {
       },
       this.logger,
       {
-        flags: opts.flags,
+        bootstrappedFlags: opts.bootstrappedFlags,
         expireTimeMs: opts.expireTimeMs,
         staleTimeMs: opts.staleTimeMs,
         fallbackFlags: opts.fallbackFlags,
@@ -490,10 +504,13 @@ export class ReflagClient {
    * Initialize the Reflag SDK.
    *
    * Must be called before calling other SDK methods.
-   *
-   * @param bootstrap - Whether to bootstrap the client: fetching flags, sending user, and company events.
    */
-  async initialize(bootstrap = true) {
+  async initialize() {
+    if (this.config.initialized) {
+      this.logger.info("Reflag client already initialized");
+      return;
+    }
+
     const start = Date.now();
     if (this.autoFeedback) {
       // do not block on automated feedback surveys initialization
@@ -502,7 +519,7 @@ export class ReflagClient {
       });
     }
 
-    if (bootstrap) {
+    if (!this.config.bootstrapped) {
       await this.flagsClient.initialize();
 
       if (this.context.user && this.config.enableTracking) {
@@ -516,6 +533,7 @@ export class ReflagClient {
           this.logger.error("error sending company", e);
         });
       }
+      this.config.bootstrapped = true;
     }
 
     this.logger.info(
@@ -524,6 +542,7 @@ export class ReflagClient {
         "ms" +
         (this.config.offline ? " (offline mode)" : ""),
     );
+    this.config.initialized = true;
   }
 
   /**
