@@ -242,7 +242,7 @@ export function ReflagProvider({
 /**
  * Props for the ReflagBootstrappedProvider.
  */
-type ReflagBootstrappedProps = Omit<
+export type ReflagBootstrappedProps = Omit<
   ReflagProps,
   "user" | "company" | "otherContext"
 > & {

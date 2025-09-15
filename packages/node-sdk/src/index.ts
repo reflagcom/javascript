@@ -3,6 +3,7 @@ export { EdgeClient, EdgeClientOptions } from "./edgeClient";
 export type {
   Attributes,
   BatchBufferOptions,
+  BootstrappedFlags,
   CacheStrategy,
   ClientOptions,
   Context,

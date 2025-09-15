@@ -491,7 +491,7 @@ export class ReflagClient {
    *
    * Must be called before calling other SDK methods.
    *
-   * @param bootstrap - Whether to bootstrap the client, fetching flags, sending user, and company events.
+   * @param bootstrap - Whether to bootstrap the client: fetching flags, sending user, and company events.
    */
   async initialize(bootstrap = true) {
     const start = Date.now();
