@@ -78,7 +78,7 @@ type BulkEvent =
     }
   | {
       type: "feature-flag-event";
-      action: "check" | "evaluate" | "check-config" | "evaluate-config";
+      action: "check" | "check-config";
       key: string;
       targetingVersion?: number;
       evalResult:
@@ -126,7 +126,6 @@ export class ReflagClient {
     fallbackFlags?: Record<TypedFlagKey, RawFlag>;
     flagOverrides: FlagOverridesFn;
     offline: boolean;
-    emitEvaluationEvents: boolean;
     configFile?: string;
     flagsFetchRetries: number;
     fetchTimeoutMs: number;
@@ -302,7 +301,6 @@ export class ReflagClient {
 
     this._config = {
       offline,
-      emitEvaluationEvents: config.emitEvaluationEvents ?? true,
       apiBaseUrl: (config.apiBaseUrl ?? config.host) || API_BASE_URL,
       headers: {
         "Content-Type": "application/json",
@@ -841,10 +839,7 @@ export class ReflagClient {
     ok(typeof event === "object", "event must be an object");
     ok(
       typeof event.action === "string" &&
-        (event.action === "evaluate" ||
-          event.action === "evaluate-config" ||
-          event.action === "check" ||
-          event.action === "check-config"),
+        (event.action === "check" || event.action === "check-config"),
       "event must have an action",
     );
     ok(
@@ -880,13 +875,6 @@ export class ReflagClient {
     ).toString();
 
     if (this._config.offline) {
-      return;
-    }
-
-    if (
-      !this._config.emitEvaluationEvents &&
-      (event.action === "evaluate" || event.action === "evaluate-config")
-    ) {
       return;
     }
 
@@ -1056,7 +1044,7 @@ export class ReflagClient {
       flagDefinitions = flagDefs;
     }
 
-    const { enableTracking = true, meta: _, ...context } = options;
+    const { enableTracking: _, meta: __, ...context } = options;
 
     const evaluated = flagDefinitions
       .filter(({ key: flagKey }) => (key ? key === flagKey : true))
@@ -1075,55 +1063,6 @@ export class ReflagClient {
             missingContextFields: [],
           } satisfies EvaluationResult<any>),
       }));
-
-    if (enableTracking) {
-      const promises = evaluated
-        .map((res) => {
-          const outPromises: Promise<void>[] = [];
-          outPromises.push(
-            this.sendFlagEvent({
-              action: "evaluate",
-              key: res.flagKey,
-              targetingVersion: res.targetingVersion,
-              evalResult: res.enabledResult.value ?? false,
-              evalContext: res.enabledResult.context,
-              evalRuleResults: res.enabledResult.ruleEvaluationResults,
-              evalMissingFields: res.enabledResult.missingContextFields,
-            }),
-          );
-
-          const config = res.configResult;
-          if (config.value) {
-            outPromises.push(
-              this.sendFlagEvent({
-                action: "evaluate-config",
-                key: res.flagKey,
-                targetingVersion: res.configVersion,
-                evalResult: config.value,
-                evalContext: config.context,
-                evalRuleResults: config.ruleEvaluationResults,
-                evalMissingFields: config.missingContextFields,
-              }),
-            );
-          }
-
-          return outPromises;
-        })
-        .flat();
-
-      void Promise.allSettled(promises).then((results) => {
-        const failed = results
-          .map((result) =>
-            result.status === "rejected" ? result.reason : undefined,
-          )
-          .filter(Boolean);
-        if (failed.length > 0) {
-          this.logger.error(`failed to queue some evaluate events.`, {
-            errors: failed,
-          });
-        }
-      });
-    }
 
     let evaluatedFlags = evaluated.reduce(
       (acc, res) => {

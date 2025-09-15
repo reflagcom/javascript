@@ -10,8 +10,6 @@ import {
   vi,
 } from "vitest";
 
-import { flattenJSON } from "@reflag/flag-evaluation";
-
 import { BoundReflagClient, ReflagClient } from "../src";
 import {
   API_BASE_URL,
@@ -1083,95 +1081,6 @@ describe("ReflagClient", () => {
             userId: "user123",
           },
           {
-            type: "feature-flag-event",
-            action: "evaluate",
-            key: "flag1",
-            targetingVersion: 1,
-            evalContext: flattenJSON(context),
-            evalResult: true,
-            evalRuleResults: [true],
-            evalMissingFields: [],
-          },
-          {
-            type: "feature-flag-event",
-            action: "evaluate-config",
-            key: "flag1",
-            targetingVersion: 1,
-            evalContext: flattenJSON(context),
-            evalResult: {
-              key: "config-1",
-              payload: {
-                something: "else",
-              },
-            },
-            evalRuleResults: [true],
-            evalMissingFields: [],
-          },
-          {
-            type: "event",
-            event: "flag1",
-            userId: user.id,
-            companyId: company.id,
-          },
-        ],
-      );
-    });
-
-    it("`track` does not send evaluation events when `emitEvaluationEvents` is `false`", async () => {
-      client = new ReflagClient({
-        ...validOptions,
-        emitEvaluationEvents: false,
-      });
-
-      const context = {
-        company,
-        user,
-        other: otherContext,
-      };
-
-      // test that the flag is returned
-      await client.initialize();
-      const flag = client.getFlag(
-        {
-          ...context,
-          meta: {
-            active: true,
-          },
-          enableTracking: true,
-        },
-        "flag1",
-      );
-
-      await flag.track();
-      await client.flush();
-
-      expect(httpClient.post).toHaveBeenCalledWith(
-        BULK_ENDPOINT,
-        expectedHeaders,
-        [
-          {
-            attributes: {
-              employees: 100,
-              name: "Acme Inc.",
-            },
-            companyId: "company123",
-            context: {
-              active: true,
-            },
-            type: "company",
-          },
-          {
-            attributes: {
-              age: 1,
-              name: "John",
-            },
-            context: {
-              active: true,
-            },
-            type: "user",
-            userId: "user123",
-          },
-          {
             type: "event",
             event: "flag1",
             userId: user.id,
@@ -1560,8 +1469,6 @@ describe("ReflagClient", () => {
       });
 
       await client.flush();
-
-      expect(httpClient.post).toHaveBeenCalledTimes(1);
     });
 
     it("should send `track` with user and company if provided", async () => {
@@ -1773,41 +1680,6 @@ describe("ReflagClient", () => {
           }),
         ],
       );
-    });
-
-    it("should not fail if sendFlagEvent fails to send evaluate event", async () => {
-      httpClient.post.mockRejectedValueOnce(new Error("Network error"));
-      const context = { user, company, other: otherContext };
-
-      await client.initialize();
-      const flags = client.getFlags(context);
-
-      await client.flush();
-
-      expect(logger.error).toHaveBeenCalledWith(
-        expect.stringMatching("post request .* failed with error"),
-        expect.any(Error),
-      );
-
-      expect(flags).toStrictEqual({
-        flag1: {
-          key: "flag1",
-          isEnabled: true,
-          config: {
-            key: "config-1",
-            payload: {
-              something: "else",
-            },
-          },
-          track: expect.any(Function),
-        },
-        flag2: {
-          key: "flag2",
-          isEnabled: false,
-          config: { key: undefined, payload: undefined },
-          track: expect.any(Function),
-        },
-      });
     });
 
     it("should not fail if sendFlagEvent fails to send check event", async () => {
