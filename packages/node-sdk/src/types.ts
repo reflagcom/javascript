@@ -125,6 +125,9 @@ export interface RawFlag {
   missingContextFields?: string[];
 }
 
+/**
+ * Describes a collection of evaluated raw flags and the context for bootstrapping.
+ */
 export type BootstrappedFlags = {
   context: Context;
   flags: Record<TypedFlagKey, RawFlag>;

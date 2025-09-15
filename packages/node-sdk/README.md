@@ -206,6 +206,70 @@ const flagDefs = await client.getFlagDefinitions();
 // }]
 ```
 
+## Bootstrapping client-side applications
+
+The `getFlagsForBootstrap()` method is designed for server-side rendering (SSR) scenarios where you need to pass flag data to client-side applications. This method returns raw flag data without wrapper functions, making it suitable for serialization and client-side hydration.
+
+```typescript
+const client = new ReflagClient();
+await client.initialize();
+
+// Get flags for bootstrapping with full context
+const { context, flags } = client.getFlagsForBootstrap({
+  user: {
+    id: "john_doe",
+    name: "John Doe",
+    email: "john@acme.com",
+  },
+  company: {
+    id: "acme_inc",
+    name: "Acme, Inc.",
+  },
+  other: {
+    location: "US",
+    platform: "web",
+  },
+});
+
+// Pass this data to your client-side application
+// The flags object contains raw flag data suitable for JSON serialization
+console.log(flags);
+// {
+//   "huddle": {
+//     "key": "huddle",
+//     "isEnabled": true,
+//     "config": {
+//       "key": "pro",
+//       "payload": { "maxParticipants": 10 },
+//     }
+//   }
+// }
+```
+
+You can also use a bound client for simpler API:
+
+```typescript
+const boundClient = client.bindClient({
+  user: { id: "john_doe" },
+  company: { id: "acme_inc" },
+});
+
+const { context, flags } = boundClient.getFlagsForBootstrap();
+```
+
+### Key differences from `getFlags()`
+
+- **Raw data**: Returns plain objects without `track()` functions, making them JSON serializable
+- **Context included**: Returns both the evaluated flags and the context used for evaluation
+- **Bootstrapping focus**: Designed specifically for passing data to client-side applications
+
+### Common use cases
+
+1. **Server-side rendering**: Pass initial flag state to React/Vue/Angular applications
+2. **API responses**: Include flag data in JSON API responses for client consumption
+3. **Static site generation**: Evaluate flags at build time for static sites
+4. **Mobile app configuration**: Send flag configuration to mobile applications on startup
+
 ## Edge-runtimes like Cloudflare Workers
 
 To use the Reflag NodeSDK with Cloudflare workers, set the `node_compat` flag [in your wrangler file](https://developers.cloudflare.com/workers/runtime-apis/nodejs/#get-started).
