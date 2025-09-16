@@ -356,8 +356,7 @@ export function useFeature<TKey extends FlagKey>(key: TKey) {
  */
 export function useFlag<TKey extends FlagKey>(key: TKey): TypedFlags[TKey] {
   const client = useClient();
-  const context = useContext(ProviderContext);
-  const isLoading = context?.isLoading ?? true;
+  const isLoading = useIsLoading();
 
   const track = () => client?.track(key);
   const requestFeedback = (opts: RequestFeedbackOptions) =>
@@ -508,6 +507,28 @@ export function useUpdateOtherContext() {
 }
 
 /**
+ * Returns the current `ReflagProvider` context.
+ * @internal
+ */
+function useSafeContext() {
+  const ctx = useContext(ProviderContext);
+  if (!ctx) {
+    throw new Error(
+      `ReflagProvider is missing. Please ensure your component is wrapped with a ReflagProvider.`,
+    );
+  }
+  return ctx;
+}
+
+/**
+ * Returns a boolean indicating if the Reflag client is loading.
+ */
+export function useIsLoading() {
+  const context = useSafeContext();
+  return context.isLoading;
+}
+
+/**
  * Returns the current `ReflagClient` used by the `ReflagProvider`.
  *
  * This is useful if you need to access the `ReflagClient` outside of the `ReflagProvider`.
@@ -522,12 +543,6 @@ export function useUpdateOtherContext() {
  * ```
  */
 export function useClient() {
-  const context = useContext(ProviderContext);
-  if (!context) {
-    throw new Error(
-      "ReflagProvider is missing. Please ensure your component is wrapped with a ReflagProvider.",
-    );
-  }
-
+  const context = useSafeContext();
   return context.client;
 }
