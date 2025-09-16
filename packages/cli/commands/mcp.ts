@@ -180,12 +180,4 @@ export function registerMcpCommand(cli: Command) {
     .addOption(editorOption)
     .addOption(configScopeOption)
     .action(mcpAction);
-
-  // Update the config with the cli override values
-  cli.hook("preAction", (_, command) => {
-    const { appId } = command.opts();
-    configStore.setConfig({
-      appId,
-    });
-  });
 }
