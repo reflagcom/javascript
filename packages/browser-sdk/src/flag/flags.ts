@@ -289,6 +289,7 @@ export class FlagsClient {
   async initialize() {
     if (this.initialized) {
       this.logger.error("flags client already initialized");
+      return;
     }
     this.setFetchedFlags((await this.maybeFetchFlags()) || {});
     this.initialized = true;

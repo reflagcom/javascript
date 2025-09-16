@@ -108,7 +108,7 @@ describe("FlagsClient", () => {
     expect(testLogger.warn).toHaveBeenCalledTimes(1);
     vi.advanceTimersByTime(60 * 1000);
     await flagsClient.initialize();
-    expect(testLogger.warn).toHaveBeenCalledTimes(2);
+    expect(testLogger.error).toHaveBeenCalledTimes(1);
   });
 
   test("ignores undefined context", async () => {
@@ -508,14 +508,14 @@ describe("FlagsClient", () => {
         updateTriggered = true;
       });
 
-      // Trigger the flags updated event by setting context (which should not fetch since already initialized)
+      // Trigger the flags updated event by setting context (which should still fetch)
       await flagsClient.setContext({
         user: { id: "456" },
         company: { id: "789" },
         other: { eventId: "other-conference" },
       });
 
-      expect(updateTriggered).toBe(false); // No update since context change doesn't affect pre-fetched flags
+      expect(updateTriggered).toBe(true);
     });
 
     test("should work with fallback flags when initialization fails", async () => {
