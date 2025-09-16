@@ -247,7 +247,11 @@ function useReflagProvider({
   );
 }
 
-type ReflagPropsBase = {
+/**
+ * Base props for the ReflagProvider and ReflagBootstrappedProvider.
+ * @internal
+ */
+export type ReflagPropsBase = {
   children?: ReactNode;
   loadingComponent?: ReactNode;
   debug?: boolean;
