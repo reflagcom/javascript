@@ -2,22 +2,24 @@
 import { provide } from "vue";
 
 import { ProviderSymbol } from "./hooks";
-import { ReflagProps } from "./types";
+import { ReflagBootstrappedProps } from "./types";
 import { useReflagProvider } from "./useReflagProvider";
 
 // any optional prop which has boolean as part of the type, will default to false
 // instead of `undefined`, so we use `withDefaults` here to pass the undefined
 // down into the client.
-const props = withDefaults(defineProps<ReflagProps>(), {
+const props = withDefaults(defineProps<ReflagBootstrappedProps>(), {
   enableTracking: undefined,
   toolbar: undefined,
 });
 
-const { user, company, otherContext, ...config } = props;
+const { flags, ...config } = props;
 
 const context = useReflagProvider({
   config,
-  context: { user, company, otherContext },
+  context: flags?.context,
+  bootstrappedFlags: flags?.flags,
+  isBootstrapped: true,
 });
 
 provide(ProviderSymbol, context);

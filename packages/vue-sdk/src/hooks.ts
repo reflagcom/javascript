@@ -11,22 +11,31 @@ export function useFlag(key: string): Flag<any> {
   const client = useClient();
   const ctx = injectSafe();
 
-  const track = () => client?.value.track(key);
+  const track = () => client?.value?.track(key);
   const requestFeedback = (opts: RequestFlagFeedbackOptions) =>
-    client.value.requestFeedback({ ...opts, flagKey: key });
+    client.value?.requestFeedback({ ...opts, flagKey: key });
 
-  const feature = ref(client.value.getFlag(key));
+  const feature = ref(
+    client.value?.getFlag(key) || {
+      isEnabled: false,
+      config: { key: undefined, payload: undefined },
+    },
+  );
 
   updateFlag();
 
   function updateFlag() {
-    feature.value = client.value.getFlag(key);
+    if (client.value) {
+      feature.value = client.value.getFlag(key);
+    }
   }
 
-  client.value.on("flagsUpdated", updateFlag);
-  onBeforeUnmount(() => {
-    client.value.off("flagsUpdated", updateFlag);
-  });
+  if (client.value) {
+    client.value.on("flagsUpdated", updateFlag);
+    onBeforeUnmount(() => {
+      client.value?.off("flagsUpdated", updateFlag);
+    });
+  }
 
   return {
     key,
@@ -61,7 +70,7 @@ export function useFlag(key: string): Flag<any> {
 export function useTrack() {
   const client = useClient();
   return (eventName: string, attributes?: Record<string, any> | null) =>
-    client?.value.track(eventName, attributes);
+    client?.value?.track(eventName, attributes);
 }
 
 /**
@@ -90,7 +99,7 @@ export function useTrack() {
 export function useRequestFeedback() {
   const client = useClient();
   return (options: RequestFeedbackData) =>
-    client?.value.requestFeedback(options);
+    client?.value?.requestFeedback(options);
 }
 
 /**
@@ -117,7 +126,7 @@ export function useRequestFeedback() {
  */
 export function useSendFeedback() {
   const client = useClient();
-  return (opts: UnassignedFeedback) => client?.value.feedback(opts);
+  return (opts: UnassignedFeedback) => client?.value?.feedback(opts);
 }
 
 /**
@@ -143,7 +152,7 @@ export function useSendFeedback() {
 export function useUpdateUser() {
   const client = useClient();
   return (opts: { [key: string]: string | number | undefined }) =>
-    client?.value.updateUser(opts);
+    client?.value?.updateUser(opts);
 }
 
 /**
@@ -169,7 +178,7 @@ export function useUpdateUser() {
 export function useUpdateCompany() {
   const client = useClient();
   return (opts: { [key: string]: string | number | undefined }) =>
-    client?.value.updateCompany(opts);
+    client?.value?.updateCompany(opts);
 }
 
 /**
@@ -195,7 +204,7 @@ export function useUpdateCompany() {
 export function useUpdateOtherContext() {
   const client = useClient();
   return (opts: { [key: string]: string | number | undefined }) =>
-    client?.value.updateOtherContext(opts);
+    client?.value?.updateOtherContext(opts);
 }
 
 /**
@@ -224,7 +233,7 @@ export function useIsLoading() {
 
 function injectSafe() {
   const ctx = inject(ProviderSymbol);
-  if (!ctx?.provider) {
+  if (!ctx) {
     throw new Error(
       `ReflagProvider is missing. Please ensure your component is wrapped with a ReflagProvider.`,
     );

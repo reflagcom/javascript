@@ -176,6 +176,84 @@ ReflagProvider lets you define a template to be shown while ReflagProvider is in
 
 If you want more control over loading screens, `useIsLoading()` returns a `Ref<boolean>` which you can use to customize the loading experience.
 
+## `<ReflagBootstrappedProvider>` component
+
+The `<ReflagBootstrappedProvider>` component is a specialized version of `ReflagProvider` designed for server-side rendering and preloaded flag scenarios. Instead of fetching flags from the server, it uses pre-fetched flags to initialize the SDK, resulting in faster initial page loads and better SSR compatibility.
+
+### Key benefits
+
+- **Faster initial rendering**: No need to wait for flag fetch requests
+- **Better SEO**: Flags are available immediately during SSR
+- **Reduced server load**: Flags can be cached and reused across requests
+- **Offline capability**: Works without an internet connection when flags are pre-fetched
+
+### Usage
+
+```vue
+<script setup lang="ts">
+import { ReflagBootstrappedProvider } from "@reflag/vue-sdk";
+
+// Pre-fetched flags (typically from your server/SSR layer)
+const bootstrappedFlags = {
+  context: {
+    user: { id: "user123", name: "John Doe", email: "john@acme.com" },
+    company: { id: "company456", name: "Acme Inc", plan: "enterprise" },
+  },
+  flags: {
+    huddle: {
+      isEnabled: true,
+      config: {
+        key: "enhanced",
+        payload: { maxParticipants: 50, videoQuality: "hd" },
+      },
+    },
+  },
+};
+</script>
+
+<template>
+  <ReflagBootstrappedProvider
+    :publishable-key="publishableKey"
+    :flags="bootstrappedFlags"
+  >
+    <StartHuddleButton />
+  </ReflagBootstrappedProvider>
+</template>
+```
+
+### Getting bootstrapped flags
+
+You'll typically generate the `bootstrappedFlags` object on your server using the Node.js SDK or by fetching from the Reflag API. Here's an example using the Node.js SDK:
+
+```js
+// server.js (Node.js/SSR)
+import { ReflagClient } from "@reflag/node-sdk";
+
+const client = new ReflagClient({
+  secretKey: "your-secret-key", // Use secret key on server
+});
+await client.initialize();
+
+// Fetch flags for specific context
+const context = {
+  user: { id: "user123", name: "John Doe", email: "john@acme.com" },
+  company: { id: "company456", name: "Acme Inc", plan: "enterprise" },
+};
+
+const bootstrappedFlags = client.getFlagsForBootstrap(context);
+
+// Pass to your Vue app
+```
+
+### Props
+
+`ReflagBootstrappedProvider` accepts all the same props as `ReflagProvider` except:
+
+- `timeoutMs`, `staleWhileRevalidate`, `staleTimeMs`, `expireTimeMs` are not applicable since no requests to fetch flags are made
+- `flags`: The pre-fetched flags object containing context and flag data
+
+If the `flags` prop is not provided or is undefined, the provider will not initialize the client and will render in a non-loading state.
+
 ## Hooks
 
 ### `useFlag()`
