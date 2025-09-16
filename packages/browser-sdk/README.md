@@ -294,6 +294,8 @@ await reflagClient.initialize(); // Initializes all but flags
 const { isEnabled } = reflagClient.getFlag("huddle");
 ```
 
+This eliminates loading states and improves performance by avoiding the initial flags API call.
+
 ## Updating user/company/other context
 
 Attributes given for the user/company/other context in the ReflagClient constructor can be updated for use in flag targeting evaluation with the `updateUser()`, `updateCompany()` and `updateOtherContext()` methods.
@@ -310,8 +312,6 @@ await reflagClient.updateUser({ voiceHuddleOptIn: (!isEnabled).toString() });
 ```
 
 > [!NOTE] > `user`/`company` attributes are also stored remotely on the Reflag servers and will automatically be used to evaluate flag targeting if the page is refreshed.
-
-This eliminates loading states and improves performance by avoiding the initial flags API call.
 
 ## Toolbar
 
