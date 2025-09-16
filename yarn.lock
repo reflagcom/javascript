@@ -3055,7 +3055,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@reflag/node-sdk@npm:1.2.0, @reflag/node-sdk@workspace:packages/node-sdk":
+"@reflag/node-sdk@npm:1.2.0, @reflag/node-sdk@workspace:^, @reflag/node-sdk@workspace:packages/node-sdk":
   version: 0.0.0-use.local
   resolution: "@reflag/node-sdk@workspace:packages/node-sdk"
   dependencies:
@@ -13276,6 +13276,26 @@ __metadata:
   checksum: 10c0/d5792ad9aff56b42648456f9cced2f269100c4d4200590c2f4e419f3ad2c5795b57f7caf273bc336323f866dbb31268197b46a07016ca7e55637d68b53176b29
   languageName: node
   linkType: hard
+
+"nextjs-bootstrap-demo@workspace:packages/react-sdk/dev/nextjs-bootstrap-demo":
+  version: 0.0.0-use.local
+  resolution: "nextjs-bootstrap-demo@workspace:packages/react-sdk/dev/nextjs-bootstrap-demo"
+  dependencies:
+    "@reflag/node-sdk": "workspace:^"
+    "@reflag/react-sdk": "workspace:^"
+    "@types/node": "npm:^22.12.0"
+    "@types/react": "npm:^18"
+    "@types/react-dom": "npm:^18"
+    eslint: "npm:^8"
+    eslint-config-next: "npm:14.2.5"
+    next: "npm:14.2.21"
+    postcss: "npm:^8"
+    react: "npm:^18"
+    react-dom: "npm:^18"
+    tailwindcss: "npm:^3.4.1"
+    typescript: "npm:^5.7.3"
+  languageName: unknown
+  linkType: soft
 
 "nextjs-flag-demo@workspace:packages/react-sdk/dev/nextjs-flag-demo":
   version: 0.0.0-use.local
