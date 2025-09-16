@@ -13,10 +13,12 @@ export const metadata: Metadata = {
 
 const publishableKey = process.env.REFLAG_PUBLISHABLE_KEY || "";
 const secretKey = process.env.REFLAG_SECRET_KEY || "";
+const offline = process.env.CI === "true";
 
 async function getBootstrappedFlags() {
   const serverClient = new ReflagNodeClient({
     secretKey,
+    offline,
   });
   await serverClient.initialize();
 
