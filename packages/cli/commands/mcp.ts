@@ -16,10 +16,7 @@ import {
 import { configStore } from "../stores/config.js";
 import { handleError } from "../utils/errors.js";
 import { fileExists } from "../utils/file.js";
-import {
-  configScopeOption,
-  editorOption,
-} from "../utils/options.js";
+import { configScopeOption, editorOption } from "../utils/options.js";
 
 export const mcpAction = async (options: {
   editor?: SupportedEditor;
