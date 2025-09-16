@@ -3,6 +3,7 @@ export type {
   Flag,
   FlagRemoteConfig,
   InitOptions,
+  InitOptionsBootstrapped,
   ToolbarOptions,
 } from "./client";
 export { ReflagClient } from "./client";

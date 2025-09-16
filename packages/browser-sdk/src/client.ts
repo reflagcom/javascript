@@ -250,12 +250,6 @@ export type InitOptions = {
   offline?: boolean;
 
   /**
-   * An object containing pre-fetched flags to be used instead of fetching them from the server.
-   * This is intended to be used with the Node-SDK getFlagsForBootstrap method.
-   */
-  bootstrappedFlags?: FetchedFlags;
-
-  /**
    * Flag keys for which `isEnabled` should fallback to true
    * if SDK fails to fetch flags from Reflag servers. If a record
    * is supplied instead of array, the values of each key represent the
@@ -315,6 +309,24 @@ export type InitOptions = {
    */
   toolbar?: ToolbarOptions;
 };
+
+/**
+ * Init options for bootstrapped flags.
+ */
+export type InitOptionsBootstrapped = Omit<
+  InitOptions,
+  | "fallbackFlags"
+  | "timeoutMs"
+  | "staleWhileRevalidate"
+  | "staleTimeMs"
+  | "expireTimeMs"
+> & {
+  bootstrappedFlags: FetchedFlags;
+};
+
+function isBootstrapped(opts: InitOptions): opts is InitOptionsBootstrapped {
+  return "bootstrappedFlags" in opts;
+}
 
 const defaultConfig: Config = {
   apiBaseUrl: API_BASE_URL,
@@ -427,7 +439,8 @@ export class ReflagClient {
       sseBaseUrl: opts?.sseBaseUrl ?? defaultConfig.sseBaseUrl,
       enableTracking: opts?.enableTracking ?? defaultConfig.enableTracking,
       offline: opts?.offline ?? defaultConfig.offline,
-      bootstrapped: !!opts.bootstrappedFlags,
+      bootstrapped:
+        opts && "bootstrappedFlags" in opts && !!opts.bootstrappedFlags,
       initialized: false,
     };
 
@@ -451,14 +464,18 @@ export class ReflagClient {
         other: this.context.otherContext,
       },
       this.logger,
-      {
-        bootstrappedFlags: opts.bootstrappedFlags,
-        expireTimeMs: opts.expireTimeMs,
-        staleTimeMs: opts.staleTimeMs,
-        fallbackFlags: opts.fallbackFlags,
-        timeoutMs: opts.timeoutMs,
-        offline: this.config.offline,
-      },
+      isBootstrapped(opts)
+        ? {
+            bootstrappedFlags: opts.bootstrappedFlags,
+            offline: this.config.offline,
+          }
+        : {
+            expireTimeMs: opts.expireTimeMs,
+            staleTimeMs: opts.staleTimeMs,
+            timeoutMs: opts.timeoutMs,
+            fallbackFlags: opts.fallbackFlags,
+            offline: this.config.offline,
+          },
     );
 
     if (
