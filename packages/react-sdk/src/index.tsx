@@ -139,13 +139,25 @@ type ProviderContextType = {
 
 const ProviderContext = createContext<ProviderContextType | null>(null);
 
+/**
+ * Base props for the ReflagProvider and ReflagBootstrappedProvider.
+ * @internal
+ */
+export type ReflagPropsBase = {
+  children?: ReactNode;
+  loadingComponent?: ReactNode;
+  debug?: boolean;
+  newReflagClient?: (
+    ...args: ConstructorParameters<typeof ReflagClient>
+  ) => ReflagClient;
+};
+
+/**
+ * Options for the useReflagProvider hook.
+ * @internal
+ */
 type UseReflagProviderOptions = {
-  config: Omit<InitOptions, keyof ReflagContext> & {
-    debug?: boolean;
-    newReflagClient?: (
-      ...args: ConstructorParameters<typeof ReflagClient>
-    ) => ReflagClient;
-  };
+  config: Omit<InitOptions, keyof ReflagContext> & ReflagPropsBase;
   context?: ReflagContext;
   bootstrappedFlags?: FetchedFlags;
   isBootstrapped?: boolean;
@@ -153,6 +165,7 @@ type UseReflagProviderOptions = {
 
 /**
  * Shared hook that handles the common logic for both ReflagProvider and ReflagBootstrappedProvider
+ * @internal
  */
 function useReflagProvider({
   config,
@@ -248,22 +261,9 @@ function useReflagProvider({
 }
 
 /**
- * Base props for the ReflagProvider and ReflagBootstrappedProvider.
- * @internal
- */
-export type ReflagPropsBase = {
-  children?: ReactNode;
-  loadingComponent?: ReactNode;
-  debug?: boolean;
-  newReflagClient?: (
-    ...args: ConstructorParameters<typeof ReflagClient>
-  ) => ReflagClient;
-};
-
-/**
  * Props for the ReflagProvider.
  */
-export type ReflagProps = InitOptions & ReflagContext & ReflagPropsBase;
+export type ReflagProps = InitOptions & ReflagPropsBase;
 
 /**
  * Provider for the ReflagClient.
@@ -296,7 +296,7 @@ export function ReflagProvider({
  */
 export type ReflagBootstrappedProps = Omit<
   InitOptionsBootstrapped,
-  "bootstrappedFlags"
+  "bootstrappedFlags" | keyof ReflagContext
 > &
   ReflagPropsBase & {
     /**
