@@ -6,7 +6,6 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import ora, { type Ora } from "ora";
 
-import { App, listApps } from "../services/bootstrap.js";
 import {
   ConfigPaths,
   getServersConfig,
@@ -18,20 +17,17 @@ import { configStore } from "../stores/config.js";
 import { handleError } from "../utils/errors.js";
 import { fileExists } from "../utils/file.js";
 import {
-  appIdOption,
   configScopeOption,
   editorOption,
 } from "../utils/options.js";
 
 export const mcpAction = async (options: {
   editor?: SupportedEditor;
-  appId?: string;
   scope?: "local" | "global";
 }) => {
   const config = configStore.getConfig();
   let spinner: Ora | undefined;
   let selectedEditor = options.editor;
-  let selectedApp: App | undefined;
 
   // Select Editor/Client
   if (!selectedEditor) {
@@ -42,45 +38,6 @@ export const mcpAction = async (options: {
         name: ConfigPaths[value].name,
       })),
     });
-  }
-
-  // Select App ID
-  try {
-    spinner = ora(`Loading apps from ${chalk.cyan(config.baseUrl)}...`).start();
-    const apps = listApps();
-    spinner.succeed(`Loaded apps from ${chalk.cyan(config.baseUrl)}.`);
-
-    if (apps.length === 0) {
-      throw new Error("You don't have any apps yet. Please create one.");
-    }
-
-    let selectedAppId: string;
-    if (options.appId) {
-      // If appId is provided, try to find it directly
-      const app = apps.find(({ id }) => id === options.appId);
-      if (!app) {
-        throw new Error(`Could not find app with ID: ${options.appId}`);
-      }
-
-      selectedAppId = app.id;
-    } else {
-      // Otherwise, show selection prompt
-      const nonDemoApp = apps.find((app) => !app.demo);
-      const longestName = Math.max(...apps.map((app) => app.name.length));
-
-      selectedAppId = await select({
-        message: "Select an app",
-        default: config.appId ?? nonDemoApp?.id,
-        choices: apps.map((app) => ({
-          name: `${app.name.padEnd(longestName, " ")}${app.demo ? " [Demo]" : ""}`,
-          value: app.id,
-        })),
-      });
-    }
-    selectedApp = apps.find((app) => app.id === selectedAppId)!;
-  } catch (error) {
-    spinner?.fail("Loading apps failed.");
-    handleError(error, "MCP Configuration");
   }
 
   // Determine Config Path
@@ -152,7 +109,7 @@ export const mcpAction = async (options: {
 
   // Prompt for Add/Update
   let targetEntryKey: string;
-  const defaultNewKey = `Reflag - ${selectedApp.name}`;
+  const defaultNewKey = `Reflag`;
 
   if (existingReflagEntries.length === 0) {
     targetEntryKey = defaultNewKey;
@@ -183,13 +140,8 @@ export const mcpAction = async (options: {
   }
 
   // Construct the MCP endpoint URL
-  const mcpUrlBase = config.apiUrl + "/mcp";
-  const mcpUrlWithAppId = `${mcpUrlBase}?appId=${selectedApp.id}`;
-
   const newEntryValue = {
-    type: "stdio",
-    command: "npx",
-    args: ["mcp-remote@latest", mcpUrlWithAppId],
+    url: config.apiUrl + "/mcp",
   };
 
   // Update Config Object
@@ -228,7 +180,6 @@ export function registerMcpCommand(cli: Command) {
   cli
     .command("mcp")
     .description("Configure Reflag's remote MCP server for your AI assistant.")
-    .addOption(appIdOption)
     .addOption(editorOption)
     .addOption(configScopeOption)
     .action(mcpAction);
