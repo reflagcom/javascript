@@ -581,7 +581,7 @@ describe("<ReflagBootstrappedProvider />", () => {
         otherContext: {
           test: "test",
         },
-        flags: {
+        bootstrappedFlags: {
           abc: {
             key: "abc",
             isEnabled: true,
@@ -650,7 +650,7 @@ describe("<ReflagBootstrappedProvider />", () => {
 
     render(provider);
 
-    expect(initialize).toHaveBeenCalledWith(false);
+    expect(initialize).toHaveBeenCalledWith();
   });
 
   test("does not initialize when no flags are provided", () => {
