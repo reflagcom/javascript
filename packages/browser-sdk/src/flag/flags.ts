@@ -296,7 +296,7 @@ export class FlagsClient {
 
   async setContext(context: Context) {
     this.context = context;
-    await this.initialize();
+    this.setFetchedFlags((await this.maybeFetchFlags()) || {});
   }
 
   /**

@@ -423,7 +423,7 @@ export class ReflagClient {
   /**
    * Create a new ReflagClient instance.
    */
-  constructor(opts: InitOptions) {
+  constructor(opts: InitOptions | InitOptionsBootstrapped) {
     this.publishableKey = opts.publishableKey;
     this.logger =
       opts?.logger ?? loggerWithPrefix(quietConsoleLogger, "[Reflag]");
