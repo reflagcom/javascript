@@ -210,6 +210,13 @@ const flagDefs = await client.getFlagDefinitions();
 
 The `getFlagsForBootstrap()` method is designed for server-side rendering (SSR) scenarios where you need to pass flag data to client-side applications. This method returns raw flag data without wrapper functions, making it suitable for serialization and client-side hydration.
 
+### Key benefits
+
+- **Faster initial rendering**: No need to wait for flag fetch requests
+- **Better SEO**: Flags are available immediately during SSR
+- **Reduced server load**: Flags can be cached and reused across requests
+- **Offline capability**: Works without an internet connection when flags are pre-fetched
+
 ```typescript
 const client = new ReflagClient();
 await client.initialize();
@@ -263,13 +270,6 @@ const { context, flags } = boundClient.getFlagsForBootstrap();
 - **Raw data**: Returns plain objects without `track()` functions, making them JSON serializable
 - **Context included**: Returns both the evaluated flags and the context used for evaluation
 - **Bootstrapping focus**: Designed specifically for passing data to client-side applications
-
-### Common use cases
-
-1. **Server-side rendering**: Pass initial flag state to React/Vue/Angular applications
-2. **API responses**: Include flag data in JSON API responses for client consumption
-3. **Static site generation**: Evaluate flags at build time for static sites
-4. **Mobile app configuration**: Send flag configuration to mobile applications on startup
 
 ## Edge-runtimes like Cloudflare Workers
 

@@ -175,6 +175,13 @@ For server-side rendered applications, you can eliminate the initial network req
 
 The `ReflagBootstrappedProvider` is designed for server-side rendering (SSR) scenarios where you've pre-fetched flags on the server and want to pass them to the client without an additional network request.
 
+### Key benefits
+
+- **Faster initial rendering**: No need to wait for flag fetch requests
+- **Better SEO**: Flags are available immediately during SSR
+- **Reduced server load**: Flags can be cached and reused across requests
+- **Offline capability**: Works without an internet connection when flags are pre-fetched
+
 ```tsx
 import { useState, useEffect } from "react";
 import { BootstrappedFlags } from "@reflag/react-sdk";
