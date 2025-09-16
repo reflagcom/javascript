@@ -250,7 +250,7 @@ app.get("/bootstrap", (req, res) => {
 });
 ```
 
-### Next.js SSR example
+### Next.js Page Router SSR example
 
 For Next.js applications using server-side rendering, you can pre-fetch flags in `getServerSideProps`:
 
@@ -310,6 +310,111 @@ function HuddleFeature() {
 ```
 
 This approach eliminates loading states and improves performance by avoiding the initial flags API call.
+
+### Next.js App Router example
+
+For Next.js applications using the App Router (Next.js 13+), you can pre-fetch flags in Server Components and pass them to client components:
+
+```typescript
+// app/layout.tsx (Server Component)
+import { ReflagClient as ReflagNodeClient } from "@reflag/node-sdk";
+import { ClientProviders } from "./providers";
+
+async function getBootstrapData() {
+  const serverClient = new ReflagNodeClient({
+    secretKey: process.env.REFLAG_SECRET_KEY!
+  });
+  await serverClient.initialize();
+
+  // In a real app, you'd get user/company from your auth system
+  const bootstrapData = serverClient.getFlagsForBootstrap({
+    user: { id: "user123", name: "John Doe", email: "john@acme.com" },
+    company: { id: "company456", name: "Acme Inc", plan: "enterprise" },
+    other: { source: "web" }
+  });
+
+  return bootstrapData;
+}
+
+export default async function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const bootstrapData = await getBootstrapData();
+
+  return (
+    <html lang="en">
+      <body>
+        <ClientProviders bootstrapData={bootstrapData}>
+          {children}
+        </ClientProviders>
+      </body>
+    </html>
+  );
+}
+```
+
+```typescript
+// app/providers.tsx (Client Component)
+"use client";
+
+import { ReflagBootstrappedProvider, BootstrappedFlags } from "@reflag/react-sdk";
+
+interface ClientProvidersProps {
+  children: React.ReactNode;
+  bootstrapData: BootstrappedFlags;
+}
+
+export function ClientProviders({ children, bootstrapData }: ClientProvidersProps) {
+  return (
+    <ReflagBootstrappedProvider
+      publishableKey={process.env.NEXT_PUBLIC_REFLAG_PUBLISHABLE_KEY!}
+      flags={bootstrapData}
+    >
+      {children}
+    </ReflagBootstrappedProvider>
+  );
+}
+```
+
+```typescript
+// app/page.tsx (Server Component)
+import { HuddleFeature } from "./huddle-feature";
+
+export default function HomePage() {
+  return (
+    <main>
+      <h1>My App</h1>
+      <HuddleFeature />
+    </main>
+  );
+}
+```
+
+```typescript
+// app/huddle-feature.tsx (Client Component)
+"use client";
+
+import { useFlag } from "@reflag/react-sdk";
+
+export function HuddleFeature() {
+  const { isEnabled, track, config } = useFlag("huddle");
+
+  if (!isEnabled) return null;
+
+  return (
+    <div>
+      <h2>Start a Huddle</h2>
+      <p>Max participants: {config.payload?.maxParticipants ?? 10}</p>
+      <p>Video quality: {config.payload?.videoQuality ?? "standard"}</p>
+      <button onClick={track}>Start Huddle</button>
+    </div>
+  );
+}
+```
+
+This App Router approach leverages Server Components for server-side flag fetching while using Client Components only where React state and hooks are needed.
 
 ## `<ReflagProvider>` component
 
