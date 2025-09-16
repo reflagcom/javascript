@@ -140,7 +140,7 @@ type ProviderContextType = {
 const ProviderContext = createContext<ProviderContextType | null>(null);
 
 type UseReflagProviderOptions = {
-  config: Omit<InitOptions, "flags"> & {
+  config: Omit<InitOptions, keyof ReflagContext> & {
     debug?: boolean;
     newReflagClient?: (
       ...args: ConstructorParameters<typeof ReflagClient>

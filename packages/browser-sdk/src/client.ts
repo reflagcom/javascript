@@ -16,7 +16,7 @@ import {
 } from "./flag/flags";
 import { ToolbarPosition } from "./ui/types";
 import { API_BASE_URL, APP_BASE_URL, SSE_REALTIME_BASE_URL } from "./config";
-import { CompanyContext, ReflagContext, UserContext } from "./context";
+import { ReflagContext } from "./context";
 import { HookArgs, HooksManager } from "./hooksManager";
 import { HttpClient } from "./httpClient";
 import { Logger, loggerWithPrefix, quietConsoleLogger } from "./logger";
@@ -201,28 +201,11 @@ export type FlagDefinitions = Readonly<Array<string>>;
 /**
  * ReflagClient initialization options.
  */
-export type InitOptions = {
+export type InitOptions = ReflagContext & {
   /**
    * Publishable key for authentication
    */
   publishableKey: string;
-
-  /**
-   * User related context. If you provide `id` Reflag will enrich the evaluation context with
-   * user attributes on Reflag servers.
-   */
-  user?: UserContext;
-
-  /**
-   * Company related context. If you provide `id` Reflag will enrich the evaluation context with
-   * company attributes on Reflag servers.
-   */
-  company?: CompanyContext;
-
-  /**
-   * Context not related to users or companies
-   */
-  otherContext?: Record<string, any>;
 
   /**
    * You can provide a logger to see the logs of the network calls.

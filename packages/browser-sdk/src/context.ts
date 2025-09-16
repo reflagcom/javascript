@@ -43,12 +43,14 @@ export interface UserContext {
 
 export interface ReflagContext {
   /**
-   * Company related context
+   * Company related context. If you provide `id` Reflag will enrich the evaluation context with
+   * company attributes on Reflag servers.
    */
   company?: CompanyContext;
 
   /**
-   * User related context
+   * User related context. If you provide `id` Reflag will enrich the evaluation context with
+   * user attributes on Reflag servers.
    */
   user?: UserContext;
 
