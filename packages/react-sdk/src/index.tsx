@@ -16,6 +16,7 @@ import {
   CompanyContext,
   FetchedFlags,
   InitOptions,
+  InitOptionsBootstrapped,
   RawFlags,
   ReflagClient,
   ReflagContext,
@@ -124,44 +125,130 @@ const SDK_VERSION = `react-sdk/${version}`;
 
 type ProviderContextType = {
   isLoading: boolean;
-  provider: boolean;
   client?: ReflagClient;
 };
 
-const ProviderContext = createContext<ProviderContextType>({
-  isLoading: false,
-  provider: false,
-});
+const ProviderContext = createContext<ProviderContextType | null>(null);
 
-/**
- * Props for the ReflagProvider.
- */
-export type ReflagProps = ReflagContext &
-  Omit<InitOptions, "flags"> & {
-    /**
-     * Children to be rendered.
-     */
-    children?: ReactNode;
-
-    /**
-     * Loading component to be rendered while features are loading.
-     */
-    loadingComponent?: ReactNode;
-
-    /**
-     * Whether to enable debug mode (optional).
-     */
+type UseReflagProviderOptions = {
+  config: Omit<InitOptions, "flags"> & {
     debug?: boolean;
-
-    /**
-     * New ReflagClient constructor.
-     *
-     * @internal
-     */
     newReflagClient?: (
       ...args: ConstructorParameters<typeof ReflagClient>
     ) => ReflagClient;
   };
+  context?: ReflagContext;
+  bootstrappedFlags?: FetchedFlags;
+  isBootstrapped?: boolean;
+};
+
+/**
+ * Shared hook that handles the common logic for both ReflagProvider and ReflagBootstrappedProvider
+ */
+function useReflagProvider({
+  config,
+  context,
+  bootstrappedFlags,
+  isBootstrapped = false,
+}: UseReflagProviderOptions): ProviderContextType {
+  const [isLoading, setIsLoading] = useState(true);
+
+  const clientRef = useRef<ReflagClient>();
+  const contextKeyRef = useRef<string>();
+
+  const {
+    newReflagClient = (...args) => new ReflagClient(...args),
+    debug,
+    ...initConfig
+  } = config;
+
+  // Generate context key based to deduplicate initialization
+  const contextKey = useMemo(() => {
+    return canonicalJSON({
+      config: initConfig,
+      flags: bootstrappedFlags,
+      ...context,
+    });
+  }, [initConfig, context, bootstrappedFlags]);
+
+  // Create base client options
+  const baseClientOptions = useMemo(
+    () => ({
+      ...initConfig,
+      user: context?.user,
+      company: context?.company,
+      otherContext: context?.otherContext,
+      logger: debug ? console : undefined,
+      sdkVersion: SDK_VERSION,
+    }),
+    [initConfig, context, debug],
+  );
+
+  useEffect(() => {
+    // For bootstrapped provider, don't initialize if flags are not provided
+    if (isBootstrapped && !bootstrappedFlags) {
+      return;
+    }
+
+    // Prevent re-initialization if the context key is the same
+    if (contextKeyRef.current === contextKey) {
+      return;
+    }
+    contextKeyRef.current = contextKey;
+
+    // Stop the client if it exists
+    if (clientRef.current) {
+      void clientRef.current.stop();
+    }
+
+    setIsLoading(true);
+
+    // Add bootstrapped flags if this is a bootstrapped provider
+    const clientOptions = bootstrappedFlags
+      ? { ...baseClientOptions, bootstrappedFlags }
+      : baseClientOptions;
+
+    const client = newReflagClient(clientOptions);
+    clientRef.current = client;
+
+    client
+      .initialize()
+      .catch((e) => {
+        client.logger.error("failed to initialize client", e);
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+  }, [
+    contextKey,
+    baseClientOptions,
+    bootstrappedFlags,
+    newReflagClient,
+    isBootstrapped,
+  ]);
+
+  return useMemo(
+    () => ({
+      isLoading,
+      client: clientRef.current,
+    }),
+    [isLoading],
+  );
+}
+
+type ReflagPropsBase = {
+  children?: ReactNode;
+  loadingComponent?: ReactNode;
+  debug?: boolean;
+  newReflagClient?: (
+    ...args: ConstructorParameters<typeof ReflagClient>
+  ) => ReflagClient;
+};
+
+/**
+ * Props for the ReflagProvider.
+ */
+export type ReflagProps = InitOptions & ReflagContext & ReflagPropsBase;
 
 /**
  * Provider for the ReflagClient.
@@ -175,64 +262,14 @@ export function ReflagProvider({
   newReflagClient = (...args) => new ReflagClient(...args),
   ...config
 }: ReflagProps) {
-  const [isLoading, setIsLoading] = useState(true);
-
-  const clientRef = useRef<ReflagClient>();
-  const contextKeyRef = useRef<string>();
-
-  const featureContext = { user, company, otherContext };
-  const contextKey = canonicalJSON({ config, featureContext });
-
-  useEffect(() => {
-    // useEffect will run twice in development mode
-    // This is a workaround to prevent re-initialization
-    if (contextKeyRef.current === contextKey) {
-      return;
-    }
-    contextKeyRef.current = contextKey;
-
-    // on update of contextKey and on unmount
-    if (clientRef.current) {
-      void clientRef.current.stop();
-    }
-
-    setIsLoading(true);
-
-    const client = newReflagClient({
-      ...config,
-      user,
-      company,
-      otherContext,
-
-      logger: config.debug ? console : undefined,
-      sdkVersion: SDK_VERSION,
-    });
-
-    clientRef.current = client;
-
-    client
-      .initialize()
-      .catch((e) => {
-        client.logger.error("failed to initialize client", e);
-      })
-      .finally(() => {
-        setIsLoading(false);
-      });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- should only run once
-  }, [contextKey]);
-
-  const context: ProviderContextType = useMemo(
-    () => ({
-      isLoading: isLoading,
-      client: clientRef.current,
-      provider: true,
-    }),
-    [isLoading],
-  );
+  const context = useReflagProvider({
+    config: { ...config, newReflagClient },
+    context: { user, company, otherContext },
+  });
 
   return (
     <ProviderContext.Provider value={context}>
-      {isLoading && typeof loadingComponent !== "undefined"
+      {context.isLoading && typeof loadingComponent !== "undefined"
         ? loadingComponent
         : children}
     </ProviderContext.Provider>
@@ -243,14 +280,15 @@ export function ReflagProvider({
  * Props for the ReflagBootstrappedProvider.
  */
 export type ReflagBootstrappedProps = Omit<
-  ReflagProps,
-  "user" | "company" | "otherContext"
-> & {
-  /**
-   * Pre-fetched flags to be used instead of fetching them from the server.
-   */
-  flags?: BootstrappedFlags;
-};
+  InitOptionsBootstrapped,
+  "bootstrappedFlags"
+> &
+  ReflagPropsBase & {
+    /**
+     * Pre-fetched flags to be used instead of fetching them from the server.
+     */
+    flags?: BootstrappedFlags;
+  };
 
 /**
  * Bootstrapped Provider for the ReflagClient using pre-fetched flags.
@@ -262,70 +300,16 @@ export function ReflagBootstrappedProvider({
   newReflagClient = (...args) => new ReflagClient(...args),
   ...config
 }: ReflagBootstrappedProps) {
-  const [featuresLoading, setFlagsLoading] = useState(true);
-
-  const clientRef = useRef<ReflagClient>();
-  const contextKeyRef = useRef<string>();
-
-  const contextKey = canonicalJSON({
-    config,
-    flags: flags?.flags,
-    ...flags?.context,
+  const context = useReflagProvider({
+    config: { ...config, newReflagClient },
+    context: flags?.context,
+    bootstrappedFlags: flags?.flags,
+    isBootstrapped: true,
   });
-
-  useEffect(() => {
-    // todo: will be stuck in loading state if flags fail to load
-    if (!flags) {
-      return;
-    }
-    // useEffect will run twice in development mode
-    // This is a workaround to prevent re-initialization
-    if (contextKeyRef.current === contextKey) {
-      return;
-    }
-    contextKeyRef.current = contextKey;
-
-    // on update of contextKey and on unmount
-    if (clientRef.current) {
-      void clientRef.current.stop();
-    }
-
-    const client = newReflagClient({
-      ...config,
-      bootstrappedFlags: flags.flags,
-      user: flags.context.user,
-      company: flags.context.company,
-      otherContext: flags.context.otherContext,
-
-      logger: config.debug ? console : undefined,
-      sdkVersion: SDK_VERSION,
-    });
-
-    clientRef.current = client;
-
-    client
-      .initialize()
-      .catch((e) => {
-        client.logger.error("failed to initialize client", e);
-      })
-      .finally(() => {
-        setFlagsLoading(false);
-      });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- should only run once
-  }, [contextKey]);
-
-  const context: ProviderContextType = useMemo(
-    () => ({
-      isLoading: featuresLoading,
-      client: clientRef.current,
-      provider: true,
-    }),
-    [featuresLoading],
-  );
 
   return (
     <ProviderContext.Provider value={context}>
-      {featuresLoading && typeof loadingComponent !== "undefined"
+      {context.isLoading && typeof loadingComponent !== "undefined"
         ? loadingComponent
         : children}
     </ProviderContext.Provider>
@@ -357,7 +341,8 @@ export function useFeature<TKey extends FlagKey>(key: TKey) {
  */
 export function useFlag<TKey extends FlagKey>(key: TKey): TypedFlags[TKey] {
   const client = useClient();
-  const { isLoading } = useContext<ProviderContextType>(ProviderContext);
+  const context = useContext(ProviderContext);
+  const isLoading = context?.isLoading ?? true;
 
   const track = () => client?.track(key);
   const requestFeedback = (opts: RequestFeedbackOptions) =>
@@ -522,12 +507,12 @@ export function useUpdateOtherContext() {
  * ```
  */
 export function useClient() {
-  const { client, provider } = useContext<ProviderContextType>(ProviderContext);
-  if (!provider) {
+  const context = useContext(ProviderContext);
+  if (!context) {
     throw new Error(
       "ReflagProvider is missing. Please ensure your component is wrapped with a ReflagProvider.",
     );
   }
 
-  return client;
+  return context.client;
 }

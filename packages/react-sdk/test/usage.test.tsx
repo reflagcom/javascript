@@ -174,6 +174,7 @@ describe("<ReflagProvider />", () => {
     const newReflagClient = vi.fn().mockReturnValue({
       initialize: vi.fn().mockResolvedValue(undefined),
       on,
+      stop: vi.fn(),
     });
 
     const provider = getProvider({
@@ -522,6 +523,7 @@ describe("<ReflagBootstrappedProvider />", () => {
     const newReflagClient = vi.fn().mockReturnValue({
       initialize: vi.fn().mockResolvedValue(undefined),
       on,
+      stop: vi.fn(),
     });
 
     const bootstrapFlags: BootstrappedFlags = {
@@ -627,6 +629,7 @@ describe("<ReflagBootstrappedProvider />", () => {
     const newReflagClient = vi.fn().mockReturnValue({
       initialize,
       on: vi.fn(),
+      stop: vi.fn(),
     });
 
     const bootstrapFlags: BootstrappedFlags = {
@@ -659,6 +662,7 @@ describe("<ReflagBootstrappedProvider />", () => {
     const newReflagClient = vi.fn().mockReturnValue({
       initialize,
       on: vi.fn(),
+      stop: vi.fn(),
     });
 
     const provider = getBootstrapProvider(undefined, {

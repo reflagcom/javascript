@@ -10,6 +10,7 @@ import {
   useUpdateOtherContext,
   useUpdateUser,
   useClient,
+  ReflagBootstrappedProvider,
 } from "../../src";
 
 // Extending the Flags interface to define the available features
@@ -235,6 +236,7 @@ function CustomToolbar() {
   return (
     <div>
       <h2>Custom toolbar</h2>
+      <p>This toolbar is static and won't update when flags are fetched.</p>
       <ul>
         {Object.entries(client.getFlags()).map(([flagKey, feature]) => (
           <li key={flagKey}>
@@ -269,6 +271,40 @@ function CustomToolbar() {
 }
 
 export function App() {
+  const bootstrapped = new URLSearchParams(window.location.search).get(
+    "bootstrapped",
+  );
+
+  if (bootstrapped) {
+    return (
+      <ReflagBootstrappedProvider
+        publishableKey={publishableKey}
+        flags={{
+          context: {
+            user: initialUser,
+            company: initialCompany,
+            otherContext: initialOtherContext,
+          },
+          flags: {
+            huddle: {
+              key: "huddles",
+              isEnabled: true,
+            },
+          },
+        }}
+        apiBaseUrl={apiBaseUrl}
+      >
+        {!publishableKey && (
+          <div>
+            No publishable key set. Please set the VITE_PUBLISHABLE_KEY
+            environment variable.
+          </div>
+        )}
+        <Demos />
+      </ReflagBootstrappedProvider>
+    );
+  }
+
   return (
     <ReflagProvider
       publishableKey={publishableKey}
