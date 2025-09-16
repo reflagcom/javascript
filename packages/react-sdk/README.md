@@ -231,8 +231,8 @@ app.get("/bootstrap", (req, res) => {
   const company = getCompany(req); // Get company from your auth system
 
   const flags = reflagClient.getFlagsForBootstrap({
-    user: { id: user.id, email: user.email, role: user.role },
-    company: { id: company.id, plan: company.plan },
+    user: { id: "user123", name: "John Doe", email: "john@acme.com" },
+    company: { id: "company456", name: "Acme Inc", plan: "enterprise" },
     other: { source: "web" },
   });
 
@@ -267,8 +267,8 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
   const company = await getCompanyFromUser(user);
 
   const bootstrapData = serverClient.getFlagsForBootstrap({
-    user: { id: user.id, email: user.email, role: user.role },
-    company: { id: company.id, plan: company.plan },
+    user: { id: "user123", name: "John Doe", email: "john@acme.com" },
+    company: { id: "company456", name: "Acme Inc", plan: "enterprise" },
     other: { page: "homepage" }
   });
 
@@ -294,7 +294,8 @@ function HuddleFeature() {
   return (
     <div>
       <h2>Start a Huddle</h2>
-      <p>{config.payload?.description ?? "Connect with your team instantly"}</p>
+      <p>Max participants: {config.payload?.maxParticipants ?? 10}</p>
+      <p>Video quality: {config.payload?.videoQuality ?? "standard"}</p>
       <button onClick={track}>Start Huddle</button>
     </div>
   );

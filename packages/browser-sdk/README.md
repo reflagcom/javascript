@@ -257,8 +257,8 @@ const serverClient = new ReflagNodeClient({ secretKey: "your-secret-key" });
 await serverClient.initialize();
 
 const { flags } = serverClient.getFlagsForBootstrap({
-  user: { id: "user123" },
-  company: { id: "company456" },
+  user: { id: "user123", name: "John Doe", email: "john@acme.com" },
+  company: { id: "company456", name: "Acme Inc", plan: "enterprise" },
 });
 
 // Pass flags data to client using your framework's preferred method
@@ -278,8 +278,8 @@ import { ReflagClient } from "@reflag/browser-sdk";
 
 const reflagClient = new ReflagClient({
   publishableKey: "your-publishable-key",
-  user: { id: "user123" },
-  company: { id: "company456" },
+  user: { id: "user123", name: "John Doe", email: "john@acme.com" },
+  company: { id: "company456", name: "Acme Inc", plan: "enterprise" },
   bootstrappedFlags: flags, // No network request needed
 });
 

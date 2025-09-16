@@ -217,17 +217,18 @@ await client.initialize();
 // Get flags for bootstrapping with full context
 const { context, flags } = client.getFlagsForBootstrap({
   user: {
-    id: "john_doe",
+    id: "user123",
     name: "John Doe",
     email: "john@acme.com",
   },
   company: {
-    id: "acme_inc",
-    name: "Acme, Inc.",
+    id: "company456",
+    name: "Acme Inc",
+    plan: "enterprise",
   },
   other: {
-    location: "US",
-    platform: "web",
+    source: "web",
+    platform: "desktop",
   },
 });
 
@@ -239,8 +240,8 @@ console.log(flags);
 //     "key": "huddle",
 //     "isEnabled": true,
 //     "config": {
-//       "key": "pro",
-//       "payload": { "maxParticipants": 10 },
+//       "key": "enhanced",
+//       "payload": { "maxParticipants": 50, "videoQuality": "hd" },
 //     }
 //   }
 // }
@@ -250,8 +251,8 @@ You can also use a bound client for simpler API:
 
 ```typescript
 const boundClient = client.bindClient({
-  user: { id: "john_doe" },
-  company: { id: "acme_inc" },
+  user: { id: "user123", name: "John Doe", email: "john@acme.com" },
+  company: { id: "company456", name: "Acme Inc", plan: "enterprise" },
 });
 
 const { context, flags } = boundClient.getFlagsForBootstrap();
