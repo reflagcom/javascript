@@ -3136,7 +3136,7 @@ __metadata:
     "@types/react": "npm:^18.3.2"
     "@types/react-dom": "npm:^18.3.0"
     "@types/webpack": "npm:^5.28.5"
-    canonical-json: "npm:^0.0.4"
+    canonical-json: "npm:^0.2.0"
     eslint: "npm:^9.21.0"
     jsdom: "npm:^24.1.0"
     msw: "npm:^2.3.5"

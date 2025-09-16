@@ -123,6 +123,15 @@ export type FlagKey = keyof TypedFlags;
 
 const SDK_VERSION = `react-sdk/${version}`;
 
+function removeUndefined(obj: Record<string, any>) {
+  const t = obj;
+  for (const v in t) {
+    if (typeof t[v] == "object") removeUndefined(t[v]);
+    else if (t[v] == undefined) delete t[v];
+  }
+  return t;
+}
+
 type ProviderContextType = {
   isLoading: boolean;
   client?: ReflagClient;
@@ -164,11 +173,13 @@ function useReflagProvider({
 
   // Generate context key based to deduplicate initialization
   const contextKey = useMemo(() => {
-    return canonicalJSON({
-      config: initConfig,
-      flags: bootstrappedFlags,
-      ...context,
-    });
+    return canonicalJSON(
+      removeUndefined({
+        ...initConfig,
+        ...context,
+        flags: bootstrappedFlags ?? null,
+      }),
+    );
   }, [initConfig, context, bootstrappedFlags]);
 
   // Create base client options
