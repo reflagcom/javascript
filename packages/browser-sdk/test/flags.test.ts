@@ -108,7 +108,7 @@ describe("FlagsClient", () => {
     expect(testLogger.warn).toHaveBeenCalledTimes(1);
     vi.advanceTimersByTime(60 * 1000);
     await flagsClient.initialize();
-    expect(testLogger.error).toHaveBeenCalledTimes(1);
+    expect(testLogger.warn).toHaveBeenCalledTimes(2);
   });
 
   test("ignores undefined context", async () => {

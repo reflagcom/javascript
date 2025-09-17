@@ -284,7 +284,7 @@ export class AutoFeedback {
    */
   async initialize() {
     if (this.initialized) {
-      this.logger.error("auto. feedback client already initialized");
+      this.logger.warn("auto. feedback client already initialized");
       return;
     }
     this.initialized = true;

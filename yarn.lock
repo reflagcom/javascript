@@ -3055,7 +3055,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@reflag/node-sdk@npm:1.2.0, @reflag/node-sdk@workspace:^, @reflag/node-sdk@workspace:packages/node-sdk":
+"@reflag/node-sdk@npm:1.1.0, @reflag/node-sdk@workspace:^, @reflag/node-sdk@workspace:packages/node-sdk":
   version: 0.0.0-use.local
   resolution: "@reflag/node-sdk@workspace:packages/node-sdk"
   dependencies:
@@ -3107,7 +3107,7 @@ __metadata:
     "@openfeature/core": "npm:^1.5.0"
     "@openfeature/server-sdk": "npm:>=1.16.1"
     "@reflag/eslint-config": "npm:~0.0.2"
-    "@reflag/node-sdk": "npm:1.2.0"
+    "@reflag/node-sdk": "npm:1.1.0"
     "@reflag/tsconfig": "npm:~0.0.2"
     "@types/node": "npm:^22.12.0"
     eslint: "npm:^9.21.0"

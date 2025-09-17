@@ -282,13 +282,14 @@ export class FlagsClient {
     if (options?.bootstrappedFlags) {
       this.initialized = true;
       this.fetchedFlags = options.bootstrappedFlags;
+      this.warnMissingFlagContextFields(this.fetchedFlags);
       this.flags = this.mergeFlags(this.fetchedFlags, this.flagOverrides);
     }
   }
 
   async initialize() {
     if (this.initialized) {
-      this.logger.error("flags client already initialized");
+      this.logger.warn("flags client already initialized");
       return;
     }
     this.setFetchedFlags((await this.maybeFetchFlags()) || {});

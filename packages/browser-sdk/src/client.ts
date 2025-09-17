@@ -507,7 +507,7 @@ export class ReflagClient {
    */
   async initialize() {
     if (this.config.initialized) {
-      this.logger.info("Reflag client already initialized");
+      this.logger.warn("Reflag client already initialized");
       return;
     }
 

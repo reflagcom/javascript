@@ -7,7 +7,7 @@ import { ProviderContextType, UseReflagProviderOptions } from "./types";
 import { SDK_VERSION } from "./version";
 
 function removeUndefined(obj: Record<string, any>) {
-  const t = obj;
+  const t = { ...obj };
   for (const v in t) {
     if (typeof t[v] == "object") removeUndefined(t[v]);
     else if (t[v] == undefined) delete t[v];
