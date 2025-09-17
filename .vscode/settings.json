@@ -32,6 +32,7 @@
     "**/node_modules": true
   },
   "search.exclude": {
+    "**/.next": true,
     "**/build": true,
     "**/dist": true,
     "**/coverage": true,
