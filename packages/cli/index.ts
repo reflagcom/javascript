@@ -91,19 +91,15 @@ async function main() {
       }
     }
 
-    try {
-      const { latestVersion, currentVersion, isNewerAvailable } =
-        await cliVersionCheckPromise;
+    const { latestVersion, currentVersion, isNewerAvailable } =
+      await cliVersionCheckPromise;
 
-      if (isNewerAvailable) {
-        console.info(
-          `A new version of the CLI is available: ${chalk.yellow(
-            currentVersion,
-          )} -> ${chalk.green(latestVersion)}. Update to ensure you have the latest features and bug fixes.`,
-        );
-      }
-    } catch {
-      // Ignore errors
+    if (isNewerAvailable) {
+      console.info(
+        `A new version of the CLI is available: ${chalk.yellow(
+          currentVersion,
+        )} -> ${chalk.green(latestVersion)}. Update to ensure you have the latest features and bug fixes.`,
+      );
     }
 
     if (debug) {

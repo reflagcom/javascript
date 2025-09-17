@@ -25,37 +25,41 @@ export async function current() {
 }
 
 async function getLatestVersionFromNpm(packageName: string): Promise<string> {
-  try {
-    const response = await fetch(`https://registry.npmjs.org/${packageName}`, {
-      signal: AbortSignal.timeout(5000),
-    });
+  // await new Promise((resolve) => setTimeout(resolve, 1000));
+  throw new Error(`Failed to fetch latest version from npm: ${packageName}`);
+  // try {
+  //   const response = await fetch(`https://registry.npmjs.org/${packageName}`, {
+  //     signal: AbortSignal.timeout(5000),
+  //   });
 
-    if (!response.ok) {
-      throw new Error(
-        `Failed to fetch package info: ${response.status} ${response.statusText}`,
-      );
-    }
+  //   if (!response.ok) {
+  //     throw new Error(
+  //       `Failed to fetch package info: ${response.status} ${response.statusText}`,
+  //     );
+  //   }
 
-    const data: {
-      "dist-tags": {
-        latest: string;
-      };
-    } = await response.json();
+  //   const data: {
+  //     "dist-tags": {
+  //       latest: string;
+  //     };
+  //   } = await response.json();
 
-    return data["dist-tags"].latest;
-  } catch (error) {
-    throw new Error(
-      `Failed to fetch latest version from npm: ${error instanceof Error ? error.message : "Unknown error"}`,
-    );
-  }
+  //   return data["dist-tags"].latest;
+  // } catch (error) {
+  //   throw new Error(
+  //     `Failed to fetch latest version from npm: ${error instanceof Error ? error.message : "Unknown error"}`,
+  //   );
+  // }
 }
 
 export async function checkLatest() {
   const { version: currentVersion, name: packageName } = await current();
 
-  const latestVersion = await getLatestVersionFromNpm(packageName);
-  const isNewerAvailable = gt(latestVersion, currentVersion);
-
+  const latestVersion = await getLatestVersionFromNpm(packageName).catch(
+    () => null,
+  );
+  const isNewerAvailable =
+    latestVersion !== null && gt(latestVersion, currentVersion);
   return {
     currentVersion,
     latestVersion,
