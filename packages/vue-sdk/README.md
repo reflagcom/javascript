@@ -178,14 +178,7 @@ If you want more control over loading screens, `useIsLoading()` returns a `Ref<b
 
 ## `<ReflagBootstrappedProvider>` component
 
-The `<ReflagBootstrappedProvider>` component is a specialized version of `ReflagProvider` designed for server-side rendering and preloaded flag scenarios. Instead of fetching flags from the server, it uses pre-fetched flags to initialize the SDK, resulting in faster initial page loads and better SSR compatibility.
-
-### Key benefits
-
-- **Faster initial rendering**: No need to wait for flag fetch requests
-- **Better SEO**: Flags are available immediately during SSR
-- **Reduced server load**: Flags can be cached and reused across requests
-- **Offline capability**: Works without an internet connection when flags are pre-fetched
+The `<ReflagBootstrappedProvider>` component is a specialized version of `ReflagProvider` designed for server-side rendering and preloaded flag scenarios. Instead of fetching flags on initialization, it uses pre-fetched flags, resulting in faster initial page loads and better SSR compatibility.
 
 ### Usage
 

@@ -231,13 +231,6 @@ generate a `check` event, contrary to the `config` property on the object return
 
 For server-side rendered applications, you can eliminate the initial network request by bootstrapping the client with pre-fetched flag data.
 
-### Key benefits
-
-- **Faster initial rendering**: No need to wait for flag fetch requests
-- **Better SEO**: Flags are available immediately during SSR
-- **Reduced server load**: Flags can be cached and reused across requests
-- **Offline capability**: Works without an internet connection when flags are pre-fetched
-
 ### Init options bootstrapped
 
 ```typescript

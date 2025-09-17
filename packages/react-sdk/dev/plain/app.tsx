@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 
 import {
   FlagKey,
@@ -11,6 +11,7 @@ import {
   useUpdateUser,
   useClient,
   ReflagBootstrappedProvider,
+  RawFlags,
 } from "../../src";
 
 // Extending the Flags interface to define the available features
@@ -29,12 +30,12 @@ declare module "../../src" {
 const publishableKey = import.meta.env.VITE_PUBLISHABLE_KEY || "";
 const apiBaseUrl = import.meta.env.VITE_REFLAG_API_BASE_URL;
 
-function HuddleFeature() {
+function HuddlesFeature() {
   // Type safe feature
   const feature = useFlag("huddles");
   return (
     <div>
-      <h2>Huddle feature</h2>
+      <h2>Huddles feature</h2>
       <pre>
         <code>{JSON.stringify(feature, null, 2)}</code>
       </pre>
@@ -156,7 +157,7 @@ function Feedback() {
         onClick={(e) =>
           requestFeedback({
             title: "How do you like Huddles?",
-            flagKey: "huddle",
+            flagKey: "huddles",
             position: {
               type: "POPOVER",
               anchor: e.currentTarget as HTMLElement,
@@ -176,7 +177,7 @@ function Demos() {
     <main>
       <h1>React SDK</h1>
 
-      <HuddleFeature />
+      <HuddlesFeature />
 
       <h2>Feature opt-in</h2>
       <div>
@@ -228,17 +229,22 @@ function FeatureOptIn({
 
 function CustomToolbar() {
   const client = useClient();
+  const [flags, setFlags] = useState<RawFlags>(client?.getFlags() ?? {});
 
-  if (!client) {
-    return null;
-  }
+  useEffect(() => {
+    setFlags(client?.getFlags() ?? {});
+    // Subscribe to updates
+    return client?.on("flagsUpdated", () => {
+      setFlags(client.getFlags());
+    });
+  }, [client]);
 
   return (
     <div>
       <h2>Custom toolbar</h2>
       <p>This toolbar is static and won't update when flags are fetched.</p>
       <ul>
-        {Object.entries(client.getFlags()).map(([flagKey, feature]) => (
+        {Object.entries(flags).map(([flagKey, feature]) => (
           <li key={flagKey}>
             {flagKey} -
             {(feature.isEnabledOverride ?? feature.isEnabled)
@@ -247,7 +253,7 @@ function CustomToolbar() {
             {feature.isEnabledOverride !== null && (
               <button
                 onClick={() => {
-                  client.getFlag(flagKey).setIsEnabledOverride(null);
+                  client?.getFlag(flagKey).setIsEnabledOverride(null);
                 }}
               >
                 Reset
@@ -259,7 +265,7 @@ function CustomToolbar() {
               onChange={(e) => {
                 // this uses slightly simplified logic compared to the Reflag Toolbar
                 client
-                  .getFlag(flagKey)
+                  ?.getFlag(flagKey)
                   .setIsEnabledOverride(e.target.checked ?? false);
               }}
             />
@@ -286,7 +292,7 @@ export function App() {
             otherContext: initialOtherContext,
           },
           flags: {
-            huddle: {
+            huddles: {
               key: "huddles",
               isEnabled: true,
             },
