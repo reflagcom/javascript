@@ -35,7 +35,13 @@ type Options = {
 
 async function main() {
   // Start a version check in the background
-  const cliVersionCheckPromise = checkLatestVersion();
+  // unhandled promise rejection can happen even without the `await`
+  // so we need a `catch` here.
+  const cliVersionCheckPromise = checkLatestVersion().catch(() => ({
+    latestVersion: "unknown",
+    currentVersion: "unknown",
+    isNewerAvailable: false,
+  }));
 
   // Must load tokens and config before anything else
   await authStore.initialize();
