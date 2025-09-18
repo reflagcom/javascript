@@ -35,7 +35,13 @@ type Options = {
 
 async function main() {
   // Start a version check in the background
-  const cliVersionCheckPromise = checkLatestVersion();
+  // unhandled promise rejection can happen even without the `await`
+  // so we need a `catch` here.
+  const cliVersionCheckPromise = checkLatestVersion().catch(() => ({
+    latestVersion: "unknown",
+    currentVersion: "unknown",
+    isNewerAvailable: false,
+  }));
 
   // Must load tokens and config before anything else
   await authStore.initialize();
@@ -91,19 +97,15 @@ async function main() {
       }
     }
 
-    try {
-      const { latestVersion, currentVersion, isNewerAvailable } =
-        await cliVersionCheckPromise;
+    const { latestVersion, currentVersion, isNewerAvailable } =
+      await cliVersionCheckPromise;
 
-      if (isNewerAvailable) {
-        console.info(
-          `A new version of the CLI is available: ${chalk.yellow(
-            currentVersion,
-          )} -> ${chalk.green(latestVersion)}. Update to ensure you have the latest features and bug fixes.`,
-        );
-      }
-    } catch {
-      // Ignore errors
+    if (isNewerAvailable) {
+      console.info(
+        `A new version of the CLI is available: ${chalk.yellow(
+          currentVersion,
+        )} -> ${chalk.green(latestVersion)}. Update to ensure you have the latest features and bug fixes.`,
+      );
     }
 
     if (debug) {

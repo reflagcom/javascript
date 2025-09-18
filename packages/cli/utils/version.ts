@@ -55,7 +55,6 @@ export async function checkLatest() {
 
   const latestVersion = await getLatestVersionFromNpm(packageName);
   const isNewerAvailable = gt(latestVersion, currentVersion);
-
   return {
     currentVersion,
     latestVersion,
