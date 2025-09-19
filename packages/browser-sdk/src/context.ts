@@ -43,17 +43,25 @@ export interface UserContext {
 
 export interface ReflagContext {
   /**
-   * Company related context
+   * Company related context. If you provide `id` Reflag will enrich the evaluation context with
+   * company attributes on Reflag servers.
    */
   company?: CompanyContext;
 
   /**
-   * User related context
+   * User related context. If you provide `id` Reflag will enrich the evaluation context with
+   * user attributes on Reflag servers.
    */
   user?: UserContext;
 
   /**
-   * Context which is not related to a user or a company
+   * Context which is not related to a user or a company.
+   */
+  other?: Record<string, string | number | undefined>;
+
+  /**
+   * Context which is not related to a user or a company.
+   * @deprecated Use `other` instead
    */
   otherContext?: Record<string, string | number | undefined>;
 }

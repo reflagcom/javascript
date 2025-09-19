@@ -7,8 +7,15 @@ import {
   UserContext,
 } from "@reflag/browser-sdk";
 
+import ReflagBootstrappedProvider from "./ReflagBootstrappedProvider.vue";
 import ReflagProvider from "./ReflagProvider.vue";
-import { EmptyFlagRemoteConfig, Flag, FlagType, ReflagProps } from "./types";
+import {
+  BootstrappedFlags,
+  EmptyFlagRemoteConfig,
+  Flag,
+  FlagType,
+  ReflagProps,
+} from "./types";
 
 export {
   useClient,
@@ -21,11 +28,17 @@ export {
   useUpdateOtherContext,
   useUpdateUser,
 } from "./hooks";
-export type { ReflagProps, RequestFlagFeedbackOptions } from "./types";
+export type {
+  ReflagBaseProps,
+  ReflagBootstrappedProps,
+  ReflagProps,
+  RequestFlagFeedbackOptions,
+} from "./types";
 
-export { ReflagProvider };
+export { ReflagBootstrappedProvider, ReflagProvider };
 
 export type {
+  BootstrappedFlags,
   CheckEvent,
   CompanyContext,
   EmptyFlagRemoteConfig,
@@ -38,5 +51,6 @@ export type {
 export default {
   install(app: App, _options?: ReflagProps) {
     app.component("ReflagProvider", ReflagProvider);
+    app.component("ReflagBootstrappedProvider", ReflagBootstrappedProvider);
   },
 };

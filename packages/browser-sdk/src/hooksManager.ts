@@ -1,7 +1,10 @@
 import { CheckEvent, RawFlags } from "./flag/flags";
 import { CompanyContext, UserContext } from "./context";
 
+export type State = "idle" | "initializing" | "initialized" | "stopped";
+
 export interface HookArgs {
+  stateUpdated: State;
   check: CheckEvent;
   flagsUpdated: RawFlags;
 
@@ -27,12 +30,14 @@ export type TrackEvent = {
  */
 export class HooksManager {
   private hooks: {
+    stateUpdated: ((arg0: State) => void)[];
     check: ((arg0: CheckEvent) => void)[];
     flagsUpdated: ((arg0: RawFlags) => void)[];
     user: ((arg0: UserContext) => void)[];
     company: ((arg0: CompanyContext) => void)[];
     track: ((arg0: TrackEvent) => void)[];
   } = {
+    stateUpdated: [],
     check: [],
     flagsUpdated: [],
     user: [],

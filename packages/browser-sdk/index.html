@@ -15,6 +15,7 @@
       const urlParams = new URLSearchParams(window.location.search);
       const publishableKey = urlParams.get("publishableKey");
       const flagKey = urlParams.get("flagKey") ?? "huddles";
+      const isBootstrapped = urlParams.get("bootstrapped") === "true";
     </script>
     <style>
       body {
@@ -47,11 +48,29 @@
             placement: "bottom-right",
           },
         },
+        bootstrappedFlags: isBootstrapped
+          ? {
+              [flagKey]: {
+                key: flagKey,
+                isEnabled: true,
+              },
+            }
+          : undefined,
       });
+
+      function setVisibility(isVisible) {
+        const startHuddleElem = document.getElementById("start-huddle");
+        if (startHuddleElem)
+          startHuddleElem.style.display = isVisible ? "block" : "none";
+      }
 
       reflag.initialize().then(() => {
         console.log("Reflag initialized");
         document.getElementById("loading").style.display = "none";
+        if (isBootstrapped) {
+          const flag = reflag.getFlag(flagKey);
+          setVisibility(flag.isEnabled);
+        }
       });
 
       reflag.on("check", (check) =>
@@ -61,15 +80,7 @@
       reflag.on("flagsUpdated", (flags) => {
         console.log("Flags updated");
         const flag = reflag.getFlag(flagKey);
-
-        const startHuddleElem = document.getElementById("start-huddle");
-        if (flag.isEnabled) {
-          // show the start-huddle button
-          if (startHuddleElem) startHuddleElem.style.display = "block";
-        } else {
-          // hide the start-huddle button
-          if (startHuddleElem) startHuddleElem.style.display = "none";
-        }
+        setVisibility(flag.isEnabled);
       });
     </script>
   </body>

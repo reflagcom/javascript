@@ -3,6 +3,7 @@ export type {
   Flag,
   FlagRemoteConfig,
   InitOptions,
+  InitOptionsBootstrapped,
   ToolbarOptions,
 } from "./client";
 export { ReflagClient } from "./client";
@@ -32,6 +33,7 @@ export type {
   CheckEvent,
   FallbackFlagOverride,
   FetchedFlag,
+  FetchedFlags,
   RawFlag,
   RawFlags,
 } from "./flag/flags";

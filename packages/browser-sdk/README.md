@@ -227,6 +227,68 @@ const flags = reflagClient.getFlags();
 Just as `isEnabled`, accessing `config` on the object returned by `getFlags` does not automatically
 generate a `check` event, contrary to the `config` property on the object returned by `getFlag`.
 
+## Server-side rendering and bootstrapping
+
+For server-side rendered applications, you can eliminate the initial network request by bootstrapping the client with pre-fetched flag data.
+
+### Init options bootstrapped
+
+```typescript
+type Configuration = {
+  logger: console; // by default only logs warn/error, by passing `console` you'll log everything
+  apiBaseUrl?: "https://front.reflag.com";
+  sseBaseUrl?: "https://livemessaging.bucket.co";
+  feedback?: undefined; // See FEEDBACK.md
+  enableTracking?: true; // set to `false` to stop sending track events and user/company updates to Reflag servers. Useful when you're impersonating a user
+  offline?: boolean; // Use the SDK in offline mode. Offline mode is useful during testing and local development
+  bootstrappedFlags?: FetchedFlags; // Pre-fetched flags from server-side (see Server-side rendering section)
+};
+```
+
+### Using bootstrappedFlags
+
+Use the Node SDK's `getFlagsForBootstrap()` method to pre-fetch flags server-side, then pass them to the browser client:
+
+```typescript
+// Server-side: Get flags using Node SDK
+import { ReflagClient as ReflagNodeClient } from "@reflag/node-sdk";
+
+const serverClient = new ReflagNodeClient({ secretKey: "your-secret-key" });
+await serverClient.initialize();
+
+const { flags } = serverClient.getFlagsForBootstrap({
+  user: { id: "user123", name: "John Doe", email: "john@acme.com" },
+  company: { id: "company456", name: "Acme Inc", plan: "enterprise" },
+});
+
+// Pass flags data to client using your framework's preferred method
+// or for example in a script tag
+app.get("/", (req, res) => {
+  res.set("Content-Type", "text/html");
+  res.send(
+    Buffer.from(
+      `<script>var flags = ${JSON.stringify(flags)};</script>
+      <main id="app"></main>`,
+    ),
+  );
+});
+
+// Client-side: Initialize with pre-fetched flags
+import { ReflagClient } from "@reflag/browser-sdk";
+
+const reflagClient = new ReflagClient({
+  publishableKey: "your-publishable-key",
+  user: { id: "user123", name: "John Doe", email: "john@acme.com" },
+  company: { id: "company456", name: "Acme Inc", plan: "enterprise" },
+  bootstrappedFlags: flags, // No network request needed
+});
+
+await reflagClient.initialize(); // Initializes all but flags
+const { isEnabled } = reflagClient.getFlag("huddle");
+```
+
+This eliminates loading states and improves performance by avoiding the initial flags API call.
+
 ## Updating user/company/other context
 
 Attributes given for the user/company/other context in the ReflagClient constructor can be updated for use in flag targeting evaluation with the `updateUser()`, `updateCompany()` and `updateOtherContext()` methods.

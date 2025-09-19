@@ -206,6 +206,64 @@ const flagDefs = await client.getFlagDefinitions();
 // }]
 ```
 
+## Bootstrapping client-side applications
+
+The `getFlagsForBootstrap()` method is designed for server-side rendering (SSR) scenarios where you need to pass flag data to client-side applications. This method returns raw flag data without wrapper functions, making it suitable for serialization and client-side hydration.
+
+```typescript
+const client = new ReflagClient();
+await client.initialize();
+
+// Get flags for bootstrapping with full context
+const { context, flags } = client.getFlagsForBootstrap({
+  user: {
+    id: "user123",
+    name: "John Doe",
+    email: "john@acme.com",
+  },
+  company: {
+    id: "company456",
+    name: "Acme Inc",
+    plan: "enterprise",
+  },
+  other: {
+    source: "web",
+    platform: "desktop",
+  },
+});
+
+// Pass this data to your client-side application
+// The flags object contains raw flag data suitable for JSON serialization
+console.log(flags);
+// {
+//   "huddle": {
+//     "key": "huddle",
+//     "isEnabled": true,
+//     "config": {
+//       "key": "enhanced",
+//       "payload": { "maxParticipants": 50, "videoQuality": "hd" },
+//     }
+//   }
+// }
+```
+
+You can also use a bound client for simpler API:
+
+```typescript
+const boundClient = client.bindClient({
+  user: { id: "user123", name: "John Doe", email: "john@acme.com" },
+  company: { id: "company456", name: "Acme Inc", plan: "enterprise" },
+});
+
+const { context, flags } = boundClient.getFlagsForBootstrap();
+```
+
+### Key differences from `getFlags()`
+
+- **Raw data**: Returns plain objects without `track()` functions, making them JSON serializable
+- **Context included**: Returns both the evaluated flags and the context used for evaluation
+- **Bootstrapping focus**: Designed specifically for passing data to client-side applications
+
 ## Edge-runtimes like Cloudflare Workers
 
 To use the Reflag NodeSDK with Cloudflare workers, set the `node_compat` flag [in your wrangler file](https://developers.cloudflare.com/workers/runtime-apis/nodejs/#get-started).

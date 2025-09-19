@@ -1,8 +1,10 @@
 export { BoundReflagClient, ReflagClient } from "./client";
+export { FLAG_OVERRIDES_COOKIE } from "./config";
 export { EdgeClient, EdgeClientOptions } from "./edgeClient";
 export type {
   Attributes,
   BatchBufferOptions,
+  BootstrappedFlags,
   CacheStrategy,
   ClientOptions,
   Context,

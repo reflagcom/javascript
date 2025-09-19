@@ -50,7 +50,7 @@
     "vitest": "~1.6.0"
   },
   "dependencies": {
-    "@reflag/node-sdk": "1.0.1"
+    "@reflag/node-sdk": "1.1.0"
   },
   "peerDependencies": {
     "@openfeature/server-sdk": ">=1.16.1"

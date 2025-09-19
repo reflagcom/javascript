@@ -39,6 +39,12 @@ export default function inRequestCache<T>(
     if (fetching) await fetching;
   };
 
+  const destroy = () => {
+    fetching = null;
+    value = undefined;
+    lastFetch = 0;
+  };
+
   return {
     get(): T | undefined {
       const now = Date.now();
@@ -60,5 +66,6 @@ export default function inRequestCache<T>(
       return await refresh();
     },
     waitRefresh,
+    destroy,
   };
 }

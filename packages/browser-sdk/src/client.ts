@@ -1,3 +1,5 @@
+import { deepEqual } from "fast-equals";
+
 import {
   AutoFeedback,
   Feedback,
@@ -10,13 +12,14 @@ import * as feedbackLib from "./feedback/ui";
 import {
   CheckEvent,
   FallbackFlagOverride,
+  FetchedFlags,
   FlagsClient,
   RawFlags,
 } from "./flag/flags";
 import { ToolbarPosition } from "./ui/types";
 import { API_BASE_URL, APP_BASE_URL, SSE_REALTIME_BASE_URL } from "./config";
-import { CompanyContext, ReflagContext, UserContext } from "./context";
-import { HookArgs, HooksManager } from "./hooksManager";
+import { ReflagContext } from "./context";
+import { HookArgs, HooksManager, State } from "./hooksManager";
 import { HttpClient } from "./httpClient";
 import { Logger, loggerWithPrefix, quietConsoleLogger } from "./logger";
 import { showToolbarToggle } from "./toolbar";
@@ -170,6 +173,11 @@ export interface Config {
    * Whether to enable offline mode.
    */
   offline: boolean;
+
+  /**
+   * Whether the client is bootstrapped.
+   */
+  bootstrapped: boolean;
 }
 
 /**
@@ -190,28 +198,11 @@ export type FlagDefinitions = Readonly<Array<string>>;
 /**
  * ReflagClient initialization options.
  */
-export type InitOptions = {
+export type InitOptions = ReflagContext & {
   /**
    * Publishable key for authentication
    */
   publishableKey: string;
-
-  /**
-   * User related context. If you provide `id` Reflag will enrich the evaluation context with
-   * user attributes on Reflag servers.
-   */
-  user?: UserContext;
-
-  /**
-   * Company related context. If you provide `id` Reflag will enrich the evaluation context with
-   * company attributes on Reflag servers.
-   */
-  company?: CompanyContext;
-
-  /**
-   * Context not related to users or companies
-   */
-  otherContext?: Record<string, any>;
 
   /**
    * You can provide a logger to see the logs of the network calls.
@@ -299,12 +290,31 @@ export type InitOptions = {
   toolbar?: ToolbarOptions;
 };
 
+/**
+ * Init options for bootstrapped flags.
+ */
+export type InitOptionsBootstrapped = Omit<
+  InitOptions,
+  | "fallbackFlags"
+  | "timeoutMs"
+  | "staleWhileRevalidate"
+  | "staleTimeMs"
+  | "expireTimeMs"
+> & {
+  bootstrappedFlags: FetchedFlags;
+};
+
+function isBootstrapped(opts: InitOptions): opts is InitOptionsBootstrapped {
+  return "bootstrappedFlags" in opts;
+}
+
 const defaultConfig: Config = {
   apiBaseUrl: API_BASE_URL,
   appBaseUrl: APP_BASE_URL,
   sseBaseUrl: SSE_REALTIME_BASE_URL,
   enableTracking: true,
   offline: false,
+  bootstrapped: false,
 };
 
 /**
@@ -365,18 +375,19 @@ export interface Flag {
 
 function shouldShowToolbar(opts: InitOptions) {
   const toolbarOpts = opts.toolbar;
+  if (typeof window === "undefined") return false;
   if (typeof toolbarOpts === "boolean") return toolbarOpts;
   if (typeof toolbarOpts?.show === "boolean") return toolbarOpts.show;
-
-  return window?.location?.hostname === "localhost";
+  return window.location.hostname === "localhost";
 }
 
 /**
  * ReflagClient lets you interact with the Reflag API.
  */
 export class ReflagClient {
+  private state: State = "idle";
   private readonly publishableKey: string;
-  private readonly context: ReflagContext;
+  private context: ReflagContext;
   private config: Config;
   private requestFeedbackOptions: Partial<RequestFeedbackOptions>;
   private readonly httpClient: HttpClient;
@@ -392,14 +403,14 @@ export class ReflagClient {
   /**
    * Create a new ReflagClient instance.
    */
-  constructor(opts: InitOptions) {
+  constructor(opts: InitOptions | InitOptionsBootstrapped) {
     this.publishableKey = opts.publishableKey;
     this.logger =
       opts?.logger ?? loggerWithPrefix(quietConsoleLogger, "[Reflag]");
     this.context = {
       user: opts?.user?.id ? opts.user : undefined,
       company: opts?.company?.id ? opts.company : undefined,
-      otherContext: opts?.otherContext,
+      other: { ...opts?.otherContext, ...opts?.other },
     };
 
     this.config = {
@@ -408,6 +419,8 @@ export class ReflagClient {
       sseBaseUrl: opts?.sseBaseUrl ?? defaultConfig.sseBaseUrl,
       enableTracking: opts?.enableTracking ?? defaultConfig.enableTracking,
       offline: opts?.offline ?? defaultConfig.offline,
+      bootstrapped:
+        opts && "bootstrappedFlags" in opts && !!opts.bootstrappedFlags,
     };
 
     this.requestFeedbackOptions = {
@@ -423,20 +436,25 @@ export class ReflagClient {
 
     this.flagsClient = new FlagsClient(
       this.httpClient,
-      // API expects `other` and we have `otherContext`.
       {
         user: this.context.user,
         company: this.context.company,
-        other: this.context.otherContext,
+        other: { ...this.context.otherContext, ...this.context.other },
       },
       this.logger,
-      {
-        expireTimeMs: opts.expireTimeMs,
-        staleTimeMs: opts.staleTimeMs,
-        fallbackFlags: opts.fallbackFlags,
-        timeoutMs: opts.timeoutMs,
-        offline: this.config.offline,
-      },
+      isBootstrapped(opts)
+        ? {
+            bootstrappedFlags: opts.bootstrappedFlags,
+            offline: this.config.offline,
+          }
+        : {
+            expireTimeMs: opts.expireTimeMs,
+            staleTimeMs: opts.staleTimeMs,
+            staleWhileRevalidate: opts.staleWhileRevalidate,
+            timeoutMs: opts.timeoutMs,
+            fallbackFlags: opts.fallbackFlags,
+            offline: this.config.offline,
+          },
     );
 
     if (
@@ -484,6 +502,12 @@ export class ReflagClient {
    * Must be called before calling other SDK methods.
    */
   async initialize() {
+    if (this.state === "initializing" || this.state === "initialized") {
+      this.logger.warn(`"Reflag client already ${this.state}`);
+      return;
+    }
+    this.setState("initializing");
+
     const start = Date.now();
     if (this.autoFeedback) {
       // do not block on automated feedback surveys initialization
@@ -492,17 +516,21 @@ export class ReflagClient {
       });
     }
 
-    await this.flagsClient.initialize();
-    if (this.context.user && this.config.enableTracking) {
-      this.user().catch((e) => {
-        this.logger.error("error sending user", e);
-      });
-    }
+    if (!this.config.bootstrapped) {
+      await this.flagsClient.initialize();
 
-    if (this.context.company && this.config.enableTracking) {
-      this.company().catch((e) => {
-        this.logger.error("error sending company", e);
-      });
+      if (this.context.user && this.config.enableTracking) {
+        this.user().catch((e) => {
+          this.logger.error("error sending user", e);
+        });
+      }
+
+      if (this.context.company && this.config.enableTracking) {
+        this.company().catch((e) => {
+          this.logger.error("error sending company", e);
+        });
+      }
+      this.config.bootstrapped = true;
     }
 
     this.logger.info(
@@ -511,6 +539,27 @@ export class ReflagClient {
         "ms" +
         (this.config.offline ? " (offline mode)" : ""),
     );
+    this.setState("initialized");
+  }
+
+  /**
+   * Stop the SDK.
+   * This will stop any automated feedback surveys.
+   *
+   **/
+  async stop() {
+    if (this.autoFeedback) {
+      // ensure fully initialized before stopping
+      await this.autoFeedbackInit;
+      this.autoFeedback.stop();
+    }
+
+    this.flagsClient.stop();
+    this.setState("stopped");
+  }
+
+  getState() {
+    return this.state;
   }
 
   /**
@@ -552,65 +601,118 @@ export class ReflagClient {
   /**
    * Update the user context.
    * Performs a shallow merge with the existing user context.
-   * Attempting to update the user ID will log a warning and be ignored.
+   * It will not update the context if nothing has changed.
    *
    * @param user
    */
   async updateUser(user: { [key: string]: string | number | undefined }) {
-    if (user.id && user.id !== this.context.user?.id) {
-      this.logger.warn(
-        "ignoring attempt to update the user ID. Re-initialize the ReflagClient with a new user ID instead.",
-      );
-      return;
-    }
-
-    this.context.user = {
+    const userIdChanged = user.id && user.id !== this.context.user?.id;
+    const newUserContext = {
       ...this.context.user,
       ...user,
       id: user.id ?? this.context.user?.id,
     };
+
+    // Nothing has changed, skipping update
+    if (deepEqual(this.context.user, newUserContext)) return;
+    this.context.user = newUserContext;
     void this.user();
+
+    // Update the feedback user if the user ID has changed
+    if (userIdChanged) {
+      void this.updateAutoFeedbackUser(String(user.id));
+    }
+
     await this.flagsClient.setContext(this.context);
   }
 
   /**
    * Update the company context.
    * Performs a shallow merge with the existing company context.
-   * Attempting to update the company ID will log a warning and be ignored.
+   * It will not update the context if nothing has changed.
    *
    * @param company The company details.
    */
   async updateCompany(company: { [key: string]: string | number | undefined }) {
-    if (company.id && company.id !== this.context.company?.id) {
-      this.logger.warn(
-        "ignoring attempt to update the company ID. Re-initialize the ReflagClient with a new company ID instead.",
-      );
-      return;
-    }
-    this.context.company = {
+    const newCompanyContext = {
       ...this.context.company,
       ...company,
       id: company.id ?? this.context.company?.id,
     };
+
+    // Nothing has changed, skipping update
+    if (deepEqual(this.context.company, newCompanyContext)) return;
+    this.context.company = newCompanyContext;
     void this.company();
+
     await this.flagsClient.setContext(this.context);
   }
 
   /**
    * Update the company context.
    * Performs a shallow merge with the existing company context.
-   * Updates to the company ID will be ignored.
+   * It will not update the context if nothing has changed.
    *
    * @param otherContext Additional context.
    */
   async updateOtherContext(otherContext: {
     [key: string]: string | number | undefined;
   }) {
-    this.context.otherContext = {
-      ...this.context.otherContext,
+    const newOtherContext = {
+      ...this.context.other,
       ...otherContext,
     };
+
+    // Nothing has changed, skipping update
+    if (deepEqual(this.context.other, newOtherContext)) return;
+    this.context.other = newOtherContext;
+
     await this.flagsClient.setContext(this.context);
+  }
+
+  /**
+   * Update the context.
+   * Performs a shallow merge with the existing context.
+   * It will not update the context if nothing has changed.
+   *
+   * @param context The context to update.
+   */
+  async updateContext({ otherContext, ...context }: ReflagContext) {
+    const userIdChanged =
+      context.user?.id && context.user.id !== this.context.user?.id;
+    const newContext = {
+      ...this.context,
+      ...context,
+      other: { ...this.context.other, ...otherContext, ...context.other },
+    };
+
+    // Nothing has changed, skipping update
+    if (deepEqual(this.context, newContext)) return;
+    this.context = newContext;
+
+    if (context.company) {
+      void this.company();
+    }
+
+    if (context.user) {
+      void this.user();
+      // Update the automatic feedback user if the user ID has changed
+      if (userIdChanged) {
+        void this.updateAutoFeedbackUser(String(context.user.id));
+      }
+    }
+
+    await this.flagsClient.setContext(this.context);
+  }
+
+  /**
+   * Update the flags.
+   *
+   * @param flags The flags to update.
+   * @param triggerEvent Whether to trigger the `flagsUpdated` event.
+   */
+  updateFlags(flags: FetchedFlags, triggerEvent = true) {
+    this.flagsClient.setFetchedFlags(flags, triggerEvent);
   }
 
   /**
@@ -844,25 +946,15 @@ export class ReflagClient {
     };
   }
 
+  private setState(state: State) {
+    this.state = state;
+    this.hooks.trigger("stateUpdated", state);
+  }
+
   private sendCheckEvent(checkEvent: CheckEvent) {
     return this.flagsClient.sendCheckEvent(checkEvent, () => {
       this.hooks.trigger("check", checkEvent);
     });
-  }
-
-  /**
-   * Stop the SDK.
-   * This will stop any automated feedback surveys.
-   *
-   **/
-  async stop() {
-    if (this.autoFeedback) {
-      // ensure fully initialized before stopping
-      await this.autoFeedbackInit;
-      this.autoFeedback.stop();
-    }
-
-    this.flagsClient.stop();
   }
 
   /**
@@ -925,5 +1017,14 @@ export class ReflagClient {
     this.logger.debug(`sent company`, res);
     this.hooks.trigger("company", this.context.company);
     return res;
+  }
+
+  private async updateAutoFeedbackUser(userId: string) {
+    if (!this.autoFeedback) {
+      return;
+    }
+    // Ensure fully initialized before updating the user
+    await this.autoFeedbackInit;
+    await this.autoFeedback.setUser(userId);
   }
 }

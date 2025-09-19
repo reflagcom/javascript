@@ -85,4 +85,15 @@ export default class BatchBuffer<T> {
       });
     }
   }
+
+  /**
+   * Destroys the buffer, clearing any pending timer and discarding buffered items.
+   */
+  public destroy(): void {
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+    this.buffer = [];
+  }
 }
