@@ -92,12 +92,12 @@ function StartHuddleButton() {
 
 ## Setting `user` and `company`
 
-Reflag determines which flags are active for a given `user`, `company`, or `otherContext`.
+Reflag determines which flags are active for a given `user`, `company`, or `other`.
 You pass these to the `ReflagProvider` as props.
 
 If you supply `user` or `company` objects, they must include at least the `id` property otherwise they will be ignored in their entirety.
 In addition to the `id`, you must also supply anything additional that you want to be able to evaluate flag targeting rules against.
-Attributes which are not properties of the `user` or `company` can be supplied using the `otherContext` prop.
+Attributes which are not properties of the `user` or `company` can be supplied using the `other` prop.
 
 Attributes cannot be nested (multiple levels) and must be either strings, numbers or booleans.
 A number of special attributes exist:
@@ -111,7 +111,7 @@ A number of special attributes exist:
   publishableKey={YOUR_PUBLISHABLE_KEY}
   user={{ id: "user_123", name: "John Doe", email: "john@acme.com" }}
   company={{ id: "company_123", name: "Acme, Inc" }}
-  otherContext={{ completedSteps: [1, 4, 7] }}
+  other={{ completedSteps: [1, 4, 7] }}
 >
   <LoadingReflag>
     {/* children here are shown when loading finishes */}
@@ -414,7 +414,7 @@ This App Router approach leverages Server Components for server-side flag fetchi
 The `<ReflagProvider>` initializes the Reflag SDK, fetches flags and starts listening for automated feedback survey events. The component can be configured using a number of props:
 
 - `publishableKey` is used to connect the provider to an _environment_ on Reflag. Find your `publishableKey` under [environment settings](https://app.reflag.com/env-current/settings/app-environments) in Reflag,
-- `company`, `user` and `otherContext` make up the _context_ that is used to determine if a flag is enabled or not. `company` and `user` contexts are automatically transmitted to Reflag servers so the Reflag app can show you which companies have access to which flags etc.
+- `company`, `user` and `other` make up the _context_ that is used to determine if a flag is enabled or not. `company` and `user` contexts are automatically transmitted to Reflag servers so the Reflag app can show you which companies have access to which flags etc.
   > [!Note]
   > If you specify `company` and/or `user` they must have at least the `id` property, otherwise they will be ignored in their entirety. You should also supply anything additional you want to be able to evaluate flag targeting against,
 - `fallbackFlags`: A list of strings which specify which flags to consider enabled if the SDK is unable to fetch flags. Can be provided in two formats:
@@ -475,8 +475,8 @@ The `<ReflagBootstrappedProvider>` is a specialized version of the `ReflagProvid
 
 The component accepts the following props:
 
-- `flags`: Pre-fetched flags data of type `BootstrappedFlags` obtained from the Node SDK's `getFlagsForBootstrap()` method. This contains both the context (user, company, otherContext) and the flags data.
-- All other props available in [`ReflagProvider`](#reflagprovider-component) are supported except `user`, `company`, and `otherContext` (which are extracted from `flags.context`).
+- `flags`: Pre-fetched flags data of type `BootstrappedFlags` obtained from the Node SDK's `getFlagsForBootstrap()` method. This contains both the context (user, company, other) and the flags data.
+- All other props available in [`ReflagProvider`](#reflagprovider-component) are supported except `user`, `company`, and `other` (which are extracted from `flags.context`).
 
 **Example:**
 
@@ -505,7 +505,7 @@ function App({ bootstrapData }: AppProps) {
 ```
 
 > [!Note]
-> When using `ReflagBootstrappedProvider`, the user, company, and otherContext are extracted from the `flags.context` property and don't need to be passed separately.
+> When using `ReflagBootstrappedProvider`, the user, company, and other are extracted from the `flags.context` property and don't need to be passed separately.
 
 ## Hooks
 

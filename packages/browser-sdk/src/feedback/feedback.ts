@@ -284,7 +284,7 @@ export class AutoFeedback {
    */
   async initialize() {
     if (this.initialized) {
-      this.logger.warn("auto. feedback client already initialized");
+      this.logger.warn("automatic feedback client already initialized");
       return;
     }
     this.initialized = true;
@@ -293,7 +293,7 @@ export class AutoFeedback {
     if (!channel) return;
 
     try {
-      this.logger.debug(`auto. feedback enabled`, channel);
+      this.logger.debug(`automatic feedback enabled`, channel);
       this.sseChannel = openAblySSEChannel({
         userId: this.userId,
         channel,
@@ -303,42 +303,24 @@ export class AutoFeedback {
         logger: this.logger,
         sseBaseUrl: this.sseBaseUrl,
       });
-      this.logger.debug(`auto. feedback connection established`);
+      this.logger.debug(`automatic feedback connection established`);
     } catch (e) {
-      this.logger.error(`error initializing auto. feedback client`, e);
+      this.logger.error(`error initializing automatic feedback client`, e);
     }
   }
 
-  private async getChannel() {
-    const existingAuth = getAuthToken(this.userId);
-    const channel = existingAuth?.channel;
-
-    if (channel) {
-      return channel;
+  stop() {
+    if (this.sseChannel) {
+      this.sseChannel.close();
+      this.sseChannel = null;
     }
+  }
 
-    try {
-      if (!channel) {
-        const res = await this.httpClient.post({
-          path: `/feedback/prompting-init`,
-          body: {
-            userId: this.userId,
-          },
-        });
-
-        this.logger.debug(`auto. feedback status sent`, res);
-        if (res.ok) {
-          const body: { success: boolean; channel?: string } = await res.json();
-          if (body.success && body.channel) {
-            return body.channel;
-          }
-        }
-      }
-    } catch (e) {
-      this.logger.error(`error initializing auto. feedback`, e);
-      return;
-    }
-    return;
+  async setUser(userId: string) {
+    this.stop();
+    this.initialized = false;
+    this.userId = userId;
+    await this.initialize();
   }
 
   handleFeedbackPromptRequest(userId: string, message: any) {
@@ -363,13 +345,6 @@ export class AutoFeedback {
           message,
         );
       }
-    }
-  }
-
-  stop() {
-    if (this.sseChannel) {
-      this.sseChannel.close();
-      this.sseChannel = null;
     }
   }
 
@@ -476,5 +451,37 @@ export class AutoFeedback {
     });
     this.logger.debug(`sent prompt event`, res);
     return res;
+  }
+
+  private async getChannel() {
+    const existingAuth = getAuthToken(this.userId);
+    const channel = existingAuth?.channel;
+
+    if (channel) {
+      return channel;
+    }
+
+    try {
+      if (!channel) {
+        const res = await this.httpClient.post({
+          path: `/feedback/prompting-init`,
+          body: {
+            userId: this.userId,
+          },
+        });
+
+        this.logger.debug(`automatic feedback status sent`, res);
+        if (res.ok) {
+          const body: { success: boolean; channel?: string } = await res.json();
+          if (body.success && body.channel) {
+            return body.channel;
+          }
+        }
+      }
+    } catch (e) {
+      this.logger.error(`error initializing automatic feedback`, e);
+      return;
+    }
+    return;
   }
 }

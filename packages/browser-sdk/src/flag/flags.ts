@@ -1,4 +1,8 @@
+import { deepEqual } from "fast-equals";
+import Cookies from "js-cookie";
+
 import { FLAG_EVENTS_PER_MIN, FLAGS_EXPIRE_MS } from "../config";
+import { ReflagContext } from "../context";
 import { HttpClient } from "../httpClient";
 import { Logger, loggerWithPrefix } from "../logger";
 import RateLimiter from "../rateLimiter";
@@ -66,8 +70,6 @@ export type FetchedFlag = {
   };
 };
 
-const FLAGS_UPDATED_EVENT = "flagsUpdated";
-
 export type FetchedFlags = Record<string, FetchedFlag | undefined>;
 
 export type RawFlag = FetchedFlag & {
@@ -86,17 +88,21 @@ export type FallbackFlagOverride =
     }
   | true;
 
+type FallbackFlags = Record<string, FallbackFlagOverride>;
+
 type Config = {
-  fallbackFlags: Record<string, FallbackFlagOverride>;
   timeoutMs: number;
+  staleTimeMs: number;
   staleWhileRevalidate: boolean;
+  expireTimeMs: number;
   offline: boolean;
 };
 
 export const DEFAULT_FLAGS_CONFIG: Config = {
-  fallbackFlags: {},
   timeoutMs: 5000,
+  staleTimeMs: 0,
   staleWhileRevalidate: false,
+  expireTimeMs: FLAGS_EXPIRE_MS,
   offline: false,
 };
 
@@ -173,101 +179,88 @@ export interface CheckEvent {
   missingContextFields?: string[];
 }
 
-type Context = {
-  user?: Record<string, any>;
-  company?: Record<string, any>;
-  other?: Record<string, any>;
-};
-
 const localStorageFetchedFlagsKey = `__reflag_fetched_flags`;
-const localStorageOverridesKey = `__reflag_overrides`;
+const overridesCookieKey = `__reflag_overrides`;
 
 type OverridesFlags = Record<string, boolean | null>;
 
 function setOverridesCache(overrides: OverridesFlags) {
-  localStorage.setItem(localStorageOverridesKey, JSON.stringify(overrides));
+  try {
+    Cookies.set(overridesCookieKey, JSON.stringify(overrides), {
+      expires: 30, // 30 days
+      sameSite: "strict",
+    });
+  } catch {
+    // Cookie setting failed, overrides won't persist
+  }
 }
 
 function getOverridesCache(): OverridesFlags {
-  const cachedOverrides = JSON.parse(
-    localStorage.getItem(localStorageOverridesKey) || "{}",
-  );
-
-  if (!isObject(cachedOverrides)) {
-    return {};
+  try {
+    const cookieValue = Cookies.get(overridesCookieKey);
+    if (cookieValue) {
+      const cachedOverrides = JSON.parse(cookieValue);
+      if (isObject(cachedOverrides)) {
+        return cachedOverrides;
+      }
+    }
+  } catch {
+    // Ignore cookie parsing errors
   }
 
-  return cachedOverrides;
+  return {};
 }
+
+type FlagsClientOptions = Partial<Config> & {
+  bootstrappedFlags?: FetchedFlags;
+  fallbackFlags?: Record<string, FallbackFlagOverride> | string[];
+  cache?: FlagCache;
+  rateLimiter?: RateLimiter;
+};
 
 /**
  * @internal
  */
 export class FlagsClient {
   private initialized = false;
+  private rateLimiter: RateLimiter;
+  private readonly logger: Logger;
+
   private cache: FlagCache;
   private fetchedFlags: FetchedFlags = {};
   private flagOverrides: OverridesFlags = {};
-
   private flags: RawFlags = {};
+  private fallbackFlags: FallbackFlags = {};
 
-  private config: Config;
-  private rateLimiter: RateLimiter;
-  private readonly logger: Logger;
+  private config: Config = DEFAULT_FLAGS_CONFIG;
 
   private eventTarget = new EventTarget();
   private abortController: AbortController = new AbortController();
 
   constructor(
     private httpClient: HttpClient,
-    private context: Context,
+    private context: ReflagContext,
     logger: Logger,
-    options?: {
-      bootstrappedFlags?: FetchedFlags;
-      fallbackFlags?: Record<string, FallbackFlagOverride> | string[];
-      timeoutMs?: number;
-      staleTimeMs?: number;
-      expireTimeMs?: number;
-      cache?: FlagCache;
-      rateLimiter?: RateLimiter;
-      offline?: boolean;
-    },
-  ) {
-    this.logger = loggerWithPrefix(logger, "[Flags]");
-    this.cache = options?.cache
-      ? options.cache
-      : new FlagCache({
-          storage: {
-            get: () => localStorage.getItem(localStorageFetchedFlagsKey),
-            set: (value) =>
-              localStorage.setItem(localStorageFetchedFlagsKey, value),
-          },
-          staleTimeMs: options?.staleTimeMs ?? 0,
-          expireTimeMs: options?.expireTimeMs ?? FLAGS_EXPIRE_MS,
-        });
-
-    let fallbackFlags: Record<string, FallbackFlagOverride>;
-
-    if (Array.isArray(options?.fallbackFlags)) {
-      fallbackFlags = options!.fallbackFlags.reduce(
-        (acc, key) => {
-          acc[key] = true;
-          return acc;
-        },
-        {} as Record<string, FallbackFlagOverride>,
-      );
-    } else {
-      fallbackFlags = options?.fallbackFlags ?? {};
-    }
-
-    this.config = {
-      ...DEFAULT_FLAGS_CONFIG,
-      ...options,
+    {
+      bootstrappedFlags,
+      cache,
+      rateLimiter,
       fallbackFlags,
+      ...config
+    }: FlagsClientOptions = {},
+  ) {
+    this.config = {
+      ...this.config,
+      ...config,
     };
 
+    this.logger = loggerWithPrefix(logger, "[Flags]");
     this.rateLimiter =
-      options?.rateLimiter ?? new RateLimiter(FLAG_EVENTS_PER_MIN, this.logger);
+      rateLimiter ?? new RateLimiter(FLAG_EVENTS_PER_MIN, this.logger);
+    this.cache =
+      cache ??
+      this.setupCache(this.config.staleTimeMs, this.config.expireTimeMs);
+    this.fallbackFlags = this.setupFallbackFlags(fallbackFlags);
 
     try {
       const storedFlagOverrides = getOverridesCache();
@@ -279,11 +272,9 @@ export class FlagsClient {
       this.flagOverrides = {};
     }
 
-    if (options?.bootstrappedFlags) {
+    if (bootstrappedFlags) {
       this.initialized = true;
-      this.fetchedFlags = options.bootstrappedFlags;
-      this.warnMissingFlagContextFields(this.fetchedFlags);
-      this.flags = this.mergeFlags(this.fetchedFlags, this.flagOverrides);
+      this.setFetchedFlags(bootstrappedFlags, false);
     }
   }
 
@@ -292,12 +283,7 @@ export class FlagsClient {
       this.logger.warn("flags client already initialized");
       return;
     }
-    this.setFetchedFlags((await this.maybeFetchFlags()) || {});
     this.initialized = true;
-  }
-
-  async setContext(context: Context) {
-    this.context = context;
     this.setFetchedFlags((await this.maybeFetchFlags()) || {});
   }
 
@@ -308,19 +294,6 @@ export class FlagsClient {
     this.abortController.abort();
   }
 
-  /**
-   * Register a callback to be called when the flags are updated.
-   * Flags are not guaranteed to have actually changed when the callback is called.
-   *
-   * @param callback this will be called when the flags are updated.
-   * @returns a function that can be called to remove the listener
-   */
-  onUpdated(callback: () => void) {
-    this.eventTarget.addEventListener(FLAGS_UPDATED_EVENT, callback, {
-      signal: this.abortController.signal,
-    });
-  }
-
   getFlags(): RawFlags {
     return this.flags;
   }
@@ -329,41 +302,55 @@ export class FlagsClient {
     return this.fetchedFlags;
   }
 
-  public async fetchFlags(): Promise<FetchedFlags | undefined> {
-    const params = this.fetchParams();
-    try {
-      const res = await this.httpClient.get({
-        path: "/features/evaluated",
-        timeoutMs: this.config.timeoutMs,
-        params,
-      });
+  setFetchedFlags(flags: FetchedFlags, triggerEvent = true) {
+    // Nothing has changed, skipping update
+    if (deepEqual(this.fetchedFlags, flags)) return;
+    this.warnMissingFlagContextFields(flags);
+    this.fetchedFlags = flags;
+    this.flags = this.mergeFlags(this.fetchedFlags, this.flagOverrides);
+    if (triggerEvent) this.triggerFlagsUpdated();
+  }
 
-      if (!res.ok) {
-        let errorBody = null;
-        try {
-          errorBody = await res.json();
-        } catch {
-          // ignore
-        }
+  async setContext(context: ReflagContext) {
+    this.context = {
+      user: context.user,
+      company: context.company,
+      other: { ...context.otherContext, ...context.other },
+    };
+    this.setFetchedFlags((await this.maybeFetchFlags()) || {});
+  }
 
-        throw new Error(
-          "unexpected response code: " +
-            res.status +
-            " - " +
-            JSON.stringify(errorBody),
-        );
-      }
-
-      const typeRes = validateFlagsResponse(await res.json());
-      if (!typeRes || !typeRes.success) {
-        throw new Error("unable to validate response");
-      }
-
-      return typeRes.flags;
-    } catch (e) {
-      this.logger.error("error fetching flags: ", e);
-      return;
+  setFlagOverride(key: string, isEnabled: boolean | null) {
+    if (!(typeof isEnabled === "boolean" || isEnabled === null)) {
+      throw new Error("setFlagOverride: isEnabled must be boolean or null");
     }
+
+    if (isEnabled === null) {
+      delete this.flagOverrides[key];
+    } else {
+      this.flagOverrides[key] = isEnabled;
+    }
+    setOverridesCache(this.flagOverrides);
+
+    this.flags = this.mergeFlags(this.fetchedFlags, this.flagOverrides);
+    this.triggerFlagsUpdated();
+  }
+
+  getFlagOverride(key: string): boolean | null {
+    return this.flagOverrides[key] ?? null;
+  }
+
+  /**
+   * Register a callback to be called when the flags are updated.
+   * Flags are not guaranteed to have actually changed when the callback is called.
+   *
+   * @param callback this will be called when the flags are updated.
+   * @returns a function that can be called to remove the listener
+   */
+  onUpdated(callback: () => void) {
+    this.eventTarget.addEventListener("flagsUpdated", callback, {
+      signal: this.abortController.signal,
+    });
   }
 
   /**
@@ -406,64 +393,40 @@ export class FlagsClient {
     return checkEvent.value;
   }
 
-  private mergeFlags(fetchedFlags: FetchedFlags, overrides: OverridesFlags) {
-    const mergedFlags: RawFlags = {};
-    // merge fetched flags with overrides into `this.flags`
-    for (const key in fetchedFlags) {
-      const fetchedFlag = fetchedFlags[key];
-      if (!fetchedFlag) continue;
-      const isEnabledOverride = overrides[key] ?? null;
-      mergedFlags[key] = { ...fetchedFlag, isEnabledOverride };
-    }
-    return mergedFlags;
-  }
+  async fetchFlags(): Promise<FetchedFlags | undefined> {
+    const params = this.fetchParams();
+    try {
+      const res = await this.httpClient.get({
+        path: "/features/evaluated",
+        timeoutMs: this.config.timeoutMs,
+        params,
+      });
 
-  private triggerFlagsUpdated() {
-    this.flags = this.mergeFlags(this.fetchedFlags, this.flagOverrides);
+      if (!res.ok) {
+        let errorBody = null;
+        try {
+          errorBody = await res.json();
+        } catch {
+          // ignore
+        }
 
-    this.eventTarget.dispatchEvent(new Event(FLAGS_UPDATED_EVENT));
-  }
-
-  private setFetchedFlags(flags: FetchedFlags) {
-    this.fetchedFlags = flags;
-    this.triggerFlagsUpdated();
-  }
-
-  private fetchParams() {
-    const flattenedContext = flattenJSON({ context: this.context });
-    const params = new URLSearchParams(flattenedContext);
-    // publishableKey should be part of the cache key
-    params.append("publishableKey", this.httpClient.publishableKey);
-
-    // sort the params to ensure that the URL is the same for the same context
-    params.sort();
-
-    return params;
-  }
-
-  private warnMissingFlagContextFields(flags: FetchedFlags) {
-    const report: Record<string, string[]> = {};
-    for (const flagKey in flags) {
-      const flag = flags[flagKey];
-      if (flag?.missingContextFields?.length) {
-        report[flag.key] = flag.missingContextFields;
+        throw new Error(
+          "unexpected response code: " +
+            res.status +
+            " - " +
+            JSON.stringify(errorBody),
+        );
       }
 
-      if (flag?.config?.missingContextFields?.length) {
-        report[`${flag.key}.config`] = flag.config.missingContextFields;
+      const typeRes = validateFlagsResponse(await res.json());
+      if (!typeRes || !typeRes.success) {
+        throw new Error("unable to validate response");
       }
-    }
 
-    if (Object.keys(report).length > 0) {
-      this.rateLimiter.rateLimited(
-        `flag-missing-context-fields:${this.fetchParams().toString()}`,
-        () => {
-          this.logger.warn(
-            `flag targeting rules might not be correctly evaluated due to missing context fields.`,
-            report,
-          );
-        },
-      );
+      return typeRes.flags;
+    } catch (e) {
+      this.logger.error("error fetching flags: ", e);
+      return;
     }
   }
 
@@ -505,8 +468,6 @@ export class FlagsClient {
       this.cache.set(cacheKey, {
         flags: fetchedFlags,
       });
-
-      this.warnMissingFlagContextFields(fetchedFlags);
       return fetchedFlags;
     }
 
@@ -516,41 +477,107 @@ export class FlagsClient {
     }
 
     // fetch failed, nothing cached => return fallbacks
-    return Object.entries(this.config.fallbackFlags).reduce(
-      (acc, [key, override]) => {
-        acc[key] = {
-          key,
-          isEnabled: !!override,
-          config:
-            typeof override === "object" && "key" in override
-              ? {
-                  key: override.key,
-                  payload: override.payload,
-                }
-              : undefined,
-        };
-        return acc;
-      },
-      {} as FetchedFlags,
-    );
+    return Object.entries(this.fallbackFlags).reduce((acc, [key, override]) => {
+      acc[key] = {
+        key,
+        isEnabled: !!override,
+        config:
+          typeof override === "object" && "key" in override
+            ? {
+                key: override.key,
+                payload: override.payload,
+              }
+            : undefined,
+      };
+      return acc;
+    }, {} as FetchedFlags);
   }
 
-  setFlagOverride(key: string, isEnabled: boolean | null) {
-    if (!(typeof isEnabled === "boolean" || isEnabled === null)) {
-      throw new Error("setFlagOverride: isEnabled must be boolean or null");
+  private mergeFlags(fetchedFlags: FetchedFlags, overrides: OverridesFlags) {
+    const mergedFlags: RawFlags = {};
+    // merge fetched flags with overrides into `this.flags`
+    for (const key in fetchedFlags) {
+      const fetchedFlag = fetchedFlags[key];
+      if (!fetchedFlag) continue;
+      const isEnabledOverride = overrides[key] ?? null;
+      mergedFlags[key] = { ...fetchedFlag, isEnabledOverride };
     }
+    return mergedFlags;
+  }
 
-    if (isEnabled === null) {
-      delete this.flagOverrides[key];
+  private triggerFlagsUpdated() {
+    this.eventTarget.dispatchEvent(new Event("flagsUpdated"));
+  }
+
+  private setupCache(staleTimeMs = 0, expireTimeMs = FLAGS_EXPIRE_MS) {
+    return new FlagCache({
+      storage:
+        typeof localStorage !== "undefined"
+          ? {
+              get: () => localStorage.getItem(localStorageFetchedFlagsKey),
+              set: (value) =>
+                localStorage.setItem(localStorageFetchedFlagsKey, value),
+            }
+          : {
+              get: () => null,
+              set: () => void 0,
+            },
+      staleTimeMs,
+      expireTimeMs,
+    });
+  }
+
+  private setupFallbackFlags(
+    fallbackFlags?: Record<string, FallbackFlagOverride> | string[],
+  ) {
+    if (Array.isArray(fallbackFlags)) {
+      return fallbackFlags.reduce(
+        (acc, key) => {
+          acc[key] = true;
+          return acc;
+        },
+        {} as Record<string, FallbackFlagOverride>,
+      );
     } else {
-      this.flagOverrides[key] = isEnabled;
+      return fallbackFlags ?? {};
     }
-    setOverridesCache(this.flagOverrides);
-
-    this.triggerFlagsUpdated();
   }
 
-  getFlagOverride(key: string): boolean | null {
-    return this.flagOverrides[key] ?? null;
+  private fetchParams() {
+    const flattenedContext = flattenJSON({ context: this.context });
+    const params = new URLSearchParams(flattenedContext);
+    // publishableKey should be part of the cache key
+    params.append("publishableKey", this.httpClient.publishableKey);
+
+    // sort the params to ensure that the URL is the same for the same context
+    params.sort();
+
+    return params;
+  }
+
+  private warnMissingFlagContextFields(flags: FetchedFlags) {
+    const report: Record<string, string[]> = {};
+    for (const flagKey in flags) {
+      const flag = flags[flagKey];
+      if (flag?.missingContextFields?.length) {
+        report[flag.key] = flag.missingContextFields;
+      }
+
+      if (flag?.config?.missingContextFields?.length) {
+        report[`${flag.key}.config`] = flag.config.missingContextFields;
+      }
+    }
+
+    if (Object.keys(report).length > 0) {
+      this.rateLimiter.rateLimited(
+        `flag-missing-context-fields:${this.fetchParams().toString()}`,
+        () => {
+          this.logger.warn(
+            `flag targeting rules might not be correctly evaluated due to missing context fields.`,
+            report,
+          );
+        },
+      );
+    }
   }
 }

@@ -526,6 +526,11 @@ export type Cache<T> = {
    * @returns A promise that resolves when the refresh is complete.
    **/
   waitRefresh: () => Promise<void> | undefined;
+
+  /**
+   * Cleanup and destroy the cache, stopping any background processes.
+   **/
+  destroy: () => void;
 };
 
 /**

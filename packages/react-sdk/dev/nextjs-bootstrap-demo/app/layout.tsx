@@ -2,7 +2,11 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/Providers";
-import { ReflagClient as ReflagNodeClient } from "@reflag/node-sdk";
+import {
+  ReflagClient as ReflagNodeClient,
+  FLAG_OVERRIDES_COOKIE,
+} from "@reflag/node-sdk";
+import { cookies } from "next/headers";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -15,23 +19,40 @@ const publishableKey = process.env.REFLAG_PUBLISHABLE_KEY || "";
 const secretKey = process.env.REFLAG_SECRET_KEY || "";
 const offline = process.env.CI === "true";
 
+let serverClient: ReflagNodeClient;
+
+// todo: investigate how to avoid reloads creating a new client
+async function getServerClient() {
+  if (!serverClient) {
+    serverClient = new ReflagNodeClient({
+      secretKey,
+      offline,
+    });
+    await serverClient.initialize();
+  }
+  return serverClient;
+}
+
 async function getBootstrappedFlags() {
-  const serverClient = new ReflagNodeClient({
-    secretKey,
-    offline,
-  });
-  await serverClient.initialize();
+  const serverClient = await getServerClient();
+  // Get overrides from cookie
+  const cookieStore = await cookies();
+  const cookieString = cookieStore.get(FLAG_OVERRIDES_COOKIE)?.value;
+  const flagOverrides = JSON.parse(cookieString || "{}");
 
   // In a real app, you'd get user/company from your auth system
-  const flags = serverClient.getFlagsForBootstrap({
-    user: {
-      id: "demo-user",
-      email: "demo-user@example.com",
-      "optin-huddles": true,
+  const flags = serverClient.getFlagsForBootstrap(
+    {
+      user: {
+        id: "demo-user",
+        email: "demo-user@example.com",
+        "optin-huddles": true,
+      },
+      company: { id: "demo-company", name: "Demo Company" },
+      other: { source: "web" },
     },
-    company: { id: "demo-company", name: "Demo Company" },
-    other: { source: "web" },
-  });
+    flagOverrides,
+  );
 
   return flags;
 }

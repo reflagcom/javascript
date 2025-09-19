@@ -6,10 +6,8 @@ import React, {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from "react";
-import canonicalJSON from "canonical-json";
 
 import {
   CheckEvent,
@@ -123,22 +121,6 @@ export type FlagKey = keyof TypedFlags;
 
 const SDK_VERSION = `react-sdk/${version}`;
 
-function removeUndefined(obj: Record<string, any>) {
-  const t = { ...obj };
-  for (const v in t) {
-    if (typeof t[v] == "object") removeUndefined(t[v]);
-    else if (t[v] == undefined) delete t[v];
-  }
-  return t;
-}
-
-type ProviderContextType = {
-  isLoading: boolean;
-  client?: ReflagClient;
-};
-
-const ProviderContext = createContext<ProviderContextType | null>(null);
-
 /**
  * Base props for the ReflagProvider and ReflagBootstrappedProvider.
  * @internal
@@ -147,116 +129,76 @@ export type ReflagPropsBase = {
   children?: ReactNode;
   loadingComponent?: ReactNode;
   debug?: boolean;
-  newReflagClient?: (
-    ...args: ConstructorParameters<typeof ReflagClient>
-  ) => ReflagClient;
 };
 
 /**
- * Options for the useReflagProvider hook.
+ * Map of clients by context key. Used to deduplicate initialization of the client.
  * @internal
  */
-type UseReflagProviderOptions = {
-  config: Omit<InitOptions, keyof ReflagContext> & ReflagPropsBase;
-  context?: ReflagContext;
-  bootstrappedFlags?: FetchedFlags;
-  isBootstrapped?: boolean;
-};
+const reflagClients = new Map<string, ReflagClient>();
 
 /**
- * Shared hook that handles the common logic for both ReflagProvider and ReflagBootstrappedProvider
+ * Returns the ReflagClient for a given publishable key.
+ * Only creates a new ReflagClient is not already created or if it hook is run on the server.
  * @internal
  */
-function useReflagProvider({
-  config,
-  context,
-  bootstrappedFlags,
-  isBootstrapped = false,
-}: UseReflagProviderOptions): ProviderContextType {
-  const [isLoading, setIsLoading] = useState(true);
-
-  const clientRef = useRef<ReflagClient>();
-  const contextKeyRef = useRef<string>();
-
-  const {
-    newReflagClient = (...args) => new ReflagClient(...args),
-    debug,
-    ...initConfig
-  } = config;
-
-  // Generate context key based to deduplicate initialization
-  const contextKey = useMemo(() => {
-    return canonicalJSON(
-      removeUndefined({
-        ...initConfig,
-        ...context,
-        flags: bootstrappedFlags ?? null,
-      }),
-    );
-  }, [initConfig, context, bootstrappedFlags]);
-
-  // Create base client options
-  const baseClientOptions = useMemo(
-    () => ({
-      ...initConfig,
-      user: context?.user,
-      company: context?.company,
-      otherContext: context?.otherContext,
+function useReflagClient(
+  initOptions: InitOptions | InitOptionsBootstrapped,
+  debug = false,
+) {
+  const isServer = typeof window === "undefined";
+  if (isServer || !reflagClients.has(initOptions.publishableKey)) {
+    const client = new ReflagClient({
+      ...initOptions,
       logger: debug ? console : undefined,
       sdkVersion: SDK_VERSION,
-    }),
-    [initConfig, context, debug],
+    });
+    if (!isServer) {
+      reflagClients.set(initOptions.publishableKey, client);
+    }
+    return client;
+  }
+  return reflagClients.get(initOptions.publishableKey)!;
+}
+
+type ProviderContextType = {
+  isLoading: boolean;
+  client: ReflagClient;
+};
+
+const ProviderContext = createContext<ProviderContextType | null>(null);
+
+type ReflagClientProviderProps = ReflagPropsBase & {
+  client: ReflagClient;
+  loadingComponent: ReactNode;
+};
+
+export function ReflagClientProvider({
+  client,
+  loadingComponent,
+  children,
+}: ReflagClientProviderProps) {
+  const [isLoading, setIsLoading] = useState(
+    client.getState() === "initializing",
   );
 
   useEffect(() => {
-    // For bootstrapped provider, don't initialize if flags are not provided
-    if (isBootstrapped && !bootstrappedFlags) {
-      return;
-    }
+    return client.on("stateUpdated", (state) => {
+      setIsLoading(state === "initializing");
+    });
+  }, [client]);
 
-    // Prevent re-initialization if the context key is the same
-    if (contextKeyRef.current === contextKey) {
-      return;
-    }
-    contextKeyRef.current = contextKey;
-
-    // Stop the client if it exists
-    if (clientRef.current) {
-      void clientRef.current.stop();
-    }
-
-    setIsLoading(true);
-
-    // Add bootstrapped flags if this is a bootstrapped provider
-    const clientOptions = bootstrappedFlags
-      ? { ...baseClientOptions, bootstrappedFlags }
-      : baseClientOptions;
-
-    const client = newReflagClient(clientOptions);
-    clientRef.current = client;
-
-    client
-      .initialize()
-      .catch((e) => {
-        client.logger.error("failed to initialize client", e);
-      })
-      .finally(() => {
-        setIsLoading(false);
-      });
-  }, [
-    contextKey,
-    baseClientOptions,
-    bootstrappedFlags,
-    newReflagClient,
-    isBootstrapped,
-  ]);
-
-  return useMemo(
-    () => ({
-      isLoading,
-      client: clientRef.current,
-    }),
-    [isLoading],
+  return (
+    <ProviderContext.Provider
+      value={{
+        isLoading,
+        client,
+      }}
+    >
+      {isLoading && typeof loadingComponent !== "undefined"
+        ? loadingComponent
+        : children}
+    </ProviderContext.Provider>
   );
 }
 
@@ -272,22 +214,41 @@ export function ReflagProvider({
   children,
   user,
   company,
+  other,
   otherContext,
   loadingComponent,
-  newReflagClient = (...args) => new ReflagClient(...args),
+  debug,
   ...config
 }: ReflagProps) {
-  const context = useReflagProvider({
-    config: { ...config, newReflagClient },
-    context: { user, company, otherContext },
-  });
+  const context = useMemo(
+    () => ({ user, company, other: { ...otherContext, ...other } }),
+    [user, company, other, otherContext],
+  );
+  const client = useReflagClient(
+    {
+      ...config,
+      ...context,
+    },
+    debug,
+  );
+
+  // Initialize the client if it is not already initialized
+  useEffect(() => {
+    if (client.getState() !== "idle") return;
+    void client.initialize().catch((e) => {
+      client.logger.error("failed to initialize client", e);
+    });
+  }, [client]);
+
+  // Update the context if it changes
+  useEffect(() => {
+    void client.updateContext(context);
+  }, [client, context]);
 
   return (
-    <ProviderContext.Provider value={context}>
-      {context.isLoading && typeof loadingComponent !== "undefined"
-        ? loadingComponent
-        : children}
-    </ProviderContext.Provider>
+    <ReflagClientProvider client={client} loadingComponent={loadingComponent}>
+      {children}
+    </ReflagClientProvider>
   );
 }
 
@@ -302,7 +263,7 @@ export type ReflagBootstrappedProps = Omit<
     /**
      * Pre-fetched flags to be used instead of fetching them from the server.
      */
-    flags?: BootstrappedFlags;
+    flags: BootstrappedFlags;
   };
 
 /**
@@ -312,22 +273,40 @@ export function ReflagBootstrappedProvider({
   flags,
   children,
   loadingComponent,
-  newReflagClient = (...args) => new ReflagClient(...args),
+  debug,
   ...config
 }: ReflagBootstrappedProps) {
-  const context = useReflagProvider({
-    config: { ...config, newReflagClient },
-    context: flags?.context,
-    bootstrappedFlags: flags?.flags,
-    isBootstrapped: true,
-  });
+  const client = useReflagClient(
+    {
+      ...config,
+      ...flags.context,
+      bootstrappedFlags: flags.flags,
+    },
+    debug,
+  );
+
+  // Initialize the client if it is not already initialized
+  useEffect(() => {
+    if (client.getState() !== "idle") return;
+    void client.initialize().catch((e) => {
+      client.logger.error("failed to initialize client", e);
+    });
+  }, [client]);
+
+  // Update the context if it changes on the client side
+  useEffect(() => {
+    void client.updateContext(flags.context);
+  }, [client, flags.context]);
+
+  // Update the bootstrappedFlags if they change on the client side
+  useEffect(() => {
+    client.updateFlags(flags.flags);
+  }, [client, flags.flags]);
 
   return (
-    <ProviderContext.Provider value={context}>
-      {context.isLoading && typeof loadingComponent !== "undefined"
-        ? loadingComponent
-        : children}
-    </ProviderContext.Provider>
+    <ReflagClientProvider client={client} loadingComponent={loadingComponent}>
+      {children}
+    </ReflagClientProvider>
   );
 }
 
@@ -357,12 +336,21 @@ export function useFeature<TKey extends FlagKey>(key: TKey) {
 export function useFlag<TKey extends FlagKey>(key: TKey): TypedFlags[TKey] {
   const client = useClient();
   const isLoading = useIsLoading();
+  const [flag, setFlag] = useState(client.getFlag(key));
 
-  const track = () => client?.track(key);
+  const track = () => client.track(key);
   const requestFeedback = (opts: RequestFeedbackOptions) =>
-    client?.requestFeedback({ ...opts, flagKey: key });
+    client.requestFeedback({ ...opts, flagKey: key });
 
-  if (isLoading || !client) {
+  useEffect(() => {
+    if (!flag) setFlag(client.getFlag(key));
+    // Subscribe to updates
+    return client.on("flagsUpdated", () => {
+      setFlag(client.getFlag(key));
+    });
+  }, [client, flag, key]);
+
+  if (isLoading || !flag) {
     return {
       key,
       isLoading,
@@ -376,18 +364,16 @@ export function useFlag<TKey extends FlagKey>(key: TKey): TypedFlags[TKey] {
     };
   }
 
-  const feature = client.getFlag(key);
-
   return {
     key,
     isLoading,
     track,
     requestFeedback,
     get isEnabled() {
-      return feature.isEnabled ?? false;
+      return flag.isEnabled ?? false;
     },
     get config() {
-      return feature.config as TypedFlags[TKey]["config"];
+      return flag.config as TypedFlags[TKey]["config"];
     },
   };
 }
@@ -404,7 +390,7 @@ export function useFlag<TKey extends FlagKey>(key: TKey): TypedFlags[TKey] {
 export function useTrack() {
   const client = useClient();
   return (eventName: string, attributes?: Record<string, any> | null) =>
-    client?.track(eventName, attributes);
+    client.track(eventName, attributes);
 }
 
 /**
@@ -423,7 +409,7 @@ export function useTrack() {
  */
 export function useRequestFeedback() {
   const client = useClient();
-  return (options: RequestFeedbackData) => client?.requestFeedback(options);
+  return (options: RequestFeedbackData) => client.requestFeedback(options);
 }
 
 /**
@@ -444,7 +430,7 @@ export function useRequestFeedback() {
  */
 export function useSendFeedback() {
   const client = useClient();
-  return (opts: UnassignedFeedback) => client?.feedback(opts);
+  return (opts: UnassignedFeedback) => client.feedback(opts);
 }
 
 /**
@@ -463,7 +449,7 @@ export function useSendFeedback() {
 export function useUpdateUser() {
   const client = useClient();
   return (opts: { [key: string]: string | number | undefined }) =>
-    client?.updateUser(opts);
+    client.updateUser(opts);
 }
 
 /**
@@ -483,7 +469,7 @@ export function useUpdateCompany() {
   const client = useClient();
 
   return (opts: { [key: string]: string | number | undefined }) =>
-    client?.updateCompany(opts);
+    client.updateCompany(opts);
 }
 
 /**
@@ -503,7 +489,7 @@ export function useUpdateCompany() {
 export function useUpdateOtherContext() {
   const client = useClient();
   return (opts: { [key: string]: string | number | undefined }) =>
-    client?.updateOtherContext(opts);
+    client.updateOtherContext(opts);
 }
 
 /**
@@ -536,7 +522,7 @@ export function useIsLoading() {
  * ```ts
  * const client = useClient();
  * useEffect(() => {
- *   return client?.on("check", () => {
+ *   return client.on("check", () => {
  *     console.log("check hook called");
  *   });
  * }, [client]);

@@ -23,6 +23,7 @@ const fetchClient: HttpClient = {
       headers,
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(timeoutMs),
+      cache: "no-store",
     });
 
     const json = await response.json();
@@ -45,6 +46,7 @@ const fetchClient: HttpClient = {
       method: "get",
       headers,
       signal: AbortSignal.timeout(timeoutMs),
+      cache: "no-store",
     });
 
     const json = await response.json();

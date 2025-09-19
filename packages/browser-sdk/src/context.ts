@@ -55,7 +55,13 @@ export interface ReflagContext {
   user?: UserContext;
 
   /**
-   * Context which is not related to a user or a company
+   * Context which is not related to a user or a company.
+   */
+  other?: Record<string, string | number | undefined>;
+
+  /**
+   * Context which is not related to a user or a company.
+   * @deprecated Use `other` instead
    */
   otherContext?: Record<string, string | number | undefined>;
 }

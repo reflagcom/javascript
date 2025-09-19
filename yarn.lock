@@ -2967,6 +2967,7 @@ __metadata:
     canonical-json: "npm:^0.0.4"
     eslint: "npm:^9.21.0"
     eslint-config-preact: "npm:^1.5.0"
+    fast-equals: "npm:^5.2.2"
     http-server: "npm:^14.1.1"
     js-cookie: "npm:^3.0.5"
     jsdom: "npm:^24.1.0"
@@ -9300,6 +9301,13 @@ __metadata:
   version: 3.1.3
   resolution: "fast-deep-equal@npm:3.1.3"
   checksum: 10c0/40dedc862eb8992c54579c66d914635afbec43350afbbe991235fdcb4e3a8d5af1b23ae7e79bef7d4882d0ecee06c3197488026998fb19f72dc95acff1d1b1d0
+  languageName: node
+  linkType: hard
+
+"fast-equals@npm:^5.2.2":
+  version: 5.2.2
+  resolution: "fast-equals@npm:5.2.2"
+  checksum: 10c0/2bfeac6317a8959a00e2134749323557e5df6dea3af24e4457297733eace8ce4313fcbca2cf4532f3a6792607461e80442cd8d3af148d5c2e4e98ad996d6e5b5
   languageName: node
   linkType: hard
 

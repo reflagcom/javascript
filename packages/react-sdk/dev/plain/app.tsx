@@ -229,12 +229,12 @@ function FeatureOptIn({
 
 function CustomToolbar() {
   const client = useClient();
-  const [flags, setFlags] = useState<RawFlags>(client?.getFlags() ?? {});
+  const [flags, setFlags] = useState<RawFlags>(client.getFlags() ?? {});
 
   useEffect(() => {
-    setFlags(client?.getFlags() ?? {});
+    setFlags(client.getFlags() ?? {});
     // Subscribe to updates
-    return client?.on("flagsUpdated", () => {
+    return client.on("flagsUpdated", () => {
       setFlags(client.getFlags());
     });
   }, [client]);
@@ -253,7 +253,7 @@ function CustomToolbar() {
             {feature.isEnabledOverride !== null && (
               <button
                 onClick={() => {
-                  client?.getFlag(flagKey).setIsEnabledOverride(null);
+                  client.getFlag(flagKey).setIsEnabledOverride(null);
                 }}
               >
                 Reset
@@ -265,7 +265,7 @@ function CustomToolbar() {
               onChange={(e) => {
                 // this uses slightly simplified logic compared to the Reflag Toolbar
                 client
-                  ?.getFlag(flagKey)
+                  .getFlag(flagKey)
                   .setIsEnabledOverride(e.target.checked ?? false);
               }}
             />
@@ -289,7 +289,7 @@ export function App() {
           context: {
             user: initialUser,
             company: initialCompany,
-            otherContext: initialOtherContext,
+            other: initialOtherContext,
           },
           flags: {
             huddles: {
@@ -316,7 +316,7 @@ export function App() {
       publishableKey={publishableKey}
       company={initialCompany}
       user={initialUser}
-      otherContext={initialOtherContext}
+      other={initialOtherContext}
       apiBaseUrl={apiBaseUrl}
     >
       {!publishableKey && (
