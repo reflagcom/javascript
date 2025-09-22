@@ -314,9 +314,11 @@ export function App() {
   return (
     <ReflagProvider
       publishableKey={publishableKey}
-      company={initialCompany}
-      user={initialUser}
-      other={initialOtherContext}
+      context={{
+        user: initialUser,
+        company: initialCompany,
+        other: initialOtherContext,
+      }}
       apiBaseUrl={apiBaseUrl}
     >
       {!publishableKey && (

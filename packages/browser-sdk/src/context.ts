@@ -58,10 +58,12 @@ export interface ReflagContext {
    * Context which is not related to a user or a company.
    */
   other?: Record<string, string | number | undefined>;
+}
 
+export interface ReflagDeprecatedContext extends ReflagContext {
   /**
    * Context which is not related to a user or a company.
-   * @deprecated Use `other` instead
+   * @deprecated Use `other` instead, this property will be removed in the next major version
    */
   otherContext?: Record<string, string | number | undefined>;
 }

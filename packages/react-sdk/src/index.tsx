@@ -205,29 +205,55 @@ export function ReflagClientProvider({
 /**
  * Props for the ReflagProvider.
  */
-export type ReflagProps = InitOptions & ReflagPropsBase;
+export type ReflagProps = Omit<InitOptions, keyof ReflagContext> &
+  ReflagPropsBase & {
+    /**
+     * The context to use for the ReflagClient containing user, company, and other context.
+     */
+    context: ReflagContext;
+
+    /**
+     * Company related context. If you provide `id` Reflag will enrich the evaluation context with
+     * company attributes on Reflag servers.
+     * @deprecated Use `context` instead, this property will be removed in the next major version
+     */
+    company?: CompanyContext;
+
+    /**
+     * User related context. If you provide `id` Reflag will enrich the evaluation context with
+     * user attributes on Reflag servers.
+     * @deprecated Use `context` instead, this property will be removed in the next major version
+     */
+    user?: UserContext;
+
+    /**
+     * Context which is not related to a user or a company.
+     * @deprecated Use `context` instead, this property will be removed in the next major version
+     */
+    otherContext?: Record<string, string | number | undefined>;
+  };
 
 /**
  * Provider for the ReflagClient.
  */
 export function ReflagProvider({
   children,
+  context,
   user,
   company,
-  other,
   otherContext,
   loadingComponent,
   debug,
   ...config
 }: ReflagProps) {
-  const context = useMemo(
-    () => ({ user, company, other: { ...otherContext, ...other } }),
-    [user, company, other, otherContext],
+  const resolvedContext = useMemo(
+    () => ({ user, company, other: otherContext, ...context }),
+    [user, company, otherContext, context],
   );
   const client = useReflagClient(
     {
       ...config,
-      ...context,
+      ...resolvedContext,
     },
     debug,
   );
@@ -242,8 +268,8 @@ export function ReflagProvider({
 
   // Update the context if it changes
   useEffect(() => {
-    void client.updateContext(context);
-  }, [client, context]);
+    void client.updateContext(resolvedContext);
+  }, [client, resolvedContext]);
 
   return (
     <ReflagClientProvider client={client} loadingComponent={loadingComponent}>
@@ -257,7 +283,7 @@ export function ReflagProvider({
  */
 export type ReflagBootstrappedProps = Omit<
   InitOptionsBootstrapped,
-  "bootstrappedFlags" | keyof ReflagContext
+  "user" | "company" | "otherContext" | "bootstrappedFlags"
 > &
   ReflagPropsBase & {
     /**

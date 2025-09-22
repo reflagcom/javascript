@@ -184,33 +184,6 @@ const overridesCookieKey = `__reflag_overrides`;
 
 type OverridesFlags = Record<string, boolean | null>;
 
-function setOverridesCache(overrides: OverridesFlags) {
-  try {
-    Cookies.set(overridesCookieKey, JSON.stringify(overrides), {
-      expires: 30, // 30 days
-      sameSite: "strict",
-    });
-  } catch {
-    // Cookie setting failed, overrides won't persist
-  }
-}
-
-function getOverridesCache(): OverridesFlags {
-  try {
-    const cookieValue = Cookies.get(overridesCookieKey);
-    if (cookieValue) {
-      const cachedOverrides = JSON.parse(cookieValue);
-      if (isObject(cachedOverrides)) {
-        return cachedOverrides;
-      }
-    }
-  } catch {
-    // Ignore cookie parsing errors
-  }
-
-  return {};
-}
-
 type FlagsClientOptions = Partial<Config> & {
   bootstrappedFlags?: FetchedFlags;
   fallbackFlags?: Record<string, FallbackFlagOverride> | string[];
@@ -263,7 +236,7 @@ export class FlagsClient {
     this.fallbackFlags = this.setupFallbackFlags(fallbackFlags);
 
     try {
-      const storedFlagOverrides = getOverridesCache();
+      const storedFlagOverrides = this.getOverridesCache();
       for (const key in storedFlagOverrides) {
         this.flagOverrides[key] = storedFlagOverrides[key];
       }
@@ -312,11 +285,7 @@ export class FlagsClient {
   }
 
   async setContext(context: ReflagContext) {
-    this.context = {
-      user: context.user,
-      company: context.company,
-      other: { ...context.otherContext, ...context.other },
-    };
+    this.context = context;
     this.setFetchedFlags((await this.maybeFetchFlags()) || {});
   }
 
@@ -330,7 +299,7 @@ export class FlagsClient {
     } else {
       this.flagOverrides[key] = isEnabled;
     }
-    setOverridesCache(this.flagOverrides);
+    this.setOverridesCache(this.flagOverrides);
 
     this.flags = this.mergeFlags(this.fetchedFlags, this.flagOverrides);
     this.triggerFlagsUpdated();
@@ -427,6 +396,31 @@ export class FlagsClient {
     } catch (e) {
       this.logger.error("error fetching flags: ", e);
       return;
+    }
+  }
+
+  private setOverridesCache(overrides: OverridesFlags) {
+    try {
+      Cookies.set(overridesCookieKey, JSON.stringify(overrides), {
+        expires: 7, // 1 week
+        sameSite: "strict",
+      });
+    } catch {
+      this.logger.warn(
+        "storing flag overrides in cookies failed, overrides won't persist",
+      );
+    }
+  }
+
+  private getOverridesCache(): OverridesFlags {
+    try {
+      const overridesCookie = Cookies.get(overridesCookieKey);
+      const overrides = JSON.parse(overridesCookie || "{}");
+      if (!isObject(overrides)) throw new Error("invalid overrides");
+      return overrides;
+    } catch {
+      this.logger.warn("getting flag overrides from cookies failed");
+      return {};
     }
   }
 

@@ -18,7 +18,7 @@ import {
 } from "./flag/flags";
 import { ToolbarPosition } from "./ui/types";
 import { API_BASE_URL, APP_BASE_URL, SSE_REALTIME_BASE_URL } from "./config";
-import { ReflagContext } from "./context";
+import { ReflagContext, ReflagDeprecatedContext } from "./context";
 import { HookArgs, HooksManager, State } from "./hooksManager";
 import { HttpClient } from "./httpClient";
 import { Logger, loggerWithPrefix, quietConsoleLogger } from "./logger";
@@ -198,7 +198,7 @@ export type FlagDefinitions = Readonly<Array<string>>;
 /**
  * ReflagClient initialization options.
  */
-export type InitOptions = ReflagContext & {
+export type InitOptions = ReflagDeprecatedContext & {
   /**
    * Publishable key for authentication
    */
@@ -436,11 +436,7 @@ export class ReflagClient {
 
     this.flagsClient = new FlagsClient(
       this.httpClient,
-      {
-        user: this.context.user,
-        company: this.context.company,
-        other: { ...this.context.otherContext, ...this.context.other },
-      },
+      this.context,
       this.logger,
       isBootstrapped(opts)
         ? {
@@ -677,7 +673,7 @@ export class ReflagClient {
    *
    * @param context The context to update.
    */
-  async updateContext({ otherContext, ...context }: ReflagContext) {
+  async updateContext({ otherContext, ...context }: ReflagDeprecatedContext) {
     const userIdChanged =
       context.user?.id && context.user.id !== this.context.user?.id;
     const newContext = {

@@ -157,7 +157,12 @@ function validateCacheData(cacheDataInput: any) {
   return cacheData;
 }
 
-// Simple object check.
-export function isObject(item: any): boolean {
-  return item && typeof item === "object" && !Array.isArray(item);
+/**
+ * Check if the given item is an object.
+ *
+ * @param item - The item to check.
+ * @returns `true` if the item is an object, `false` otherwise.
+ **/
+export function isObject(item: any): item is Record<string, any> {
+  return (item && typeof item === "object" && !Array.isArray(item)) || false;
 }
