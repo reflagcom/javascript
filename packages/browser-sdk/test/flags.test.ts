@@ -357,7 +357,7 @@ describe("FlagsClient", () => {
     expect(client.getFlags().flagA.isEnabledOverride).toBe(false);
   });
 
-  test("handled overrides for flags not returned by API", async () => {
+  test("ignores overrides for flags not returned by API", async () => {
     // change the response so we can validate that we'll serve the stale cache
     const { newFlagsClient } = flagsClientFactory();
 
@@ -373,9 +373,11 @@ describe("FlagsClient", () => {
     expect(client.getFlags().flagB.isEnabled).toBe(true);
     expect(client.getFlags().flagB.isEnabledOverride).toBe(null);
 
+    // Setting an override for a flag that doesn't exist in fetched flags
+    // should not trigger an update since the merged flags don't change
     client.setFlagOverride("flagC", true);
 
-    expect(updated).toBe(true);
+    expect(updated).toBe(false);
     expect(client.getFlags().flagC).toBeUndefined();
   });
 
@@ -560,6 +562,73 @@ describe("FlagsClient", () => {
       // Calling initialize again should not fetch since already initialized
       await flagsClient.initialize();
       expect(httpClient.get).not.toHaveBeenCalled();
+    });
+
+    test("should apply bootstrapped overrides when supplied in constructor", () => {
+      const { httpClient } = flagsClientFactory();
+      const bootstrappedFlags = {
+        testFlag: {
+          key: "testFlag",
+          isEnabled: true,
+          targetingVersion: 1,
+        },
+        anotherFlag: {
+          key: "anotherFlag",
+          isEnabled: false,
+          targetingVersion: 2,
+        },
+      };
+
+      const bootstrappedOverrides = {
+        testFlag: false,
+        anotherFlag: true,
+      };
+
+      // Spy on FlagsClient prototype method before creating instance
+      const setOverridesCacheSpy = vi.spyOn(
+        FlagsClient.prototype as any,
+        "setOverridesCache",
+      );
+
+      const flagsClient = new FlagsClient(
+        httpClient,
+        {
+          user: { id: "123" },
+          company: { id: "456" },
+          other: { eventId: "big-conference1" },
+        },
+        testLogger,
+        {
+          bootstrappedFlags,
+          bootstrappedOverrides,
+        },
+      );
+
+      // Should be initialized immediately
+      expect(flagsClient["initialized"]).toBe(true);
+
+      // Should have the flags with overrides applied
+      expect(flagsClient.getFlags()).toEqual({
+        testFlag: {
+          key: "testFlag",
+          isEnabled: true,
+          targetingVersion: 1,
+          isEnabledOverride: false,
+        },
+        anotherFlag: {
+          key: "anotherFlag",
+          isEnabled: false,
+          targetingVersion: 2,
+          isEnabledOverride: true,
+        },
+      });
+
+      // Verify that the cache was updated with the bootstrapped overrides
+      expect(setOverridesCacheSpy).toHaveBeenCalledWith(bootstrappedOverrides);
+      expect(flagsClient["flagOverrides"]).toEqual(bootstrappedOverrides);
+
+      // Clean up the spy
+      setOverridesCacheSpy.mockRestore();
     });
   });
 });

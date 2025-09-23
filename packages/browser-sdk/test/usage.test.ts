@@ -501,7 +501,7 @@ describe(`sends "check" events `, () => {
             company: {
               id: "cid",
             },
-            other: undefined,
+            other: {},
             user: {
               id: "uid",
             },
@@ -534,7 +534,8 @@ describe(`sends "check" events `, () => {
         body: {
           action: "check-config",
           evalContext: {
-            other: undefined,
+            company: undefined,
+            other: {},
             user: {
               id: "uid",
             },
