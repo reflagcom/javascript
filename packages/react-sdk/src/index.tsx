@@ -12,7 +12,7 @@ import React, {
 import {
   CheckEvent,
   CompanyContext,
-  FetchedFlags,
+  FlagOverrides,
   InitOptions,
   InitOptionsBootstrapped,
   RawFlags,
@@ -114,7 +114,8 @@ export type TypedFlags = keyof Flags extends never
 
 export type BootstrappedFlags = {
   context: ReflagContext;
-  flags: FetchedFlags;
+  flags: RawFlags;
+  overrides?: FlagOverrides;
 };
 
 export type FlagKey = keyof TypedFlags;
@@ -307,6 +308,7 @@ export function ReflagBootstrappedProvider({
       ...config,
       ...flags.context,
       bootstrappedFlags: flags.flags,
+      bootstrappedOverrides: flags.overrides,
     },
     debug,
   );

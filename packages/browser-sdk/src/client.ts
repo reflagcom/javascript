@@ -12,7 +12,7 @@ import * as feedbackLib from "./feedback/ui";
 import {
   CheckEvent,
   FallbackFlagOverride,
-  FetchedFlags,
+  FlagOverrides,
   FlagsClient,
   RawFlags,
 } from "./flag/flags";
@@ -301,7 +301,15 @@ export type InitOptionsBootstrapped = Omit<
   | "staleTimeMs"
   | "expireTimeMs"
 > & {
-  bootstrappedFlags: FetchedFlags;
+  /**
+   * Pre-fetched flags to be used instead of fetching them from the server.
+   */
+  bootstrappedFlags: RawFlags;
+
+  /**
+   * Pre-fetched flag overrides to be used instead of reading them from the client.
+   */
+  bootstrappedOverrides: FlagOverrides;
 };
 
 function isBootstrapped(opts: InitOptions): opts is InitOptionsBootstrapped {
@@ -441,6 +449,7 @@ export class ReflagClient {
       isBootstrapped(opts)
         ? {
             bootstrappedFlags: opts.bootstrappedFlags,
+            bootstrappedOverrides: opts.bootstrappedOverrides,
             offline: this.config.offline,
           }
         : {
@@ -514,7 +523,6 @@ export class ReflagClient {
 
     if (!this.config.bootstrapped) {
       await this.flagsClient.initialize();
-
       if (this.context.user && this.config.enableTracking) {
         this.user().catch((e) => {
           this.logger.error("error sending user", e);
@@ -528,6 +536,9 @@ export class ReflagClient {
       }
       this.config.bootstrapped = true;
     }
+
+    // Apply overrides and trigger an update if they changed
+    this.flagsClient.updateFlags();
 
     this.logger.info(
       "Reflag initialized in " +
@@ -707,8 +718,8 @@ export class ReflagClient {
    * @param flags The flags to update.
    * @param triggerEvent Whether to trigger the `flagsUpdated` event.
    */
-  updateFlags(flags: FetchedFlags, triggerEvent = true) {
-    this.flagsClient.setFetchedFlags(flags, triggerEvent);
+  updateFlags(...args: Parameters<FlagsClient["setFetchedFlags"]>) {
+    this.flagsClient.setFetchedFlags(...args);
   }
 
   /**

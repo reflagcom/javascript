@@ -1,4 +1,4 @@
-import { FetchedFlags } from "./flags";
+import { RawFlags } from "./flags";
 
 interface StorageItem {
   get(): string | null;
@@ -8,18 +8,18 @@ interface StorageItem {
 interface cacheEntry {
   expireAt: number;
   staleAt: number;
-  flags: FetchedFlags;
+  flags: RawFlags;
 }
 
 // Parse and validate an API flags response
 export function parseAPIFlagsResponse(
   flagsInput: any,
-): FetchedFlags | undefined {
+): RawFlags | undefined {
   if (!isObject(flagsInput)) {
     return;
   }
 
-  const flags: FetchedFlags = {};
+  const flags: RawFlags = {};
   for (const key in flagsInput) {
     const flag = flagsInput[key];
 
@@ -49,7 +49,7 @@ export function parseAPIFlagsResponse(
 }
 
 export interface CacheResult {
-  flags: FetchedFlags;
+  flags: RawFlags;
   stale: boolean;
 }
 
@@ -77,7 +77,7 @@ export class FlagCache {
     {
       flags,
     }: {
-      flags: FetchedFlags;
+      flags: RawFlags;
     },
   ) {
     let cacheData: CacheData = {};

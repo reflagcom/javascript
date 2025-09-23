@@ -12,7 +12,7 @@ import { FlagCache, isObject, parseAPIFlagsResponse } from "./flagCache";
 /**
  * A flag fetched from the server.
  */
-export type FetchedFlag = {
+export type RawFlag = {
   /**
    * Flag key.
    */
@@ -23,6 +23,11 @@ export type FetchedFlag = {
    * Note: does not take local overrides into account.
    */
   isEnabled: boolean;
+
+  /**
+   * If not null or undefined, the result is being overridden locally
+   */
+  isEnabledOverride?: boolean | null;
 
   /**
    * Version of targeting rules.
@@ -68,15 +73,6 @@ export type FetchedFlag = {
      */
     missingContextFields?: string[];
   };
-};
-
-export type FetchedFlags = Record<string, FetchedFlag | undefined>;
-
-export type RawFlag = FetchedFlag & {
-  /**
-   * If not null, the result is being overridden locally
-   */
-  isEnabledOverride: boolean | null;
 };
 
 export type RawFlags = Record<string, RawFlag>;
@@ -182,10 +178,11 @@ export interface CheckEvent {
 const localStorageFetchedFlagsKey = `__reflag_fetched_flags`;
 const overridesCookieKey = `__reflag_overrides`;
 
-type OverridesFlags = Record<string, boolean | null>;
+export type FlagOverrides = Record<string, boolean | undefined>;
 
 type FlagsClientOptions = Partial<Config> & {
-  bootstrappedFlags?: FetchedFlags;
+  bootstrappedFlags?: RawFlags;
+  bootstrappedOverrides?: FlagOverrides;
   fallbackFlags?: Record<string, FallbackFlagOverride> | string[];
   cache?: FlagCache;
   rateLimiter?: RateLimiter;
@@ -200,8 +197,8 @@ export class FlagsClient {
   private readonly logger: Logger;
 
   private cache: FlagCache;
-  private fetchedFlags: FetchedFlags = {};
-  private flagOverrides: OverridesFlags = {};
+  private fetchedFlags: RawFlags = {};
+  private flagOverrides: FlagOverrides = {};
   private flags: RawFlags = {};
   private fallbackFlags: FallbackFlags = {};
 
@@ -216,6 +213,7 @@ export class FlagsClient {
     logger: Logger,
     {
       bootstrappedFlags,
+      bootstrappedOverrides,
       cache,
       rateLimiter,
       fallbackFlags,
@@ -235,19 +233,18 @@ export class FlagsClient {
       this.setupCache(this.config.staleTimeMs, this.config.expireTimeMs);
     this.fallbackFlags = this.setupFallbackFlags(fallbackFlags);
 
-    try {
-      const storedFlagOverrides = this.getOverridesCache();
-      for (const key in storedFlagOverrides) {
-        this.flagOverrides[key] = storedFlagOverrides[key];
-      }
-    } catch (e) {
-      this.logger.warn("error getting flag overrides from cache", e);
-      this.flagOverrides = {};
-    }
-
     if (bootstrappedFlags) {
       this.initialized = true;
+      // If bootstrapped flag overrides are provided, use them and store them in the cache
+      if (bootstrappedOverrides) {
+        this.flagOverrides = bootstrappedOverrides;
+        this.setOverridesCache(this.flagOverrides);
+      }
       this.setFetchedFlags(bootstrappedFlags, false);
+    }
+
+    if (!bootstrappedFlags || !bootstrappedOverrides) {
+      this.flagOverrides = this.getOverridesCache();
     }
   }
 
@@ -271,22 +268,27 @@ export class FlagsClient {
     return this.flags;
   }
 
-  getFetchedFlags(): FetchedFlags {
+  getFetchedFlags(): RawFlags {
     return this.fetchedFlags;
   }
 
-  setFetchedFlags(flags: FetchedFlags, triggerEvent = true) {
-    // Nothing has changed, skipping update
-    if (deepEqual(this.fetchedFlags, flags)) return;
-    this.warnMissingFlagContextFields(flags);
-    this.fetchedFlags = flags;
-    this.flags = this.mergeFlags(this.fetchedFlags, this.flagOverrides);
-    if (triggerEvent) this.triggerFlagsUpdated();
+  setFetchedFlags(fetchedFlags: RawFlags, triggerEvent = true) {
+    this.fetchedFlags = fetchedFlags;
+    this.warnMissingFlagContextFields(fetchedFlags);
+    this.updateFlags(triggerEvent);
   }
 
   async setContext(context: ReflagContext) {
     this.context = context;
     this.setFetchedFlags((await this.maybeFetchFlags()) || {});
+  }
+
+  updateFlags(triggerEvent = true) {
+    const updatedFlags = this.mergeFlags(this.fetchedFlags, this.flagOverrides);
+    // Nothing has changed, skipping update
+    if (deepEqual(this.flags, updatedFlags)) return;
+    this.flags = updatedFlags;
+    if (triggerEvent) this.triggerFlagsUpdated();
   }
 
   setFlagOverride(key: string, isEnabled: boolean | null) {
@@ -295,14 +297,17 @@ export class FlagsClient {
     }
 
     if (isEnabled === null) {
+      const actualValue = !this.flagOverrides[key];
       delete this.flagOverrides[key];
+      // todo: investigate if this is safe or if we need to fetch flags again
+      this.fetchedFlags[key].isEnabled = actualValue;
+      this.fetchedFlags[key].isEnabledOverride = null;
     } else {
       this.flagOverrides[key] = isEnabled;
     }
-    this.setOverridesCache(this.flagOverrides);
 
-    this.flags = this.mergeFlags(this.fetchedFlags, this.flagOverrides);
-    this.triggerFlagsUpdated();
+    this.updateFlags();
+    this.setOverridesCache(this.flagOverrides);
   }
 
   getFlagOverride(key: string): boolean | null {
@@ -362,7 +367,7 @@ export class FlagsClient {
     return checkEvent.value;
   }
 
-  async fetchFlags(): Promise<FetchedFlags | undefined> {
+  async fetchFlags(): Promise<RawFlags | undefined> {
     const params = this.fetchParams();
     try {
       const res = await this.httpClient.get({
@@ -399,7 +404,7 @@ export class FlagsClient {
     }
   }
 
-  private setOverridesCache(overrides: OverridesFlags) {
+  private setOverridesCache(overrides: FlagOverrides) {
     try {
       Cookies.set(overridesCookieKey, JSON.stringify(overrides), {
         expires: 7, // 1 week
@@ -412,7 +417,7 @@ export class FlagsClient {
     }
   }
 
-  private getOverridesCache(): OverridesFlags {
+  private getOverridesCache(): FlagOverrides {
     try {
       const overridesCookie = Cookies.get(overridesCookieKey);
       const overrides = JSON.parse(overridesCookie || "{}");
@@ -424,7 +429,7 @@ export class FlagsClient {
     }
   }
 
-  private async maybeFetchFlags(): Promise<FetchedFlags | undefined> {
+  private async maybeFetchFlags(): Promise<RawFlags | undefined> {
     if (this.config.offline) {
       return;
     }
@@ -484,10 +489,10 @@ export class FlagsClient {
             : undefined,
       };
       return acc;
-    }, {} as FetchedFlags);
+    }, {} as RawFlags);
   }
 
-  private mergeFlags(fetchedFlags: FetchedFlags, overrides: OverridesFlags) {
+  private mergeFlags(fetchedFlags: RawFlags, overrides: FlagOverrides) {
     const mergedFlags: RawFlags = {};
     // merge fetched flags with overrides into `this.flags`
     for (const key in fetchedFlags) {
@@ -549,7 +554,7 @@ export class FlagsClient {
     return params;
   }
 
-  private warnMissingFlagContextFields(flags: FetchedFlags) {
+  private warnMissingFlagContextFields(flags: RawFlags) {
     const report: Record<string, string[]> = {};
     for (const flagKey in flags) {
       const flag = flags[flagKey];

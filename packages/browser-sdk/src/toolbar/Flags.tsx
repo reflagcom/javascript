@@ -94,6 +94,7 @@ function FlagRow({
   index: number;
   isNotVisible: boolean;
 }) {
+  const isEnabledOverride = flag.isEnabledOverride !== null;
   return (
     <tr
       key={flag.flagKey}
@@ -111,18 +112,17 @@ function FlagRow({
         </a>
       </td>
       <td class="flag-reset-cell">
-        {flag.localOverride !== null ? (
+        {isEnabledOverride ? (
           <Reset setEnabledOverride={setEnabledOverride} tabIndex={index + 1} />
         ) : null}
       </td>
       <td class="flag-switch-cell">
         <Switch
-          checked={flag.localOverride ?? flag.isEnabled}
+          checked={isEnabledOverride ?? flag.isEnabled}
           tabIndex={index + 1}
           onChange={(e) => {
             const isChecked = e.currentTarget.checked;
-            const isOverridden = isChecked !== flag.isEnabled;
-            setEnabledOverride(isOverridden ? isChecked : null);
+            setEnabledOverride(!isEnabledOverride ? isChecked : null);
           }}
         />
       </td>

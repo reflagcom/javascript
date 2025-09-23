@@ -21,14 +21,14 @@ const TOOLBAR_HIDE_KEY = "reflag-toolbar-hidden";
 
 export type FlagItem = {
   flagKey: string;
-  localOverride: boolean | null;
   isEnabled: boolean;
+  isEnabledOverride: boolean | null;
 };
 
 type Flag = {
   flagKey: string;
   isEnabled: boolean;
-  localOverride: boolean | null;
+  isEnabledOverride: boolean | null;
 };
 
 export default function Toolbar({
@@ -55,7 +55,7 @@ export default function Toolbar({
           (flag) =>
             ({
               flagKey: flag.key,
-              localOverride: flag.isEnabledOverride,
+              isEnabledOverride: flag.isEnabledOverride ?? null,
               isEnabled: flag.isEnabled,
             }) satisfies FlagItem,
         ),
@@ -63,7 +63,7 @@ export default function Toolbar({
   }, [reflagClient]);
 
   const hasAnyOverrides = useMemo(() => {
-    return flags.some((f) => f.localOverride !== null);
+    return flags.some((f) => f.isEnabledOverride !== null);
   }, [flags]);
 
   useEffect(() => {

@@ -2,7 +2,7 @@ import { afterAll, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { version } from "../package.json";
 import { FLAGS_EXPIRE_MS } from "../src/config";
-import { FetchedFlag, FlagsClient, RawFlag } from "../src/flag/flags";
+import { FlagsClient, RawFlag } from "../src/flag/flags";
 import { HttpClient } from "../src/httpClient";
 
 import { flagsResult } from "./mocks/handlers";
@@ -235,7 +235,7 @@ describe("FlagsClient", () => {
           isEnabled: true,
           key: "flagB",
           targetingVersion: 1,
-        } satisfies FetchedFlag,
+        } satisfies RawFlag,
       },
     };
 

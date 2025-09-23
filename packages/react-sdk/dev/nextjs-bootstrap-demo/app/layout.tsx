@@ -2,11 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/Providers";
-import {
-  ReflagClient as ReflagNodeClient,
-  FLAG_OVERRIDES_COOKIE,
-} from "@reflag/node-sdk";
-import { cookies } from "next/headers";
+import { ReflagClient as ReflagNodeClient } from "@reflag/node-sdk";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -19,28 +15,26 @@ const publishableKey = process.env.REFLAG_PUBLISHABLE_KEY || "";
 const secretKey = process.env.REFLAG_SECRET_KEY || "";
 const offline = process.env.CI === "true";
 
-let serverClient: ReflagNodeClient;
+declare global {
+  var serverClient: ReflagNodeClient;
+}
 
-// todo: investigate how to avoid reloads creating a new client
 async function getServerClient() {
-  if (!serverClient) {
-    serverClient = new ReflagNodeClient({
+  if (!globalThis.serverClient) {
+    globalThis.serverClient = new ReflagNodeClient({
       secretKey,
       offline,
     });
-    await serverClient.initialize();
+    await globalThis.serverClient.initialize();
   }
-  return serverClient;
+  return globalThis.serverClient;
 }
 
 async function getBootstrappedFlags() {
   const serverClient = await getServerClient();
-  // Get overrides from cookie
-  const cookieStore = await cookies();
-  const cookieString = cookieStore.get(FLAG_OVERRIDES_COOKIE)?.value;
-  const flagOverrides = JSON.parse(cookieString || "{}");
 
   // In a real app, you'd get user/company from your auth system
+  const flagOverrides = await serverClient.getFlagOverridesNextJS();
   const flags = serverClient.getFlagsForBootstrap(
     {
       user: {

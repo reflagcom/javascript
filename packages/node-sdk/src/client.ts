@@ -693,7 +693,7 @@ export class ReflagClient {
    * @param options.other - The other context.
    * @param options.overrides - Additional flag overrides to apply on top of any configured overrides.
    *
-   * @returns The evaluated raw flags and the context.
+   * @returns The evaluated raw flags, the context, and the overrides.
    *
    * @remarks
    * Call `initialize` before calling this method to ensure the flag definitions are cached, no flags will be returned otherwise.
@@ -710,6 +710,7 @@ export class ReflagClient {
         undefined,
         overrides,
       ),
+      overrides,
     };
   }
 
@@ -754,6 +755,75 @@ export class ReflagClient {
     additionalContext?: Context,
   ): Promise<TypedFlags[TKey]> {
     return this._getFlagsRemote(key, userId, companyId, additionalContext);
+  }
+
+  /**
+   * Get flag overrides from the NextJS cookies.
+   * @returns The parsed overrides object
+   */
+  public async getFlagOverridesNextJS(): Promise<FlagOverrides> {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { cookies } = require("next/headers");
+      const cookieStore = await cookies();
+      const overridesCookie = cookieStore.get(FLAG_OVERRIDES_COOKIE)?.value;
+      const overrides = JSON.parse(overridesCookie || "{}");
+      if (!isObject(overrides)) throw new Error("invalid overrides");
+      return overrides;
+    } catch (error) {
+      this.logger.error("unable to get overrides from nextjs cookie", error);
+      return {};
+    }
+  }
+
+  /**
+   * Get flag overrides from the request cookies.
+   * @param req - The request object.
+   * @returns The parsed overrides object
+   */
+  public getFlagOverridesRequest(req: {
+    cookies?: Record<string, string>;
+  }): FlagOverrides {
+    try {
+      const overridesCookie = req.cookies?.[FLAG_OVERRIDES_COOKIE];
+      const overrides = JSON.parse(overridesCookie || "{}");
+      if (!isObject(overrides)) throw new Error("invalid overrides");
+      return overrides;
+    } catch (error) {
+      this.logger.error("unable to get overrides from express cookie", error);
+      return {};
+    }
+  }
+
+  /**
+   * Get flag overrides from a cookie string.
+   * @param cookiesString - An unparsed cookie string.
+   * @returns The parsed overrides object
+   */
+  public getFlagOverridesCookiesString(cookiesString: string): FlagOverrides {
+    try {
+      const cookies = cookiesString
+        .split(";")
+        .map((cookie) => cookie.trim())
+        .reduce(
+          (acc, cookie) => {
+            const [key, value] = cookie.split("=");
+            if (key && value) {
+              acc[key] = decodeURIComponent(value);
+            }
+            return acc;
+          },
+          {} as Record<string, string>,
+        );
+
+      const overridesCookie = cookies[FLAG_OVERRIDES_COOKIE];
+      const overrides = JSON.parse(overridesCookie || "{}");
+      if (!isObject(overrides)) throw new Error("invalid overrides");
+      return overrides;
+    } catch (error) {
+      this.logger.error("unable to get overrides from cookie string", error);
+      return {};
+    }
   }
 
   private buildUrl(path: string) {
@@ -851,41 +921,6 @@ export class ReflagClient {
       );
       return undefined;
     }
-  }
-
-  /**
-   * Get overrides from a cookie string (useful for server-side usage)
-   * @param cookieString - The cookie string from document.cookie or server request headers
-   * @returns The parsed overrides object
-   */
-  getOverridesFromCookie(cookieString: string): FlagOverrides {
-    try {
-      const cookies = cookieString
-        .split(";")
-        .map((cookie) => cookie.trim())
-        .reduce(
-          (acc, cookie) => {
-            const [key, value] = cookie.split("=");
-            if (key && value) {
-              acc[key] = decodeURIComponent(value);
-            }
-            return acc;
-          },
-          {} as Record<string, string>,
-        );
-
-      const overridesCookie = cookies[FLAG_OVERRIDES_COOKIE];
-      if (overridesCookie) {
-        const cachedOverrides = JSON.parse(overridesCookie);
-        if (isObject(cachedOverrides)) {
-          return cachedOverrides;
-        }
-      }
-    } catch {
-      // Ignore parsing errors
-    }
-
-    return {};
   }
 
   /**
@@ -1100,17 +1135,17 @@ export class ReflagClient {
   private _getFlags(
     options: ContextWithTracking,
     key?: undefined,
-    additionalOverrides?: FlagOverrides,
+    clientOverrides?: FlagOverrides,
   ): Record<TypedFlagKey, RawFlag>;
   private _getFlags<TKey extends TypedFlagKey>(
     options: ContextWithTracking,
     key: TKey,
-    additionalOverrides?: FlagOverrides,
+    clientOverrides?: FlagOverrides,
   ): RawFlag | undefined;
   private _getFlags<TKey extends TypedFlagKey>(
     options: ContextWithTracking,
     key?: TKey,
-    additionalOverrides?: FlagOverrides,
+    clientOverrides?: FlagOverrides,
   ): Record<TypedFlagKey, RawFlag> | RawFlag | undefined {
     checkContextWithTracking(options);
 
@@ -1161,6 +1196,7 @@ export class ReflagClient {
         acc[res.flagKey as TypedFlagKey] = {
           key: res.flagKey,
           isEnabled: res.enabledResult.value ?? false,
+          isEnabledOverride: null,
           ruleEvaluationResults: res.enabledResult.ruleEvaluationResults,
           missingContextFields: res.enabledResult.missingContextFields,
           targetingVersion: res.targetingVersion,
@@ -1177,9 +1213,9 @@ export class ReflagClient {
       {} as Record<TypedFlagKey, RawFlag>,
     );
 
-    // apply flag overrides (merge configured overrides with additional overrides)
-    const configuredOverrides = this._config.flagOverrides(context);
-    const mergedOverrides = { ...configuredOverrides, ...additionalOverrides };
+    // apply flag overrides (merge config overrides with client overrides)
+    const configOverrides = this._config.flagOverrides(context);
+    const mergedOverrides = { ...configOverrides, ...clientOverrides };
 
     const overrides = Object.entries(mergedOverrides)
       .filter(([flagKey]) => (key ? key === flagKey : true))
@@ -1189,11 +1225,13 @@ export class ReflagClient {
           ? {
               key: flagKey,
               isEnabled: override.isEnabled,
+              isEnabledOverride: override.isEnabled,
               config: override.config,
             }
           : {
               key: flagKey,
               isEnabled: !!override,
+              isEnabledOverride: !!override,
               config: undefined,
             },
       ]);
