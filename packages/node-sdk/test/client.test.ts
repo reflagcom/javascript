@@ -17,6 +17,7 @@ import {
   BATCH_INTERVAL_MS,
   BATCH_MAX_SIZE,
   FLAG_EVENT_RATE_LIMITER_WINDOW_SIZE_MS,
+  FLAG_OVERRIDES_COOKIE,
   FLAGS_REFETCH_MS,
   SDK_VERSION,
   SDK_VERSION_HEADER_NAME,
@@ -44,6 +45,11 @@ vi.mock("../src/rate-limiter", async (importOriginal) => {
 
 vi.mock("../src/flusher", () => ({
   subscribe: vi.fn(),
+}));
+
+// Mock NextJS headers module for dynamic import
+vi.mock("next/headers", () => ({
+  cookies: vi.fn(),
 }));
 
 const user = {
@@ -2864,6 +2870,156 @@ describe("BoundReflagClient", () => {
         expectedHeaders,
         API_TIMEOUT_MS,
       );
+    });
+  });
+
+  describe("Cookie Parsers", () => {
+    let cookieClient: ReflagClient;
+
+    beforeEach(() => {
+      cookieClient = new ReflagClient(validOptions);
+    });
+
+    describe("getFlagOverridesCookiesString", () => {
+      it("should parse flag overrides from cookie string", () => {
+        const overrides = { flag1: true, flag2: false };
+        const cookieValue = encodeURIComponent(JSON.stringify(overrides));
+        const cookieString = `session=abc123; __reflag_overrides=${cookieValue}; theme=dark`;
+
+        const result = cookieClient.getFlagOverridesCookiesString(cookieString);
+
+        expect(result).toEqual(overrides);
+      });
+
+      it("should return empty object for invalid input", () => {
+        expect(cookieClient.getFlagOverridesCookiesString("")).toEqual({});
+        expect(
+          cookieClient.getFlagOverridesCookiesString("session=abc123"),
+        ).toEqual({});
+        expect(
+          cookieClient.getFlagOverridesCookiesString(
+            "__reflag_overrides=invalid-json",
+          ),
+        ).toEqual({});
+      });
+    });
+
+    describe("getFlagOverridesRequest", () => {
+      it("should parse flag overrides from request object", () => {
+        const overrides = { flag1: true, flag2: false };
+        const req = {
+          cookies: { __reflag_overrides: JSON.stringify(overrides) },
+        };
+
+        const result = cookieClient.getFlagOverridesRequest(req);
+
+        expect(result).toEqual(overrides);
+      });
+
+      it("should return empty object for invalid input", () => {
+        expect(cookieClient.getFlagOverridesRequest({})).toEqual({});
+        expect(
+          cookieClient.getFlagOverridesRequest({ cookies: undefined }),
+        ).toEqual({});
+        expect(
+          cookieClient.getFlagOverridesRequest({
+            cookies: { __reflag_overrides: "invalid-json" },
+          }),
+        ).toEqual({});
+      });
+    });
+
+    describe("getFlagOverridesNextJS", () => {
+      let originalRequire: NodeRequire;
+
+      beforeEach(() => {
+        originalRequire = global.require;
+      });
+
+      afterEach(() => {
+        global.require = originalRequire;
+        vi.clearAllMocks();
+      });
+
+      it("should parse flag overrides from NextJS cookies", async () => {
+        const overrides = { flag1: true, flag2: false };
+        const mockCookieStore = {
+          get: vi.fn().mockReturnValue({ value: JSON.stringify(overrides) }),
+        };
+        const mockCookies = vi.fn().mockResolvedValue(mockCookieStore);
+
+        // Use Module._load to intercept require calls
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const Module = require("module");
+        const originalLoad = Module._load;
+
+        Module._load = vi.fn((request: string, parent: any) => {
+          if (request === "next/headers") {
+            return { cookies: mockCookies };
+          }
+          return originalLoad(request, parent);
+        });
+
+        const result = await cookieClient.getFlagOverridesNextJS();
+
+        expect(result).toEqual(overrides);
+        expect(mockCookies).toHaveBeenCalled();
+        expect(mockCookieStore.get).toHaveBeenCalledWith(FLAG_OVERRIDES_COOKIE);
+
+        // Restore original Module._load
+        Module._load = originalLoad;
+      });
+
+      it("should return empty object for invalid input", async () => {
+        // Test module not available
+        const result1 = await cookieClient.getFlagOverridesNextJS();
+        expect(result1).toEqual({});
+
+        // Test require throws
+        global.require = vi.fn((id: string) => {
+          if (id === "next/headers") {
+            throw new Error("Module not found");
+          }
+          return originalRequire(id);
+        }) as any;
+
+        const result2 = await cookieClient.getFlagOverridesNextJS();
+        expect(result2).toEqual({});
+
+        // Test invalid cookie data
+        const mockCookieStore = {
+          get: vi.fn().mockReturnValue({ value: "invalid-json" }),
+        };
+        const mockCookies = vi.fn().mockResolvedValue(mockCookieStore);
+
+        global.require = vi.fn((id: string) => {
+          if (id === "next/headers") {
+            return { cookies: mockCookies };
+          }
+          return originalRequire(id);
+        }) as any;
+
+        const result3 = await cookieClient.getFlagOverridesNextJS();
+        expect(result3).toEqual({});
+
+        // Test missing cookie
+        const mockCookieStoreMissing = {
+          get: vi.fn().mockReturnValue(undefined),
+        };
+        const mockCookiesMissing = vi
+          .fn()
+          .mockResolvedValue(mockCookieStoreMissing);
+
+        global.require = vi.fn((id: string) => {
+          if (id === "next/headers") {
+            return { cookies: mockCookiesMissing };
+          }
+          return originalRequire(id);
+        }) as any;
+
+        const result4 = await cookieClient.getFlagOverridesNextJS();
+        expect(result4).toEqual({});
+      });
     });
   });
 });
