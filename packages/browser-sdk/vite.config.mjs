@@ -1,18 +1,15 @@
 import { resolve } from "path";
 import { defineConfig } from "vite";
 import dts from "vite-plugin-dts";
+import { defaultExclude } from "vitest/config";
 
 export default defineConfig({
   test: {
+    root: __dirname,
     environment: "jsdom",
-    exclude: [
-      "test/e2e/**",
-      "**/node_modules/**",
-      "**/dist/**",
-      "**/cypress/**",
-      "**/.{idea,git,cache,output,temp}/**",
-      "**/{karma,rollup,webpack,vite,vitest,jest,ava,babel,nyc,cypress,tsup,build}.config.*",
-    ],
+    globals: true,
+    setupFiles: ["./vitest.setup.ts"],
+    exclude: [...defaultExclude, "test/e2e/**"],
   },
   plugins: [dts({ insertTypesEntry: true })],
   build: {
