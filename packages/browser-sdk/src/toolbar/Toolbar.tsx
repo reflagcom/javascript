@@ -43,7 +43,8 @@ export default function Toolbar({
   const [flags, setFlags] = useState<Flag[]>([]);
 
   const wasHidden =
-    window?.sessionStorage?.getItem(TOOLBAR_HIDE_KEY) === "true";
+    typeof window !== "undefined" &&
+    window.sessionStorage?.getItem(TOOLBAR_HIDE_KEY) === "true";
   const [isHidden, setIsHidden] = useState(wasHidden);
 
   const updateFlags = useCallback(() => {

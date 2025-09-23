@@ -24,7 +24,12 @@ import {
 import fetchClient from "../src/fetch-http-client";
 import { subscribe as triggerOnExit } from "../src/flusher";
 import { newRateLimiter } from "../src/rate-limiter";
-import { ClientOptions, Context, FlagsAPIResponse } from "../src/types";
+import {
+  ClientOptions,
+  Context,
+  FlagOverrides,
+  FlagsAPIResponse,
+} from "../src/types";
 
 const BULK_ENDPOINT = "https://api.example.com/bulk";
 
@@ -1888,6 +1893,7 @@ describe("ReflagClient", () => {
           flag1: {
             key: "flag1",
             isEnabled: true,
+            isEnabledOverride: null,
             targetingVersion: 1,
             config: {
               key: "config-1",
@@ -1904,6 +1910,7 @@ describe("ReflagClient", () => {
           flag2: {
             key: "flag2",
             isEnabled: false,
+            isEnabledOverride: null,
             targetingVersion: 2,
             config: {
               key: undefined,
@@ -1916,6 +1923,7 @@ describe("ReflagClient", () => {
             missingContextFields: ["attributeKey"],
           },
         },
+        overrides: undefined,
       });
 
       // Should not have track function like regular getFlags
@@ -1941,6 +1949,7 @@ describe("ReflagClient", () => {
           flag1: {
             key: "flag1",
             isEnabled: false,
+            isEnabledOverride: null,
             targetingVersion: 1,
             config: {
               key: undefined,
@@ -1955,6 +1964,7 @@ describe("ReflagClient", () => {
           flag2: {
             key: "flag2",
             isEnabled: false,
+            isEnabledOverride: null,
             targetingVersion: 2,
             config: {
               key: undefined,
@@ -1967,6 +1977,7 @@ describe("ReflagClient", () => {
             missingContextFields: ["company.id"],
           },
         },
+        overrides: undefined,
       });
 
       // Should not have track function
@@ -1990,6 +2001,7 @@ describe("ReflagClient", () => {
           flag1: {
             key: "flag1",
             isEnabled: true,
+            isEnabledOverride: null,
             targetingVersion: 1,
             config: {
               key: "config-1",
@@ -2006,6 +2018,7 @@ describe("ReflagClient", () => {
           flag2: {
             key: "flag2",
             isEnabled: false,
+            isEnabledOverride: null,
             targetingVersion: 2,
             config: {
               key: undefined,
@@ -2018,6 +2031,7 @@ describe("ReflagClient", () => {
             missingContextFields: ["attributeKey"],
           },
         },
+        overrides: undefined,
       });
 
       // Should not have track function
@@ -2037,6 +2051,7 @@ describe("ReflagClient", () => {
           flag1: {
             key: "flag1",
             isEnabled: false,
+            isEnabledOverride: null,
             targetingVersion: 1,
             config: {
               key: undefined,
@@ -2051,6 +2066,7 @@ describe("ReflagClient", () => {
           flag2: {
             key: "flag2",
             isEnabled: false,
+            isEnabledOverride: null,
             targetingVersion: 2,
             config: {
               key: undefined,
@@ -2063,6 +2079,7 @@ describe("ReflagClient", () => {
             missingContextFields: ["company.id"],
           },
         },
+        overrides: undefined,
       });
 
       // Should not have track function
@@ -2091,6 +2108,7 @@ describe("ReflagClient", () => {
             key: "key",
           },
         },
+        overrides: undefined,
       });
     });
 
@@ -2118,6 +2136,7 @@ describe("ReflagClient", () => {
           other: otherContext,
         },
         flags: {},
+        overrides: undefined,
       });
     });
 
@@ -2177,6 +2196,7 @@ describe("ReflagClient", () => {
           other: otherContext,
         },
         flags: {},
+        overrides: undefined,
       });
     });
 
@@ -2209,6 +2229,162 @@ describe("ReflagClient", () => {
           other: otherContext,
         },
         flags: fallbackTestFlags,
+        overrides: undefined,
+      });
+    });
+
+    it("should apply flag overrides correctly in bootstrap flags", async () => {
+      await client.initialize();
+
+      // Test with simple boolean overrides
+      const overrides = {
+        flag1: false, // Override to disable flag1 (normally enabled)
+        flag2: true, // Override to enable flag2 (normally disabled)
+      };
+
+      const flagsWithOverrides = client.getFlagsForBootstrap(
+        {
+          company,
+          user,
+          other: otherContext,
+          enableTracking: true,
+        },
+        overrides,
+      );
+
+      expect(flagsWithOverrides).toStrictEqual({
+        context: {
+          company,
+          user,
+          other: otherContext,
+        },
+        flags: {
+          flag1: {
+            key: "flag1",
+            isEnabled: false, // Overridden to false
+            isEnabledOverride: false,
+            config: undefined,
+          },
+          flag2: {
+            key: "flag2",
+            isEnabled: true, // Overridden to true
+            isEnabledOverride: true,
+            config: undefined,
+          },
+        },
+        overrides,
+      });
+    });
+
+    it("should apply complex flag overrides with config in bootstrap flags", async () => {
+      await client.initialize();
+
+      // Test with complex object overrides
+      const complexOverrides: FlagOverrides = {
+        flag1: {
+          isEnabled: false,
+          config: {
+            key: "override-config-1",
+            payload: { test: "data" },
+          },
+        },
+        flag2: {
+          isEnabled: true,
+          config: {
+            key: "override-config-2",
+            payload: undefined,
+          },
+        },
+      };
+
+      const flagsWithComplexOverrides = client.getFlagsForBootstrap(
+        {
+          company,
+          user,
+          other: otherContext,
+          enableTracking: true,
+        },
+        complexOverrides,
+      );
+
+      expect(flagsWithComplexOverrides).toStrictEqual({
+        context: {
+          company,
+          user,
+          other: otherContext,
+        },
+        flags: {
+          flag1: {
+            key: "flag1",
+            isEnabled: false,
+            isEnabledOverride: false,
+            config: {
+              key: "override-config-1",
+              payload: { test: "data" },
+            },
+          },
+          flag2: {
+            key: "flag2",
+            isEnabled: true,
+            isEnabledOverride: true,
+            config: {
+              key: "override-config-2",
+              payload: undefined,
+            },
+          },
+        },
+        overrides: complexOverrides,
+      });
+    });
+
+    it("should merge client overrides with config overrides", async () => {
+      // Create a client with config-level overrides
+      const clientWithConfigOverrides = new ReflagClient({
+        ...validOptions,
+        flagOverrides: () => ({
+          flag1: false, // Config override
+        }),
+      });
+
+      await clientWithConfigOverrides.initialize();
+
+      // Client-level overrides should override config overrides
+      const clientOverrides = {
+        flag1: true, // Should override the config override
+        flag2: true, // New override
+      };
+
+      const flags = clientWithConfigOverrides.getFlagsForBootstrap(
+        {
+          company,
+          user,
+          other: otherContext,
+          enableTracking: true,
+        },
+        clientOverrides,
+      );
+
+      expect(flags).toStrictEqual({
+        context: {
+          company,
+          user,
+          other: otherContext,
+        },
+        flags: {
+          flag1: {
+            key: "flag1",
+            isEnabled: true, // Client override wins
+            isEnabledOverride: true,
+            config: undefined,
+          },
+          flag2: {
+            key: "flag2",
+            isEnabled: true, // Client override
+            isEnabledOverride: true,
+            config: undefined,
+          },
+        },
+        overrides: clientOverrides,
       });
     });
   });
@@ -2561,6 +2737,7 @@ describe("BoundReflagClient", () => {
         flag1: {
           key: "flag1",
           isEnabled: true,
+          isEnabledOverride: null,
           targetingVersion: 1,
           config: {
             key: "config-1",
@@ -2577,6 +2754,7 @@ describe("BoundReflagClient", () => {
         flag2: {
           key: "flag2",
           isEnabled: false,
+          isEnabledOverride: null,
           targetingVersion: 2,
           config: {
             key: undefined,
@@ -2589,6 +2767,7 @@ describe("BoundReflagClient", () => {
           missingContextFields: ["attributeKey"],
         },
       },
+      overrides: undefined,
     });
 
     // Should not have track function like regular getFlags
