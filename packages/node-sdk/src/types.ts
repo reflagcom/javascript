@@ -136,7 +136,7 @@ export interface RawFlag {
 export type BootstrappedFlags = {
   context: Context;
   flags: Record<TypedFlagKey, RawFlag>;
-  overrides?: FlagOverrides;
+  overrides?: FlagSimpleOverrides;
 };
 
 export type EmptyFlagRemoteConfig = { key: undefined; payload: undefined };
@@ -292,6 +292,8 @@ export type FlagOverrides = Partial<
           : Exclude<FlagOverride, "config">;
       }
 >;
+
+export type FlagSimpleOverrides = Record<string, boolean | undefined>;
 
 export type FlagOverridesFn = (context: Context) => FlagOverrides;
 

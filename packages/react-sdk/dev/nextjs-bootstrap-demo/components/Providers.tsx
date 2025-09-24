@@ -16,8 +16,8 @@ type Props = {
   children: ReactNode;
 };
 
-// Use the cookies override provider to store flag overrides that we can retrieve on the server.
-// Note that that classes can only be provided as props on the client side.
+// Use the store flag overrides in a cookie for retrieval on the server.
+// Note that classes can only be provided as props on the client side, hence the "use client" directive.
 const overridesProvider = new CookieOverridesProvider(DEFAULT_OVERRIDES_KEY);
 
 export const Providers = ({ publishableKey, flags, children }: Props) => {

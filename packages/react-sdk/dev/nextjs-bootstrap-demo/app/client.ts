@@ -1,7 +1,7 @@
 import { DEFAULT_OVERRIDES_KEY } from "@reflag/browser-sdk";
 import {
   Context,
-  FlagOverrides,
+  FlagSimpleOverrides,
   ReflagClient as ReflagNodeClient,
 } from "@reflag/node-sdk";
 import { cookies } from "next/headers";
@@ -37,7 +37,9 @@ export async function getServerClient() {
  * Get flag overrides from the NextJS cookies.
  * @returns The parsed overrides object
  */
-export async function getFlagOverrides(): Promise<FlagOverrides | undefined> {
+export async function getFlagOverrides(): Promise<
+  FlagSimpleOverrides | undefined
+> {
   try {
     const cookieStore = await cookies();
     const overridesCookie = cookieStore.get(DEFAULT_OVERRIDES_KEY)?.value;
@@ -46,7 +48,7 @@ export async function getFlagOverrides(): Promise<FlagOverrides | undefined> {
     return overrides;
   } catch (error) {
     console.error("unable to get overrides from nextjs cookie", error);
-    return {};
+    return;
   }
 }
 

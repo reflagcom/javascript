@@ -30,6 +30,7 @@ import type {
   FlagDefinition,
   FlagOverrides,
   FlagOverridesFn,
+  FlagSimpleOverrides,
   IdType,
   RawFlag,
   TypedFlagKey,
@@ -700,7 +701,7 @@ export class ReflagClient {
    **/
   public getFlagsForBootstrap(
     { enableTracking = true, meta, ...context }: ContextWithTracking,
-    overrides?: FlagOverrides,
+    overrides?: FlagSimpleOverrides,
   ): BootstrappedFlags {
     return {
       context,
@@ -1065,17 +1066,17 @@ export class ReflagClient {
   private _getFlags(
     options: ContextWithTracking,
     key?: undefined,
-    clientOverrides?: FlagOverrides,
+    clientOverrides?: FlagSimpleOverrides,
   ): Record<TypedFlagKey, RawFlag>;
   private _getFlags<TKey extends TypedFlagKey>(
     options: ContextWithTracking,
     key: TKey,
-    clientOverrides?: FlagOverrides,
+    clientOverrides?: FlagSimpleOverrides,
   ): RawFlag | undefined;
   private _getFlags<TKey extends TypedFlagKey>(
     options: ContextWithTracking,
     key?: TKey,
-    clientOverrides?: FlagOverrides,
+    clientOverrides?: FlagSimpleOverrides,
   ): Record<TypedFlagKey, RawFlag> | RawFlag | undefined {
     checkContextWithTracking(options);
 
@@ -1397,7 +1398,9 @@ export class BoundReflagClient {
    * @param overrides - Additional flag overrides to apply on top of any configured overrides.
    * @returns Raw flags for the given user/company and whether each one is enabled or not
    */
-  public getFlagsForBootstrap(overrides?: FlagOverrides): BootstrappedFlags {
+  public getFlagsForBootstrap(
+    overrides?: FlagSimpleOverrides,
+  ): BootstrappedFlags {
     return this._client.getFlagsForBootstrap({ ...this._options }, overrides);
   }
 

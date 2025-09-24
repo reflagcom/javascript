@@ -17,6 +17,7 @@ export type {
   FlagOverridesFn,
   FlagRemoteConfig,
   Flags,
+  FlagSimpleOverrides,
   FlagType,
   HttpClient,
   HttpClientResponse,
