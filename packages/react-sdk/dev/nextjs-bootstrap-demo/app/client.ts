@@ -35,6 +35,7 @@ export async function getServerClient() {
 
 /**
  * Get flag overrides from the NextJS cookies.
+ * This requires the overrides provider to be set in the client.
  * @returns The parsed overrides object
  */
 export async function getFlagOverrides(): Promise<

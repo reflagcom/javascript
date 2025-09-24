@@ -295,19 +295,7 @@ export type InitOptions = ReflagDeprecatedContext & {
    * Defaults to `StorageOverridesProvider` using local storage.
    */
   overridesProvider?: OverridesProvider;
-};
 
-/**
- * Init options for bootstrapped flags.
- */
-export type InitOptionsBootstrapped = Omit<
-  InitOptions,
-  | "fallbackFlags"
-  | "timeoutMs"
-  | "staleWhileRevalidate"
-  | "staleTimeMs"
-  | "expireTimeMs"
-> & {
   /**
    * Pre-fetched flags to be used instead of fetching them from the server.
    */
@@ -316,12 +304,8 @@ export type InitOptionsBootstrapped = Omit<
   /**
    * Pre-fetched flag overrides to be used instead of reading them from the client.
    */
-  bootstrappedOverrides: FlagOverrides;
+  bootstrappedOverrides?: FlagOverrides;
 };
-
-function isBootstrapped(opts: InitOptions): opts is InitOptionsBootstrapped {
-  return "bootstrappedFlags" in opts;
-}
 
 const defaultConfig: Config = {
   apiBaseUrl: API_BASE_URL,
@@ -418,7 +402,7 @@ export class ReflagClient {
   /**
    * Create a new ReflagClient instance.
    */
-  constructor(opts: InitOptions | InitOptionsBootstrapped) {
+  constructor(opts: InitOptions) {
     this.publishableKey = opts.publishableKey;
     this.logger =
       opts?.logger ?? loggerWithPrefix(quietConsoleLogger, "[Reflag]");
@@ -453,22 +437,17 @@ export class ReflagClient {
       this.httpClient,
       this.context,
       this.logger,
-      isBootstrapped(opts)
-        ? {
-            bootstrappedFlags: opts.bootstrappedFlags,
-            bootstrappedOverrides: opts.bootstrappedOverrides,
-            offline: this.config.offline,
-            overridesProvider: opts.overridesProvider,
-          }
-        : {
-            expireTimeMs: opts.expireTimeMs,
-            staleTimeMs: opts.staleTimeMs,
-            staleWhileRevalidate: opts.staleWhileRevalidate,
-            timeoutMs: opts.timeoutMs,
-            fallbackFlags: opts.fallbackFlags,
-            offline: this.config.offline,
-            overridesProvider: opts.overridesProvider,
-          },
+      {
+        bootstrappedFlags: opts.bootstrappedFlags,
+        bootstrappedOverrides: opts.bootstrappedOverrides,
+        expireTimeMs: opts.expireTimeMs,
+        staleTimeMs: opts.staleTimeMs,
+        staleWhileRevalidate: opts.staleWhileRevalidate,
+        timeoutMs: opts.timeoutMs,
+        fallbackFlags: opts.fallbackFlags,
+        offline: this.config.offline,
+        overridesProvider: opts.overridesProvider,
+      },
     );
 
     if (
@@ -544,7 +523,6 @@ export class ReflagClient {
           this.logger.error("error sending company", e);
         });
       }
-      this.config.bootstrapped = true;
     }
 
     this.logger.info(

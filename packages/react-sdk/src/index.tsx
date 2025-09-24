@@ -14,7 +14,6 @@ import {
   CompanyContext,
   FlagOverrides,
   InitOptions,
-  InitOptionsBootstrapped,
   RawFlags,
   ReflagClient,
   ReflagContext,
@@ -143,10 +142,7 @@ const reflagClients = new Map<string, ReflagClient>();
  * Only creates a new ReflagClient is not already created or if it hook is run on the server.
  * @internal
  */
-function useReflagClient(
-  initOptions: InitOptions | InitOptionsBootstrapped,
-  debug = false,
-) {
+function useReflagClient(initOptions: InitOptions, debug = false) {
   const isServer = typeof window === "undefined";
   if (isServer || !reflagClients.has(initOptions.publishableKey)) {
     const client = new ReflagClient({
@@ -283,9 +279,10 @@ export function ReflagProvider({
  * Props for the ReflagBootstrappedProvider.
  */
 export type ReflagBootstrappedProps = Omit<
-  InitOptionsBootstrapped,
+  InitOptions,
   | "user"
   | "company"
+  | "other"
   | "otherContext"
   | "bootstrappedFlags"
   | "bootstrappedOverrides"
