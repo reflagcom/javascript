@@ -118,7 +118,7 @@ function FlagRow({
       </td>
       <td class="flag-switch-cell">
         <Switch
-          checked={isEnabledOverride ?? flag.isEnabled}
+          checked={flag.isEnabledOverride ?? flag.isEnabled}
           tabIndex={index + 1}
           onChange={(e) => {
             const isChecked = e.currentTarget.checked;

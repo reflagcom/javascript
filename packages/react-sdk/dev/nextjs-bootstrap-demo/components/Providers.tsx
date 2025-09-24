@@ -1,8 +1,14 @@
+"use client";
+
 import React, { ReactNode } from "react";
 import {
   BootstrappedFlags,
   ReflagBootstrappedProvider,
 } from "@reflag/react-sdk";
+import {
+  CookieOverridesProvider,
+  DEFAULT_OVERRIDES_KEY,
+} from "@reflag/browser-sdk";
 
 type Props = {
   publishableKey: string;
@@ -10,9 +16,17 @@ type Props = {
   children: ReactNode;
 };
 
+// Use the cookies override provider to store flag overrides that we can retrieve on the server.
+// Note that that classes can only be provided as props on the client side.
+const overridesProvider = new CookieOverridesProvider(DEFAULT_OVERRIDES_KEY);
+
 export const Providers = ({ publishableKey, flags, children }: Props) => {
   return (
-    <ReflagBootstrappedProvider publishableKey={publishableKey} flags={flags}>
+    <ReflagBootstrappedProvider
+      publishableKey={publishableKey}
+      overridesProvider={overridesProvider}
+      flags={flags}
+    >
       {children}
     </ReflagBootstrappedProvider>
   );

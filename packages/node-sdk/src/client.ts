@@ -11,7 +11,6 @@ import {
   API_BASE_URL,
   API_TIMEOUT_MS,
   FLAG_EVENT_RATE_LIMITER_WINDOW_SIZE_MS,
-  FLAG_OVERRIDES_COOKIE,
   FLAGS_REFETCH_MS,
   loadConfig,
   REFLAG_LOG_PREFIX,
@@ -755,75 +754,6 @@ export class ReflagClient {
     additionalContext?: Context,
   ): Promise<TypedFlags[TKey]> {
     return this._getFlagsRemote(key, userId, companyId, additionalContext);
-  }
-
-  /**
-   * Get flag overrides from the NextJS cookies.
-   * @returns The parsed overrides object
-   */
-  public async getFlagOverridesNextJS(): Promise<FlagOverrides> {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { cookies } = require("next/headers");
-      const cookieStore = await cookies();
-      const overridesCookie = cookieStore.get(FLAG_OVERRIDES_COOKIE)?.value;
-      const overrides = JSON.parse(overridesCookie || "{}");
-      if (!isObject(overrides)) throw new Error("invalid overrides");
-      return overrides;
-    } catch (error) {
-      this.logger.error("unable to get overrides from nextjs cookie", error);
-      return {};
-    }
-  }
-
-  /**
-   * Get flag overrides from the request cookies.
-   * @param req - The request object.
-   * @returns The parsed overrides object
-   */
-  public getFlagOverridesRequest(req: {
-    cookies?: Record<string, string>;
-  }): FlagOverrides {
-    try {
-      const overridesCookie = req.cookies?.[FLAG_OVERRIDES_COOKIE];
-      const overrides = JSON.parse(overridesCookie || "{}");
-      if (!isObject(overrides)) throw new Error("invalid overrides");
-      return overrides;
-    } catch (error) {
-      this.logger.error("unable to get overrides from express cookie", error);
-      return {};
-    }
-  }
-
-  /**
-   * Get flag overrides from a cookie string.
-   * @param cookiesString - An unparsed cookie string.
-   * @returns The parsed overrides object
-   */
-  public getFlagOverridesCookiesString(cookiesString: string): FlagOverrides {
-    try {
-      const cookies = cookiesString
-        .split(";")
-        .map((cookie) => cookie.trim())
-        .reduce(
-          (acc, cookie) => {
-            const [key, value] = cookie.split("=");
-            if (key && value) {
-              acc[key] = decodeURIComponent(value);
-            }
-            return acc;
-          },
-          {} as Record<string, string>,
-        );
-
-      const overridesCookie = cookies[FLAG_OVERRIDES_COOKIE];
-      const overrides = JSON.parse(overridesCookie || "{}");
-      if (!isObject(overrides)) throw new Error("invalid overrides");
-      return overrides;
-    } catch (error) {
-      this.logger.error("unable to get overrides from cookie string", error);
-      return {};
-    }
   }
 
   private buildUrl(path: string) {

@@ -157,7 +157,7 @@ export default function Toolbar({
             flags={sortedFlags}
             searchQuery={search?.toLocaleLowerCase() ?? null}
             setIsEnabledOverride={(flagKey, isEnabled) =>
-              reflagClient.getFlag(flagKey).setIsEnabledOverride(isEnabled)
+              void reflagClient.getFlag(flagKey).setIsEnabledOverride(isEnabled)
             }
           />
         </DialogContent>

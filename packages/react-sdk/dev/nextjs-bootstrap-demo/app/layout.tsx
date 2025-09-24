@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { getBootstrappedFlags } from "./client";
 import { Providers } from "@/components/Providers";
-import { ReflagClient as ReflagNodeClient } from "@reflag/node-sdk";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -12,51 +12,22 @@ export const metadata: Metadata = {
 };
 
 const publishableKey = process.env.REFLAG_PUBLISHABLE_KEY || "";
-const secretKey = process.env.REFLAG_SECRET_KEY || "";
-const offline = process.env.CI === "true";
-
-declare global {
-  var serverClient: ReflagNodeClient;
-}
-
-async function getServerClient() {
-  if (!globalThis.serverClient) {
-    globalThis.serverClient = new ReflagNodeClient({
-      secretKey,
-      offline,
-    });
-    await globalThis.serverClient.initialize();
-  }
-  return globalThis.serverClient;
-}
-
-async function getBootstrappedFlags() {
-  const serverClient = await getServerClient();
-
-  // In a real app, you'd get user/company from your auth system
-  const flagOverrides = await serverClient.getFlagOverridesNextJS();
-  const flags = serverClient.getFlagsForBootstrap(
-    {
-      user: {
-        id: "demo-user",
-        email: "demo-user@example.com",
-        "optin-huddles": true,
-      },
-      company: { id: "demo-company", name: "Demo Company" },
-      other: { source: "web" },
-    },
-    flagOverrides,
-  );
-
-  return flags;
-}
 
 export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const flags = await getBootstrappedFlags();
+  // In a real app, you'd get user/company from your auth system
+  const flags = await getBootstrappedFlags({
+    user: {
+      id: "demo-user",
+      email: "demo-user@example.com",
+      "optin-huddles": true,
+    },
+    company: { id: "demo-company", name: "Demo Company" },
+    other: { source: "web" },
+  });
 
   return (
     <html lang="en">

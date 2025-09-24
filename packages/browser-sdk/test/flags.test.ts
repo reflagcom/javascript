@@ -350,7 +350,7 @@ describe("FlagsClient", () => {
 
     expect(updated).toBe(false);
 
-    client.setFlagOverride("flagA", false);
+    void client.setFlagOverride("flagA", false);
 
     expect(updated).toBe(true);
     expect(client.getFlags().flagA.isEnabled).toBe(true);
@@ -375,14 +375,14 @@ describe("FlagsClient", () => {
 
     // Setting an override for a flag that doesn't exist in fetched flags
     // should not trigger an update since the merged flags don't change
-    client.setFlagOverride("flagC", true);
+    void client.setFlagOverride("flagC", true);
 
     expect(updated).toBe(false);
     expect(client.getFlags().flagC).toBeUndefined();
   });
 
   describe("pre-fetched flags", () => {
-    test("should be initialized when flags are provided in constructor", () => {
+    test("should have flags available when bootstrapped flags are provided in constructor", () => {
       const { httpClient } = flagsClientFactory();
       const preFetchedFlags = {
         testFlag: {
@@ -415,10 +415,11 @@ describe("FlagsClient", () => {
         },
       );
 
-      // Should be initialized immediately when flags are provided
-      expect(flagsClient["initialized"]).toBe(true);
+      // Should be bootstrapped but not initialized until initialize() is called
+      expect(flagsClient["bootstrapped"]).toBe(true);
+      expect(flagsClient["initialized"]).toBe(false);
 
-      // Should have the flags available
+      // Should have the flags available even before initialize()
       expect(flagsClient.getFlags()).toEqual({
         testFlag: {
           key: "testFlag",
@@ -548,8 +549,9 @@ describe("FlagsClient", () => {
         },
       );
 
-      // Should be initialized with pre-fetched flags
-      expect(flagsClient["initialized"]).toBe(true);
+      // Should be bootstrapped but not initialized until initialize() is called
+      expect(flagsClient["bootstrapped"]).toBe(true);
+      expect(flagsClient["initialized"]).toBe(false);
       expect(flagsClient.getFlags()).toEqual({
         testFlag: {
           key: "testFlag",
@@ -559,9 +561,10 @@ describe("FlagsClient", () => {
         },
       });
 
-      // Calling initialize again should not fetch since already initialized
+      // Calling initialize should not fetch since already bootstrapped
       await flagsClient.initialize();
       expect(httpClient.get).not.toHaveBeenCalled();
+      expect(flagsClient["initialized"]).toBe(true);
     });
 
     test("should apply bootstrapped overrides when supplied in constructor", () => {
@@ -584,12 +587,6 @@ describe("FlagsClient", () => {
         anotherFlag: true,
       };
 
-      // Spy on FlagsClient prototype method before creating instance
-      const setOverridesCacheSpy = vi.spyOn(
-        FlagsClient.prototype as any,
-        "setOverridesCache",
-      );
-
       const flagsClient = new FlagsClient(
         httpClient,
         {
@@ -604,8 +601,9 @@ describe("FlagsClient", () => {
         },
       );
 
-      // Should be initialized immediately
-      expect(flagsClient["initialized"]).toBe(true);
+      // Should be bootstrapped but not initialized until initialize() is called
+      expect(flagsClient["bootstrapped"]).toBe(true);
+      expect(flagsClient["initialized"]).toBe(false);
 
       // Should have the flags with overrides applied
       expect(flagsClient.getFlags()).toEqual({
@@ -623,12 +621,9 @@ describe("FlagsClient", () => {
         },
       });
 
-      // Verify that the cache was updated with the bootstrapped overrides
-      expect(setOverridesCacheSpy).toHaveBeenCalledWith(bootstrappedOverrides);
+      // Verify that the overrides were properly set in the flagOverrides property
       expect(flagsClient["flagOverrides"]).toEqual(bootstrappedOverrides);
-
-      // Clean up the spy
-      setOverridesCacheSpy.mockRestore();
+      expect(flagsClient["overridesInitialized"]).toBe(true);
     });
   });
 });

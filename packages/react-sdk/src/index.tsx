@@ -171,7 +171,7 @@ const ProviderContext = createContext<ProviderContextType | null>(null);
 
 type ReflagClientProviderProps = ReflagPropsBase & {
   client: ReflagClient;
-  loadingComponent: ReactNode;
+  loadingComponent?: ReactNode;
 };
 
 export function ReflagClientProvider({
@@ -284,7 +284,11 @@ export function ReflagProvider({
  */
 export type ReflagBootstrappedProps = Omit<
   InitOptionsBootstrapped,
-  "user" | "company" | "otherContext" | "bootstrappedFlags"
+  | "user"
+  | "company"
+  | "otherContext"
+  | "bootstrappedFlags"
+  | "bootstrappedOverrides"
 > &
   ReflagPropsBase & {
     /**

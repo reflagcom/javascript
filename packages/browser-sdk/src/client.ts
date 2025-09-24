@@ -16,6 +16,7 @@ import {
   FlagsClient,
   RawFlags,
 } from "./flag/flags";
+import { OverridesProvider } from "./overrides/overridesProvider";
 import { ToolbarPosition } from "./ui/types";
 import { API_BASE_URL, APP_BASE_URL, SSE_REALTIME_BASE_URL } from "./config";
 import { ReflagContext, ReflagDeprecatedContext } from "./context";
@@ -288,6 +289,12 @@ export type InitOptions = ReflagDeprecatedContext & {
    * Toolbar configuration
    */
   toolbar?: ToolbarOptions;
+
+  /**
+   * Overrides provider for storing flag overrides.
+   * Defaults to `StorageOverridesProvider` using local storage.
+   */
+  overridesProvider?: OverridesProvider;
 };
 
 /**
@@ -378,7 +385,7 @@ export interface Flag {
    * Set the override status for isEnabled for the flag.
    * Set to `null` to remove the override.
    */
-  setIsEnabledOverride(isEnabled: boolean | null): void;
+  setIsEnabledOverride(isEnabled: boolean | null): Promise<void>;
 }
 
 function shouldShowToolbar(opts: InitOptions) {
@@ -451,6 +458,7 @@ export class ReflagClient {
             bootstrappedFlags: opts.bootstrappedFlags,
             bootstrappedOverrides: opts.bootstrappedOverrides,
             offline: this.config.offline,
+            overridesProvider: opts.overridesProvider,
           }
         : {
             expireTimeMs: opts.expireTimeMs,
@@ -459,6 +467,7 @@ export class ReflagClient {
             timeoutMs: opts.timeoutMs,
             fallbackFlags: opts.fallbackFlags,
             offline: this.config.offline,
+            overridesProvider: opts.overridesProvider,
           },
     );
 
@@ -521,8 +530,9 @@ export class ReflagClient {
       });
     }
 
+    await this.flagsClient.initialize();
+
     if (!this.config.bootstrapped) {
-      await this.flagsClient.initialize();
       if (this.context.user && this.config.enableTracking) {
         this.user().catch((e) => {
           this.logger.error("error sending user", e);
@@ -536,9 +546,6 @@ export class ReflagClient {
       }
       this.config.bootstrapped = true;
     }
-
-    // Apply overrides and trigger an update if they changed
-    this.flagsClient.updateFlags();
 
     this.logger.info(
       "Reflag initialized in " +
@@ -596,6 +603,13 @@ export class ReflagClient {
     handler: (args0: HookArgs[THookType]) => void,
   ) {
     this.hooks.removeHook(type, handler);
+  }
+
+  /**
+   * Get the current context.
+   */
+  getContext() {
+    return this.context;
   }
 
   /**
@@ -947,8 +961,8 @@ export class ReflagClient {
         });
       },
       isEnabledOverride: this.flagsClient.getFlagOverride(flagKey),
-      setIsEnabledOverride(isEnabled: boolean | null) {
-        self.flagsClient.setFlagOverride(flagKey, isEnabled);
+      async setIsEnabledOverride(isEnabled: boolean | null) {
+        await self.flagsClient.setFlagOverride(flagKey, isEnabled);
       },
     };
   }

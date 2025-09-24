@@ -70,7 +70,7 @@ describe("ReflagClient", () => {
       await client.initialize();
       expect(flagsResult["flagA"].isEnabled).toBe(true);
       expect(client.getFlag("flagA").isEnabled).toBe(true);
-      client.getFlag("flagA").setIsEnabledOverride(false);
+      void client.getFlag("flagA").setIsEnabledOverride(false);
       expect(client.getFlag("flagA").isEnabled).toBe(false);
     });
   });
@@ -202,8 +202,9 @@ describe("ReflagClient", () => {
         feedback: { enableAutoFeedback: false }, // Disable to avoid HTTP calls
       });
 
-      // FlagsClient should be initialized in constructor when flags are provided
-      expect(client["flagsClient"]["initialized"]).toBe(true);
+      // FlagsClient should be bootstrapped but not initialized in constructor when flags are provided
+      expect(client["flagsClient"]["bootstrapped"]).toBe(true);
+      expect(client["flagsClient"]["initialized"]).toBe(false);
       expect(client.getFlags()).toEqual({
         testFlag: {
           key: "testFlag",
@@ -217,7 +218,10 @@ describe("ReflagClient", () => {
 
       await client.initialize();
 
-      // maybeFetchFlags should not be called since flagsClient is already initialized
+      // After initialize, flagsClient should be properly initialized
+      expect(client["flagsClient"]["initialized"]).toBe(true);
+
+      // maybeFetchFlags should not be called since flagsClient is already bootstrapped
       expect(maybeFetchFlags).not.toHaveBeenCalled();
     });
   });
