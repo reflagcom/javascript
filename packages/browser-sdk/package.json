@@ -17,12 +17,12 @@
     "test:watch": "vitest",
     "test:e2e": "yarn build && playwright test",
     "test:ci": "yarn test --reporter=default --reporter=junit --outputFile=junit.xml && yarn test:e2e",
-    "coverage": "vitest run --coverage",
+    "coverage": "yarn test --coverage",
     "lint": "eslint .",
     "lint:ci": "eslint --output-file eslint-report.json --format json .",
     "prettier": "prettier --check .",
     "format": "yarn lint --fix && yarn prettier --write",
-    "preversion": "yarn lint && yarn prettier && yarn vitest run -c vitest.config.ts && yarn build"
+    "preversion": "yarn lint && yarn prettier && yarn test && yarn build"
   },
   "files": [
     "dist"

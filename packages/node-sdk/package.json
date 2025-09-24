@@ -13,12 +13,12 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ci": "yarn test --reporter=default --reporter=junit --outputFile=junit.xml",
-    "coverage": "vitest run --coverage",
+    "coverage": "yarn test --coverage",
     "lint": "eslint .",
     "lint:ci": "eslint --output-file eslint-report.json --format json .",
     "prettier": "prettier --check .",
     "format": "yarn lint --fix && yarn prettier --write",
-    "preversion": "yarn lint && yarn prettier && yarn vitest run -c vite.config.js && yarn build"
+    "preversion": "yarn lint && yarn prettier && yarn test && yarn build"
   },
   "files": [
     "dist"
