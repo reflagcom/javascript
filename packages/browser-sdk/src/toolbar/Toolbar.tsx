@@ -8,6 +8,7 @@ import {
 } from "preact/hooks";
 
 import { ReflagClient } from "../client";
+import { IS_SERVER } from "../config";
 import { toolbarContainerId } from "../ui/constants";
 import { Dialog, DialogContent, DialogHeader, useDialog } from "../ui/Dialog";
 import { Logo } from "../ui/icons/Logo";
@@ -43,8 +44,7 @@ export default function Toolbar({
   const [flags, setFlags] = useState<Flag[]>([]);
 
   const wasHidden =
-    typeof window !== "undefined" &&
-    window.sessionStorage?.getItem(TOOLBAR_HIDE_KEY) === "true";
+    !IS_SERVER && sessionStorage.getItem(TOOLBAR_HIDE_KEY) === "true";
   const [isHidden, setIsHidden] = useState(wasHidden);
 
   const updateFlags = useCallback(() => {
@@ -87,7 +87,8 @@ export default function Toolbar({
   const { isOpen, close, toggle } = useDialog();
 
   const hideToolbar = useCallback(() => {
-    window?.sessionStorage?.setItem(TOOLBAR_HIDE_KEY, "true");
+    if (IS_SERVER) return;
+    sessionStorage.setItem(TOOLBAR_HIDE_KEY, "true");
     setIsHidden(true);
     close();
   }, [close]);
@@ -157,7 +158,7 @@ export default function Toolbar({
             flags={sortedFlags}
             searchQuery={search?.toLocaleLowerCase() ?? null}
             setIsEnabledOverride={(flagKey, isEnabled) =>
-              void reflagClient.getFlag(flagKey).setIsEnabledOverride(isEnabled)
+              reflagClient.getFlag(flagKey).setIsEnabledOverride(isEnabled)
             }
           />
         </DialogContent>

@@ -105,11 +105,6 @@ export interface RawFlag {
   isEnabled: boolean;
 
   /**
-   * If not null or undefined, the result is being overridden.
-   */
-  isEnabledOverride?: boolean | null;
-
-  /**
    * The version of the targeting used to evaluate if the feature is enabled (optional).
    */
   targetingVersion?: number;
@@ -136,7 +131,6 @@ export interface RawFlag {
 export type BootstrappedFlags = {
   context: Context;
   flags: Record<TypedFlagKey, RawFlag>;
-  overrides?: FlagSimpleOverrides;
 };
 
 export type EmptyFlagRemoteConfig = { key: undefined; payload: undefined };
@@ -292,8 +286,6 @@ export type FlagOverrides = Partial<
           : Exclude<FlagOverride, "config">;
       }
 >;
-
-export type FlagSimpleOverrides = Record<string, boolean | undefined>;
 
 export type FlagOverridesFn = (context: Context) => FlagOverrides;
 

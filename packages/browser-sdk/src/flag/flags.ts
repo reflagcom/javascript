@@ -1,11 +1,9 @@
 import { deepEqual } from "fast-equals";
 
-import { FLAG_EVENTS_PER_MIN, FLAGS_EXPIRE_MS } from "../config";
+import { FLAG_EVENTS_PER_MIN, FLAGS_EXPIRE_MS, IS_SERVER } from "../config";
 import { ReflagContext } from "../context";
 import { HttpClient } from "../httpClient";
 import { Logger, loggerWithPrefix } from "../logger";
-import { OverridesProvider } from "../overrides/overridesProvider";
-import { StorageOverridesProvider } from "../overrides/storageOverridesProvider";
 import RateLimiter from "../rateLimiter";
 
 import { FlagCache, isObject, parseAPIFlagsResponse } from "./flagCache";
@@ -177,16 +175,15 @@ export interface CheckEvent {
 }
 
 const localStorageFetchedFlagsKey = `__reflag_fetched_flags`;
+const storageOverridesKey = `__reflag_overrides`;
 
 export type FlagOverrides = Record<string, boolean | undefined>;
 
 type FlagsClientOptions = Partial<Config> & {
   bootstrappedFlags?: RawFlags;
-  bootstrappedOverrides?: FlagOverrides;
   fallbackFlags?: Record<string, FallbackFlagOverride> | string[];
   cache?: FlagCache;
   rateLimiter?: RateLimiter;
-  overridesProvider?: OverridesProvider;
 };
 
 /**
@@ -195,7 +192,6 @@ type FlagsClientOptions = Partial<Config> & {
 export class FlagsClient {
   private initialized = false;
   private bootstrapped = false;
-  private overridesInitialized = false;
 
   private rateLimiter: RateLimiter;
   private readonly logger: Logger;
@@ -205,7 +201,6 @@ export class FlagsClient {
   private flagOverrides: FlagOverrides = {};
   private flags: RawFlags = {};
   private fallbackFlags: FallbackFlags = {};
-  private overridesProvider: OverridesProvider;
 
   private config: Config = DEFAULT_FLAGS_CONFIG;
 
@@ -218,11 +213,9 @@ export class FlagsClient {
     logger: Logger,
     {
       bootstrappedFlags,
-      bootstrappedOverrides,
       cache,
       rateLimiter,
       fallbackFlags,
-      overridesProvider,
       ...config
     }: FlagsClientOptions = {},
   ) {
@@ -238,19 +231,13 @@ export class FlagsClient {
       cache ??
       this.setupCache(this.config.staleTimeMs, this.config.expireTimeMs);
     this.fallbackFlags = this.setupFallbackFlags(fallbackFlags);
-    this.overridesProvider =
-      overridesProvider ?? new StorageOverridesProvider();
 
     if (bootstrappedFlags) {
       this.bootstrapped = true;
-      // If bootstrapped flag overrides are provided, use and store them
-      if (bootstrappedOverrides) {
-        this.overridesInitialized = true;
-        this.flagOverrides = bootstrappedOverrides;
-        void this.overridesProvider.setOverrides(this.flagOverrides);
-      }
       this.setFetchedFlags(bootstrappedFlags, false);
     }
+
+    this.flagOverrides = this.getOverridesCache();
   }
 
   async initialize() {
@@ -260,27 +247,9 @@ export class FlagsClient {
     }
     this.initialized = true;
 
-    const requests = [];
-
-    if (!this.overridesInitialized) {
-      this.overridesInitialized = true;
-      requests.push(
-        this.overridesProvider.getOverrides().then((overrides) => {
-          this.flagOverrides = overrides;
-        }),
-      );
-    }
-
     if (!this.bootstrapped) {
-      requests.push(
-        this.maybeFetchFlags().then((flags) => {
-          this.setFetchedFlags(flags || {});
-        }),
-      );
+      this.setFetchedFlags((await this.maybeFetchFlags()) || {});
     }
-
-    // Run all requests in parallel
-    await Promise.all(requests);
 
     // Apply overrides and trigger update if flags have changed
     this.updateFlags();
@@ -320,22 +289,19 @@ export class FlagsClient {
     if (triggerEvent) this.triggerFlagsUpdated();
   }
 
-  async setFlagOverride(key: string, isEnabled: boolean | null) {
+  setFlagOverride(key: string, isEnabled: boolean | null) {
     if (!(typeof isEnabled === "boolean" || isEnabled === null)) {
       throw new Error("setFlagOverride: isEnabled must be boolean or null");
     }
 
     if (isEnabled === null) {
-      const actualValue = !this.flagOverrides[key];
       delete this.flagOverrides[key];
-      this.fetchedFlags[key].isEnabled = actualValue;
-      this.fetchedFlags[key].isEnabledOverride = null;
     } else {
       this.flagOverrides[key] = isEnabled;
     }
+    this.setOverridesCache(this.flagOverrides);
 
     this.updateFlags();
-    await this.overridesProvider.setOverrides(this.flagOverrides);
   }
 
   getFlagOverride(key: string): boolean | null {
@@ -432,6 +398,34 @@ export class FlagsClient {
     }
   }
 
+  private setOverridesCache(overrides: FlagOverrides) {
+    if (IS_SERVER) return;
+    try {
+      localStorage.setItem(storageOverridesKey, JSON.stringify(overrides));
+    } catch (error) {
+      this.logger.warn(
+        "storing flag overrides in localStorage failed, overrides won't persist",
+        error,
+      );
+    }
+  }
+
+  private getOverridesCache(): FlagOverrides {
+    if (IS_SERVER) return {};
+    try {
+      const overridesStored = localStorage.getItem(storageOverridesKey);
+      const overrides = JSON.parse(overridesStored || "{}");
+      if (!isObject(overrides)) throw new Error("invalid overrides");
+      return overrides;
+    } catch (error) {
+      this.logger.warn(
+        "getting flag overrides from localStorage failed",
+        error,
+      );
+      return {};
+    }
+  }
+
   private async maybeFetchFlags(): Promise<RawFlags | undefined> {
     if (this.config.offline) {
       return;
@@ -513,17 +507,16 @@ export class FlagsClient {
 
   private setupCache(staleTimeMs = 0, expireTimeMs = FLAGS_EXPIRE_MS) {
     return new FlagCache({
-      storage:
-        typeof localStorage !== "undefined"
-          ? {
-              get: () => localStorage.getItem(localStorageFetchedFlagsKey),
-              set: (value) =>
-                localStorage.setItem(localStorageFetchedFlagsKey, value),
-            }
-          : {
-              get: () => null,
-              set: () => void 0,
-            },
+      storage: !IS_SERVER
+        ? {
+            get: () => localStorage.getItem(localStorageFetchedFlagsKey),
+            set: (value) =>
+              localStorage.setItem(localStorageFetchedFlagsKey, value),
+          }
+        : {
+            get: () => null,
+            set: () => void 0,
+          },
       staleTimeMs,
       expireTimeMs,
     });

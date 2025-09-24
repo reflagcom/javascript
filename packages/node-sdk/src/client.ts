@@ -30,7 +30,6 @@ import type {
   FlagDefinition,
   FlagOverrides,
   FlagOverridesFn,
-  FlagSimpleOverrides,
   IdType,
   RawFlag,
   TypedFlagKey,
@@ -691,26 +690,21 @@ export class ReflagClient {
    * @param options.user - The user context.
    * @param options.company - The company context.
    * @param options.other - The other context.
-   * @param options.overrides - Additional flag overrides to apply on top of any configured overrides.
    *
-   * @returns The evaluated raw flags, the context, and the overrides.
+   * @returns The evaluated raw flags and the context.
    *
    * @remarks
    * Call `initialize` before calling this method to ensure the flag definitions are cached, no flags will be returned otherwise.
    * This method returns RawFlag objects without wrapping them in getters, making them suitable for serialization.
    **/
-  public getFlagsForBootstrap(
-    { enableTracking = true, meta, ...context }: ContextWithTracking,
-    overrides?: FlagSimpleOverrides,
-  ): BootstrappedFlags {
+  public getFlagsForBootstrap({
+    enableTracking = true,
+    meta,
+    ...context
+  }: ContextWithTracking): BootstrappedFlags {
     return {
       context,
-      flags: this._getFlags(
-        { enableTracking, meta, ...context },
-        undefined,
-        overrides,
-      ),
-      overrides,
+      flags: this._getFlags({ enableTracking, meta, ...context }),
     };
   }
 
@@ -1065,18 +1059,14 @@ export class ReflagClient {
 
   private _getFlags(
     options: ContextWithTracking,
-    key?: undefined,
-    clientOverrides?: FlagSimpleOverrides,
   ): Record<TypedFlagKey, RawFlag>;
   private _getFlags<TKey extends TypedFlagKey>(
     options: ContextWithTracking,
     key: TKey,
-    clientOverrides?: FlagSimpleOverrides,
   ): RawFlag | undefined;
   private _getFlags<TKey extends TypedFlagKey>(
     options: ContextWithTracking,
     key?: TKey,
-    clientOverrides?: FlagSimpleOverrides,
   ): Record<TypedFlagKey, RawFlag> | RawFlag | undefined {
     checkContextWithTracking(options);
 
@@ -1127,7 +1117,6 @@ export class ReflagClient {
         acc[res.flagKey as TypedFlagKey] = {
           key: res.flagKey,
           isEnabled: res.enabledResult.value ?? false,
-          isEnabledOverride: null,
           ruleEvaluationResults: res.enabledResult.ruleEvaluationResults,
           missingContextFields: res.enabledResult.missingContextFields,
           targetingVersion: res.targetingVersion,
@@ -1144,11 +1133,7 @@ export class ReflagClient {
       {} as Record<TypedFlagKey, RawFlag>,
     );
 
-    // apply flag overrides (merge config overrides with client overrides)
-    const configOverrides = this._config.flagOverrides(context);
-    const mergedOverrides = { ...configOverrides, ...clientOverrides };
-
-    const overrides = Object.entries(mergedOverrides)
+    const overrides = Object.entries(this._config.flagOverrides(context))
       .filter(([flagKey]) => (key ? key === flagKey : true))
       .map(([flagKey, override]) => [
         flagKey,
@@ -1156,13 +1141,11 @@ export class ReflagClient {
           ? {
               key: flagKey,
               isEnabled: override.isEnabled,
-              isEnabledOverride: override.isEnabled,
               config: override.config,
             }
           : {
               key: flagKey,
               isEnabled: !!override,
-              isEnabledOverride: !!override,
               config: undefined,
             },
       ]);
@@ -1395,13 +1378,10 @@ export class BoundReflagClient {
    * Get raw flags for the user/company/other context bound to this client without wrapping them in getters.
    * This method returns raw flag data suitable for bootstrapping client-side applications.
    *
-   * @param overrides - Additional flag overrides to apply on top of any configured overrides.
    * @returns Raw flags for the given user/company and whether each one is enabled or not
    */
-  public getFlagsForBootstrap(
-    overrides?: FlagSimpleOverrides,
-  ): BootstrappedFlags {
-    return this._client.getFlagsForBootstrap({ ...this._options }, overrides);
+  public getFlagsForBootstrap(): BootstrappedFlags {
+    return this._client.getFlagsForBootstrap({ ...this._options });
   }
 
   /**

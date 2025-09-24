@@ -12,11 +12,9 @@ import * as feedbackLib from "./feedback/ui";
 import {
   CheckEvent,
   FallbackFlagOverride,
-  FlagOverrides,
   FlagsClient,
   RawFlags,
 } from "./flag/flags";
-import { OverridesProvider } from "./overrides/overridesProvider";
 import { ToolbarPosition } from "./ui/types";
 import { API_BASE_URL, APP_BASE_URL, SSE_REALTIME_BASE_URL } from "./config";
 import { ReflagContext, ReflagDeprecatedContext } from "./context";
@@ -291,20 +289,9 @@ export type InitOptions = ReflagDeprecatedContext & {
   toolbar?: ToolbarOptions;
 
   /**
-   * Overrides provider for storing flag overrides.
-   * Defaults to `StorageOverridesProvider` using local storage.
-   */
-  overridesProvider?: OverridesProvider;
-
-  /**
    * Pre-fetched flags to be used instead of fetching them from the server.
    */
-  bootstrappedFlags: RawFlags;
-
-  /**
-   * Pre-fetched flag overrides to be used instead of reading them from the client.
-   */
-  bootstrappedOverrides?: FlagOverrides;
+  bootstrappedFlags?: RawFlags;
 };
 
 const defaultConfig: Config = {
@@ -369,7 +356,7 @@ export interface Flag {
    * Set the override status for isEnabled for the flag.
    * Set to `null` to remove the override.
    */
-  setIsEnabledOverride(isEnabled: boolean | null): Promise<void>;
+  setIsEnabledOverride(isEnabled: boolean | null): void;
 }
 
 function shouldShowToolbar(opts: InitOptions) {
@@ -439,14 +426,12 @@ export class ReflagClient {
       this.logger,
       {
         bootstrappedFlags: opts.bootstrappedFlags,
-        bootstrappedOverrides: opts.bootstrappedOverrides,
         expireTimeMs: opts.expireTimeMs,
         staleTimeMs: opts.staleTimeMs,
         staleWhileRevalidate: opts.staleWhileRevalidate,
         timeoutMs: opts.timeoutMs,
         fallbackFlags: opts.fallbackFlags,
         offline: this.config.offline,
-        overridesProvider: opts.overridesProvider,
       },
     );
 

@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { getBootstrappedFlags } from "./client";
-import { Providers } from "@/components/Providers";
+import { getServerClient } from "./client";
+import { ReflagBootstrappedProvider } from "@reflag/react-sdk";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -18,8 +18,11 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Get the singleton server client
+  const serverClient = await getServerClient();
+
   // In a real app, you'd get user/company from your auth system
-  const flags = await getBootstrappedFlags({
+  const flags = serverClient.getFlagsForBootstrap({
     user: {
       id: "demo-user",
       email: "demo-user@example.com",
@@ -32,9 +35,12 @@ export default async function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <Providers publishableKey={publishableKey} flags={flags}>
+        <ReflagBootstrappedProvider
+          publishableKey={publishableKey}
+          flags={flags}
+        >
           {children}
-        </Providers>
+        </ReflagBootstrappedProvider>
       </body>
     </html>
   );

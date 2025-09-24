@@ -37,10 +37,6 @@ export type {
 } from "./flag/flags";
 export type { HookArgs, TrackEvent } from "./hooksManager";
 export type { Logger } from "./logger";
-export { CookieOverridesProvider } from "./overrides/cookieOverridesProvider";
-export type { OverridesProvider } from "./overrides/overridesProvider";
-export { DEFAULT_OVERRIDES_KEY } from "./overrides/overridesProvider";
-export { StorageOverridesProvider } from "./overrides/storageOverridesProvider";
 export { feedbackContainerId, propagatedEvents } from "./ui/constants";
 export type {
   DialogPlacement,

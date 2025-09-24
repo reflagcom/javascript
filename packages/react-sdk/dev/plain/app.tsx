@@ -297,9 +297,6 @@ export function App() {
               isEnabled: true,
             },
           },
-          overrides: {
-            huddles: false,
-          },
         }}
         apiBaseUrl={apiBaseUrl}
       >

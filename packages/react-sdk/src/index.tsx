@@ -12,7 +12,6 @@ import React, {
 import {
   CheckEvent,
   CompanyContext,
-  FlagOverrides,
   InitOptions,
   RawFlags,
   ReflagClient,
@@ -114,7 +113,6 @@ export type TypedFlags = keyof Flags extends never
 export type BootstrappedFlags = {
   context: ReflagContext;
   flags: RawFlags;
-  overrides?: FlagOverrides;
 };
 
 export type FlagKey = keyof TypedFlags;
@@ -130,6 +128,15 @@ export type ReflagPropsBase = {
   loadingComponent?: ReactNode;
   debug?: boolean;
 };
+
+/**
+ * Base init options for the ReflagProvider and ReflagBootstrappedProvider.
+ * @internal
+ */
+export type ReflagInitOptionsBase = Omit<
+  InitOptions,
+  "user" | "company" | "other" | "otherContext" | "bootstrappedFlags"
+>;
 
 /**
  * Map of clients by context key. Used to deduplicate initialization of the client.
@@ -202,8 +209,8 @@ export function ReflagClientProvider({
 /**
  * Props for the ReflagProvider.
  */
-export type ReflagProps = Omit<InitOptions, keyof ReflagContext> &
-  ReflagPropsBase & {
+export type ReflagProps = ReflagPropsBase &
+  ReflagInitOptionsBase & {
     /**
      * The context to use for the ReflagClient containing user, company, and other context.
      */
@@ -278,16 +285,8 @@ export function ReflagProvider({
 /**
  * Props for the ReflagBootstrappedProvider.
  */
-export type ReflagBootstrappedProps = Omit<
-  InitOptions,
-  | "user"
-  | "company"
-  | "other"
-  | "otherContext"
-  | "bootstrappedFlags"
-  | "bootstrappedOverrides"
-> &
-  ReflagPropsBase & {
+export type ReflagBootstrappedProps = ReflagPropsBase &
+  ReflagInitOptionsBase & {
     /**
      * Pre-fetched flags to be used instead of fetching them from the server.
      */
@@ -309,7 +308,6 @@ export function ReflagBootstrappedProvider({
       ...config,
       ...flags.context,
       bootstrappedFlags: flags.flags,
-      bootstrappedOverrides: flags.overrides,
     },
     debug,
   );

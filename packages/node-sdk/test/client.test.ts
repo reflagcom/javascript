@@ -24,12 +24,7 @@ import {
 import fetchClient from "../src/fetch-http-client";
 import { subscribe as triggerOnExit } from "../src/flusher";
 import { newRateLimiter } from "../src/rate-limiter";
-import {
-  ClientOptions,
-  Context,
-  FlagOverrides,
-  FlagsAPIResponse,
-} from "../src/types";
+import { ClientOptions, Context, FlagsAPIResponse } from "../src/types";
 
 const BULK_ENDPOINT = "https://api.example.com/bulk";
 
@@ -1898,7 +1893,6 @@ describe("ReflagClient", () => {
           flag1: {
             key: "flag1",
             isEnabled: true,
-            isEnabledOverride: null,
             targetingVersion: 1,
             config: {
               key: "config-1",
@@ -1915,7 +1909,6 @@ describe("ReflagClient", () => {
           flag2: {
             key: "flag2",
             isEnabled: false,
-            isEnabledOverride: null,
             targetingVersion: 2,
             config: {
               key: undefined,
@@ -1928,7 +1921,6 @@ describe("ReflagClient", () => {
             missingContextFields: ["attributeKey"],
           },
         },
-        overrides: undefined,
       });
 
       // Should not have track function like regular getFlags
@@ -1954,7 +1946,6 @@ describe("ReflagClient", () => {
           flag1: {
             key: "flag1",
             isEnabled: false,
-            isEnabledOverride: null,
             targetingVersion: 1,
             config: {
               key: undefined,
@@ -1969,7 +1960,6 @@ describe("ReflagClient", () => {
           flag2: {
             key: "flag2",
             isEnabled: false,
-            isEnabledOverride: null,
             targetingVersion: 2,
             config: {
               key: undefined,
@@ -1982,7 +1972,6 @@ describe("ReflagClient", () => {
             missingContextFields: ["company.id"],
           },
         },
-        overrides: undefined,
       });
 
       // Should not have track function
@@ -2006,7 +1995,6 @@ describe("ReflagClient", () => {
           flag1: {
             key: "flag1",
             isEnabled: true,
-            isEnabledOverride: null,
             targetingVersion: 1,
             config: {
               key: "config-1",
@@ -2023,7 +2011,6 @@ describe("ReflagClient", () => {
           flag2: {
             key: "flag2",
             isEnabled: false,
-            isEnabledOverride: null,
             targetingVersion: 2,
             config: {
               key: undefined,
@@ -2036,7 +2023,6 @@ describe("ReflagClient", () => {
             missingContextFields: ["attributeKey"],
           },
         },
-        overrides: undefined,
       });
 
       // Should not have track function
@@ -2056,7 +2042,6 @@ describe("ReflagClient", () => {
           flag1: {
             key: "flag1",
             isEnabled: false,
-            isEnabledOverride: null,
             targetingVersion: 1,
             config: {
               key: undefined,
@@ -2071,7 +2056,6 @@ describe("ReflagClient", () => {
           flag2: {
             key: "flag2",
             isEnabled: false,
-            isEnabledOverride: null,
             targetingVersion: 2,
             config: {
               key: undefined,
@@ -2084,7 +2068,6 @@ describe("ReflagClient", () => {
             missingContextFields: ["company.id"],
           },
         },
-        overrides: undefined,
       });
 
       // Should not have track function
@@ -2113,7 +2096,6 @@ describe("ReflagClient", () => {
             key: "key",
           },
         },
-        overrides: undefined,
       });
     });
 
@@ -2141,7 +2123,6 @@ describe("ReflagClient", () => {
           other: otherContext,
         },
         flags: {},
-        overrides: undefined,
       });
     });
 
@@ -2201,7 +2182,6 @@ describe("ReflagClient", () => {
           other: otherContext,
         },
         flags: {},
-        overrides: undefined,
       });
     });
 
@@ -2234,350 +2214,194 @@ describe("ReflagClient", () => {
           other: otherContext,
         },
         flags: fallbackTestFlags,
-        overrides: undefined,
       });
     });
+  });
+});
 
-    it("should apply flag overrides correctly in bootstrap flags", async () => {
-      await client.initialize();
+describe("getFlagsRemote", () => {
+  let client: ReflagClient;
 
-      // Test with simple boolean overrides
-      const overrides = {
-        flag1: false, // Override to disable flag1 (normally enabled)
-        flag2: true, // Override to enable flag2 (normally disabled)
-      };
-
-      const flagsWithOverrides = client.getFlagsForBootstrap(
-        {
-          company,
-          user,
-          other: otherContext,
-          enableTracking: true,
-        },
-        overrides,
-      );
-
-      expect(flagsWithOverrides).toStrictEqual({
-        context: {
-          company,
-          user,
-          other: otherContext,
-        },
-        flags: {
+  beforeEach(async () => {
+    httpClient.get.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: {
+        success: true,
+        remoteContextUsed: true,
+        features: {
           flag1: {
             key: "flag1",
-            isEnabled: false, // Overridden to false
-            isEnabledOverride: false,
-            config: undefined,
-          },
-          flag2: {
-            key: "flag2",
-            isEnabled: true, // Overridden to true
-            isEnabledOverride: true,
-            config: undefined,
-          },
-        },
-        overrides,
-      });
-    });
-
-    it("should apply complex flag overrides with config in bootstrap flags", async () => {
-      await client.initialize();
-
-      // Test with complex object overrides
-      const complexOverrides: FlagOverrides = {
-        flag1: {
-          isEnabled: false,
-          config: {
-            key: "override-config-1",
-            payload: { test: "data" },
-          },
-        },
-        flag2: {
-          isEnabled: true,
-          config: {
-            key: "override-config-2",
-            payload: undefined,
-          },
-        },
-      };
-
-      const flagsWithComplexOverrides = client.getFlagsForBootstrap(
-        {
-          company,
-          user,
-          other: otherContext,
-          enableTracking: true,
-        },
-        complexOverrides,
-      );
-
-      expect(flagsWithComplexOverrides).toStrictEqual({
-        context: {
-          company,
-          user,
-          other: otherContext,
-        },
-        flags: {
-          flag1: {
-            key: "flag1",
-            isEnabled: false,
-            isEnabledOverride: false,
-            config: {
-              key: "override-config-1",
-              payload: { test: "data" },
-            },
-          },
-          flag2: {
-            key: "flag2",
+            targetingVersion: 1,
             isEnabled: true,
-            isEnabledOverride: true,
             config: {
-              key: "override-config-2",
-              payload: undefined,
+              key: "config-1",
+              version: 3,
+              default: true,
+              payload: { something: "else" },
+              missingContextFields: ["funny"],
             },
-          },
-        },
-        overrides: complexOverrides,
-      });
-    });
-
-    it("should merge client overrides with config overrides", async () => {
-      // Create a client with config-level overrides
-      const clientWithConfigOverrides = new ReflagClient({
-        ...validOptions,
-        flagOverrides: () => ({
-          flag1: false, // Config override
-        }),
-      });
-
-      await clientWithConfigOverrides.initialize();
-
-      // Client-level overrides should override config overrides
-      const clientOverrides = {
-        flag1: true, // Should override the config override
-        flag2: true, // New override
-      };
-
-      const flags = clientWithConfigOverrides.getFlagsForBootstrap(
-        {
-          company,
-          user,
-          other: otherContext,
-          enableTracking: true,
-        },
-        clientOverrides,
-      );
-
-      expect(flags).toStrictEqual({
-        context: {
-          company,
-          user,
-          other: otherContext,
-        },
-        flags: {
-          flag1: {
-            key: "flag1",
-            isEnabled: true, // Client override wins
-            isEnabledOverride: true,
-            config: undefined,
+            missingContextFields: ["something", "funny"],
           },
           flag2: {
             key: "flag2",
-            isEnabled: true, // Client override
-            isEnabledOverride: true,
-            config: undefined,
+            targetingVersion: 2,
+            isEnabled: false,
+            missingContextFields: ["another"],
+          },
+          flag3: {
+            key: "flag3",
+            targetingVersion: 5,
+            isEnabled: true,
           },
         },
-        overrides: clientOverrides,
-      });
+      },
     });
+
+    client = new ReflagClient(validOptions);
   });
 
-  describe("getFlagsRemote", () => {
-    let client: ReflagClient;
-
-    beforeEach(async () => {
-      httpClient.get.mockResolvedValue({
-        ok: true,
-        status: 200,
-        body: {
-          success: true,
-          remoteContextUsed: true,
-          features: {
-            flag1: {
-              key: "flag1",
-              targetingVersion: 1,
-              isEnabled: true,
-              config: {
-                key: "config-1",
-                version: 3,
-                default: true,
-                payload: { something: "else" },
-                missingContextFields: ["funny"],
-              },
-              missingContextFields: ["something", "funny"],
-            },
-            flag2: {
-              key: "flag2",
-              targetingVersion: 2,
-              isEnabled: false,
-              missingContextFields: ["another"],
-            },
-            flag3: {
-              key: "flag3",
-              targetingVersion: 5,
-              isEnabled: true,
-            },
-          },
-        },
-      });
-
-      client = new ReflagClient(validOptions);
-    });
-
-    afterEach(() => {
-      httpClient.get.mockClear();
-    });
-
-    it("should return evaluated flags", async () => {
-      const result = await client.getFlagsRemote("c1", "u1", {
-        other: otherContext,
-      });
-
-      expect(result).toStrictEqual({
-        flag1: {
-          key: "flag1",
-          isEnabled: true,
-          config: {
-            key: "config-1",
-            payload: { something: "else" },
-          },
-          track: expect.any(Function),
-        },
-        flag2: {
-          key: "flag2",
-          isEnabled: false,
-          config: { key: undefined, payload: undefined },
-          track: expect.any(Function),
-        },
-        flag3: {
-          key: "flag3",
-          isEnabled: true,
-          config: { key: undefined, payload: undefined },
-          track: expect.any(Function),
-        },
-      });
-
-      expect(httpClient.get).toHaveBeenCalledTimes(1);
-
-      expect(httpClient.get).toHaveBeenCalledWith(
-        "https://api.example.com/features/evaluated?context.other.custom=context&context.other.key=value&context.user.id=c1&context.company.id=u1",
-        expectedHeaders,
-        API_TIMEOUT_MS,
-      );
-    });
-
-    it("should not try to append the context if it's empty", async () => {
-      await client.getFlagsRemote();
-
-      expect(httpClient.get).toHaveBeenCalledTimes(1);
-
-      expect(httpClient.get).toHaveBeenCalledWith(
-        "https://api.example.com/features/evaluated?",
-        expectedHeaders,
-        API_TIMEOUT_MS,
-      );
-    });
+  afterEach(() => {
+    httpClient.get.mockClear();
   });
 
-  describe("getFlagRemote", () => {
-    let client: ReflagClient;
-
-    beforeEach(async () => {
-      httpClient.get.mockResolvedValue({
-        ok: true,
-        status: 200,
-        body: {
-          success: true,
-          remoteContextUsed: true,
-          features: {
-            flag1: {
-              key: "flag1",
-              targetingVersion: 1,
-              isEnabled: true,
-              config: {
-                key: "config-1",
-                version: 3,
-                default: true,
-                payload: { something: "else" },
-                missingContextFields: ["two"],
-              },
-              missingContextFields: ["one", "two"],
-            },
-          },
-        },
-      });
-
-      client = new ReflagClient(validOptions);
+  it("should return evaluated flags", async () => {
+    const result = await client.getFlagsRemote("c1", "u1", {
+      other: otherContext,
     });
 
-    afterEach(() => {
-      httpClient.get.mockClear();
-    });
-
-    it("should return evaluated flag", async () => {
-      const result = await client.getFlagRemote("flag1", "c1", "u1", {
-        other: otherContext,
-      });
-
-      expect(result).toStrictEqual({
+    expect(result).toStrictEqual({
+      flag1: {
         key: "flag1",
         isEnabled: true,
-        track: expect.any(Function),
         config: {
           key: "config-1",
           payload: { something: "else" },
         },
-      });
-
-      expect(httpClient.get).toHaveBeenCalledTimes(1);
-
-      expect(httpClient.get).toHaveBeenCalledWith(
-        "https://api.example.com/features/evaluated?context.other.custom=context&context.other.key=value&context.user.id=c1&context.company.id=u1&key=flag1",
-        expectedHeaders,
-        API_TIMEOUT_MS,
-      );
+        track: expect.any(Function),
+      },
+      flag2: {
+        key: "flag2",
+        isEnabled: false,
+        config: { key: undefined, payload: undefined },
+        track: expect.any(Function),
+      },
+      flag3: {
+        key: "flag3",
+        isEnabled: true,
+        config: { key: undefined, payload: undefined },
+        track: expect.any(Function),
+      },
     });
 
-    it("should not try to append the context if it's empty", async () => {
-      await client.getFlagRemote("flag1");
+    expect(httpClient.get).toHaveBeenCalledTimes(1);
 
-      expect(httpClient.get).toHaveBeenCalledWith(
-        "https://api.example.com/features/evaluated?key=flag1",
-        expectedHeaders,
-        API_TIMEOUT_MS,
-      );
-    });
+    expect(httpClient.get).toHaveBeenCalledWith(
+      "https://api.example.com/features/evaluated?context.other.custom=context&context.other.key=value&context.user.id=c1&context.company.id=u1",
+      expectedHeaders,
+      API_TIMEOUT_MS,
+    );
   });
 
-  describe("offline mode", () => {
-    let client: ReflagClient;
+  it("should not try to append the context if it's empty", async () => {
+    await client.getFlagsRemote();
 
-    beforeEach(async () => {
-      client = new ReflagClient({
-        ...validOptions,
-        offline: true,
-      });
-      await client.initialize();
+    expect(httpClient.get).toHaveBeenCalledTimes(1);
+
+    expect(httpClient.get).toHaveBeenCalledWith(
+      "https://api.example.com/features/evaluated?",
+      expectedHeaders,
+      API_TIMEOUT_MS,
+    );
+  });
+});
+
+describe("getFlagRemote", () => {
+  let client: ReflagClient;
+
+  beforeEach(async () => {
+    httpClient.get.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: {
+        success: true,
+        remoteContextUsed: true,
+        features: {
+          flag1: {
+            key: "flag1",
+            targetingVersion: 1,
+            isEnabled: true,
+            config: {
+              key: "config-1",
+              version: 3,
+              default: true,
+              payload: { something: "else" },
+              missingContextFields: ["two"],
+            },
+            missingContextFields: ["one", "two"],
+          },
+        },
+      },
     });
 
-    it("should send not send or fetch anything", async () => {
-      client.getFlags({});
+    client = new ReflagClient(validOptions);
+  });
 
-      expect(httpClient.get).toHaveBeenCalledTimes(0);
-      expect(httpClient.post).toHaveBeenCalledTimes(0);
+  afterEach(() => {
+    httpClient.get.mockClear();
+  });
+
+  it("should return evaluated flag", async () => {
+    const result = await client.getFlagRemote("flag1", "c1", "u1", {
+      other: otherContext,
     });
+
+    expect(result).toStrictEqual({
+      key: "flag1",
+      isEnabled: true,
+      track: expect.any(Function),
+      config: {
+        key: "config-1",
+        payload: { something: "else" },
+      },
+    });
+
+    expect(httpClient.get).toHaveBeenCalledTimes(1);
+
+    expect(httpClient.get).toHaveBeenCalledWith(
+      "https://api.example.com/features/evaluated?context.other.custom=context&context.other.key=value&context.user.id=c1&context.company.id=u1&key=flag1",
+      expectedHeaders,
+      API_TIMEOUT_MS,
+    );
+  });
+
+  it("should not try to append the context if it's empty", async () => {
+    await client.getFlagRemote("flag1");
+
+    expect(httpClient.get).toHaveBeenCalledWith(
+      "https://api.example.com/features/evaluated?key=flag1",
+      expectedHeaders,
+      API_TIMEOUT_MS,
+    );
+  });
+});
+
+describe("offline mode", () => {
+  let client: ReflagClient;
+
+  beforeEach(async () => {
+    client = new ReflagClient({
+      ...validOptions,
+      offline: true,
+    });
+    await client.initialize();
+  });
+
+  it("should send not send or fetch anything", async () => {
+    client.getFlags({});
+
+    expect(httpClient.get).toHaveBeenCalledTimes(0);
+    expect(httpClient.post).toHaveBeenCalledTimes(0);
   });
 });
 
@@ -2742,7 +2566,6 @@ describe("BoundReflagClient", () => {
         flag1: {
           key: "flag1",
           isEnabled: true,
-          isEnabledOverride: null,
           targetingVersion: 1,
           config: {
             key: "config-1",
@@ -2759,7 +2582,6 @@ describe("BoundReflagClient", () => {
         flag2: {
           key: "flag2",
           isEnabled: false,
-          isEnabledOverride: null,
           targetingVersion: 2,
           config: {
             key: undefined,
@@ -2772,7 +2594,6 @@ describe("BoundReflagClient", () => {
           missingContextFields: ["attributeKey"],
         },
       },
-      overrides: undefined,
     });
 
     // Should not have track function like regular getFlags
