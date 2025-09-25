@@ -1,31 +1,73 @@
 <script setup lang="ts">
-import { provide } from "vue";
+import { onMounted, provide, ref, watch } from "vue";
 
-import { ProviderSymbol } from "./hooks";
-import { ReflagBootstrappedProps } from "./types";
-import { useReflagProvider } from "./useReflagProvider";
+import { ProviderSymbol, useClientEvent, useReflagClient } from "./hooks";
+import { BootstrappedFlags, ReflagInitOptionsBase } from "./types";
 
-// any optional prop which has boolean as part of the type, will default to false
-// instead of `undefined`, so we use `withDefaults` here to pass the undefined
-// down into the client.
+/**
+ * Props for the ReflagBootstrappedProvider.
+ */
+export type ReflagBootstrappedProps = ReflagInitOptionsBase & {
+  /**
+   * Pre-fetched flags to be used instead of fetching them from the server.
+   */
+  flags: BootstrappedFlags;
+};
+
 const props = withDefaults(defineProps<ReflagBootstrappedProps>(), {
-  enableTracking: undefined,
-  toolbar: undefined,
+  enableTracking: true,
 });
 
 const { flags, ...config } = props;
 
-const context = useReflagProvider({
-  config,
-  context: flags?.context,
+const client = useReflagClient({
+  ...config,
+  ...flags?.context,
   bootstrappedFlags: flags?.flags,
-  isBootstrapped: true,
 });
 
-provide(ProviderSymbol, context);
+const isLoading = ref(client.getState() === "initializing");
+useClientEvent(
+  "stateUpdated",
+  (state) => {
+    isLoading.value = state === "initializing";
+  },
+  client,
+);
+
+// Initialize the client if it is not already initialized
+onMounted(() => {
+  if (client.getState() !== "idle") return;
+  void client.initialize().catch((e) => {
+    client.logger.error("failed to initialize client", e);
+  });
+});
+
+// Update the context if it changes
+watch(
+  () => flags.context,
+  (newContext) => {
+    void client.updateContext(newContext);
+  },
+  { deep: true },
+);
+
+// Update the flags if they change
+watch(
+  () => flags.flags,
+  (newFlags) => {
+    client.updateFlags(newFlags);
+  },
+  { deep: true },
+);
+
+provide(ProviderSymbol, {
+  isLoading,
+  client,
+});
 </script>
 
 <template>
-  <slot v-if="context.isLoading.value && $slots.loading" name="loading" />
+  <slot v-if="isLoading && $slots.loading" name="loading" />
   <slot v-else />
 </template>

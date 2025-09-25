@@ -8,7 +8,7 @@ import FlagsList from "./components/FlagsList.vue";
 import MissingKeyMessage from "./components/MissingKeyMessage.vue";
 import RequestFeedback from "./components/RequestFeedback.vue";
 import Section from "./components/Section.vue";
-import StartHuddleButton from "./components/StartHuddleButton.vue";
+import StartHuddlesButton from "./components/StartHuddlesButton.vue";
 import Track from "./components/Track.vue";
 
 // Initial context
@@ -53,7 +53,7 @@ const isBootstrapped = computed(() => {
   >
     <template #loading>......loading......</template>
     <h1>Vue SDK (Bootstrapped)</h1>
-    <StartHuddleButton />
+    <StartHuddlesButton />
     <Track />
     <RequestFeedback />
 
@@ -75,7 +75,7 @@ const isBootstrapped = computed(() => {
   >
     <template #loading>......loading......</template>
     <h1>Vue SDK</h1>
-    <StartHuddleButton />
+    <StartHuddlesButton />
     <Track />
     <RequestFeedback />
 

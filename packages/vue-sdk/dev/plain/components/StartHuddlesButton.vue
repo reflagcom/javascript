@@ -4,17 +4,17 @@ import { useFlag } from "../../../src";
 import Section from "./Section.vue";
 
 const { isLoading, isEnabled, config, requestFeedback, track } =
-  useFlag("huddle");
+  useFlag("huddles");
 </script>
 <template>
-  <Section title="Huddle">
+  <Section title="Huddles">
     <div style="display: flex; gap: 10px; flex-wrap: wrap">
-      <div>Huddle enabled: {{ isEnabled }}</div>
+      <div>huddles enabled: {{ isEnabled }}</div>
       <div v-if="isLoading">Loading...</div>
       <div v-else style="display: flex; gap: 10px; flex-wrap: wrap">
         <div>
           <button @click="track()">
-            {{ config?.payload?.buttonTitle ?? "Start Huddle (track event)" }}
+            {{ config?.payload?.buttonTitle ?? "Start Huddles (track event)" }}
           </button>
         </div>
         <div>

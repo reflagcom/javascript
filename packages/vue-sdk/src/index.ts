@@ -1,24 +1,12 @@
 import { App } from "vue";
 
-import {
-  CheckEvent,
-  CompanyContext,
-  TrackEvent,
-  UserContext,
-} from "@reflag/browser-sdk";
-
 import ReflagBootstrappedProvider from "./ReflagBootstrappedProvider.vue";
+import ReflagClientProvider from "./ReflagClientProvider.vue";
 import ReflagProvider from "./ReflagProvider.vue";
-import {
-  BootstrappedFlags,
-  EmptyFlagRemoteConfig,
-  Flag,
-  FlagType,
-  ReflagProps,
-} from "./types";
 
 export {
   useClient,
+  useClientEvent,
   useFlag,
   useIsLoading,
   useRequestFeedback,
@@ -28,29 +16,28 @@ export {
   useUpdateOtherContext,
   useUpdateUser,
 } from "./hooks";
-export type {
-  ReflagBaseProps,
-  ReflagBootstrappedProps,
-  ReflagProps,
-  RequestFlagFeedbackOptions,
-} from "./types";
-
-export { ReflagBootstrappedProvider, ReflagProvider };
-
+export type { ReflagBootstrappedProps } from "./ReflagBootstrappedProvider.vue";
+export type { ReflagProps } from "./ReflagProvider.vue";
 export type {
   BootstrappedFlags,
-  CheckEvent,
-  CompanyContext,
   EmptyFlagRemoteConfig,
   Flag,
   FlagType,
+  RequestFlagFeedbackOptions,
+} from "./types";
+export type {
+  CheckEvent,
+  CompanyContext,
   TrackEvent,
   UserContext,
-};
+} from "@reflag/browser-sdk";
+
+export { ReflagBootstrappedProvider, ReflagClientProvider, ReflagProvider };
 
 export default {
-  install(app: App, _options?: ReflagProps) {
+  install(app: App) {
     app.component("ReflagProvider", ReflagProvider);
     app.component("ReflagBootstrappedProvider", ReflagBootstrappedProvider);
+    app.component("ReflagClientProvider", ReflagClientProvider);
   },
 };

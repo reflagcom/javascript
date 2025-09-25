@@ -1,9 +1,8 @@
 import type { Ref } from "vue";
 
 import type {
-  FetchedFlags,
   InitOptions,
-  InitOptionsBootstrapped,
+  RawFlags,
   ReflagClient,
   ReflagContext,
   RequestFeedbackData,
@@ -49,52 +48,23 @@ export type TypedFlags = keyof Flags extends never
 export type FlagKey = keyof TypedFlags;
 
 export interface ProviderContextType {
-  client: Ref<ReflagClient | undefined>;
+  client: ReflagClient;
   isLoading: Ref<boolean>;
 }
 
 export type BootstrappedFlags = {
   context: ReflagContext;
-  flags: FetchedFlags;
+  flags: RawFlags;
 };
 
 /**
- * Base props for the ReflagProvider and ReflagBootstrappedProvider.
+ * Base init options for the ReflagProvider and ReflagBootstrappedProvider.
  * @internal
  */
-export type ReflagBaseProps = {
-  debug?: boolean;
-  newReflagClient?: (
-    ...args: ConstructorParameters<typeof ReflagClient>
-  ) => ReflagClient;
-};
-
-/**
- * Props for the ReflagProvider.
- */
-export type ReflagProps = InitOptions & ReflagBaseProps;
-
-/**
- * Props for the ReflagBootstrappedProvider.
- */
-export type ReflagBootstrappedProps = Omit<
-  InitOptionsBootstrapped,
-  "bootstrappedFlags" | "user" | "company" | "otherContext"
-> &
-  ReflagBaseProps & {
-    /**
-     * Pre-fetched flags to be used instead of fetching them from the server.
-     */
-    flags?: BootstrappedFlags;
-  };
-
-export type UseReflagProviderOptions = {
-  config: Omit<InitOptions, "user" | "company" | "otherContext"> &
-    ReflagBaseProps;
-  context?: ReflagContext;
-  bootstrappedFlags?: FetchedFlags;
-  isBootstrapped?: boolean;
-};
+export type ReflagInitOptionsBase = Omit<
+  InitOptions,
+  "user" | "company" | "other" | "otherContext" | "bootstrappedFlags"
+>;
 
 export type RequestFlagFeedbackOptions = Omit<
   RequestFeedbackData,

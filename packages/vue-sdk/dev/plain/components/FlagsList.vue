@@ -10,7 +10,7 @@
         style="list-style-type: none; padding: 0"
       >
         <li
-          v-for="[flagKey, feature] in flagEntries"
+          v-for="[flagKey, flag] in flagEntries"
           :key="flagKey"
           style="
             margin-bottom: 10px;
@@ -24,13 +24,11 @@
             <span
               :style="{
                 color:
-                  (feature.isEnabledOverride ?? feature.isEnabled)
-                    ? 'green'
-                    : 'red',
+                  (flag.isEnabledOverride ?? flag.isEnabled) ? 'green' : 'red',
               }"
             >
               {{
-                (feature.isEnabledOverride ?? feature.isEnabled)
+                (flag.isEnabledOverride ?? flag.isEnabled)
                   ? "Enabled"
                   : "Disabled"
               }}
@@ -38,7 +36,7 @@
 
             <!-- Reset button if override is active -->
             <button
-              v-if="feature.isEnabledOverride !== null"
+              v-if="flag.isEnabledOverride !== null"
               style="margin-left: 10px; padding: 2px 8px; font-size: 12px"
               @click="() => resetOverride(flagKey)"
             >
@@ -48,15 +46,21 @@
             <!-- Toggle checkbox -->
             <input
               type="checkbox"
-              :checked="feature.isEnabledOverride ?? feature.isEnabled"
+              :checked="flag.isEnabledOverride ?? flag.isEnabled"
               style="margin-left: auto"
-              @change="(e) => toggleFlag(flagKey, e.target.checked)"
+              @change="
+                (e) => {
+                  const isChecked = e.target.checked;
+                  const isEnabledOverride = flag.isEnabledOverride !== null;
+                  toggleFlag(flagKey, !isEnabledOverride ? isChecked : null);
+                }
+              "
             />
           </div>
 
           <!-- Show config if available -->
           <div
-            v-if="feature.config && feature.config.key"
+            v-if="flag.config && flag.config.key"
             style="margin-top: 5px; font-size: 12px; color: #666"
           >
             <strong>Config:</strong>
@@ -68,7 +72,7 @@
                 border-radius: 2px;
                 overflow: auto;
               "
-              >{{ JSON.stringify(feature.config.payload, null, 2) }}</pre
+              >{{ JSON.stringify(flag.config.payload, null, 2) }}</pre
             >
           </div>
         </li>
@@ -79,9 +83,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 
-import { useClient } from "../../../src";
+import { useClient, useClientEvent } from "../../../src";
 
 import Section from "./Section.vue";
 
@@ -90,38 +94,29 @@ const flagsData = ref({});
 
 // Update flags data when flags are updated
 function updateFlags() {
-  if (client.value) {
-    flagsData.value = client.value.getFlags();
-  }
+  flagsData.value = client.getFlags();
 }
 
 // Initial load
-updateFlags();
+onMounted(() => {
+  updateFlags();
+});
 
-// Listen for flag updates
-if (client.value) {
-  client.value.on("flagsUpdated", updateFlags);
-  onBeforeUnmount(() => {
-    client.value?.off("flagsUpdated", updateFlags);
-  });
-}
+// Update flags data when flags are updated
+useClientEvent("flagsUpdated", updateFlags);
 
 const flagEntries = computed(() => {
   return Object.entries(flagsData.value);
 });
 
 function resetOverride(flagKey: string) {
-  if (client.value) {
-    client.value.getFlag(flagKey).setIsEnabledOverride(null);
-    updateFlags();
-  }
+  client.getFlag(flagKey).setIsEnabledOverride(null);
+  updateFlags();
 }
 
 function toggleFlag(flagKey: string, checked: boolean) {
-  if (client.value) {
-    // Use simplified logic similar to React implementation
-    client.value.getFlag(flagKey).setIsEnabledOverride(checked);
-    updateFlags();
-  }
+  // Use simplified logic similar to React implementation
+  client.getFlag(flagKey).setIsEnabledOverride(checked);
+  updateFlags();
 }
 </script>

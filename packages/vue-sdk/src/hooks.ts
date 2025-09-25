@@ -1,50 +1,142 @@
-import { computed, inject, InjectionKey, onBeforeUnmount, ref } from "vue";
+import {
+  computed,
+  inject,
+  InjectionKey,
+  onMounted,
+  onUnmounted,
+  ref,
+} from "vue";
 
-import { RequestFeedbackData, UnassignedFeedback } from "@reflag/browser-sdk";
+import {
+  HookArgs,
+  InitOptions,
+  ReflagClient,
+  RequestFeedbackData,
+  UnassignedFeedback,
+} from "@reflag/browser-sdk";
 
-import { Flag, ProviderContextType, RequestFlagFeedbackOptions } from "./types";
+import {
+  FlagKey,
+  ProviderContextType,
+  RequestFlagFeedbackOptions,
+  TypedFlags,
+} from "./types";
+import { SDK_VERSION } from "./version";
 
 export const ProviderSymbol: InjectionKey<ProviderContextType> =
   Symbol("ReflagProvider");
 
-export function useFlag(key: string): Flag<any> {
+/**
+ * Map of clients by context key. Used to deduplicate initialization of the client.
+ * @internal
+ */
+const reflagClients = new Map<string, ReflagClient>();
+
+/**
+ * Returns the ReflagClient for a given publishable key.
+ * Only creates a new ReflagClient if not already created or if it hook is run on the server.
+ * @internal
+ */
+export function useReflagClient(initOptions: InitOptions): ReflagClient {
+  const isServer = typeof window === "undefined";
+  if (isServer || !reflagClients.has(initOptions.publishableKey)) {
+    const client = new ReflagClient({
+      ...initOptions,
+      sdkVersion: SDK_VERSION,
+    });
+    if (!isServer) {
+      reflagClients.set(initOptions.publishableKey, client);
+    }
+    return client;
+  }
+  return reflagClients.get(initOptions.publishableKey)!;
+}
+
+/**
+ * Vue composable for listening to Reflag client events.
+ *
+ * @example
+ * ```ts
+ * import { useClientEvent } from '@reflag/vue-sdk';
+ *
+ * useClientEvent("flagsUpdated", () => {
+ *   console.log("flags updated");
+ * });
+ * ```
+ *
+ * @param event - The event to listen to.
+ * @param handler - The function to call when the event is triggered.
+ * @param client - The Reflag client to listen to. If not provided, the client will be retrieved from the context.
+ */
+export function useClientEvent<THookType extends keyof HookArgs>(
+  event: THookType,
+  handler: (arg0: HookArgs[THookType]) => void,
+  client?: ReflagClient,
+) {
+  const resolvedClient = client ?? useClient();
+  let off: () => void;
+  onMounted(() => {
+    off = resolvedClient.on(event, handler);
+  });
+  onUnmounted(() => {
+    off();
+  });
+}
+
+/**
+ * Vue composable for getting the state of a given flag for the current context.
+ *
+ * This composable returns an object with the state of the flag for the current context.
+ *
+ * @param key - The key of the flag to get the state of.
+ * @returns An object with the state of the flag.
+ *
+ * @example
+ * ```ts
+ * import { useFlag } from '@reflag/vue-sdk';
+ *
+ * const { isEnabled, config, track, requestFeedback } = useFlag("huddles");
+ *
+ * function StartHuddlesButton() {
+ *   const { isEnabled, config: { payload }, track } = useFlag("huddles");
+ *   if (isEnabled) {
+ *    return <button onClick={() => track()}>{payload?.buttonTitle ?? "Start Huddles"}</button>;
+ * }
+ * ```
+ */
+export function useFlag<TKey extends FlagKey>(key: TKey): TypedFlags[TKey] {
   const client = useClient();
-  const ctx = injectSafe();
+  const isLoading = useIsLoading();
 
-  const track = () => client?.value?.track(key);
+  const track = () => client.track(key);
   const requestFeedback = (opts: RequestFlagFeedbackOptions) =>
-    client.value?.requestFeedback({ ...opts, flagKey: key });
+    client.requestFeedback({ ...opts, flagKey: key });
 
-  const feature = ref(
-    client.value?.getFlag(key) || {
+  const flag = ref(
+    client.getFlag(key) || {
       isEnabled: false,
       config: { key: undefined, payload: undefined },
     },
   );
 
-  updateFlag();
+  const updateFlag = () => {
+    flag.value = client.getFlag(key);
+  };
 
-  function updateFlag() {
-    if (client.value) {
-      feature.value = client.value.getFlag(key);
-    }
-  }
+  onMounted(() => {
+    updateFlag();
+  });
 
-  if (client.value) {
-    client.value.on("flagsUpdated", updateFlag);
-    onBeforeUnmount(() => {
-      client.value?.off("flagsUpdated", updateFlag);
-    });
-  }
+  useClientEvent("flagsUpdated", updateFlag);
 
   return {
     key,
-    isEnabled: computed(() => feature.value.isEnabled),
-    config: computed(() => feature.value.config),
+    isLoading,
+    isEnabled: computed(() => flag.value.isEnabled),
+    config: computed(() => flag.value.config),
     track,
     requestFeedback,
-    isLoading: computed(() => ctx.isLoading.value),
-  };
+  } as TypedFlags[TKey];
 }
 
 /**
@@ -60,7 +152,7 @@ export function useFlag(key: string): Flag<any> {
  * const track = useTrack();
  *
  * // Track a custom event
- * track('button_clicked', { buttonName: 'Start Huddle' });
+ * track('button_clicked', { buttonName: 'Start Huddles' });
  * ```
  *
  * @returns A function that tracks an event. The function accepts:
@@ -70,7 +162,7 @@ export function useFlag(key: string): Flag<any> {
 export function useTrack() {
   const client = useClient();
   return (eventName: string, attributes?: Record<string, any> | null) =>
-    client?.value?.track(eventName, attributes);
+    client.track(eventName, attributes);
 }
 
 /**
@@ -98,8 +190,7 @@ export function useTrack() {
  */
 export function useRequestFeedback() {
   const client = useClient();
-  return (options: RequestFeedbackData) =>
-    client?.value?.requestFeedback(options);
+  return (options: RequestFeedbackData) => client.requestFeedback(options);
 }
 
 /**
@@ -116,7 +207,7 @@ export function useRequestFeedback() {
  *
  * // Send feedback from the user
  * sendFeedback({
- *   feedback: "I love this feature!",
+ *   feedback: "I love this flag!",
  *   metadata: { page: "dashboard" }
  * });
  * ```
@@ -126,7 +217,7 @@ export function useRequestFeedback() {
  */
 export function useSendFeedback() {
   const client = useClient();
-  return (opts: UnassignedFeedback) => client?.value?.feedback(opts);
+  return (opts: UnassignedFeedback) => client.feedback(opts);
 }
 
 /**
@@ -152,7 +243,7 @@ export function useSendFeedback() {
 export function useUpdateUser() {
   const client = useClient();
   return (opts: { [key: string]: string | number | undefined }) =>
-    client?.value?.updateUser(opts);
+    client.updateUser(opts);
 }
 
 /**
@@ -178,7 +269,7 @@ export function useUpdateUser() {
 export function useUpdateCompany() {
   const client = useClient();
   return (opts: { [key: string]: string | number | undefined }) =>
-    client?.value?.updateCompany(opts);
+    client.updateCompany(opts);
 }
 
 /**
@@ -204,7 +295,7 @@ export function useUpdateCompany() {
 export function useUpdateOtherContext() {
   const client = useClient();
   return (opts: { [key: string]: string | number | undefined }) =>
-    client?.value?.updateOtherContext(opts);
+    client.updateOtherContext(opts);
 }
 
 /**

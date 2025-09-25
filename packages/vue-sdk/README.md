@@ -66,12 +66,12 @@ If using Nuxt, wrap `<ReflagProvider>` in `<ClientOnly>`. `<ReflagProvider>` onl
 <script setup lang="ts">
 import { useFlag } from "@reflag/vue-sdk";
 
-const { isEnabled } = useFlag("huddle");
+const { isEnabled } = useFlag("huddles");
 </script>
 
 <template>
   <div v-if="isEnabled">
-    <button>Start huddle!</button>
+    <button>Start huddles!</button>
   </div>
 </template>
 ```
@@ -169,7 +169,7 @@ ReflagProvider lets you define a template to be shown while ReflagProvider is in
     :company="{ id: 'acme_inc', plan: 'pro' }"
   >
     <template #loading>Loading...</template>
-    <StartHuddleButton />
+    <StartHuddlesButton />
   </ReflagProvider>
 </template>
 ```
@@ -193,7 +193,7 @@ const bootstrappedFlags = {
     company: { id: "company456", name: "Acme Inc", plan: "enterprise" },
   },
   flags: {
-    huddle: {
+    huddles: {
       isEnabled: true,
       config: {
         key: "enhanced",
@@ -209,7 +209,7 @@ const bootstrappedFlags = {
     :publishable-key="publishableKey"
     :flags="bootstrappedFlags"
   >
-    <StartHuddleButton />
+    <StartHuddlesButton />
   </ReflagBootstrappedProvider>
 </template>
 ```
@@ -271,14 +271,14 @@ Example:
 <script setup lang="ts">
 import { useFlag } from "@reflag/vue-sdk";
 
-const { isEnabled, track, requestFeedback, config } = useFlag("huddle");
+const { isEnabled, track, requestFeedback, config } = useFlag("huddles");
 </script>
 
 <template>
   <div v-if="isLoading">Loading...</div>
   <div v-else-if="!isEnabled">Flag not available</div>
   <div v-else>
-    <button @click="track()">Start huddle!</button>
+    <button @click="track()">Start huddles!</button>
     <button
       @click="
         (e) =>
@@ -316,8 +316,8 @@ const track = useTrack();
 
 <template>
   <div>
-    <button @click="track('Huddle Started', { huddleType: 'voice' })">
-      Start voice huddle!
+    <button @click="track('Huddles Started', { huddlesType: 'voice' })">
+      Start voice huddles!
     </button>
   </div>
 </template>
@@ -344,7 +344,7 @@ const requestFeedback = useRequestFeedback();
     @click="
       (e) =>
         requestFeedback({
-          flagKey: 'huddle-flag',
+          flagKey: 'huddles',
           title: 'How satisfied are you with file uploads?',
           position: {
             type: 'POPOVER',
@@ -452,11 +452,64 @@ import { onMounted } from "vue";
 
 const client = useClient();
 
-onMounted(() => {
-  client.value.on("check", (evt) => {
-    console.log(`The flag ${evt.key} is ${evt.value} for user.`);
-  });
+console.log(client.getContext());
+</script>
+
+<template>
+  <!-- your component content -->
+</template>
+```
+
+### `useClientEvent()`
+
+Vue composable for listening to Reflag client events. This composable automatically handles mounting and unmounting of event listeners.
+
+Available events include:
+
+- `flagsUpdated`: Triggered when flags are updated
+- `track`: Triggered when tracking events are sent
+- `feedback`: Triggered when feedback is sent
+
+```vue
+<script setup lang="ts">
+import { useClientEvent } from "@reflag/vue-sdk";
+
+// Listen to flag updates
+useClientEvent("flagsUpdated", () => {
+  console.log("Flags have been updated");
 });
+
+// Listen to tracking events
+useClientEvent("track", (event) => {
+  console.log("Tracking event:", event);
+});
+
+// Listen to feedback events
+useClientEvent("feedback", (event) => {
+  console.log("Feedback event:", event);
+});
+</script>
+
+<template>
+  <!-- your component content -->
+</template>
+```
+
+You can also provide a specific client instance if needed:
+
+```vue
+<script setup lang="ts">
+import { ReflagClient } from "@reflag/browser-sdk";
+
+const myReflagClient = new ReflagClient();
+
+useClientEvent(
+  "flagsUpdated",
+  () => {
+    console.log("flags updated");
+  },
+  myReflagClient,
+);
 </script>
 
 <template>
