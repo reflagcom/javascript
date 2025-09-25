@@ -172,7 +172,10 @@ type ProviderContextType = {
 
 const ProviderContext = createContext<ProviderContextType | null>(null);
 
-type ReflagClientProviderProps = ReflagPropsBase & {
+/**
+ * Props for the ReflagClientProvider.
+ */
+export type ReflagClientProviderProps = ReflagPropsBase & {
   client: ReflagClient;
   loadingComponent?: ReactNode;
 };

@@ -20,10 +20,13 @@ export type {
   BootstrappedFlags,
   EmptyFlagRemoteConfig,
   Flag,
+  Flags,
   FlagType,
   ReflagBootstrappedProps,
+  ReflagInitOptionsBase,
   ReflagProps,
   RequestFlagFeedbackOptions,
+  TypedFlags,
 } from "./types";
 export type {
   CheckEvent,

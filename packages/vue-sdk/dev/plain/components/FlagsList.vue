@@ -50,7 +50,7 @@
               style="margin-left: auto"
               @change="
                 (e) => {
-                  const isChecked = e.target.checked;
+                  const isChecked = (e.target as HTMLInputElement).checked;
                   const isEnabledOverride = flag.isEnabledOverride !== null;
                   toggleFlag(flagKey, !isEnabledOverride ? isChecked : null);
                 }
@@ -83,24 +83,19 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, ref } from "vue";
 
 import { useClient, useClientEvent } from "../../../src";
 
 import Section from "./Section.vue";
 
 const client = useClient();
-const flagsData = ref({});
+const flagsData = ref(client.getFlags());
 
 // Update flags data when flags are updated
 function updateFlags() {
   flagsData.value = client.getFlags();
 }
-
-// Initial load
-onMounted(() => {
-  updateFlags();
-});
 
 // Update flags data when flags are updated
 useClientEvent("flagsUpdated", updateFlags);
@@ -114,7 +109,7 @@ function resetOverride(flagKey: string) {
   updateFlags();
 }
 
-function toggleFlag(flagKey: string, checked: boolean) {
+function toggleFlag(flagKey: string, checked: boolean | null) {
   // Use simplified logic similar to React implementation
   client.getFlag(flagKey).setIsEnabledOverride(checked);
   updateFlags();

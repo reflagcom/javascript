@@ -695,8 +695,8 @@ export class ReflagClient {
    * @param flags The flags to update.
    * @param triggerEvent Whether to trigger the `flagsUpdated` event.
    */
-  updateFlags(...args: Parameters<FlagsClient["setFetchedFlags"]>) {
-    this.flagsClient.setFetchedFlags(...args);
+  updateFlags(flags: RawFlags, triggerEvent = true) {
+    this.flagsClient.setFetchedFlags(flags, triggerEvent);
   }
 
   /**

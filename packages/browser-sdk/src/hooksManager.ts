@@ -1,6 +1,9 @@
 import { CheckEvent, RawFlags } from "./flag/flags";
 import { CompanyContext, UserContext } from "./context";
 
+/**
+ * State of the client.
+ */
 export type State = "idle" | "initializing" | "initialized" | "stopped";
 
 export interface HookArgs {
