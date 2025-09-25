@@ -16,13 +16,13 @@ export {
   useUpdateOtherContext,
   useUpdateUser,
 } from "./hooks";
-export type { ReflagBootstrappedProps } from "./ReflagBootstrappedProvider.vue";
-export type { ReflagProps } from "./ReflagProvider.vue";
 export type {
   BootstrappedFlags,
   EmptyFlagRemoteConfig,
   Flag,
   FlagType,
+  ReflagBootstrappedProps,
+  ReflagProps,
   RequestFlagFeedbackOptions,
 } from "./types";
 export type {

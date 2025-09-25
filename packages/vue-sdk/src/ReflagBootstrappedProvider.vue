@@ -2,17 +2,7 @@
 import { onMounted, provide, ref, watch } from "vue";
 
 import { ProviderSymbol, useClientEvent, useReflagClient } from "./hooks";
-import { BootstrappedFlags, ReflagInitOptionsBase } from "./types";
-
-/**
- * Props for the ReflagBootstrappedProvider.
- */
-export type ReflagBootstrappedProps = ReflagInitOptionsBase & {
-  /**
-   * Pre-fetched flags to be used instead of fetching them from the server.
-   */
-  flags: BootstrappedFlags;
-};
+import type { ReflagBootstrappedProps } from "./types";
 
 const props = withDefaults(defineProps<ReflagBootstrappedProps>(), {
   enableTracking: true,

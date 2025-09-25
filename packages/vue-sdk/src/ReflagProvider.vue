@@ -1,44 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, provide, ref, watch } from "vue";
 
-import type {
-  CompanyContext,
-  ReflagContext,
-  UserContext,
-} from "@reflag/browser-sdk";
-
 import { ProviderSymbol, useClientEvent, useReflagClient } from "./hooks";
-import type { ReflagInitOptionsBase } from "./types";
-
-/**
- * Props for the ReflagProvider.
- */
-export type ReflagProps = ReflagInitOptionsBase & {
-  /**
-   * The context to use for the ReflagClient containing user, company, and other context.
-   */
-  context?: ReflagContext;
-
-  /**
-   * Company related context. If you provide `id` Reflag will enrich the evaluation context with
-   * company attributes on Reflag servers.
-   * @deprecated Use `context` instead, this property will be removed in the next major version
-   */
-  company?: CompanyContext;
-
-  /**
-   * User related context. If you provide `id` Reflag will enrich the evaluation context with
-   * user attributes on Reflag servers.
-   * @deprecated Use `context` instead, this property will be removed in the next major version
-   */
-  user?: UserContext;
-
-  /**
-   * Context which is not related to a user or a company.
-   * @deprecated Use `context` instead, this property will be removed in the next major version
-   */
-  otherContext?: Record<string, string | number | undefined>;
-};
+import type { ReflagProps } from "./types";
 
 // any optional prop which has boolean as part of the type, will default to false
 // instead of `undefined`, so we use `withDefaults` here to pass the undefined
