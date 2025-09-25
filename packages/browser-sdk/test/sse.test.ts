@@ -1,5 +1,5 @@
 import { http, HttpResponse } from "msw";
-import nock from "nock";
+import { cleanAll, isDone } from "nock";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import {
@@ -300,10 +300,10 @@ describe("message handling", () => {
   });
 
   afterEach(() => {
-    expect(nock.isDone()).toBe(true);
+    expect(isDone()).toBe(true);
 
     vi.clearAllMocks();
-    nock.cleanAll();
+    cleanAll();
   });
 
   test("passes message to callback", async () => {
@@ -435,11 +435,11 @@ describe("automatic retries", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    nock.cleanAll();
+    cleanAll();
   });
 
   afterEach(() => {
-    expect(nock.isDone()).toBe(true);
+    expect(isDone()).toBe(true);
   });
 
   test("opens and connects to a channel", async () => {

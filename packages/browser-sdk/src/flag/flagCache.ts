@@ -12,9 +12,7 @@ interface cacheEntry {
 }
 
 // Parse and validate an API flags response
-export function parseAPIFlagsResponse(
-  flagsInput: any,
-): RawFlags | undefined {
+export function parseAPIFlagsResponse(flagsInput: any): RawFlags | undefined {
   if (!isObject(flagsInput)) {
     return;
   }
