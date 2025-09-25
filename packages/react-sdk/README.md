@@ -27,8 +27,10 @@ import { ReflagProvider } from "@reflag/react-sdk";
 
 <ReflagProvider
   publishableKey="{YOUR_PUBLISHABLE_KEY}"
-  company={{ id: "acme_inc", plan: "pro" }}
-  user={{ id: "john doe" }}
+  context={{
+    company: { id: "acme_inc", plan: "pro" },
+    user: { id: "john doe" },
+  }}
   loadingComponent={<Loading />}
 >
   {/* children here are shown when loading finishes or immediately if no `loadingComponent` is given */}
@@ -90,14 +92,53 @@ function StartHuddleButton() {
 
 `useFlag` can help you do much more. See a full example for `useFlag` [see below](#useflag).
 
-## Setting `user` and `company`
+## Setting context
 
-Reflag determines which flags are active for a given `user`, `company`, or `other`.
-You pass these to the `ReflagProvider` as props.
+Reflag determines which flags are active for a given `user`, `company`, or `other` context.
+You can pass these to the `ReflagProvider` using the `context` prop.
+
+### Using the `context` prop
+
+```tsx
+<ReflagProvider
+  publishableKey={YOUR_PUBLISHABLE_KEY}
+  context={{
+    user: { id: "user_123", name: "John Doe", email: "john@acme.com" },
+    company: { id: "company_123", name: "Acme, Inc" },
+    other: { source: "web" },
+  }}
+>
+  <LoadingReflag>
+    {/* children here are shown when loading finishes */}
+  </LoadingReflag>
+</ReflagProvider>
+```
+
+### Legacy individual props (deprecated)
+
+For backward compatibility, you can still use individual props, but these are deprecated and will be removed in the next major version:
+
+```tsx
+<ReflagProvider
+  publishableKey={YOUR_PUBLISHABLE_KEY}
+  user={{ id: "user_123", name: "John Doe", email: "john@acme.com" }}
+  company={{ id: "company_123", name: "Acme, Inc" }}
+  otherContext={{ source: "web" }}
+>
+  <LoadingReflag>
+    {/* children here are shown when loading finishes */}
+  </LoadingReflag>
+</ReflagProvider>
+```
+
+> [!Important]
+> The `user`, `company`, and `otherContext` props are deprecated. Use the `context` prop instead, which provides the same functionality in a more structured way.
+
+### Context requirements
 
 If you supply `user` or `company` objects, they must include at least the `id` property otherwise they will be ignored in their entirety.
 In addition to the `id`, you must also supply anything additional that you want to be able to evaluate flag targeting rules against.
-Attributes which are not properties of the `user` or `company` can be supplied using the `other` prop.
+Attributes which are not properties of the `user` or `company` can be supplied using the `other` property.
 
 Attributes cannot be nested (multiple levels) and must be either strings, numbers or booleans.
 A number of special attributes exist:
@@ -105,19 +146,6 @@ A number of special attributes exist:
 - `name` -- display name for `user`/`company`,
 - `email` -- the email of the user,
 - `avatar` -- the URL for `user`/`company` avatar image.
-
-```tsx
-<ReflagProvider
-  publishableKey={YOUR_PUBLISHABLE_KEY}
-  user={{ id: "user_123", name: "John Doe", email: "john@acme.com" }}
-  company={{ id: "company_123", name: "Acme, Inc" }}
-  other={{ completedSteps: [1, 4, 7] }}
->
-  <LoadingReflag>
-    {/* children here are shown when loading finishes */}
-  </LoadingReflag>
-</ReflagProvider>
-```
 
 To retrieve flags along with their targeting information, use `useFlag(key: string)` hook (described in a section below).
 
@@ -409,12 +437,53 @@ export function HuddleFeature() {
 
 This App Router approach leverages Server Components for server-side flag fetching while using Client Components only where React state and hooks are needed.
 
+## `<ReflagClientProvider>` component
+
+The `<ReflagClientProvider>` is a lower-level component that accepts a pre-initialized `ReflagClient` instance. This is useful for advanced use cases where you need full control over client initialization or want to share a client instance across multiple parts of your application.
+
+### Usage
+
+```tsx
+import { ReflagClient } from "@reflag/browser-sdk";
+import { ReflagClientProvider } from "@reflag/react-sdk";
+
+// Initialize the client yourself
+const client = new ReflagClient({
+  publishableKey: "your-publishable-key",
+  user: { id: "user123", name: "John Doe" },
+  company: { id: "company456", name: "Acme Inc" },
+  // ... other configuration options
+});
+
+// Initialize the client
+await client.initialize();
+
+function App() {
+  return (
+    <ReflagClientProvider client={client} loadingComponent={<Loading />}>
+      <Router />
+    </ReflagClientProvider>
+  );
+}
+```
+
+### Props
+
+The `ReflagClientProvider` accepts the following props:
+
+- `client`: A pre-initialized `ReflagClient` instance
+- `loadingComponent`: Optional React component to show while the client is initializing (same as `ReflagProvider`)
+
+> [!Note]
+> Most applications should use `ReflagProvider` or `ReflagBootstrappedProvider` instead of `ReflagClientProvider`. Only use this component when you need the advanced control it provides.
+
 ## `<ReflagProvider>` component
 
 The `<ReflagProvider>` initializes the Reflag SDK, fetches flags and starts listening for automated feedback survey events. The component can be configured using a number of props:
 
 - `publishableKey` is used to connect the provider to an _environment_ on Reflag. Find your `publishableKey` under [environment settings](https://app.reflag.com/env-current/settings/app-environments) in Reflag,
-- `company`, `user` and `other` make up the _context_ that is used to determine if a flag is enabled or not. `company` and `user` contexts are automatically transmitted to Reflag servers so the Reflag app can show you which companies have access to which flags etc.
+- `context` (recommended): An object containing `user`, `company`, and `other` properties that make up the evaluation context used to determine if a flag is enabled or not. `company` and `user` contexts are automatically transmitted to Reflag servers so the Reflag app can show you which companies have access to which flags etc.
+- `company`, `user` and `other` (deprecated): Individual props for context. These are deprecated in favor of the `context` prop and will be removed in the next major version.
   > [!Note]
   > If you specify `company` and/or `user` they must have at least the `id` property, otherwise they will be ignored in their entirety. You should also supply anything additional you want to be able to evaluate flag targeting against,
 - `fallbackFlags`: A list of strings which specify which flags to consider enabled if the SDK is unable to fetch flags. Can be provided in two formats:
@@ -476,7 +545,7 @@ The `<ReflagBootstrappedProvider>` is a specialized version of the `ReflagProvid
 The component accepts the following props:
 
 - `flags`: Pre-fetched flags data of type `BootstrappedFlags` obtained from the Node SDK's `getFlagsForBootstrap()` method. This contains both the context (user, company, other) and the flags data.
-- All other props available in [`ReflagProvider`](#reflagprovider-component) are supported except `user`, `company`, and `other` (which are extracted from `flags.context`).
+- All other props available in [`ReflagProvider`](#reflagprovider-component) are supported except `context`, `user`, `company`, and `other` (which are extracted from `flags.context`).
 
 **Example:**
 
@@ -505,7 +574,7 @@ function App({ bootstrapData }: AppProps) {
 ```
 
 > [!Note]
-> When using `ReflagBootstrappedProvider`, the user, company, and other are extracted from the `flags.context` property and don't need to be passed separately.
+> When using `ReflagBootstrappedProvider`, the context (user, company, and other) is extracted from the `flags.context` property and doesn't need to be passed separately.
 
 ## Hooks
 
@@ -681,8 +750,6 @@ function FlagOptIn() {
   );
 }
 ```
-
-Note: To change the `user.id` or `company.id`, you need to update the props passed to `ReflagProvider` instead of using these hooks.
 
 ### `useClient()`
 
