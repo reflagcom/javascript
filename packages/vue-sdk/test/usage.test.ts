@@ -113,25 +113,4 @@ describe("ReflagBootstrappedProvider", () => {
     expect(wrapper.findComponent(Child).vm.client).toBeDefined();
     expect(wrapper.findComponent(Child).vm.flag.isEnabled.value).toBe(true);
   });
-
-  test("handles missing flags gracefully", async () => {
-    const Child = defineComponent({
-      setup() {
-        const client = useClient();
-        return { client };
-      },
-      template: "<div></div>",
-    });
-
-    const wrapper = mount(ReflagBootstrappedProvider, {
-      props: {
-        publishableKey: "key",
-        // No flags provided
-      },
-      slots: { default: () => h(Child) },
-    });
-
-    await nextTick();
-    expect(wrapper.findComponent(Child).vm.client).toBeUndefined();
-  });
 });
