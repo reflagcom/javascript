@@ -924,8 +924,8 @@ export class ReflagClient {
         });
       },
       isEnabledOverride: this.flagsClient.getFlagOverride(flagKey),
-      async setIsEnabledOverride(isEnabled: boolean | null) {
-        await self.flagsClient.setFlagOverride(flagKey, isEnabled);
+      setIsEnabledOverride(isEnabled: boolean | null) {
+        self.flagsClient.setFlagOverride(flagKey, isEnabled);
       },
     };
   }

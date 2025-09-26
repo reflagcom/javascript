@@ -70,7 +70,7 @@ describe("ReflagClient", () => {
       await client.initialize();
       expect(flagsResult["flagA"].isEnabled).toBe(true);
       expect(client.getFlag("flagA").isEnabled).toBe(true);
-      void client.getFlag("flagA").setIsEnabledOverride(false);
+      client.getFlag("flagA").setIsEnabledOverride(false);
       expect(client.getFlag("flagA").isEnabled).toBe(false);
     });
   });

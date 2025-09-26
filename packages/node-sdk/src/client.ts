@@ -699,12 +699,12 @@ export class ReflagClient {
    **/
   public getFlagsForBootstrap({
     enableTracking = true,
-    meta,
     ...context
   }: ContextWithTracking): BootstrappedFlags {
+    const contextWithTracking = { enableTracking, ...context };
     return {
-      context,
-      flags: this._getFlags({ enableTracking, meta, ...context }),
+      context: contextWithTracking,
+      flags: this._getFlags(contextWithTracking),
     };
   }
 

@@ -350,7 +350,7 @@ describe("FlagsClient", () => {
 
     expect(updated).toBe(false);
 
-    void client.setFlagOverride("flagA", false);
+    client.setFlagOverride("flagA", false);
 
     expect(updated).toBe(true);
     expect(client.getFlags().flagA.isEnabled).toBe(true);
@@ -375,7 +375,7 @@ describe("FlagsClient", () => {
 
     // Setting an override for a flag that doesn't exist in fetched flags
     // should not trigger an update since the merged flags don't change
-    void client.setFlagOverride("flagC", true);
+    client.setFlagOverride("flagC", true);
 
     expect(updated).toBe(false);
     expect(client.getFlags().flagC).toBeUndefined();

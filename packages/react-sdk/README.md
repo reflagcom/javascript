@@ -510,26 +510,7 @@ The `<ReflagProvider>` initializes the Reflag SDK, fetches flags and starts list
 - `expireTimeMs`: If set, flags will be cached between page loads for this duration (in milliseconds).
 - `staleTimeMs`: Maximum time (in milliseconds) that stale flags will be returned if `staleWhileRevalidate` is true and new flags cannot be fetched.
 - `offline`: Provide this option when testing or in local development environments to avoid contacting Reflag servers.
-- `loadingComponent` lets you specify an React component to be rendered instead of the children while the Reflag provider is initializing. If you want more control over loading screens, `useFlag()` returns `isLoading` which you can use to customize the loading experience:
-
-  ```tsx
-  function LoadingReflag({ children }) {
-    const { isLoading } = useFlag("myFlag");
-    if (isLoading) {
-      return <Spinner />;
-    }
-
-    return children;
-  }
-
-  //-- Initialize the Reflag provider
-  <ReflagProvider publishableKey={YOUR_PUBLISHABLE_KEY} /*...*/>
-    <LoadingReflag>
-      {/* children here are shown when loading finishes */}
-    </LoadingReflag>
-  </ReflagProvider>;
-  ```
-
+- `loadingComponent` lets you specify an React component to be rendered instead of the children while the Reflag provider is initializing. If you want more control over loading screens, `useFlag()` and `useIsLoading` returns `isLoading` which you can use to customize the loading experience.
 - `enableTracking`: Set to `false` to stop sending tracking events and user/company updates to Reflag. Useful when you're impersonating a user (defaults to `true`),
 - `apiBaseUrl`: Optional base URL for the Reflag API. Use this to override the default API endpoint,
 - `appBaseUrl`: Optional base URL for the Reflag application. Use this to override the default app URL,
@@ -584,6 +565,7 @@ Returns the state of a given flag for the current context. The hook provides typ
 
 ```tsx
 import { useFlag } from "@reflag/react-sdk";
+import { Loading } from "./Loading";
 
 function StartHuddleButton() {
   const {
@@ -767,6 +749,25 @@ function LoggingWrapper({ children }: { children: ReactNode }) {
       console.log(`The flag ${evt.key} is ${evt.value} for user.`);
     });
   }, [client]);
+
+  return children;
+}
+```
+
+### `useIsLoading()`
+
+Returns the loading state of the flags in the `ReflagClient`.
+
+```tsx
+import { useIsLoading } from "@reflag/react-sdk";
+import { Spinner } from "./Spinner";
+
+function LoadingWrapper({ children }: { children: ReactNode }) {
+  const isLoading = useIsLoading();
+
+  if (isLoading) {
+    return <Spinner />;
+  }
 
   return children;
 }
