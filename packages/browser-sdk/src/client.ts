@@ -689,7 +689,6 @@ export class ReflagClient {
 
     // Nothing has changed, skipping update
     if (deepEqual(this.context, newContext)) return;
-    console.log("diffed");
     this.context = newContext;
 
     if (context.company) {
