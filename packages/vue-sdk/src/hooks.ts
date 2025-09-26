@@ -37,12 +37,16 @@ const reflagClients = new Map<string, ReflagClient>();
  * Only creates a new ReflagClient if not already created or if it hook is run on the server.
  * @internal
  */
-export function useReflagClient(initOptions: InitOptions): ReflagClient {
+export function useReflagClient(
+  initOptions: InitOptions,
+  debug = false,
+): ReflagClient {
   const isServer = typeof window === "undefined";
   if (isServer || !reflagClients.has(initOptions.publishableKey)) {
     const client = new ReflagClient({
       ...initOptions,
       sdkVersion: SDK_VERSION,
+      logger: debug ? console : undefined,
     });
     if (!isServer) {
       reflagClients.set(initOptions.publishableKey, client);
@@ -50,37 +54,6 @@ export function useReflagClient(initOptions: InitOptions): ReflagClient {
     return client;
   }
   return reflagClients.get(initOptions.publishableKey)!;
-}
-
-/**
- * Vue composable for listening to Reflag client events.
- *
- * @example
- * ```ts
- * import { useClientEvent } from '@reflag/vue-sdk';
- *
- * useClientEvent("flagsUpdated", () => {
- *   console.log("flags updated");
- * });
- * ```
- *
- * @param event - The event to listen to.
- * @param handler - The function to call when the event is triggered.
- * @param client - The Reflag client to listen to. If not provided, the client will be retrieved from the context.
- */
-export function useClientEvent<THookType extends keyof HookArgs>(
-  event: THookType,
-  handler: (arg0: HookArgs[THookType]) => void,
-  client?: ReflagClient,
-) {
-  const resolvedClient = client ?? useClient();
-  let off: () => void;
-  onMounted(() => {
-    off = resolvedClient.on(event, handler);
-  });
-  onUnmounted(() => {
-    off();
-  });
 }
 
 /**
@@ -127,7 +100,7 @@ export function useFlag<TKey extends FlagKey>(key: TKey): TypedFlags[TKey] {
     updateFlag();
   });
 
-  useClientEvent("flagsUpdated", updateFlag);
+  useOnEvent("flagsUpdated", updateFlag);
 
   return {
     key,
@@ -304,6 +277,14 @@ export function useUpdateOtherContext() {
  * This composable returns the Reflag client. You can use this to get the Reflag
  * client at any point in your application.
  *
+ * @example
+ * ```ts
+ * import { useClient } from '@reflag/vue-sdk';
+ *
+ * const client = useClient();
+ *
+ * console.log(client.getContext());
+ * ```
  * @returns The Reflag client.
  */
 export function useClient() {
@@ -316,10 +297,51 @@ export function useClient() {
  *
  * This composable returns a boolean value that indicates whether the Reflag client is loading.
  * You can use this to check if the Reflag client is loading at any point in your application.
+ * Initially, the value will be true until the client is initialized.
+ *
+ * @example
+ * ```ts
+ * import { useIsLoading } from '@reflag/vue-sdk';
+ *
+ * const isLoading = useIsLoading();
+ *
+ * console.log(isLoading);
+ * ```
  */
 export function useIsLoading() {
   const ctx = injectSafe();
   return ctx.isLoading;
+}
+
+/**
+ * Vue composable for listening to Reflag client events.
+ *
+ * @example
+ * ```ts
+ * import { useOnEvent } from '@reflag/vue-sdk';
+ *
+ * useOnEvent("flagsUpdated", () => {
+ *   console.log("flags updated");
+ * });
+ * ```
+ *
+ * @param event - The event to listen to.
+ * @param handler - The function to call when the event is triggered.
+ * @param client - The Reflag client to listen to. If not provided, the client will be retrieved from the context.
+ */
+export function useOnEvent<THookType extends keyof HookArgs>(
+  event: THookType,
+  handler: (arg0: HookArgs[THookType]) => void,
+  client?: ReflagClient,
+) {
+  const resolvedClient = client ?? useClient();
+  let off: () => void;
+  onMounted(() => {
+    off = resolvedClient.on(event, handler);
+  });
+  onUnmounted(() => {
+    off();
+  });
 }
 
 function injectSafe() {

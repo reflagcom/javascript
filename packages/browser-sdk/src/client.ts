@@ -16,7 +16,12 @@ import {
   RawFlags,
 } from "./flag/flags";
 import { ToolbarPosition } from "./ui/types";
-import { API_BASE_URL, APP_BASE_URL, SSE_REALTIME_BASE_URL } from "./config";
+import {
+  API_BASE_URL,
+  APP_BASE_URL,
+  IS_SERVER,
+  SSE_REALTIME_BASE_URL,
+} from "./config";
 import { ReflagContext, ReflagDeprecatedContext } from "./context";
 import { HookArgs, HooksManager, State } from "./hooksManager";
 import { HttpClient } from "./httpClient";
@@ -393,9 +398,11 @@ export class ReflagClient {
     this.publishableKey = opts.publishableKey;
     this.logger =
       opts?.logger ?? loggerWithPrefix(quietConsoleLogger, "[Reflag]");
+
+    // Create the context object making sure to clone the user and company objects
     this.context = {
-      user: opts?.user?.id ? opts.user : undefined,
-      company: opts?.company?.id ? opts.company : undefined,
+      user: opts?.user?.id ? { ...opts.user } : undefined,
+      company: opts?.company?.id ? { ...opts.company } : undefined,
       other: { ...opts?.otherContext, ...opts?.other },
     };
 
@@ -487,7 +494,7 @@ export class ReflagClient {
     this.setState("initializing");
 
     const start = Date.now();
-    if (this.autoFeedback) {
+    if (this.autoFeedback && !IS_SERVER) {
       // do not block on automated feedback surveys initialization
       this.autoFeedbackInit = this.autoFeedback.initialize().catch((e) => {
         this.logger.error("error initializing automated feedback surveys", e);
@@ -656,22 +663,33 @@ export class ReflagClient {
 
   /**
    * Update the context.
-   * Performs a shallow merge with the existing context.
-   * It will not update the context if nothing has changed.
+   * Replaces the existing context with a new context.
    *
    * @param context The context to update.
    */
-  async updateContext({ otherContext, ...context }: ReflagDeprecatedContext) {
+  async setContext({ otherContext, ...context }: ReflagDeprecatedContext) {
     const userIdChanged =
       context.user?.id && context.user.id !== this.context.user?.id;
+
+    // Create a new context object making sure to clone the user and company objects
     const newContext = {
-      ...this.context,
-      ...context,
-      other: { ...this.context.other, ...otherContext, ...context.other },
+      user: context.user?.id ? { ...context.user } : undefined,
+      company: context.company?.id ? { ...context.company } : undefined,
+      other: { ...otherContext, ...context.other },
     };
+
+    if (!context.user?.id) {
+      this.logger.warn("No user Id provided in context, user will be ignored");
+    }
+    if (!context.company?.id) {
+      this.logger.warn(
+        "No company Id provided in context, company will be ignored",
+      );
+    }
 
     // Nothing has changed, skipping update
     if (deepEqual(this.context, newContext)) return;
+    console.log("diffed");
     this.context = newContext;
 
     if (context.company) {

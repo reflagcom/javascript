@@ -12,6 +12,7 @@ import React, {
 import {
   CheckEvent,
   CompanyContext,
+  HookArgs,
   InitOptions,
   RawFlags,
   ReflagClient,
@@ -124,8 +125,24 @@ const SDK_VERSION = `react-sdk/${version}`;
  * @internal
  */
 export type ReflagPropsBase = {
+  /**
+   * The children to render after the client is initialized.
+   */
   children?: ReactNode;
+
+  /**
+   * A React component to show while the client is initializing.
+   */
   loadingComponent?: ReactNode;
+
+  /**
+   * Set to `true` to show the loading component while the client is initializing.
+   */
+  initialLoading?: boolean;
+
+  /**
+   * Set to `true` to enable debug logging to the console,
+   */
   debug?: boolean;
 };
 
@@ -175,25 +192,25 @@ const ProviderContext = createContext<ProviderContextType | null>(null);
 /**
  * Props for the ReflagClientProvider.
  */
-export type ReflagClientProviderProps = ReflagPropsBase & {
+export type ReflagClientProviderProps = Omit<ReflagPropsBase, "debug"> & {
   client: ReflagClient;
-  loadingComponent?: ReactNode;
 };
 
 export function ReflagClientProvider({
   client,
   loadingComponent,
+  initialLoading = true,
   children,
 }: ReflagClientProviderProps) {
-  const [isLoading, setIsLoading] = useState(
-    client.getState() === "initializing",
-  );
+  const [isLoading, setIsLoading] = useState(initialLoading);
 
-  useEffect(() => {
-    return client.on("stateUpdated", (state) => {
+  useOnEvent(
+    "stateUpdated",
+    (state) => {
       setIsLoading(state === "initializing");
-    });
-  }, [client]);
+    },
+    client,
+  );
 
   return (
     <ProviderContext.Provider
@@ -250,6 +267,7 @@ export function ReflagProvider({
   company,
   otherContext,
   loadingComponent,
+  initialLoading = true,
   debug,
   ...config
 }: ReflagProps) {
@@ -275,11 +293,15 @@ export function ReflagProvider({
 
   // Update the context if it changes
   useEffect(() => {
-    void client.updateContext(resolvedContext);
+    void client.setContext(resolvedContext);
   }, [client, resolvedContext]);
 
   return (
-    <ReflagClientProvider client={client} loadingComponent={loadingComponent}>
+    <ReflagClientProvider
+      client={client}
+      initialLoading={initialLoading}
+      loadingComponent={loadingComponent}
+    >
       {children}
     </ReflagClientProvider>
   );
@@ -303,6 +325,7 @@ export function ReflagBootstrappedProvider({
   flags,
   children,
   loadingComponent,
+  initialLoading = false,
   debug,
   ...config
 }: ReflagBootstrappedProps) {
@@ -325,7 +348,7 @@ export function ReflagBootstrappedProvider({
 
   // Update the context if it changes on the client side
   useEffect(() => {
-    void client.updateContext(flags.context);
+    void client.setContext(flags.context);
   }, [client, flags.context]);
 
   // Update the bootstrappedFlags if they change on the client side
@@ -334,7 +357,11 @@ export function ReflagBootstrappedProvider({
   }, [client, flags.flags]);
 
   return (
-    <ReflagClientProvider client={client} loadingComponent={loadingComponent}>
+    <ReflagClientProvider
+      client={client}
+      initialLoading={initialLoading}
+      loadingComponent={loadingComponent}
+    >
       {children}
     </ReflagClientProvider>
   );
@@ -372,13 +399,13 @@ export function useFlag<TKey extends FlagKey>(key: TKey): TypedFlags[TKey] {
   const requestFeedback = (opts: RequestFeedbackOptions) =>
     client.requestFeedback({ ...opts, flagKey: key });
 
-  useEffect(() => {
-    if (!flag) setFlag(client.getFlag(key));
-    // Subscribe to updates
-    return client.on("flagsUpdated", () => {
+  useOnEvent(
+    "flagsUpdated",
+    () => {
       setFlag(client.getFlag(key));
-    });
-  }, [client, flag, key]);
+    },
+    client,
+  );
 
   if (isLoading || !flag) {
     return {
@@ -538,6 +565,19 @@ function useSafeContext() {
 
 /**
  * Returns a boolean indicating if the Reflag client is loading.
+ * You can use this to check if the Reflag client is loading at any point in your application.
+ * Initially, the value will be true until the client is initialized.
+ *
+ * @example
+ * ```ts
+ * import { useIsLoading } from '@reflag/react-sdk';
+ *
+ * const isLoading = useIsLoading();
+ *
+ * console.log(isLoading);
+ * ```
+ *
+ * @returns A boolean indicating if the Reflag client is loading.
  */
 export function useIsLoading() {
   const context = useSafeContext();
@@ -549,16 +589,52 @@ export function useIsLoading() {
  *
  * This is useful if you need to access the `ReflagClient` outside of the `ReflagProvider`.
  *
+ * @example
  * ```ts
- * const client = useClient();
- * useEffect(() => {
- *   return client.on("check", () => {
- *     console.log("check hook called");
- *   });
- * }, [client]);
+ * import { useClient } from '@reflag/react-sdk';
+ *
+ * function App() {
+ *   const client = useClient();
+ *   console.log(client.getContext());
+ * }
  * ```
+ *
+ * @returns The `ReflagClient`.
  */
 export function useClient() {
   const context = useSafeContext();
   return context.client;
+}
+
+/**
+ * Attach a callback handler to client events to act on changes. It automatically disposes itself on unmount.
+ *
+ * @example
+ * ```ts
+ * import { useOnEvent } from '@reflag/react-sdk';
+ *
+ * useOnEvent("flagsUpdated", () => {
+ *   console.log("flags updated");
+ * });
+ * ```
+ *
+ * @param event - The event to listen to.
+ * @param handler - The function to call when the event is triggered.
+ * @param client - The Reflag client to listen to. If not provided, the client will be retrieved from the context.
+ */
+export function useOnEvent<THookType extends keyof HookArgs>(
+  event: THookType,
+  handler: (arg0: HookArgs[THookType]) => void,
+  client?: ReflagClient,
+) {
+  const contextClient = useContext(ProviderContext);
+  const resolvedClient = client ?? contextClient?.client;
+  if (!resolvedClient) {
+    throw new Error(
+      `ReflagProvider is missing and no client was provided. Please ensure your component is wrapped with a ReflagProvider.`,
+    );
+  }
+  useEffect(() => {
+    return resolvedClient.on(event, handler);
+  }, [resolvedClient, event, handler]);
 }

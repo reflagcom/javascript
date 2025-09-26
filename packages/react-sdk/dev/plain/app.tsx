@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 
 import {
   FlagKey,
@@ -12,6 +12,7 @@ import {
   useClient,
   ReflagBootstrappedProvider,
   RawFlags,
+  useOnEvent,
 } from "../../src";
 
 // Extending the Flags interface to define the available features
@@ -231,13 +232,9 @@ function CustomToolbar() {
   const client = useClient();
   const [flags, setFlags] = useState<RawFlags>(client.getFlags() ?? {});
 
-  useEffect(() => {
+  useOnEvent("flagsUpdated", () => {
     setFlags(client.getFlags() ?? {});
-    // Subscribe to updates
-    return client.on("flagsUpdated", () => {
-      setFlags(client.getFlags());
-    });
-  }, [client]);
+  });
 
   return (
     <div>

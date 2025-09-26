@@ -85,7 +85,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 
-import { useClient, useClientEvent } from "../../../src";
+import { useClient, useOnEvent } from "../../../src";
 
 import Section from "./Section.vue";
 
@@ -98,7 +98,7 @@ function updateFlags() {
 }
 
 // Update flags data when flags are updated
-useClientEvent("flagsUpdated", updateFlags);
+useOnEvent("flagsUpdated", updateFlags);
 
 const flagEntries = computed(() => {
   return Object.entries(flagsData.value);

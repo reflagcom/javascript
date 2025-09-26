@@ -14,9 +14,14 @@ import Track from "./components/Track.vue";
 // Initial context
 const initialUser = { id: "demo-user", email: "demo-user@example.com" };
 const initialCompany = { id: "demo-company", name: "Demo Company" };
-const initialOtherContext = { test: "test" };
+const initialOther = { test: "test" };
 
-const user = ref(initialUser);
+const context = ref({
+  user: initialUser,
+  company: initialCompany,
+  other: initialOther,
+});
+
 const publishableKey = import.meta.env.VITE_PUBLISHABLE_KEY || "";
 const apiBaseUrl = import.meta.env.VITE_REFLAG_API_BASE_URL;
 
@@ -37,11 +42,7 @@ const isBootstrapped = computed(() => {
     v-else-if="isBootstrapped"
     :publishable-key="publishableKey"
     :flags="{
-      context: {
-        user: initialUser,
-        company: initialCompany,
-        otherContext: initialOtherContext,
-      },
+      context,
       flags: {
         huddles: {
           key: 'huddles',
@@ -58,7 +59,7 @@ const isBootstrapped = computed(() => {
     <RequestFeedback />
 
     <Section title="Set User ID">
-      <input v-model="user.id" />
+      <input v-model="context.user.id" />
     </Section>
     <Events />
     <FlagsList />
@@ -68,9 +69,7 @@ const isBootstrapped = computed(() => {
   <ReflagProvider
     v-else
     :publishable-key="publishableKey"
-    :user="user"
-    :company="initialCompany"
-    :other-context="initialOtherContext"
+    :context="context"
     :api-base-url="apiBaseUrl"
   >
     <template #loading>......loading......</template>
@@ -80,7 +79,7 @@ const isBootstrapped = computed(() => {
     <RequestFeedback />
 
     <Section title="Set User ID">
-      <input v-model="user.id" />
+      <input v-model="context.user.id" />
     </Section>
     <Events />
     <FlagsList />

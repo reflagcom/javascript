@@ -1,17 +1,22 @@
 <script setup lang="ts">
 import { computed, onMounted, provide, ref, watch } from "vue";
 
-import { ProviderSymbol, useClientEvent, useReflagClient } from "./hooks";
+import { ProviderSymbol, useOnEvent, useReflagClient } from "./hooks";
 import type { ReflagProps } from "./types";
 
 // any optional prop which has boolean as part of the type, will default to false
 // instead of `undefined`, so we use `withDefaults` here to pass the undefined
 // down into the client.
-const props = withDefaults(defineProps<ReflagProps>(), {
-  enableTracking: true,
-});
-
-const { context, user, company, otherContext, ...config } = props;
+const {
+  context,
+  user,
+  company,
+  otherContext,
+  initialLoading = true,
+  enableTracking = true,
+  debug,
+  ...config
+} = defineProps<ReflagProps>();
 
 const resolvedContext = computed(() => ({
   user,
@@ -20,13 +25,17 @@ const resolvedContext = computed(() => ({
   ...context,
 }));
 
-const client = useReflagClient({
-  ...config,
-  ...resolvedContext.value,
-});
+const client = useReflagClient(
+  {
+    ...config,
+    ...resolvedContext.value,
+    enableTracking,
+  },
+  debug,
+);
 
-const isLoading = ref(client.getState() === "initializing");
-useClientEvent(
+const isLoading = ref(initialLoading);
+useOnEvent(
   "stateUpdated",
   (state) => {
     isLoading.value = state === "initializing";
@@ -43,9 +52,13 @@ onMounted(() => {
 });
 
 // Update the context if it changes
-watch(resolvedContext, () => {
-  void client.updateContext(resolvedContext.value);
-});
+watch(
+  () => resolvedContext.value,
+  () => {
+    void client.setContext(resolvedContext.value);
+  },
+  { deep: true },
+);
 
 provide(ProviderSymbol, {
   isLoading,

@@ -6,9 +6,9 @@ import ReflagProvider from "./ReflagProvider.vue";
 
 export {
   useClient,
-  useClientEvent,
   useFlag,
   useIsLoading,
+  useOnEvent,
   useRequestFeedback,
   useSendFeedback,
   useTrack,
@@ -22,7 +22,9 @@ export type {
   Flag,
   Flags,
   FlagType,
+  ReflagBaseProps,
   ReflagBootstrappedProps,
+  ReflagClientProviderProps,
   ReflagInitOptionsBase,
   ReflagProps,
   RequestFlagFeedbackOptions,

@@ -536,7 +536,25 @@ console.log(client.getContext());
 </template>
 ```
 
-### `useClientEvent()`
+### `useIsLoading()`
+
+Returns a `Ref<boolean>` to indicate if Reflag has finished loading.
+Initially, the value will be `true` if no bootstrap flags have been provided and the client has not be initialized.
+
+```vue
+<script setup>
+import { useIsLoading } from "@reflag/vue-sdk";
+import { Spinner } from "./Spinner";
+
+const isLoading = useIsLoading();
+</script>
+
+<template>
+  <!-- your component content -->
+</template>
+```
+
+### `useOnEvent()`
 
 Vue composable for listening to Reflag client events. This composable automatically handles mounting and unmounting of event listeners.
 
@@ -548,21 +566,11 @@ Available events include:
 
 ```vue
 <script setup lang="ts">
-import { useClientEvent } from "@reflag/vue-sdk";
+import { useOnEvent } from "@reflag/vue-sdk";
 
 // Listen to flag updates
-useClientEvent("flagsUpdated", () => {
+useOnEvent("flagsUpdated", () => {
   console.log("Flags have been updated");
-});
-
-// Listen to tracking events
-useClientEvent("track", (event) => {
-  console.log("Tracking event:", event);
-});
-
-// Listen to feedback events
-useClientEvent("feedback", (event) => {
-  console.log("Feedback event:", event);
 });
 </script>
 
@@ -579,7 +587,7 @@ import { ReflagClient } from "@reflag/browser-sdk";
 
 const myReflagClient = new ReflagClient();
 
-useClientEvent(
+useOnEvent(
   "flagsUpdated",
   () => {
     console.log("flags updated");
@@ -592,10 +600,6 @@ useClientEvent(
   <!-- your component content -->
 </template>
 ```
-
-### `useIsLoading()`
-
-Returns a `Ref<boolean>` to indicate if Reflag has finished loading.
 
 ## Content Security Policy (CSP)
 

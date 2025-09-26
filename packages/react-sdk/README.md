@@ -744,11 +744,7 @@ import { useClient } from "@reflag/react-sdk";
 function LoggingWrapper({ children }: { children: ReactNode }) {
   const client = useClient();
 
-  useEffect(() => {
-    client.on("check", (evt) => {
-      console.log(`The flag ${evt.key} is ${evt.value} for user.`);
-    });
-  }, [client]);
+  console.log(client.getContext());
 
   return children;
 }
@@ -757,6 +753,7 @@ function LoggingWrapper({ children }: { children: ReactNode }) {
 ### `useIsLoading()`
 
 Returns the loading state of the flags in the `ReflagClient`.
+Initially, the value will be `true` if no bootstrap flags have been provided and the client has not be initialized.
 
 ```tsx
 import { useIsLoading } from "@reflag/react-sdk";
@@ -768,6 +765,22 @@ function LoadingWrapper({ children }: { children: ReactNode }) {
   if (isLoading) {
     return <Spinner />;
   }
+
+  return children;
+}
+```
+
+### `useOnEvent()`
+
+Attach a callback handler to client events to act on changes. It automatically disposes itself on unmount.
+
+```tsx
+import { useOnEvent } from "@reflag/react-sdk";
+
+function LoggingWrapper({ children }: { children: ReactNode }) {
+  useOnEvent("flagsUpdated", (newFlags) => {
+    console.log(newFlags);
+  });
 
   return children;
 }

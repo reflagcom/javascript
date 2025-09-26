@@ -74,41 +74,69 @@ export type ReflagInitOptionsBase = Omit<
 >;
 
 /**
+ * Base props for the ReflagProvider and ReflagBootstrappedProvider.
+ * @internal
+ */
+export type ReflagBaseProps = {
+  /**
+   * Set to `true` to show the loading component while the client is initializing.
+   */
+  initialLoading?: boolean;
+
+  /**
+   * Set to `true` to enable debug logging to the console.
+   */
+  debug?: boolean;
+};
+
+/**
+ * Props for the ReflagClientProvider.
+ */
+export type ReflagClientProviderProps = Omit<ReflagBaseProps, "debug"> & {
+  /**
+   * A pre-initialized ReflagClient to use.
+   */
+  client: ReflagClient;
+};
+
+/**
  * Props for the ReflagProvider.
  */
-export type ReflagProps = ReflagInitOptionsBase & {
-  /**
-   * The context to use for the ReflagClient containing user, company, and other context.
-   */
-  context?: ReflagContext;
+export type ReflagProps = ReflagInitOptionsBase &
+  ReflagBaseProps & {
+    /**
+     * The context to use for the ReflagClient containing user, company, and other context.
+     */
+    context?: ReflagContext;
 
-  /**
-   * Company related context. If you provide `id` Reflag will enrich the evaluation context with
-   * company attributes on Reflag servers.
-   * @deprecated Use `context` instead, this property will be removed in the next major version
-   */
-  company?: CompanyContext;
+    /**
+     * Company related context. If you provide `id` Reflag will enrich the evaluation context with
+     * company attributes on Reflag servers.
+     * @deprecated Use `context` instead, this property will be removed in the next major version
+     */
+    company?: CompanyContext;
 
-  /**
-   * User related context. If you provide `id` Reflag will enrich the evaluation context with
-   * user attributes on Reflag servers.
-   * @deprecated Use `context` instead, this property will be removed in the next major version
-   */
-  user?: UserContext;
+    /**
+     * User related context. If you provide `id` Reflag will enrich the evaluation context with
+     * user attributes on Reflag servers.
+     * @deprecated Use `context` instead, this property will be removed in the next major version
+     */
+    user?: UserContext;
 
-  /**
-   * Context which is not related to a user or a company.
-   * @deprecated Use `context` instead, this property will be removed in the next major version
-   */
-  otherContext?: Record<string, string | number | undefined>;
-};
+    /**
+     * Context which is not related to a user or a company.
+     * @deprecated Use `context` instead, this property will be removed in the next major version
+     */
+    otherContext?: Record<string, string | number | undefined>;
+  };
 
 /**
  * Props for the ReflagBootstrappedProvider.
  */
-export type ReflagBootstrappedProps = ReflagInitOptionsBase & {
-  /**
-   * Pre-fetched flags to be used instead of fetching them from the server.
-   */
-  flags: BootstrappedFlags;
-};
+export type ReflagBootstrappedProps = ReflagInitOptionsBase &
+  ReflagBaseProps & {
+    /**
+     * Pre-fetched flags to be used instead of fetching them from the server.
+     */
+    flags: BootstrappedFlags;
+  };

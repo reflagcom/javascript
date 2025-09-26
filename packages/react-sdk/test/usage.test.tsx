@@ -17,12 +17,15 @@ import { ReflagClient } from "@reflag/browser-sdk";
 
 import {
   BootstrappedFlags,
+  ReflagBootstrappedProps,
   ReflagBootstrappedProvider,
   ReflagClientProvider,
   ReflagProps,
   ReflagProvider,
   useClient,
   useFlag,
+  useIsLoading,
+  useOnEvent,
   useRequestFeedback,
   useSendFeedback,
   useTrack,
@@ -39,12 +42,14 @@ afterEach(() => {
   console.error = originalConsoleError;
 });
 
-const publishableKey = Math.random().toString();
 const company = { id: "123", name: "test" };
 const user = { id: "456", name: "test" };
 const other = { test: "test" };
 
-function getProvider(props: Partial<ReflagProps> = {}) {
+let keyIndex = 0;
+
+function getProvider(props: Omit<Partial<ReflagProps>, "publishableKey"> = {}) {
+  const publishableKey = `KEY-${keyIndex++}`;
   return (
     <ReflagProvider
       context={{ user, company, other }}
@@ -56,8 +61,9 @@ function getProvider(props: Partial<ReflagProps> = {}) {
 
 function getBootstrapProvider(
   bootstrapFlags: BootstrappedFlags,
-  props: Partial<Omit<ReflagProps, "user" | "company" | "otherContext">> = {},
+  props: Omit<Partial<ReflagBootstrappedProps>, "publishableKey"> = {},
 ) {
+  const publishableKey = `KEY-${keyIndex++}`;
   return (
     <ReflagBootstrappedProvider
       flags={bootstrapFlags}
@@ -170,7 +176,6 @@ describe("<ReflagProvider />", () => {
     const initialize = vi.spyOn(ReflagClient.prototype, "initialize");
 
     const provider = getProvider({
-      publishableKey: "KEY",
       apiBaseUrl: "https://apibaseurl.com",
       sseBaseUrl: "https://ssebaseurl.com",
       context: {
@@ -499,7 +504,6 @@ describe("<ReflagBootstrappedProvider />", () => {
 
     const { container } = render(
       getBootstrapProvider(bootstrapFlags, {
-        publishableKey: "KEY",
         apiBaseUrl: "https://apibaseurl.com",
         sseBaseUrl: "https://ssebaseurl.com",
         enableTracking: false,
@@ -971,6 +975,187 @@ describe("ReflagProvider with deprecated properties", () => {
       expect(context.user).toEqual(deprecatedUser);
       expect(context.company).toEqual(deprecatedCompany);
       expect(context.other).toEqual(deprecatedOtherContext);
+    });
+
+    unmount();
+  });
+});
+
+describe("useIsLoading", () => {
+  test("returns loading state during initialization", async () => {
+    const { result, unmount } = renderHook(() => useIsLoading(), {
+      wrapper: ({ children }) => getProvider({ children }),
+    });
+
+    // Should be loading initially
+    expect(result.current).toBe(true);
+
+    // Wait for initialization to complete
+    await waitFor(() => {
+      expect(result.current).toBe(false);
+    });
+
+    unmount();
+  });
+
+  test("throws error when used outside provider", () => {
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {
+        // Silence console.error during test
+      });
+
+    expect(() => {
+      renderHook(() => useIsLoading());
+    }).toThrow(
+      "ReflagProvider is missing. Please ensure your component is wrapped with a ReflagProvider.",
+    );
+
+    consoleErrorSpy.mockRestore();
+  });
+});
+
+describe("useOnEvent", () => {
+  test("subscribes to flagsUpdated event", async () => {
+    const eventHandler = vi.fn();
+    const client = new ReflagClient({
+      publishableKey: "test-key-events",
+      user,
+      company,
+      other,
+    });
+
+    const { unmount } = renderHook(
+      () => useOnEvent("flagsUpdated", eventHandler),
+      {
+        wrapper: ({ children }) => (
+          <ReflagClientProvider client={client}>
+            {children}
+          </ReflagClientProvider>
+        ),
+      },
+    );
+
+    // Initialize the client to trigger events
+    await client.initialize();
+
+    // Wait for the event to be triggered
+    await waitFor(() => {
+      expect(eventHandler).toHaveBeenCalled();
+    });
+
+    unmount();
+  });
+
+  test("works with external client parameter", async () => {
+    const eventHandler = vi.fn();
+    const client = new ReflagClient({
+      publishableKey: "test-key-external",
+      user,
+      company,
+      other,
+    });
+
+    const { unmount } = renderHook(() =>
+      useOnEvent("flagsUpdated", eventHandler, client),
+    );
+
+    // Initialize the client to trigger events
+    await client.initialize();
+
+    // Wait for the event to be triggered
+    await waitFor(() => {
+      expect(eventHandler).toHaveBeenCalled();
+    });
+
+    unmount();
+  });
+
+  test("cleans up event listeners on unmount", async () => {
+    const eventHandler = vi.fn();
+    const client = new ReflagClient({
+      publishableKey: "test-key-cleanup",
+      user,
+      company,
+      other,
+    });
+
+    // Mock the addHook method to return a cleanup function that we can spy on
+    const cleanupSpy = vi.fn();
+    const addHookSpy = vi
+      .spyOn(client["hooks"], "addHook")
+      .mockReturnValue(cleanupSpy);
+
+    const { unmount } = renderHook(
+      () => useOnEvent("flagsUpdated", eventHandler),
+      {
+        wrapper: ({ children }) => (
+          <ReflagClientProvider client={client}>
+            {children}
+          </ReflagClientProvider>
+        ),
+      },
+    );
+
+    // Verify that addHook was called with the correct parameters
+    expect(addHookSpy).toHaveBeenCalledWith("flagsUpdated", eventHandler);
+
+    unmount();
+
+    // Verify that the cleanup function was called
+    expect(cleanupSpy).toHaveBeenCalled();
+
+    addHookSpy.mockRestore();
+  });
+
+  test("throws error when used outside provider without client parameter", () => {
+    const consoleErrorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {
+        // Silence console.error during test
+      });
+    const eventHandler = vi.fn();
+
+    expect(() => {
+      renderHook(() => useOnEvent("flagsUpdated", eventHandler));
+    }).toThrow(
+      "ReflagProvider is missing and no client was provided. Please ensure your component is wrapped with a ReflagProvider.",
+    );
+
+    consoleErrorSpy.mockRestore();
+  });
+
+  test("handles multiple event subscriptions", async () => {
+    const flagsHandler = vi.fn();
+    const stateHandler = vi.fn();
+    const client = new ReflagClient({
+      publishableKey: "test-key-multiple",
+      user,
+      company,
+      other,
+    });
+
+    const { unmount } = renderHook(
+      () => {
+        useOnEvent("flagsUpdated", flagsHandler);
+        useOnEvent("stateUpdated", stateHandler);
+      },
+      {
+        wrapper: ({ children }) => (
+          <ReflagClientProvider client={client}>
+            {children}
+          </ReflagClientProvider>
+        ),
+      },
+    );
+
+    // Initialize the client to trigger events
+    await client.initialize();
+
+    // Wait for both events to be triggered
+    await waitFor(() => {
+      expect(flagsHandler).toHaveBeenCalled();
+      expect(stateHandler).toHaveBeenCalled();
     });
 
     unmount();

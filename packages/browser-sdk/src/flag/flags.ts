@@ -271,7 +271,8 @@ export class FlagsClient {
   }
 
   setFetchedFlags(fetchedFlags: RawFlags, triggerEvent = true) {
-    this.fetchedFlags = fetchedFlags;
+    // Create a new fetched flags object making sure to clone the flags
+    this.fetchedFlags = { ...fetchedFlags };
     this.warnMissingFlagContextFields(fetchedFlags);
     this.updateFlags(triggerEvent);
   }

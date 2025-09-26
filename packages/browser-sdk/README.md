@@ -289,7 +289,9 @@ const { isEnabled } = reflagClient.getFlag("huddle");
 
 This eliminates loading states and improves performance by avoiding the initial flags API call.
 
-## Updating user/company/other context
+## Context management
+
+### Updating user/company/other context
 
 Attributes given for the user/company/other context in the ReflagClient constructor can be updated for use in flag targeting evaluation with the `updateUser()`, `updateCompany()` and `updateOtherContext()` methods.
 They return a promise which resolves once the flags have been re-evaluated follow the update of the attributes.
@@ -305,6 +307,57 @@ await reflagClient.updateUser({ voiceHuddleOptIn: (!isEnabled).toString() });
 ```
 
 > [!NOTE] > `user`/`company` attributes are also stored remotely on the Reflag servers and will automatically be used to evaluate flag targeting if the page is refreshed.
+
+### setContext()
+
+The `setContext()` method allows you to replace the entire context (user, company, and other attributes) at once. This method is useful when you need to completely change the context, such as when a user logs in or switches between different accounts.
+
+```ts
+await reflagClient.setContext({
+  user: {
+    id: "new-user-123",
+    name: "Jane Doe",
+    email: "jane@example.com",
+    role: "admin",
+  },
+  company: {
+    id: "company-456",
+    name: "New Company Inc",
+    plan: "enterprise",
+  },
+  other: {
+    feature: "beta",
+    locale: "en-US",
+  },
+});
+```
+
+The method will:
+
+- Replace the entire context with the new values
+- Re-evaluate all flags based on the new context
+- Update the user and company information on Reflag servers
+- Return a promise that resolves once the flags have been re-evaluated
+
+### getContext()
+
+The `getContext()` method returns the current context being used for flag evaluation. This is useful for debugging or when you need to inspect the current user, company, and other attributes.
+
+```ts
+const currentContext = reflagClient.getContext();
+console.log(currentContext);
+// {
+//   user: { id: "user-123", name: "John Doe", email: "john@example.com" },
+//   company: { id: "company-456", name: "Acme Inc", plan: "enterprise" },
+//   other: { locale: "en-US", feature: "beta" }
+// }
+```
+
+The returned context object contains:
+
+- `user`: Current user attributes (if any)
+- `company`: Current company attributes (if any)
+- `other`: Additional context attributes not related to user or company
 
 ## Toolbar
 

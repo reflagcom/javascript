@@ -1,23 +1,29 @@
 <script setup lang="ts">
 import { onMounted, provide, ref, watch } from "vue";
 
-import { ProviderSymbol, useClientEvent, useReflagClient } from "./hooks";
+import { ProviderSymbol, useOnEvent, useReflagClient } from "./hooks";
 import type { ReflagBootstrappedProps } from "./types";
 
-const props = withDefaults(defineProps<ReflagBootstrappedProps>(), {
-  enableTracking: true,
-});
+const {
+  flags,
+  initialLoading = false,
+  enableTracking = true,
+  debug,
+  ...config
+} = defineProps<ReflagBootstrappedProps>();
 
-const { flags, ...config } = props;
+const client = useReflagClient(
+  {
+    ...config,
+    ...flags?.context,
+    enableTracking,
+    bootstrappedFlags: flags?.flags,
+  },
+  debug,
+);
 
-const client = useReflagClient({
-  ...config,
-  ...flags?.context,
-  bootstrappedFlags: flags?.flags,
-});
-
-const isLoading = ref(client.getState() === "initializing");
-useClientEvent(
+const isLoading = ref(initialLoading);
+useOnEvent(
   "stateUpdated",
   (state) => {
     isLoading.value = state === "initializing";
@@ -37,7 +43,7 @@ onMounted(() => {
 watch(
   () => flags.context,
   (newContext) => {
-    void client.updateContext(newContext);
+    void client.setContext(newContext);
   },
   { deep: true },
 );

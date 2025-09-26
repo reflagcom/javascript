@@ -1,34 +1,24 @@
 <script setup lang="ts">
 import { provide, ref } from "vue";
 
-import type { ReflagClient } from "@reflag/browser-sdk";
+import { ProviderSymbol, useOnEvent } from "./hooks";
+import { ReflagClientProviderProps } from "./types";
 
-import { ProviderSymbol, useClientEvent } from "./hooks";
+const { client, initialLoading = true } =
+  defineProps<ReflagClientProviderProps>();
 
-/**
- * Props for the ReflagClientProvider.
- */
-export type ReflagClientProviderProps = {
-  /**
-   * A pre-initialized ReflagClient to use.
-   */
-  client: ReflagClient;
-};
-
-const props = defineProps<ReflagClientProviderProps>();
-
-const isLoading = ref(props.client.getState() === "initializing");
-useClientEvent(
+const isLoading = ref(initialLoading);
+useOnEvent(
   "stateUpdated",
   (state) => {
     isLoading.value = state === "initializing";
   },
-  props.client,
+  client,
 );
 
 provide(ProviderSymbol, {
   isLoading,
-  client: props.client,
+  client,
 });
 </script>
 
