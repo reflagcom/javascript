@@ -1888,6 +1888,7 @@ describe("ReflagClient", () => {
           company,
           user,
           other: otherContext,
+          enableTracking: true,
         },
         flags: {
           flag1: {
@@ -1941,6 +1942,7 @@ describe("ReflagClient", () => {
       expect(flags).toStrictEqual({
         context: {
           user,
+          enableTracking: true,
         },
         flags: {
           flag1: {
@@ -1990,6 +1992,7 @@ describe("ReflagClient", () => {
       expect(flags).toStrictEqual({
         context: {
           company,
+          enableTracking: true,
         },
         flags: {
           flag1: {
@@ -2037,6 +2040,7 @@ describe("ReflagClient", () => {
       expect(flags).toStrictEqual({
         context: {
           other: otherContext,
+          enableTracking: true,
         },
         flags: {
           flag1: {
@@ -2089,6 +2093,7 @@ describe("ReflagClient", () => {
           company,
           user,
           other: otherContext,
+          enableTracking: true,
         },
         flags: {
           key: {
@@ -2121,6 +2126,7 @@ describe("ReflagClient", () => {
           company,
           user,
           other: otherContext,
+          enableTracking: true,
         },
         flags: {},
       });
@@ -2180,6 +2186,7 @@ describe("ReflagClient", () => {
           company,
           user,
           other: otherContext,
+          enableTracking: true,
         },
         flags: {},
       });
@@ -2212,6 +2219,7 @@ describe("ReflagClient", () => {
           company,
           user,
           other: otherContext,
+          enableTracking: true,
         },
         flags: fallbackTestFlags,
       });
@@ -2561,6 +2569,7 @@ describe("BoundReflagClient", () => {
         user,
         company,
         other: otherContext,
+        enableTracking: true,
       },
       flags: {
         flag1: {
