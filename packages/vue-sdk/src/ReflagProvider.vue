@@ -53,7 +53,7 @@ onMounted(() => {
 
 // Update the context if it changes
 watch(
-  () => resolvedContext.value,
+  () => resolvedContext,
   () => {
     void client.setContext(resolvedContext.value);
   },
