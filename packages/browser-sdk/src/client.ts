@@ -7,6 +7,7 @@ import {
   RequestFeedbackOptions,
 } from "./feedback/feedback";
 import * as feedbackLib from "./feedback/ui";
+import { OpenFeedbackFormOptions } from "./feedback/ui/types";
 import {
   CheckEvent,
   FallbackFlagOverride,
@@ -23,6 +24,12 @@ import { showToolbarToggle } from "./toolbar";
 
 const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
 const isNode = typeof document === "undefined"; // deno supports "window" but not "document" according to https://remix.run/docs/en/main/guides/gotchas
+
+const VALID_INPUT_MODES: Required<OpenFeedbackFormOptions["inputMode"]>[] = [
+  "comment-and-score",
+  "comment-only",
+  "score-only",
+];
 
 /**
  * (Internal) User context.
@@ -701,6 +708,13 @@ export class ReflagClient {
       return;
     }
 
+    if (options.inputMode && !VALID_INPUT_MODES.includes(options.inputMode)) {
+      this.logger.error(
+        "`requestFeedback` call ignored. Invalid `inputMode` provided",
+      );
+      return;
+    }
+
     const feedbackData = {
       flagKey: options.flagKey,
       companyId:
@@ -720,29 +734,22 @@ export class ReflagClient {
         position: options.position || this.requestFeedbackOptions.position,
         translations:
           options.translations || this.requestFeedbackOptions.translations,
-        openWithCommentVisible: options.openWithCommentVisible,
+        inputMode: options.inputMode,
         onClose: options.onClose,
         onDismiss: options.onDismiss,
-        onScoreSubmit: async (data) => {
+        onSubmit: async (data) => {
+          // Default onSubmit handler
           const res = await this.feedback({
             ...feedbackData,
             ...data,
           });
 
-          if (res) {
-            const json = await res.json();
-            return { feedbackId: json.feedbackId };
-          }
-          return { feedbackId: undefined };
-        },
-        onSubmit: async (data) => {
-          // Default onSubmit handler
-          await this.feedback({
-            ...feedbackData,
-            ...data,
-          });
+          if (!res) return;
 
-          options.onAfterSubmit?.(data);
+          const json = res ? await res.json() : {};
+          options.onAfterSubmit?.({ ...data, ...json });
+
+          return json;
         },
       });
     }, 1);

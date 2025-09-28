@@ -11,7 +11,6 @@ import { FeedbackForm } from "./FeedbackForm";
 import styles from "./index.css?inline";
 import { RadialProgress } from "./RadialProgress";
 import {
-  FeedbackScoreSubmission,
   FeedbackSubmission,
   OpenFeedbackFormOptions,
   WithRequired,
@@ -25,21 +24,19 @@ export type FeedbackDialogProps = WithRequired<
 const INACTIVE_DURATION_MS = 20 * 1000;
 const SUCCESS_DURATION_MS = 3 * 1000;
 
+export type FormState = "idle" | "submitting" | "submitted" | "error";
+
 export const FeedbackDialog: FunctionComponent<FeedbackDialogProps> = ({
   key,
   title = DEFAULT_TRANSLATIONS.DefaultQuestionLabel,
   position,
   translations = DEFAULT_TRANSLATIONS,
-  openWithCommentVisible = false,
+  inputMode = "comment-and-score",
   onClose,
   onDismiss,
   onSubmit,
-  onScoreSubmit,
 }) => {
-  const [feedbackId, setFeedbackId] = useState<string | undefined>(undefined);
-  const [scoreState, setScoreState] = useState<
-    "idle" | "submitting" | "submitted"
-  >("idle");
+  const [formState, setFormState] = useState<FormState>("idle");
 
   const { isOpen, close } = useDialog({ onClose, initialValue: true });
 
@@ -51,24 +48,21 @@ export const FeedbackDialog: FunctionComponent<FeedbackDialogProps> = ({
 
   const submit = useCallback(
     async (data: Omit<FeedbackSubmission, "feedbackId">) => {
-      await onSubmit({ ...data, feedbackId });
-      autoClose.startWithDuration(SUCCESS_DURATION_MS);
-    },
-    [autoClose, feedbackId, onSubmit],
-  );
-
-  const submitScore = useCallback(
-    async (data: Omit<FeedbackScoreSubmission, "feedbackId">) => {
-      if (onScoreSubmit !== undefined) {
-        setScoreState("submitting");
-
-        const res = await onScoreSubmit({ ...data, feedbackId });
-        setFeedbackId(res.feedbackId);
-        setScoreState("submitted");
+      try {
+        setFormState("submitting");
+        const res = await onSubmit({ ...data });
+        if (!res) throw new Error("Failed to submit feedback");
+        setFormState("submitted");
+        autoClose.startWithDuration(SUCCESS_DURATION_MS);
+      } catch (error) {
+        setFormState("error");
+        console.error("Couldn't submit feedback with Reflag:", error);
+        throw error;
       }
     },
-    [feedbackId, onScoreSubmit],
+    [autoClose, onSubmit],
   );
+
   const dismiss = useCallback(() => {
     autoClose.stop();
     close();
@@ -89,13 +83,12 @@ export const FeedbackDialog: FunctionComponent<FeedbackDialogProps> = ({
         <>
           <FeedbackForm
             key={key}
-            openWithCommentVisible={openWithCommentVisible}
+            inputMode={inputMode}
             question={title}
-            scoreState={scoreState}
             t={{ ...DEFAULT_TRANSLATIONS, ...translations }}
             onInteraction={autoClose.stop}
-            onScoreSubmit={submitScore}
             onSubmit={submit}
+            formState={formState}
           />
 
           <button class="close" onClick={dismiss}>
@@ -105,7 +98,7 @@ export const FeedbackDialog: FunctionComponent<FeedbackDialogProps> = ({
                 progress={1.0 - autoClose.elapsedFraction}
               />
             )}
-            <Close />
+            <Close width={18} height={18} />
           </button>
         </>
       </Dialog>

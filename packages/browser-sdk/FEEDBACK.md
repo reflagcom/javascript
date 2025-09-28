@@ -3,7 +3,7 @@
 The Reflag Browser SDK includes a UI you can use to collect feedback from user
 about particular flags.
 
-![image](https://github.com/reflagcom/javascript/assets/34348/c387bac1-f2e2-4efd-9dda-5030d76f9532)
+![Feedback UI example](/assets/feedback-ui-header.png)
 
 ## Global feedback configuration
 
@@ -90,6 +90,10 @@ const reflag = new ReflagClient({
         position: POSITION_CONFIG, // See positioning section
         translations: TRANSLATION_KEYS, // See internationalization section
 
+        // Decides which user input options are shown in the widget
+        // Default: "comment-and-score"
+        inputMode: "comment-and-score" | "comment-only" | "score-only";
+
         // Trigger side effects with the collected data,
         // for example posting it back into your own CRM
         onAfterSubmit: (feedback) => {
@@ -148,6 +152,10 @@ reflagClient.requestFeedback({
   position: POSITION_CONFIG, // [Optional] see the positioning section
   translations: TRANSLATION_KEYS // [Optional] see the internationalization section
 
+  // [Optional] Decides which user input options are shown in the widget
+  // Default: "comment-and-score"
+  inputMode: "comment-and-score" | "comment-only" | "score-only";
+
   // [Optional] trigger side effects with the collected data,
   // for example sending the feedback to your own CRM
   onAfterSubmit: (feedback) => {
@@ -178,7 +186,7 @@ page. It can be dismissed with the keyboard shortcut `<ESC>` or the dedicated
 close button in the top right corner. It is always centered on the page, capturing
 focus, and making it the primary interface the user needs to interact with.
 
-![image](https://github.com/reflagcom/javascript/assets/331790/6c6efbd3-cf7d-4d5b-b126-7ac978b2e512)
+![Feedback UI with modal positioning](/assets/feedback-ui-positioning-modal.png)
 
 Using a modal is the strongest possible push for feedback. You are interrupting the
 user's normal flow, which can cause annoyance. A good use-case for the modal is
@@ -198,7 +206,7 @@ user's interaction with the rest of the page. It can be dismissed with the dedic
 close button, but will automatically disappear after a short time period if the user
 does not interact with it.
 
-![image](https://github.com/reflagcom/javascript/assets/331790/30413513-fd5f-4a2c-852a-9b074fa4666c)
+![Feedback UI with dialog positioning](/assets/feedback-ui-positioning-dialog.png)
 
 Using a dialog is a soft push for feedback. It lets the user continue their work
 with a minimal amount of intrusion. The user can opt-in to respond but is not
@@ -226,7 +234,7 @@ position: {
 A popover that is anchored relative to a DOM-element (typically a button). It can
 be dismissed by clicking outside the popover or by pressing the dedicated close button.
 
-![image](https://github.com/reflagcom/javascript/assets/331790/4c5c5597-9ed3-4d4d-90c0-950926d0d967)
+![Feedback UI with popover positioning](/assets/feedback-ui-positioning-popover.png)
 
 You can use the popover mode to implement your own button to collect feedback manually.
 
@@ -265,8 +273,6 @@ translations by passing an object in the options to either or both of the
 These translations will replace the English ones used by the feedback interface.
 See examples below.
 
-![image](https://github.com/reflagcom/javascript/assets/331790/68805b38-e9f6-4de5-9f55-188216983e3c)
-
 See [default English localization keys](https://github.com/reflagcom/javascript/tree/main/packages/browser-sdk/src/feedback/ui/config/defaultTranslations.tsx)
 for a reference of what translation keys can be supplied.
 
@@ -285,7 +291,6 @@ new ReflagClient({
           "Dans quelle mesure êtes-vous satisfait de cette fonctionnalité ?",
         QuestionPlaceholder:
           "Comment pouvons-nous améliorer cette fonctionnalité ?",
-        ScoreStatusDescription: "Choisissez une note et laissez un commentaire",
         ScoreStatusLoading: "Chargement...",
         ScoreStatusReceived: "La note a été reçue !",
         ScoreVeryDissatisfiedLabel: "Très insatisfait",
@@ -351,7 +356,7 @@ properties to your page in your CSS `:root`-scope.
 
 For example, a dark mode theme might look like this:
 
-![image](https://github.com/reflagcom/javascript/assets/34348/5d579b7b-a830-4530-8b40-864488a8597e)
+![Feedback UI with custom styling](/assets/feedback-ui-custom-styling.png)
 
 ```css
 :root {

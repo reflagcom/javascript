@@ -248,7 +248,7 @@ await reflagClient.updateUser({ voiceHuddleOptIn: (!isEnabled).toString() });
 
 The Reflag Toolbar is great for toggling flags on/off for yourself to ensure that everything works both when a flag is on and when it's off.
 
-<img width="352" alt="Toolbar screenshot" src="https://github.com/user-attachments/assets/c223df5a-4bd8-49a1-8b4a-ad7001357693" />
+![Toolbar example](/assets/toolbar-example.png)
 
 The toolbar will automatically appear on `localhost`. However, it can also be incredibly useful in production.
 You have full control over when it appears through the `toolbar` configuration option passed to the `ReflagClient`.

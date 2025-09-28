@@ -378,7 +378,7 @@ export class AutoFeedback {
     message: FeedbackPrompt,
     completionHandler: FeedbackPromptCompletionHandler,
   ) {
-    let feedbackId: string | undefined = undefined;
+    const feedbackId: string | undefined = undefined;
 
     await this.feedbackPromptEvent({
       promptId: message.promptId,
@@ -435,14 +435,11 @@ export class AutoFeedback {
         feedbackLib.openFeedbackForm({
           key: message.featureId,
           title: message.question,
-          onScoreSubmit: async (data) => {
-            const res = await replyCallback(data);
-            feedbackId = res.feedbackId;
-            return { feedbackId: res.feedbackId };
-          },
           onSubmit: async (data) => {
-            await replyCallback(data);
-            options.onAfterSubmit?.(data);
+            const res = await replyCallback(data);
+            if (!res) return;
+            options.onAfterSubmit?.({ ...data, ...res });
+            return res;
           },
           onDismiss: () => replyCallback(null),
           position: this.position,

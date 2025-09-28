@@ -47,7 +47,6 @@ const requestFeedback = useRequestFeedback();
             position: {
               type: 'MODAL',
             },
-            openWithCommentVisible: true,
           })
         "
       >

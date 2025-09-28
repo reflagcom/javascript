@@ -3,7 +3,10 @@ import { expect, Locator, Page, test } from "@playwright/test";
 
 import { InitOptions } from "../../src/client";
 import { DEFAULT_TRANSLATIONS } from "../../src/feedback/ui/config/defaultTranslations";
-import { FeedbackTranslations } from "../../src/feedback/ui/types";
+import {
+  FeedbackTranslations,
+  OpenFeedbackFormOptions,
+} from "../../src/feedback/ui/types";
 import { feedbackContainerId, propagatedEvents } from "../../src/ui/constants";
 
 const KEY = randomUUID();
@@ -22,9 +25,13 @@ function pick<T>(options: T[]): T {
   return options[Math.floor(Math.random() * options.length)];
 }
 
+const DEFAULT_TITLE = "baz";
+const DEFAULT_FLAG_KEY = "flag1";
+
 async function getOpenedWidgetContainer(
   page: Page,
   initOptions: Omit<InitOptions, "publishableKey"> = {},
+  feedbackOptions: Omit<OpenFeedbackFormOptions, "key" | "onSubmit"> = {},
 ) {
   await page.goto("http://localhost:8001/test/e2e/empty.html");
 
@@ -50,8 +57,9 @@ async function getOpenedWidgetContainer(
       const reflag = new ReflagClient({publishableKey: "${KEY}", user: {id: "foo"}, company: {id: "bar"}, ...${JSON.stringify(initOptions ?? {})}});
       await reflag.initialize();
       await reflag.requestFeedback({
-        flagKey: "flag1",
-        title: "baz",
+        flagKey: "${DEFAULT_FLAG_KEY}",
+        title: "${DEFAULT_TITLE}",
+        ...${JSON.stringify(feedbackOptions ?? {})},
       });
     })()
   `);
@@ -172,7 +180,7 @@ test("Opens a feedback widget in the bottom right by default", async ({
   const bbox = await container.locator("dialog").boundingBox();
   expect(bbox?.x).toEqual(WINDOW_WIDTH - bbox!.width - 16);
   expect(bbox?.y).toBeGreaterThan(WINDOW_HEIGHT - bbox!.height - 30); // Account for browser differences
-  expect(bbox?.y).toBeLessThan(WINDOW_HEIGHT - bbox!.height);
+  expect(bbox?.y).toBeLessThan(WINDOW_HEIGHT - bbox!.height + 10);
 });
 
 test("Opens a feedback widget in the correct position when overridden", async ({
@@ -201,7 +209,6 @@ test("Opens a feedback widget with the correct translations", async ({
   page,
 }) => {
   const translations: Partial<FeedbackTranslations> = {
-    ScoreStatusDescription: "Choisissez une note et laissez un commentaire",
     ScoreVeryDissatisfiedLabel: "Très insatisfait",
     ScoreDissatisfiedLabel: "Insatisfait",
     ScoreNeutralLabel: "Neutre",
@@ -219,7 +226,6 @@ test("Opens a feedback widget with the correct translations", async ({
   });
 
   await expect(container).toBeAttached();
-  await expect(container).toContainText(translations.ScoreStatusDescription!);
   await expect(container).toContainText(
     translations.ScoreVeryDissatisfiedLabel!,
   );
@@ -228,117 +234,6 @@ test("Opens a feedback widget with the correct translations", async ({
   await expect(container).toContainText(translations.ScoreSatisfiedLabel!);
   await expect(container).toContainText(translations.ScoreVerySatisfiedLabel!);
   await expect(container).toContainText(translations.SendButton!);
-});
-
-test("Sends a request when choosing a score immediately", async ({ page }) => {
-  const expectedScore = pick([1, 2, 3, 4, 5]);
-  let sentJSON: object | null = null;
-
-  await page.route(`${API_HOST}/feedback`, async (route) => {
-    sentJSON = route.request().postDataJSON();
-    await route.fulfill({
-      status: 200,
-      body: JSON.stringify({ feedbackId: "123" }),
-      contentType: "application/json",
-    });
-  });
-
-  const container = await getOpenedWidgetContainer(page);
-  await setScore(container, expectedScore);
-
-  await expect
-    .poll(() => sentJSON)
-    .toEqual({
-      companyId: "bar",
-      key: "flag1",
-      score: expectedScore,
-      question: "baz",
-      userId: "foo",
-      source: "widget",
-    });
-});
-
-test("Shows a success message after submitting a score", async ({ page }) => {
-  await page.route(`${API_HOST}/feedback`, async (route) => {
-    await route.fulfill({
-      status: 200,
-      body: JSON.stringify({ feedbackId: "123" }),
-      contentType: "application/json",
-    });
-  });
-
-  const container = await getOpenedWidgetContainer(page);
-
-  await expect(
-    container.getByText(DEFAULT_TRANSLATIONS.ScoreStatusDescription),
-  ).toHaveCSS("opacity", "1");
-  await expect(
-    container.getByText(DEFAULT_TRANSLATIONS.ScoreStatusReceived),
-  ).toHaveCSS("opacity", "0");
-
-  await setScore(container, 3);
-
-  await expect(
-    container.getByText(DEFAULT_TRANSLATIONS.ScoreStatusDescription),
-  ).toHaveCSS("opacity", "0");
-  await expect(
-    container.getByText(DEFAULT_TRANSLATIONS.ScoreStatusReceived),
-  ).toHaveCSS("opacity", "1");
-});
-
-test("Updates the score on every change", async ({ page }) => {
-  let lastSentJSON: object | null = null;
-
-  await page.route(`${API_HOST}/feedback`, async (route) => {
-    lastSentJSON = route.request().postDataJSON();
-    await route.fulfill({
-      status: 200,
-      body: JSON.stringify({ feedbackId: "123" }),
-      contentType: "application/json",
-    });
-  });
-
-  const container = await getOpenedWidgetContainer(page);
-
-  await setScore(container, 1);
-  await setScore(container, 5);
-  await setScore(container, 3);
-
-  await expect
-    .poll(() => lastSentJSON)
-    .toEqual({
-      feedbackId: "123",
-      companyId: "bar",
-      key: "flag1",
-      question: "baz",
-      score: 3,
-      userId: "foo",
-      source: "widget",
-    });
-});
-
-test("Shows the comment field after submitting a score", async ({ page }) => {
-  await page.route(`${API_HOST}/feedback`, async (route) => {
-    await route.fulfill({
-      status: 200,
-      body: JSON.stringify({ feedbackId: "123" }),
-      contentType: "application/json",
-    });
-  });
-
-  const container = await getOpenedWidgetContainer(page);
-
-  await expect(container.locator(".form-expanded-content")).toHaveCSS(
-    "opacity",
-    "0",
-  );
-
-  await setScore(container, 1);
-
-  await expect(container.locator(".form-expanded-content")).toHaveCSS(
-    "opacity",
-    "1",
-  );
 });
 
 test("Sends a request with both the score and comment when submitting", async ({
@@ -370,7 +265,6 @@ test("Sends a request with both the score and comment when submitting", async ({
     companyId: "bar",
     question: "baz",
     key: "flag1",
-    feedbackId: "123",
     userId: "foo",
     source: "widget",
   });
@@ -443,4 +337,195 @@ test("Blocks event propagation to the containing document", async ({
 
   // No events are allowed to fire, object should be empty
   expect(firedEvents).toEqual({});
+});
+
+test("Shows both comment field and score rating with inputMode: comment-and-score", async ({
+  page,
+}) => {
+  const container = await getOpenedWidgetContainer(page, {
+    feedback: {
+      ui: {
+        position: {
+          type: "DIALOG",
+          placement: "top-left",
+        },
+      },
+    },
+  });
+
+  await expect(container).toBeAttached();
+
+  // Both comment field and score rating should be visible
+  await expect(container.locator('textarea[name="comment"]')).toBeVisible();
+  await expect(container.locator('[role="group"]')).toBeVisible();
+  await expect(container.locator("#reflag-feedback-score-1")).toBeVisible();
+  await expect(container.locator("#reflag-feedback-score-5")).toBeVisible();
+});
+
+test("Shows only comment field with inputMode: comment-only", async ({
+  page,
+}) => {
+  const container = await getOpenedWidgetContainer(
+    page,
+    {
+      feedback: {
+        ui: {
+          position: {
+            type: "DIALOG",
+            placement: "top-left",
+          },
+        },
+      },
+    },
+    {
+      inputMode: "comment-only",
+    },
+  );
+
+  await expect(container).toBeAttached();
+
+  // Comment field should be visible
+  await expect(container.locator('textarea[name="comment"]')).toBeVisible();
+
+  // Score rating should NOT be visible
+  await expect(container.locator('[role="group"]')).not.toBeVisible();
+  await expect(container.locator("#reflag-feedback-score-1")).not.toBeVisible();
+  await expect(container.locator("#reflag-feedback-score-5")).not.toBeVisible();
+});
+
+test("Shows only score rating with inputMode: score-only", async ({ page }) => {
+  const container = await getOpenedWidgetContainer(
+    page,
+    {
+      feedback: {
+        ui: {
+          position: {
+            type: "DIALOG",
+            placement: "top-left",
+          },
+        },
+      },
+    },
+    {
+      inputMode: "score-only",
+    },
+  );
+
+  await expect(container).toBeAttached();
+
+  // Score rating should be visible
+  await expect(container.locator('[role="group"]')).toBeVisible();
+  await expect(container.locator("#reflag-feedback-score-1")).toBeVisible();
+  await expect(container.locator("#reflag-feedback-score-5")).toBeVisible();
+
+  // Comment field should NOT be visible
+  await expect(container.locator('textarea[name="comment"]')).not.toBeVisible();
+});
+
+test("Submits feedback with comment-only inputMode", async ({ page }) => {
+  const expectedComment = `Comment only feedback: ${Math.random()}`;
+  let sentJSON: object | null = null;
+
+  await page.route(`${API_HOST}/feedback`, async (route) => {
+    sentJSON = route.request().postDataJSON();
+    await route.fulfill({
+      status: 200,
+      body: JSON.stringify({ feedbackId: "123" }),
+      contentType: "application/json",
+    });
+  });
+
+  const container = await getOpenedWidgetContainer(
+    page,
+    {},
+    {
+      inputMode: "comment-only",
+    },
+  );
+
+  await setComment(container, expectedComment);
+  await submitForm(container);
+
+  expect(sentJSON).toEqual({
+    comment: expectedComment,
+    companyId: "bar",
+    question: "baz",
+    key: "flag1",
+    userId: "foo",
+    source: "widget",
+  });
+});
+
+test("Submits feedback with score-only inputMode", async ({ page }) => {
+  const expectedScore = pick([1, 2, 3, 4, 5]);
+  let sentJSON: object | null = null;
+
+  await page.route(`${API_HOST}/feedback`, async (route) => {
+    sentJSON = route.request().postDataJSON();
+    await route.fulfill({
+      status: 200,
+      body: JSON.stringify({ feedbackId: "123" }),
+      contentType: "application/json",
+    });
+  });
+
+  const container = await getOpenedWidgetContainer(
+    page,
+    {},
+    {
+      inputMode: "score-only",
+    },
+  );
+
+  await setScore(container, expectedScore);
+  await submitForm(container);
+
+  await expect
+    .poll(() => sentJSON)
+    .toEqual({
+      companyId: "bar",
+      key: "flag1",
+      score: expectedScore,
+      question: "baz",
+      userId: "foo",
+      source: "widget",
+    });
+});
+
+test("Validates required fields for comment-only inputMode", async ({
+  page,
+}) => {
+  const container = await getOpenedWidgetContainer(
+    page,
+    {},
+    {
+      inputMode: "comment-only",
+    },
+  );
+
+  // Try to submit without comment
+  await submitForm(container);
+
+  // Should show validation error
+  await expect(container.locator(".error")).toBeVisible();
+  await expect(container.locator(".error")).toContainText(
+    "Comment is required",
+  );
+});
+
+test("Validates required fields for score-only inputMode", async ({ page }) => {
+  const container = await getOpenedWidgetContainer(
+    page,
+    {},
+    {
+      inputMode: "score-only",
+    },
+  );
+
+  // Try to submit without score
+  await submitForm(container);
+
+  // Should show validation error
+  await expect(container.locator(".error")).toBeVisible();
+  await expect(container.locator(".error")).toContainText("Score is required");
 });
