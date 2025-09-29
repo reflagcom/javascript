@@ -26,6 +26,7 @@ export type {
   LogLevel,
   RawFlag,
   RawFlagRemoteConfig,
+  RawFlags,
   TrackingMeta,
   TrackOptions,
   TypedFlagKey,

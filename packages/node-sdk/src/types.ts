@@ -126,11 +126,16 @@ export interface RawFlag {
 }
 
 /**
+ * Describes a collection of evaluated raw flags.
+ */
+export type RawFlags = Record<TypedFlagKey, RawFlag>;
+
+/**
  * Describes a collection of evaluated raw flags and the context for bootstrapping.
  */
 export type BootstrappedFlags = {
   context: Context;
-  flags: Record<TypedFlagKey, RawFlag>;
+  flags: RawFlags;
 };
 
 export type EmptyFlagRemoteConfig = { key: undefined; payload: undefined };
@@ -403,7 +408,7 @@ export type EvaluatedFlagsAPIResponse = {
   /**
    * The feature definitions.
    */
-  features: Record<string, RawFlag>;
+  features: RawFlags;
 };
 
 /**

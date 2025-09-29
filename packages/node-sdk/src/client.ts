@@ -32,6 +32,7 @@ import type {
   FlagOverridesFn,
   IdType,
   RawFlag,
+  RawFlags,
   TypedFlagKey,
 } from "./types";
 import {
@@ -124,7 +125,7 @@ export class ReflagClient {
     refetchInterval: number;
     staleWarningInterval: number;
     headers: Record<string, string>;
-    fallbackFlags?: Record<TypedFlagKey, RawFlag>;
+    fallbackFlags?: RawFlags;
     flagOverrides: FlagOverridesFn;
     offline: boolean;
     configFile?: string;
@@ -259,16 +260,13 @@ export class ReflagClient {
       : applyLogLevel(decorateLogger(REFLAG_LOG_PREFIX, console), logLevel);
 
     const fallbackFlags = Array.isArray(options.fallbackFlags)
-      ? options.fallbackFlags.reduce(
-          (acc, key) => {
-            acc[key as TypedFlagKey] = {
-              isEnabled: true,
-              key,
-            };
-            return acc;
-          },
-          {} as Record<TypedFlagKey, RawFlag>,
-        )
+      ? options.fallbackFlags.reduce((acc, key) => {
+          acc[key as TypedFlagKey] = {
+            isEnabled: true,
+            key,
+          };
+          return acc;
+        }, {} as RawFlags)
       : isObject(options.fallbackFlags)
         ? Object.entries(options.fallbackFlags).reduce(
             (acc, [key, fallback]) => {
@@ -288,7 +286,7 @@ export class ReflagClient {
               };
               return acc;
             },
-            {} as Record<TypedFlagKey, RawFlag>,
+            {} as RawFlags,
           )
         : undefined;
 
@@ -1057,9 +1055,7 @@ export class ReflagClient {
     }
   }
 
-  private _getFlags(
-    options: ContextWithTracking,
-  ): Record<TypedFlagKey, RawFlag>;
+  private _getFlags(options: ContextWithTracking): RawFlags;
   private _getFlags<TKey extends TypedFlagKey>(
     options: ContextWithTracking,
     key: TKey,
@@ -1067,7 +1063,7 @@ export class ReflagClient {
   private _getFlags<TKey extends TypedFlagKey>(
     options: ContextWithTracking,
     key?: TKey,
-  ): Record<TypedFlagKey, RawFlag> | RawFlag | undefined {
+  ): RawFlags | RawFlag | undefined {
     checkContextWithTracking(options);
 
     if (!this.initializationFinished) {
@@ -1112,26 +1108,23 @@ export class ReflagClient {
           } satisfies EvaluationResult<any>),
       }));
 
-    let evaluatedFlags = evaluated.reduce(
-      (acc, res) => {
-        acc[res.flagKey as TypedFlagKey] = {
-          key: res.flagKey,
-          isEnabled: res.enabledResult.value ?? false,
-          ruleEvaluationResults: res.enabledResult.ruleEvaluationResults,
-          missingContextFields: res.enabledResult.missingContextFields,
-          targetingVersion: res.targetingVersion,
-          config: {
-            key: res.configResult?.value?.key,
-            payload: res.configResult?.value?.payload,
-            targetingVersion: res.configVersion,
-            ruleEvaluationResults: res.configResult?.ruleEvaluationResults,
-            missingContextFields: res.configResult?.missingContextFields,
-          },
-        };
-        return acc;
-      },
-      {} as Record<TypedFlagKey, RawFlag>,
-    );
+    let evaluatedFlags = evaluated.reduce((acc, res) => {
+      acc[res.flagKey as TypedFlagKey] = {
+        key: res.flagKey,
+        isEnabled: res.enabledResult.value ?? false,
+        ruleEvaluationResults: res.enabledResult.ruleEvaluationResults,
+        missingContextFields: res.enabledResult.missingContextFields,
+        targetingVersion: res.targetingVersion,
+        config: {
+          key: res.configResult?.value?.key,
+          payload: res.configResult?.value?.payload,
+          targetingVersion: res.configVersion,
+          ruleEvaluationResults: res.configResult?.ruleEvaluationResults,
+          missingContextFields: res.configResult?.missingContextFields,
+        },
+      };
+      return acc;
+    }, {} as RawFlags);
 
     const overrides = Object.entries(this._config.flagOverrides(context))
       .filter(([flagKey]) => (key ? key === flagKey : true))

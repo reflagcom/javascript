@@ -14,7 +14,7 @@ import {
   CompanyContext,
   HookArgs,
   InitOptions,
-  RawFlags,
+  RawFlag,
   ReflagClient,
   ReflagContext,
   RequestFeedbackData,
@@ -25,7 +25,7 @@ import {
 
 import { version } from "../package.json";
 
-export type { CheckEvent, CompanyContext, RawFlags, TrackEvent, UserContext };
+export type { CheckEvent, CompanyContext, TrackEvent, UserContext };
 
 export type EmptyFlagRemoteConfig = { key: undefined; payload: undefined };
 
@@ -111,12 +111,17 @@ export type TypedFlags = keyof Flags extends never
         : Flag;
     };
 
+export type FlagKey = keyof TypedFlags;
+
+/**
+ * Describes a collection of evaluated raw flags.
+ */
+export type RawFlags = Record<FlagKey, RawFlag>;
+
 export type BootstrappedFlags = {
   context: ReflagContext;
   flags: RawFlags;
 };
-
-export type FlagKey = keyof TypedFlags;
 
 const SDK_VERSION = `react-sdk/${version}`;
 
@@ -234,7 +239,7 @@ export type ReflagProps = ReflagPropsBase &
     /**
      * The context to use for the ReflagClient containing user, company, and other context.
      */
-    context: ReflagContext;
+    context?: ReflagContext;
 
     /**
      * Company related context. If you provide `id` Reflag will enrich the evaluation context with
