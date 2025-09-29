@@ -123,7 +123,6 @@ type ProviderContextType = {
     isLoading: boolean;
   };
   provider: boolean;
-  activeFlags: Set<string>;
   registerActiveFlag: (flagKey: string) => void;
   unregisterActiveFlag: (flagKey: string) => void;
 };
@@ -134,7 +133,6 @@ const ProviderContext = createContext<ProviderContextType>({
     isLoading: false,
   },
   provider: false,
-  activeFlags: new Set(),
   registerActiveFlag: () => {
     // No-op default implementation
   },
@@ -187,7 +185,6 @@ export function ReflagProvider({
 }: ReflagProps) {
   const [featuresLoading, setFlagsLoading] = useState(true);
   const [rawFlags, setRawFlags] = useState<RawFlags>({});
-  const [activeFlags, setActiveFlags] = useState<Set<string>>(new Set());
 
   const clientRef = useRef<ReflagClient>();
   const contextKeyRef = useRef<string>();
@@ -236,22 +233,11 @@ export function ReflagProvider({
   }, [contextKey]);
 
   const registerActiveFlag = useCallback((flagKey: string) => {
-    setActiveFlags((prev) => {
-      const newSet = new Set(prev).add(flagKey);
-      // Sync with browser SDK client
-      clientRef.current?.setActiveFlags(newSet);
-      return newSet;
-    });
+    clientRef.current?.registerActiveFlag(flagKey);
   }, []);
 
   const unregisterActiveFlag = useCallback((flagKey: string) => {
-    setActiveFlags((prev) => {
-      const newSet = new Set(prev);
-      newSet.delete(flagKey);
-      // Sync with browser SDK client
-      clientRef.current?.setActiveFlags(newSet);
-      return newSet;
-    });
+    clientRef.current?.unregisterActiveFlag(flagKey);
   }, []);
 
   const context: ProviderContextType = {
@@ -261,7 +247,6 @@ export function ReflagProvider({
     },
     client: clientRef.current,
     provider: true,
-    activeFlags,
     registerActiveFlag,
     unregisterActiveFlag,
   };

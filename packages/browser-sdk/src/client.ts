@@ -852,12 +852,31 @@ export class ReflagClient {
   }
 
   /**
-   * Set the active flags from React SDK.
+   * Register an active flag from React SDK.
    * @internal
    */
-  setActiveFlags(flags: Set<string>) {
-    this.activeFlags = flags;
-    this.hooks.trigger("activeFlagsUpdated", flags);
+  registerActiveFlag(flagKey: string) {
+    const wasActive = this.activeFlags.has(flagKey);
+    this.activeFlags.add(flagKey);
+    
+    // Only trigger update if flag wasn't already active
+    if (!wasActive) {
+      this.hooks.trigger("activeFlagsUpdated", this.activeFlags);
+    }
+  }
+
+  /**
+   * Unregister an active flag from React SDK.
+   * @internal
+   */
+  unregisterActiveFlag(flagKey: string) {
+    const wasActive = this.activeFlags.has(flagKey);
+    this.activeFlags.delete(flagKey);
+    
+    // Only trigger update if flag was previously active
+    if (wasActive) {
+      this.hooks.trigger("activeFlagsUpdated", this.activeFlags);
+    }
   }
 
   /**
