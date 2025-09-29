@@ -388,7 +388,7 @@ export class ReflagClient {
   public readonly logger: Logger;
 
   private readonly hooks: HooksManager;
-  private liveTargetingFlags: Set<string> = new Set();
+  private activeFlags: Set<string> = new Set();
 
   /**
    * Create a new ReflagClient instance.
@@ -852,27 +852,27 @@ export class ReflagClient {
   }
 
   /**
-   * Set the live targeting flags from React SDK.
+   * Set the active flags from React SDK.
    * @internal
    */
-  setLiveTargetingFlags(flags: Set<string>) {
-    this.liveTargetingFlags = flags;
-    this.hooks.trigger("liveTargetingUpdated", flags);
+  setActiveFlags(flags: Set<string>) {
+    this.activeFlags = flags;
+    this.hooks.trigger("activeFlagsUpdated", flags);
   }
 
   /**
-   * Get the current live targeting flags.
+   * Get the current active flags.
    * @internal
    */
-  getLiveTargetingFlags(): Set<string> {
-    return this.liveTargetingFlags;
+  getActiveFlags(): Set<string> {
+    return this.activeFlags;
   }
 
   /**
    * Check if a flag is currently being used in React components.
    */
-  isFlagLiveTargeting(flagKey: string): boolean {
-    return this.liveTargetingFlags.has(flagKey);
+  isFlagActive(flagKey: string): boolean {
+    return this.activeFlags.has(flagKey);
   }
 
   /**

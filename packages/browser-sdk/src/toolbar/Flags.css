@@ -80,11 +80,11 @@
   gap: 4px;
 }
 
-.live-targeting-indicator {
+.active-flag-indicator {
   color: var(--brand400);
   line-height: 0;
 }
-.live-targeting-indicator svg {
+.active-flag-indicator svg {
   width: 14px;
   height: 14px;
 }

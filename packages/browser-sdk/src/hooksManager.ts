@@ -12,7 +12,7 @@ export interface HookArgs {
   user: UserContext;
   company: CompanyContext;
   track: TrackEvent;
-  liveTargetingUpdated: Set<string>;
+  activeFlagsUpdated: Set<string>;
 }
 
 export type TrackEvent = {
@@ -33,14 +33,14 @@ export class HooksManager {
     user: ((arg0: UserContext) => void)[];
     company: ((arg0: CompanyContext) => void)[];
     track: ((arg0: TrackEvent) => void)[];
-    liveTargetingUpdated: ((arg0: Set<string>) => void)[];
+    activeFlagsUpdated: ((arg0: Set<string>) => void)[];
   } = {
     check: [],
     flagsUpdated: [],
     user: [],
     company: [],
     track: [],
-    liveTargetingUpdated: [],
+    activeFlagsUpdated: [],
   };
 
   private _adjustEvent(event: keyof HookArgs) {

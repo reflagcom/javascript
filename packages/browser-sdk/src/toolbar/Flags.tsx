@@ -101,9 +101,9 @@ function FlagRow({
     >
       <td class="flag-name-cell">
         <div class="flag-name-content">
-          {flag.isLiveTargeting && (
+          {flag.isActive && (
             <span
-              class="live-targeting-indicator"
+              class="active-flag-indicator"
               data-tooltip="Currently mounted in React"
               data-tooltip-left
             >
