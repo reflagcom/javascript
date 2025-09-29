@@ -124,7 +124,7 @@ type ProviderContextType = {
   };
   provider: boolean;
   activeFlags: Set<string>;
-  registerActiveFlag: (flagKey: string) => void;
+  registerActiveFlag: (flagKey: string, element?: HTMLElement) => void;
   unregisterActiveFlag: (flagKey: string) => void;
 };
 
@@ -188,6 +188,7 @@ export function ReflagProvider({
   const [featuresLoading, setFlagsLoading] = useState(true);
   const [rawFlags, setRawFlags] = useState<RawFlags>({});
   const [activeFlags, setActiveFlags] = useState<Set<string>>(new Set());
+  const [flagElements, setFlagElements] = useState<Map<string, HTMLElement>>(new Map());
 
   const clientRef = useRef<ReflagClient>();
   const contextKeyRef = useRef<string>();
@@ -235,13 +236,23 @@ export function ReflagProvider({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- should only run once
   }, [contextKey]);
 
-  const registerActiveFlag = useCallback((flagKey: string) => {
+  const registerActiveFlag = useCallback((flagKey: string, element?: HTMLElement) => {
     setActiveFlags((prev) => {
       const newSet = new Set(prev).add(flagKey);
       // Sync with browser SDK client
       clientRef.current?.setActiveFlags(newSet);
       return newSet;
     });
+    
+    if (element) {
+      setFlagElements((prev) => {
+        const newMap = new Map(prev);
+        newMap.set(flagKey, element);
+        // Sync with browser SDK client
+        clientRef.current?.setFlagElements(newMap);
+        return newMap;
+      });
+    }
   }, []);
 
   const unregisterActiveFlag = useCallback((flagKey: string) => {
@@ -251,6 +262,14 @@ export function ReflagProvider({
       // Sync with browser SDK client
       clientRef.current?.setActiveFlags(newSet);
       return newSet;
+    });
+    
+    setFlagElements((prev) => {
+      const newMap = new Map(prev);
+      newMap.delete(flagKey);
+      // Sync with browser SDK client
+      clientRef.current?.setFlagElements(newMap);
+      return newMap;
     });
   }, []);
 

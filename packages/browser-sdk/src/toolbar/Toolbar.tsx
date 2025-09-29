@@ -81,9 +81,14 @@ export default function Toolbar({
     dialogContentRef.current?.scrollTo({ top: 0 });
   };
 
-  const sortedFlags = [...flags].sort((a, b) =>
-    a.flagKey.localeCompare(b.flagKey),
-  );
+  const sortedFlags = [...flags].sort((a, b) => {
+    // Active flags first
+    if (a.isActive && !b.isActive) return -1;
+    if (!a.isActive && b.isActive) return 1;
+
+    // Then sort alphabetically
+    return a.flagKey.localeCompare(b.flagKey);
+  });
 
   const appBaseUrl = reflagClient.getConfig().appBaseUrl;
 
