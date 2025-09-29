@@ -20,6 +20,8 @@ jobs:
           node-version-file: ".nvmrc"
           cache: "yarn"
           cache-dependency-path: "**/yarn.lock"
+      - name: Enable corepack
+        run: corepack enable
       - name: Restore Node.js dependencies
         run: yarn install --immutable
       - name: Restore package.json

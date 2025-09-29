@@ -18,6 +18,8 @@ jobs:
           cache-dependency-path: "**/yarn.lock"
           registry-url: "https://registry.npmjs.org"
           scope: "@reflag"
+      - name: Enable corepack
+        run: corepack enable
       - name: Install dependencies
         run: yarn install --immutable
       - name: Build packages

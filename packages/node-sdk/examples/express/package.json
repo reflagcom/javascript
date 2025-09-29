@@ -1,6 +1,6 @@
 {
   "name": "example",
-  "packageManager": "yarn@4.1.1",
+  "packageManager": "yarn@4.10.3",
   "scripts": {
     "start": "tsx serve.ts",
     "test": "vitest"
