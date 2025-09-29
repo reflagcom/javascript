@@ -246,12 +246,13 @@
   content: attr(data-tooltip);
   position: absolute;
   right: 100%;
-  top: 0%;
+  top: 50%;
+  transform: translateY(-50%);
   margin-right: 3px;
   user-select: none;
   pointer-events: none;
-  background-color: var(--bg-color);
-  border: 1px solid var(--border-color);
+  background-color: var(--gray800);
+  border: 1px solid var(--gray600);
   border-radius: 4px;
   padding: 0px 6px;
   height: 28px;
@@ -260,8 +261,15 @@
   font-size: var(--text-small-size);
   font-weight: normal;
   width: max-content;
-  display: none;
   box-sizing: border-box;
+  display: none;
+}
+
+[data-tooltip][data-tooltip-left]:after {
+  right: unset;
+  margin-right: unset;
+  left: 100%;
+  margin-left: 3px;
 }
 
 [data-tooltip]:hover:after {

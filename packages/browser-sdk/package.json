@@ -37,7 +37,7 @@
   },
   "dependencies": {
     "@floating-ui/dom": "^1.6.8",
-    "canonical-json": "^0.0.4",
+    "canonical-json": "^0.2.0",
     "js-cookie": "^3.0.5",
     "preact": "^10.22.1"
   },

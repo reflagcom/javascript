@@ -3,12 +3,13 @@
 import React, {
   createContext,
   ReactNode,
+  useCallback,
   useContext,
   useEffect,
   useRef,
   useState,
 } from "react";
-import canonicalJSON from "canonical-json";
+import { canonicalize } from "json-canonicalize";
 
 import {
   CheckEvent,
@@ -122,6 +123,9 @@ type ProviderContextType = {
     isLoading: boolean;
   };
   provider: boolean;
+  liveTargetingFlags: Set<string>;
+  registerLiveTargetingFlag: (flagKey: string) => void;
+  unregisterLiveTargetingFlag: (flagKey: string) => void;
 };
 
 const ProviderContext = createContext<ProviderContextType>({
@@ -130,6 +134,13 @@ const ProviderContext = createContext<ProviderContextType>({
     isLoading: false,
   },
   provider: false,
+  liveTargetingFlags: new Set(),
+  registerLiveTargetingFlag: () => {
+    // No-op default implementation
+  },
+  unregisterLiveTargetingFlag: () => {
+    // No-op default implementation
+  },
 });
 
 /**
@@ -176,12 +187,15 @@ export function ReflagProvider({
 }: ReflagProps) {
   const [featuresLoading, setFlagsLoading] = useState(true);
   const [rawFlags, setRawFlags] = useState<RawFlags>({});
+  const [liveTargetingFlags, setLiveTargetingFlags] = useState<Set<string>>(
+    new Set(),
+  );
 
   const clientRef = useRef<ReflagClient>();
   const contextKeyRef = useRef<string>();
 
   const featureContext = { user, company, otherContext };
-  const contextKey = canonicalJSON({ config, featureContext });
+  const contextKey = canonicalize({ config, featureContext });
 
   useEffect(() => {
     // useEffect will run twice in development mode
@@ -223,6 +237,25 @@ export function ReflagProvider({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- should only run once
   }, [contextKey]);
 
+  const registerLiveTargetingFlag = useCallback((flagKey: string) => {
+    setLiveTargetingFlags((prev) => {
+      const newSet = new Set(prev).add(flagKey);
+      // Sync with browser SDK client
+      clientRef.current?.setLiveTargetingFlags(newSet);
+      return newSet;
+    });
+  }, []);
+
+  const unregisterLiveTargetingFlag = useCallback((flagKey: string) => {
+    setLiveTargetingFlags((prev) => {
+      const newSet = new Set(prev);
+      newSet.delete(flagKey);
+      // Sync with browser SDK client
+      clientRef.current?.setLiveTargetingFlags(newSet);
+      return newSet;
+    });
+  }, []);
+
   const context: ProviderContextType = {
     features: {
       features: rawFlags,
@@ -230,6 +263,9 @@ export function ReflagProvider({
     },
     client: clientRef.current,
     provider: true,
+    liveTargetingFlags,
+    registerLiveTargetingFlag,
+    unregisterLiveTargetingFlag,
   };
   return (
     <ProviderContext.Provider value={context}>
@@ -267,7 +303,18 @@ export function useFlag<TKey extends FlagKey>(key: TKey): TypedFlags[TKey] {
   const client = useClient();
   const {
     features: { isLoading },
+    registerLiveTargetingFlag,
+    unregisterLiveTargetingFlag,
   } = useContext<ProviderContextType>(ProviderContext);
+
+  // Track mount/unmount for live targeting indicator
+  useEffect(() => {
+    console.log("registering live targeting flag", key);
+    registerLiveTargetingFlag(key);
+    return () => {
+      unregisterLiveTargetingFlag(key);
+    };
+  }, [key, registerLiveTargetingFlag, unregisterLiveTargetingFlag]);
 
   const track = () => client?.track(key);
   const requestFeedback = (opts: RequestFeedbackOptions) =>

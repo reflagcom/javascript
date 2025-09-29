@@ -2964,7 +2964,7 @@ __metadata:
     "@types/node": "npm:^22.12.0"
     "@vitest/coverage-v8": "npm:^2.0.4"
     c8: "npm:~10.1.3"
-    canonical-json: "npm:^0.0.4"
+    canonical-json: "npm:^0.2.0"
     eslint: "npm:^9.21.0"
     eslint-config-preact: "npm:^1.5.0"
     http-server: "npm:^14.1.1"
@@ -3136,9 +3136,9 @@ __metadata:
     "@types/react": "npm:^18.3.2"
     "@types/react-dom": "npm:^18.3.0"
     "@types/webpack": "npm:^5.28.5"
-    canonical-json: "npm:^0.0.4"
     eslint: "npm:^9.21.0"
     jsdom: "npm:^24.1.0"
+    json-canonicalize: "npm:^2.0.0"
     msw: "npm:^2.3.5"
     prettier: "npm:^3.5.2"
     react: "npm:*"
@@ -6594,13 +6594,6 @@ __metadata:
   version: 1.0.30001642
   resolution: "caniuse-lite@npm:1.0.30001642"
   checksum: 10c0/7366878ecdd482392a741c66fd2b39816b70573d66f64b1f8e5916835faf7a15f116368290170f4d7c4e823ec78eea9b6c0f63bee763a511cc7990afa429d63b
-  languageName: node
-  linkType: hard
-
-"canonical-json@npm:^0.0.4":
-  version: 0.0.4
-  resolution: "canonical-json@npm:0.0.4"
-  checksum: 10c0/bf130f4f6284a84860e16ef43a005544c98b8d334c128d3b3af006a586b4666b228bc2c5ef20ff9bedeaeffa45b2e862ad5e26eb6635dae7237c7c8b50f73096
   languageName: node
   linkType: hard
 
@@ -11871,6 +11864,13 @@ __metadata:
   version: 3.0.1
   resolution: "json-buffer@npm:3.0.1"
   checksum: 10c0/0d1c91569d9588e7eef2b49b59851f297f3ab93c7b35c7c221e288099322be6b562767d11e4821da500f3219542b9afd2e54c5dc573107c1126ed1080f8e96d7
+  languageName: node
+  linkType: hard
+
+"json-canonicalize@npm:^2.0.0":
+  version: 2.0.0
+  resolution: "json-canonicalize@npm:2.0.0"
+  checksum: 10c0/35c698a4b8aa6afb274b2144e778eaae6a58d9b18f1738a5118b70daa92542b2eed7ec75b2eea39d6e448e57527f267d0c47f12eae7e205e350a546d9f5d5f6b
   languageName: node
   linkType: hard
 

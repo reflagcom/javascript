@@ -23,12 +23,14 @@ export type FlagItem = {
   flagKey: string;
   localOverride: boolean | null;
   isEnabled: boolean;
+  isLiveTargeting: boolean;
 };
 
 type Flag = {
   flagKey: string;
   isEnabled: boolean;
   localOverride: boolean | null;
+  isLiveTargeting: boolean;
 };
 
 export default function Toolbar({
@@ -57,6 +59,7 @@ export default function Toolbar({
               flagKey: flag.key,
               localOverride: flag.isEnabledOverride,
               isEnabled: flag.isEnabled,
+              isLiveTargeting: reflagClient.isFlagLiveTargeting(flag.key),
             }) satisfies FlagItem,
         ),
     );
@@ -69,6 +72,7 @@ export default function Toolbar({
   useEffect(() => {
     updateFlags();
     reflagClient.on("flagsUpdated", updateFlags);
+    reflagClient.on("liveTargetingUpdated", updateFlags);
   }, [reflagClient, updateFlags]);
 
   const [search, setSearch] = useState<string | null>(null);

@@ -61,9 +61,6 @@
 }
 
 .flag-name-cell {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   width: auto;
   padding: 6px 6px 6px 0;
   display: flex;
@@ -75,6 +72,21 @@
     width: 15px;
     color: var(--dimmed-color);
   }
+}
+
+.flag-name-content {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.live-targeting-indicator {
+  color: var(--brand400);
+  line-height: 0;
+}
+.live-targeting-indicator svg {
+  width: 14px;
+  height: 14px;
 }
 
 .flag-link {
