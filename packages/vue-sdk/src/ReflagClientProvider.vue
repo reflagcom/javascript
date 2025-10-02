@@ -7,7 +7,9 @@ import { ReflagClientProviderProps } from "./types";
 const { client, initialLoading = true } =
   defineProps<ReflagClientProviderProps>();
 
-const isLoading = ref(initialLoading);
+const isLoading = ref(
+  client.getState() !== "initialized" ? initialLoading : false,
+);
 useOnEvent(
   "stateUpdated",
   (state) => {

@@ -34,7 +34,9 @@ const client = useReflagClient(
   debug,
 );
 
-const isLoading = ref(initialLoading);
+const isLoading = ref(
+  client.getState() !== "initialized" ? initialLoading : false,
+);
 useOnEvent(
   "stateUpdated",
   (state) => {
