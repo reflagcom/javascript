@@ -45,6 +45,10 @@ const fetchClient: HttpClient = {
       method: "get",
       headers,
       signal: AbortSignal.timeout(timeoutMs),
+      // We must use no-cache to avoid services such as Next.js from caching the response indefinitely.
+      // We also can't use no-store because of Next.js error withRetry https://github.com/vercel/next.js/discussions/54036.
+      // We also have local caching in the SDKs, so we don't need to cache the response.
+      cache: "no-cache",
     });
 
     const json = await response.json();
@@ -67,7 +71,7 @@ const fetchClient: HttpClient = {
  */
 export async function withRetry<T>(
   fn: () => Promise<T>,
-  onFailedTry: () => void,
+  onFailedTry: (error: unknown) => void,
   maxRetries: number,
   baseDelay: number,
   maxDelay: number,
@@ -84,7 +88,7 @@ export async function withRetry<T>(
         break;
       }
 
-      onFailedTry();
+      onFailedTry(error);
 
       // Calculate exponential backoff with jitter
       const delay = Math.min(

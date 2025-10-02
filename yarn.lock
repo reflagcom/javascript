@@ -2952,7 +2952,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@reflag/browser-sdk@npm:1.1.0, @reflag/browser-sdk@workspace:packages/browser-sdk":
+"@reflag/browser-sdk@npm:1.2.0, @reflag/browser-sdk@workspace:packages/browser-sdk":
   version: 0.0.0-use.local
   resolution: "@reflag/browser-sdk@workspace:packages/browser-sdk"
   dependencies:
@@ -2964,9 +2964,9 @@ __metadata:
     "@types/node": "npm:^22.12.0"
     "@vitest/coverage-v8": "npm:^2.0.4"
     c8: "npm:~10.1.3"
-    canonical-json: "npm:^0.0.4"
     eslint: "npm:^9.21.0"
     eslint-config-preact: "npm:^1.5.0"
+    fast-equals: "npm:^5.2.2"
     http-server: "npm:^14.1.1"
     js-cookie: "npm:^3.0.5"
     jsdom: "npm:^24.1.0"
@@ -3055,7 +3055,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@reflag/node-sdk@npm:1.0.1, @reflag/node-sdk@workspace:packages/node-sdk":
+"@reflag/node-sdk@npm:1.1.0, @reflag/node-sdk@workspace:^, @reflag/node-sdk@workspace:packages/node-sdk":
   version: 0.0.0-use.local
   resolution: "@reflag/node-sdk@workspace:packages/node-sdk"
   dependencies:
@@ -3083,7 +3083,7 @@ __metadata:
   dependencies:
     "@openfeature/core": "npm:1.5.0"
     "@openfeature/web-sdk": "npm:^1.3.0"
-    "@reflag/browser-sdk": "npm:1.1.0"
+    "@reflag/browser-sdk": "npm:1.2.0"
     "@reflag/eslint-config": "npm:0.0.2"
     "@reflag/tsconfig": "npm:0.0.2"
     "@types/node": "npm:^22.12.0"
@@ -3107,7 +3107,7 @@ __metadata:
     "@openfeature/core": "npm:^1.5.0"
     "@openfeature/server-sdk": "npm:>=1.16.1"
     "@reflag/eslint-config": "npm:~0.0.2"
-    "@reflag/node-sdk": "npm:1.0.1"
+    "@reflag/node-sdk": "npm:1.1.0"
     "@reflag/tsconfig": "npm:~0.0.2"
     "@types/node": "npm:^22.12.0"
     eslint: "npm:^9.21.0"
@@ -3127,7 +3127,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@reflag/react-sdk@workspace:packages/react-sdk"
   dependencies:
-    "@reflag/browser-sdk": "npm:1.1.0"
+    "@reflag/browser-sdk": "npm:1.2.0"
     "@reflag/eslint-config": "npm:^0.0.2"
     "@reflag/tsconfig": "npm:^0.0.2"
     "@testing-library/react": "npm:^15.0.7"
@@ -3136,7 +3136,6 @@ __metadata:
     "@types/react": "npm:^18.3.2"
     "@types/react-dom": "npm:^18.3.0"
     "@types/webpack": "npm:^5.28.5"
-    canonical-json: "npm:^0.0.4"
     eslint: "npm:^9.21.0"
     jsdom: "npm:^24.1.0"
     msw: "npm:^2.3.5"
@@ -3168,14 +3167,13 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@reflag/vue-sdk@workspace:packages/vue-sdk"
   dependencies:
-    "@reflag/browser-sdk": "npm:1.1.0"
+    "@reflag/browser-sdk": "npm:1.2.0"
     "@reflag/eslint-config": "npm:^0.0.2"
     "@reflag/tsconfig": "npm:^0.0.2"
     "@types/jsdom": "npm:^21.1.6"
     "@types/node": "npm:^22.12.0"
     "@vitejs/plugin-vue": "npm:^5.2.4"
     "@vue/test-utils": "npm:^2.3.2"
-    canonical-json: "npm:^0.2.0"
     eslint: "npm:^9.21.0"
     eslint-plugin-vue: "npm:^9.28.0"
     jsdom: "npm:^24.1.0"
@@ -6597,22 +6595,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"canonical-json@npm:^0.0.4":
-  version: 0.0.4
-  resolution: "canonical-json@npm:0.0.4"
-  checksum: 10c0/bf130f4f6284a84860e16ef43a005544c98b8d334c128d3b3af006a586b4666b228bc2c5ef20ff9bedeaeffa45b2e862ad5e26eb6635dae7237c7c8b50f73096
-  languageName: node
-  linkType: hard
-
-"canonical-json@npm:^0.2.0":
-  version: 0.2.0
-  resolution: "canonical-json@npm:0.2.0"
-  bin:
-    canonical-json: canonical-json.js
-  checksum: 10c0/6764e0671bf0227523eeebc872f8cf14d544f0cf02b4c4512e87ebd0504fc74762193db0cc6ee2ba97f1217fc77834c03afdb108417b3c5782636858f7948040
-  languageName: node
-  linkType: hard
-
 "chai@npm:^4.3.10":
   version: 4.4.1
   resolution: "chai@npm:4.4.1"
@@ -9300,6 +9282,13 @@ __metadata:
   version: 3.1.3
   resolution: "fast-deep-equal@npm:3.1.3"
   checksum: 10c0/40dedc862eb8992c54579c66d914635afbec43350afbbe991235fdcb4e3a8d5af1b23ae7e79bef7d4882d0ecee06c3197488026998fb19f72dc95acff1d1b1d0
+  languageName: node
+  linkType: hard
+
+"fast-equals@npm:^5.2.2":
+  version: 5.2.2
+  resolution: "fast-equals@npm:5.2.2"
+  checksum: 10c0/2bfeac6317a8959a00e2134749323557e5df6dea3af24e4457297733eace8ce4313fcbca2cf4532f3a6792607461e80442cd8d3af148d5c2e4e98ad996d6e5b5
   languageName: node
   linkType: hard
 
@@ -13276,6 +13265,26 @@ __metadata:
   checksum: 10c0/d5792ad9aff56b42648456f9cced2f269100c4d4200590c2f4e419f3ad2c5795b57f7caf273bc336323f866dbb31268197b46a07016ca7e55637d68b53176b29
   languageName: node
   linkType: hard
+
+"nextjs-bootstrap-demo@workspace:packages/react-sdk/dev/nextjs-bootstrap-demo":
+  version: 0.0.0-use.local
+  resolution: "nextjs-bootstrap-demo@workspace:packages/react-sdk/dev/nextjs-bootstrap-demo"
+  dependencies:
+    "@reflag/node-sdk": "workspace:^"
+    "@reflag/react-sdk": "workspace:^"
+    "@types/node": "npm:^22.12.0"
+    "@types/react": "npm:^18"
+    "@types/react-dom": "npm:^18"
+    eslint: "npm:^8"
+    eslint-config-next: "npm:14.2.5"
+    next: "npm:14.2.21"
+    postcss: "npm:^8"
+    react: "npm:^18"
+    react-dom: "npm:^18"
+    tailwindcss: "npm:^3.4.1"
+    typescript: "npm:^5.7.3"
+  languageName: unknown
+  linkType: soft
 
 "nextjs-flag-demo@workspace:packages/react-sdk/dev/nextjs-flag-demo":
   version: 0.0.0-use.local
@@ -18136,11 +18145,11 @@ __metadata:
 
 "typescript@patch:typescript@npm%3A5.8.2#optional!builtin<compat/typescript>":
   version: 5.8.2
-  resolution: "typescript@patch:typescript@npm%3A5.8.2#optional!builtin<compat/typescript>::version=5.8.2&hash=5adc0c"
+  resolution: "typescript@patch:typescript@npm%3A5.8.2#optional!builtin<compat/typescript>::version=5.8.2&hash=5786d5"
   bin:
     tsc: bin/tsc
     tsserver: bin/tsserver
-  checksum: 10c0/8a6cd29dfb59bd5a978407b93ae0edb530ee9376a5b95a42ad057a6f80ffb0c410489ccd6fe48d1d0dfad6e8adf5d62d3874bbd251f488ae30e11a1ce6dabd28
+  checksum: 10c0/5448a08e595cc558ab321e49d4cac64fb43d1fa106584f6ff9a8d8e592111b373a995a1d5c7f3046211c8a37201eb6d0f1566f15cdb7a62a5e3be01d087848e2
   languageName: node
   linkType: hard
 
@@ -18156,21 +18165,21 @@ __metadata:
 
 "typescript@patch:typescript@npm%3A^5.5.4#optional!builtin<compat/typescript>":
   version: 5.5.4
-  resolution: "typescript@patch:typescript@npm%3A5.5.4#optional!builtin<compat/typescript>::version=5.5.4&hash=5adc0c"
+  resolution: "typescript@patch:typescript@npm%3A5.5.4#optional!builtin<compat/typescript>::version=5.5.4&hash=379a07"
   bin:
     tsc: bin/tsc
     tsserver: bin/tsserver
-  checksum: 10c0/10dd9881baba22763de859e8050d6cb6e2db854197495c6f1929b08d1eb2b2b00d0b5d9b0bcee8472f1c3f4a7ef6a5d7ebe0cfd703f853aa5ae465b8404bc1ba
+  checksum: 10c0/73409d7b9196a5a1217b3aaad929bf76294d3ce7d6e9766dd880ece296ee91cf7d7db6b16c6c6c630ee5096eccde726c0ef17c7dfa52b01a243e57ae1f09ef07
   languageName: node
   linkType: hard
 
 "typescript@patch:typescript@npm%3A^5.7.3#optional!builtin<compat/typescript>":
   version: 5.7.3
-  resolution: "typescript@patch:typescript@npm%3A5.7.3#optional!builtin<compat/typescript>::version=5.7.3&hash=5adc0c"
+  resolution: "typescript@patch:typescript@npm%3A5.7.3#optional!builtin<compat/typescript>::version=5.7.3&hash=5786d5"
   bin:
     tsc: bin/tsc
     tsserver: bin/tsserver
-  checksum: 10c0/3b56d6afa03d9f6172d0b9cdb10e6b1efc9abc1608efd7a3d2f38773d5d8cfb9bbc68dfb72f0a7de5e8db04fc847f4e4baeddcd5ad9c9feda072234f0d788896
+  checksum: 10c0/6fd7e0ed3bf23a81246878c613423730c40e8bdbfec4c6e4d7bf1b847cbb39076e56ad5f50aa9d7ebd89877999abaee216002d3f2818885e41c907caaa192cc4
   languageName: node
   linkType: hard
 

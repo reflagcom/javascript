@@ -8,7 +8,7 @@ const track = useTrack();
 
 <template>
   <Section title="Custom track event">
-    <button @click="track('Huddle Started', { huddleType: 'voice' })">
+    <button @click="track('Huddles Started', { huddlesType: 'voice' })">
       Send custom track event
     </button>
   </Section>

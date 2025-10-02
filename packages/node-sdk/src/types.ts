@@ -125,6 +125,19 @@ export interface RawFlag {
   missingContextFields?: string[];
 }
 
+/**
+ * Describes a collection of evaluated raw flags.
+ */
+export type RawFlags = Record<TypedFlagKey, RawFlag>;
+
+/**
+ * Describes a collection of evaluated raw flags and the context for bootstrapping.
+ */
+export type BootstrappedFlags = {
+  context: Context;
+  flags: RawFlags;
+};
+
 export type EmptyFlagRemoteConfig = { key: undefined; payload: undefined };
 
 /**
@@ -395,7 +408,7 @@ export type EvaluatedFlagsAPIResponse = {
   /**
    * The feature definitions.
    */
-  features: Record<string, RawFlag>;
+  features: RawFlags;
 };
 
 /**
@@ -518,6 +531,11 @@ export type Cache<T> = {
    * @returns A promise that resolves when the refresh is complete.
    **/
   waitRefresh: () => Promise<void> | undefined;
+
+  /**
+   * Cleanup and destroy the cache, stopping any background processes.
+   **/
+  destroy: () => void;
 };
 
 /**

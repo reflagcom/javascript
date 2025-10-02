@@ -23,6 +23,7 @@ import inRequestCache from "./inRequestCache";
 import periodicallyUpdatingCache from "./periodicallyUpdatingCache";
 import { newRateLimiter } from "./rate-limiter";
 import type {
+  BootstrappedFlags,
   CachedFlagDefinition,
   CacheStrategy,
   EvaluatedFlagsAPIResponse,
@@ -31,6 +32,7 @@ import type {
   FlagOverridesFn,
   IdType,
   RawFlag,
+  RawFlags,
   TypedFlagKey,
 } from "./types";
 import {
@@ -123,7 +125,7 @@ export class ReflagClient {
     refetchInterval: number;
     staleWarningInterval: number;
     headers: Record<string, string>;
-    fallbackFlags?: Record<TypedFlagKey, RawFlag>;
+    fallbackFlags?: RawFlags;
     flagOverrides: FlagOverridesFn;
     offline: boolean;
     configFile?: string;
@@ -258,16 +260,13 @@ export class ReflagClient {
       : applyLogLevel(decorateLogger(REFLAG_LOG_PREFIX, console), logLevel);
 
     const fallbackFlags = Array.isArray(options.fallbackFlags)
-      ? options.fallbackFlags.reduce(
-          (acc, key) => {
-            acc[key as TypedFlagKey] = {
-              isEnabled: true,
-              key,
-            };
-            return acc;
-          },
-          {} as Record<TypedFlagKey, RawFlag>,
-        )
+      ? options.fallbackFlags.reduce((acc, key) => {
+          acc[key as TypedFlagKey] = {
+            isEnabled: true,
+            key,
+          };
+          return acc;
+        }, {} as RawFlags)
       : isObject(options.fallbackFlags)
         ? Object.entries(options.fallbackFlags).reduce(
             (acc, [key, fallback]) => {
@@ -287,7 +286,7 @@ export class ReflagClient {
               };
               return acc;
             },
-            {} as Record<TypedFlagKey, RawFlag>,
+            {} as RawFlags,
           )
         : undefined;
 
@@ -600,6 +599,19 @@ export class ReflagClient {
   }
 
   /**
+   * Destroys the client and cleans up all resources including timers and background processes.
+   *
+   * @remarks
+   * After calling this method, the client should not be used anymore.
+   * This is particularly useful in development environments with hot reloading to prevent
+   * multiple background processes from running simultaneously.
+   */
+  public destroy() {
+    this.flagsCache.destroy();
+    this.batchBuffer.destroy();
+  }
+
+  /**
    * Gets the flag definitions, including all config values.
    * To evaluate which flags are enabled for a given user/company, use `getFlags`.
    *
@@ -634,7 +646,14 @@ export class ReflagClient {
     enableTracking = true,
     ...context
   }: ContextWithTracking): TypedFlags {
-    return this._getFlags({ enableTracking, ...context });
+    const contextWithTracking = { enableTracking, ...context };
+    const rawFlags = this._getFlags(contextWithTracking);
+    return Object.fromEntries(
+      Object.entries(rawFlags).map(([key, rawFlag]) => [
+        key,
+        this._wrapRawFlag(contextWithTracking, rawFlag),
+      ]),
+    );
   }
 
   /**
@@ -651,7 +670,40 @@ export class ReflagClient {
     { enableTracking = true, ...context }: ContextWithTracking,
     key: TKey,
   ): TypedFlags[TKey] {
-    return this._getFlags({ enableTracking, ...context }, key);
+    const contextWithTracking = { enableTracking, ...context };
+    const rawFlag = this._getFlags(contextWithTracking, key);
+    return this._wrapRawFlag(
+      { enableChecks: true, ...contextWithTracking },
+      rawFlag ?? { key },
+    );
+  }
+
+  /**
+   * Gets the evaluated flags for the current context without wrapping them in getters.
+   * This method returns raw flag data suitable for bootstrapping client-side applications.
+   *
+   * @param options - The options for the context.
+   * @param options.enableTracking - Whether to enable tracking for the context.
+   * @param options.meta - The meta context associated with the context.
+   * @param options.user - The user context.
+   * @param options.company - The company context.
+   * @param options.other - The other context.
+   *
+   * @returns The evaluated raw flags and the context.
+   *
+   * @remarks
+   * Call `initialize` before calling this method to ensure the flag definitions are cached, no flags will be returned otherwise.
+   * This method returns RawFlag objects without wrapping them in getters, making them suitable for serialization.
+   **/
+  public getFlagsForBootstrap({
+    enableTracking = true,
+    ...context
+  }: ContextWithTracking): BootstrappedFlags {
+    const contextWithTracking = { enableTracking, ...context };
+    return {
+      context: contextWithTracking,
+      flags: this._getFlags(contextWithTracking),
+    };
   }
 
   /**
@@ -1003,15 +1055,15 @@ export class ReflagClient {
     }
   }
 
-  private _getFlags(options: ContextWithTracking): TypedFlags;
+  private _getFlags(options: ContextWithTracking): RawFlags;
   private _getFlags<TKey extends TypedFlagKey>(
     options: ContextWithTracking,
     key: TKey,
-  ): TypedFlags[TKey];
+  ): RawFlag | undefined;
   private _getFlags<TKey extends TypedFlagKey>(
     options: ContextWithTracking,
     key?: TKey,
-  ): TypedFlags | TypedFlags[TKey] {
+  ): RawFlags | RawFlag | undefined {
     checkContextWithTracking(options);
 
     if (!this.initializationFinished) {
@@ -1029,17 +1081,9 @@ export class ReflagClient {
         );
         const fallbackFlags = this._config.fallbackFlags || {};
         if (key) {
-          return this._wrapRawFlag(
-            { ...options, enableChecks: true },
-            { key, ...fallbackFlags[key] },
-          );
+          return fallbackFlags[key];
         }
-        return Object.fromEntries(
-          Object.entries(fallbackFlags).map(([k, v]) => [
-            k as TypedFlagKey,
-            this._wrapRawFlag(options, v),
-          ]),
-        );
+        return fallbackFlags;
       }
       flagDefinitions = flagDefs;
     }
@@ -1064,28 +1108,24 @@ export class ReflagClient {
           } satisfies EvaluationResult<any>),
       }));
 
-    let evaluatedFlags = evaluated.reduce(
-      (acc, res) => {
-        acc[res.flagKey as TypedFlagKey] = {
-          key: res.flagKey,
-          isEnabled: res.enabledResult.value ?? false,
-          ruleEvaluationResults: res.enabledResult.ruleEvaluationResults,
-          missingContextFields: res.enabledResult.missingContextFields,
-          targetingVersion: res.targetingVersion,
-          config: {
-            key: res.configResult?.value?.key,
-            payload: res.configResult?.value?.payload,
-            targetingVersion: res.configVersion,
-            ruleEvaluationResults: res.configResult?.ruleEvaluationResults,
-            missingContextFields: res.configResult?.missingContextFields,
-          },
-        };
-        return acc;
-      },
-      {} as Record<TypedFlagKey, RawFlag>,
-    );
+    let evaluatedFlags = evaluated.reduce((acc, res) => {
+      acc[res.flagKey as TypedFlagKey] = {
+        key: res.flagKey,
+        isEnabled: res.enabledResult.value ?? false,
+        ruleEvaluationResults: res.enabledResult.ruleEvaluationResults,
+        missingContextFields: res.enabledResult.missingContextFields,
+        targetingVersion: res.targetingVersion,
+        config: {
+          key: res.configResult?.value?.key,
+          payload: res.configResult?.value?.payload,
+          targetingVersion: res.configVersion,
+          ruleEvaluationResults: res.configResult?.ruleEvaluationResults,
+          missingContextFields: res.configResult?.missingContextFields,
+        },
+      };
+      return acc;
+    }, {} as RawFlags);
 
-    // apply flag overrides
     const overrides = Object.entries(this._config.flagOverrides(context))
       .filter(([flagKey]) => (key ? key === flagKey : true))
       .map(([flagKey, override]) => [
@@ -1112,18 +1152,10 @@ export class ReflagClient {
     }
 
     if (key) {
-      return this._wrapRawFlag(
-        { ...options, enableChecks: true },
-        { key, ...evaluatedFlags[key] },
-      );
+      return evaluatedFlags[key];
     }
 
-    return Object.fromEntries(
-      Object.entries(evaluatedFlags).map(([k, v]) => [
-        k as TypedFlagKey,
-        this._wrapRawFlag(options, v),
-      ]),
-    );
+    return evaluatedFlags;
   }
 
   private _wrapRawFlag<TKey extends TypedFlagKey>(
@@ -1336,6 +1368,16 @@ export class BoundReflagClient {
   }
 
   /**
+   * Get raw flags for the user/company/other context bound to this client without wrapping them in getters.
+   * This method returns raw flag data suitable for bootstrapping client-side applications.
+   *
+   * @returns Raw flags for the given user/company and whether each one is enabled or not
+   */
+  public getFlagsForBootstrap(): BootstrappedFlags {
+    return this._client.getFlagsForBootstrap({ ...this._options });
+  }
+
+  /**
    * Get a specific flag for the user/company/other context bound to this client.
    * Using the `isEnabled` property sends a `check` event to Reflag.
    *
@@ -1464,9 +1506,7 @@ function checkMeta(
   );
 }
 
-function checkContextWithTracking(
-  context: ContextWithTracking,
-): asserts context is ContextWithTracking & { enableTracking: boolean } {
+function checkContext(context: Context): asserts context is Context {
   ok(isObject(context), "context must be an object");
   ok(
     typeof context.user === "undefined" || isObject(context.user),
@@ -1488,6 +1528,13 @@ function checkContextWithTracking(
     context.other === undefined || isObject(context.other),
     "other must be an object if given",
   );
+}
+
+function checkContextWithTracking(
+  context: ContextWithTracking,
+): asserts context is ContextWithTracking & { enableTracking: boolean } {
+  checkContext(context);
+
   ok(
     typeof context.enableTracking === "boolean",
     "enableTracking must be a boolean",

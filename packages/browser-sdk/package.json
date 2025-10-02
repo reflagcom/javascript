@@ -1,6 +1,6 @@
 {
   "name": "@reflag/browser-sdk",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "packageManager": "yarn@4.1.1",
   "license": "MIT",
   "repository": {
@@ -13,15 +13,16 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --project tsconfig.build.json && vite build",
-    "test": "tsc --project tsconfig.json && vitest -c vitest.config.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "test:e2e": "yarn build && playwright test",
-    "test:ci": "tsc --project tsconfig.json && vitest run -c vitest.config.ts --reporter=default --reporter=junit --outputFile=junit.xml && yarn test:e2e",
-    "coverage": "vitest run --coverage",
+    "test:ci": "yarn test --reporter=default --reporter=junit --outputFile=junit.xml && yarn test:e2e",
+    "coverage": "yarn test --coverage",
     "lint": "eslint .",
     "lint:ci": "eslint --output-file eslint-report.json --format json .",
     "prettier": "prettier --check .",
     "format": "yarn lint --fix && yarn prettier --write",
-    "preversion": "yarn lint && yarn prettier && yarn vitest run -c vitest.config.ts && yarn build"
+    "preversion": "yarn lint && yarn prettier && yarn test && yarn build"
   },
   "files": [
     "dist"
@@ -37,7 +38,7 @@
   },
   "dependencies": {
     "@floating-ui/dom": "^1.6.8",
-    "canonical-json": "^0.0.4",
+    "fast-equals": "^5.2.2",
     "js-cookie": "^3.0.5",
     "preact": "^10.22.1"
   },

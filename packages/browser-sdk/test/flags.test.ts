@@ -2,7 +2,7 @@ import { afterAll, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { version } from "../package.json";
 import { FLAGS_EXPIRE_MS } from "../src/config";
-import { FetchedFlag, FlagsClient, RawFlag } from "../src/flag/flags";
+import { FlagsClient, RawFlag } from "../src/flag/flags";
 import { HttpClient } from "../src/httpClient";
 
 import { flagsResult } from "./mocks/handlers";
@@ -235,7 +235,7 @@ describe("FlagsClient", () => {
           isEnabled: true,
           key: "flagB",
           targetingVersion: 1,
-        } satisfies FetchedFlag,
+        } satisfies RawFlag,
       },
     };
 
@@ -357,7 +357,7 @@ describe("FlagsClient", () => {
     expect(client.getFlags().flagA.isEnabledOverride).toBe(false);
   });
 
-  test("handled overrides for flags not returned by API", async () => {
+  test("ignores overrides for flags not returned by API", async () => {
     // change the response so we can validate that we'll serve the stale cache
     const { newFlagsClient } = flagsClientFactory();
 
@@ -373,9 +373,198 @@ describe("FlagsClient", () => {
     expect(client.getFlags().flagB.isEnabled).toBe(true);
     expect(client.getFlags().flagB.isEnabledOverride).toBe(null);
 
+    // Setting an override for a flag that doesn't exist in fetched flags
+    // should not trigger an update since the merged flags don't change
     client.setFlagOverride("flagC", true);
 
-    expect(updated).toBe(true);
+    expect(updated).toBe(false);
     expect(client.getFlags().flagC).toBeUndefined();
+  });
+
+  describe("pre-fetched flags", () => {
+    test("should have flags available when bootstrapped flags are provided in constructor", () => {
+      const { httpClient } = flagsClientFactory();
+      const preFetchedFlags = {
+        testFlag: {
+          key: "testFlag",
+          isEnabled: true,
+          targetingVersion: 1,
+        },
+        configFlag: {
+          key: "configFlag",
+          isEnabled: false,
+          targetingVersion: 2,
+          config: {
+            key: "config1",
+            version: 1,
+            payload: { value: "test" },
+          },
+        },
+      };
+
+      const flagsClient = new FlagsClient(
+        httpClient,
+        {
+          user: { id: "123" },
+          company: { id: "456" },
+          other: { eventId: "big-conference1" },
+        },
+        testLogger,
+        {
+          bootstrappedFlags: preFetchedFlags,
+        },
+      );
+
+      // Should be bootstrapped but not initialized until initialize() is called
+      expect(flagsClient["bootstrapped"]).toBe(true);
+      expect(flagsClient["initialized"]).toBe(false);
+
+      // Should have the flags available even before initialize()
+      expect(flagsClient.getFlags()).toEqual({
+        testFlag: {
+          key: "testFlag",
+          isEnabled: true,
+          targetingVersion: 1,
+          isEnabledOverride: null,
+        },
+        configFlag: {
+          key: "configFlag",
+          isEnabled: false,
+          targetingVersion: 2,
+          config: {
+            key: "config1",
+            version: 1,
+            payload: { value: "test" },
+          },
+          isEnabledOverride: null,
+        },
+      });
+    });
+
+    test("should skip fetching when already initialized with pre-fetched flags", async () => {
+      const { httpClient } = flagsClientFactory();
+      vi.spyOn(httpClient, "get");
+
+      const preFetchedFlags = {
+        testFlag: {
+          key: "testFlag",
+          isEnabled: true,
+          targetingVersion: 1,
+        },
+      };
+
+      const flagsClient = new FlagsClient(
+        httpClient,
+        {
+          user: { id: "123" },
+          company: { id: "456" },
+          other: { eventId: "big-conference1" },
+        },
+        testLogger,
+        {
+          bootstrappedFlags: preFetchedFlags,
+        },
+      );
+
+      // Call initialize() after flags are already provided
+      await flagsClient.initialize();
+
+      // Should not have made any HTTP requests since already initialized
+      expect(httpClient.get).not.toHaveBeenCalled();
+
+      // Should still have the flags available
+      expect(flagsClient.getFlags()).toEqual({
+        testFlag: {
+          key: "testFlag",
+          isEnabled: true,
+          targetingVersion: 1,
+          isEnabledOverride: null,
+        },
+      });
+    });
+
+    test("should trigger onUpdated when pre-fetched flags are set", async () => {
+      const { httpClient } = flagsClientFactory();
+      const preFetchedFlags = {
+        testFlag: {
+          key: "testFlag",
+          isEnabled: true,
+          targetingVersion: 1,
+        },
+      };
+
+      const flagsClient = new FlagsClient(
+        httpClient,
+        {
+          user: { id: "123" },
+          company: { id: "456" },
+          other: { eventId: "big-conference1" },
+        },
+        testLogger,
+        {
+          bootstrappedFlags: preFetchedFlags,
+        },
+      );
+
+      let updateTriggered = false;
+      flagsClient.onUpdated(() => {
+        updateTriggered = true;
+      });
+
+      // Trigger the flags updated event by setting context (which should still fetch)
+      await flagsClient.setContext({
+        user: { id: "456" },
+        company: { id: "789" },
+        other: { eventId: "other-conference" },
+      });
+
+      expect(updateTriggered).toBe(true);
+    });
+
+    test("should work with fallback flags when initialization fails", async () => {
+      const { httpClient } = flagsClientFactory();
+      vi.spyOn(httpClient, "get").mockRejectedValue(
+        new Error("Failed to fetch flags"),
+      );
+
+      const preFetchedFlags = {
+        testFlag: {
+          key: "testFlag",
+          isEnabled: true,
+          targetingVersion: 1,
+        },
+      };
+
+      const flagsClient = new FlagsClient(
+        httpClient,
+        {
+          user: { id: "123" },
+          company: { id: "456" },
+          other: { eventId: "big-conference1" },
+        },
+        testLogger,
+        {
+          bootstrappedFlags: preFetchedFlags,
+          fallbackFlags: ["fallbackFlag"],
+        },
+      );
+
+      // Should be bootstrapped but not initialized until initialize() is called
+      expect(flagsClient["bootstrapped"]).toBe(true);
+      expect(flagsClient["initialized"]).toBe(false);
+      expect(flagsClient.getFlags()).toEqual({
+        testFlag: {
+          key: "testFlag",
+          isEnabled: true,
+          targetingVersion: 1,
+          isEnabledOverride: null,
+        },
+      });
+
+      // Calling initialize should not fetch since already bootstrapped
+      await flagsClient.initialize();
+      expect(httpClient.get).not.toHaveBeenCalled();
+      expect(flagsClient["initialized"]).toBe(true);
+    });
   });
 });

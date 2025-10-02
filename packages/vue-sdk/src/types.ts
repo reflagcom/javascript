@@ -1,10 +1,13 @@
 import type { Ref } from "vue";
 
 import type {
+  CompanyContext,
   InitOptions,
+  RawFlags,
   ReflagClient,
   ReflagContext,
   RequestFeedbackData,
+  UserContext,
 } from "@reflag/browser-sdk";
 
 export type EmptyFlagRemoteConfig = { key: undefined; payload: undefined };
@@ -47,21 +50,93 @@ export type TypedFlags = keyof Flags extends never
 export type FlagKey = keyof TypedFlags;
 
 export interface ProviderContextType {
-  client: Ref<ReflagClient>;
+  client: ReflagClient;
   isLoading: Ref<boolean>;
-  updatedCount: Ref<number>;
-  provider: boolean;
 }
 
-export type ReflagProps = ReflagContext &
-  InitOptions & {
-    debug?: boolean;
-    newReflagClient?: (
-      ...args: ConstructorParameters<typeof ReflagClient>
-    ) => ReflagClient;
-  };
+export type BootstrappedFlags = {
+  context: ReflagContext;
+  flags: RawFlags;
+};
 
 export type RequestFlagFeedbackOptions = Omit<
   RequestFeedbackData,
   "flagKey" | "featureId"
 >;
+
+/**
+ * Base init options for the ReflagProvider and ReflagBootstrappedProvider.
+ * @internal
+ */
+export type ReflagInitOptionsBase = Omit<
+  InitOptions,
+  "user" | "company" | "other" | "otherContext" | "bootstrappedFlags"
+>;
+
+/**
+ * Base props for the ReflagProvider and ReflagBootstrappedProvider.
+ * @internal
+ */
+export type ReflagBaseProps = {
+  /**
+   * Set to `true` to show the loading component while the client is initializing.
+   */
+  initialLoading?: boolean;
+
+  /**
+   * Set to `true` to enable debug logging to the console.
+   */
+  debug?: boolean;
+};
+
+/**
+ * Props for the ReflagClientProvider.
+ */
+export type ReflagClientProviderProps = Omit<ReflagBaseProps, "debug"> & {
+  /**
+   * A pre-initialized ReflagClient to use.
+   */
+  client: ReflagClient;
+};
+
+/**
+ * Props for the ReflagProvider.
+ */
+export type ReflagProps = ReflagInitOptionsBase &
+  ReflagBaseProps & {
+    /**
+     * The context to use for the ReflagClient containing user, company, and other context.
+     */
+    context?: ReflagContext;
+
+    /**
+     * Company related context. If you provide `id` Reflag will enrich the evaluation context with
+     * company attributes on Reflag servers.
+     * @deprecated Use `context` instead, this property will be removed in the next major version
+     */
+    company?: CompanyContext;
+
+    /**
+     * User related context. If you provide `id` Reflag will enrich the evaluation context with
+     * user attributes on Reflag servers.
+     * @deprecated Use `context` instead, this property will be removed in the next major version
+     */
+    user?: UserContext;
+
+    /**
+     * Context which is not related to a user or a company.
+     * @deprecated Use `context` instead, this property will be removed in the next major version
+     */
+    otherContext?: Record<string, string | number | undefined>;
+  };
+
+/**
+ * Props for the ReflagBootstrappedProvider.
+ */
+export type ReflagBootstrappedProps = ReflagInitOptionsBase &
+  ReflagBaseProps & {
+    /**
+     * Pre-fetched flags to be used instead of fetching them from the server.
+     */
+    flags: BootstrappedFlags;
+  };

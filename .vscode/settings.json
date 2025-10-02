@@ -20,6 +20,9 @@
   "[typescriptreact]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
+  "[vue]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
   "[yaml]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
@@ -32,6 +35,7 @@
     "**/node_modules": true
   },
   "search.exclude": {
+    "**/.next": true,
     "**/build": true,
     "**/dist": true,
     "**/coverage": true,

@@ -56,6 +56,11 @@ module.exports = [
         // https://github.com/import-js/eslint-plugin-import/issues/2556
         espree: [".js", ".cjs", ".mjs", ".jsx"],
       },
+      "import/resolver": {
+        typescript: {
+          alwaysTryTypes: true,
+        },
+      },
     },
     rules: {
       ...jsPlugin.configs.recommended.rules,
@@ -119,7 +124,6 @@ module.exports = [
       "import/resolver": {
         ...importsPlugin.configs.typescript.settings["import/resolver"],
         typescript: {
-          alwaysTryTypes: true,
           project: "./tsconfig.json",
         },
       },

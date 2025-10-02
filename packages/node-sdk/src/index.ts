@@ -3,6 +3,7 @@ export { EdgeClient, EdgeClientOptions } from "./edgeClient";
 export type {
   Attributes,
   BatchBufferOptions,
+  BootstrappedFlags,
   CacheStrategy,
   ClientOptions,
   Context,
@@ -25,6 +26,7 @@ export type {
   LogLevel,
   RawFlag,
   RawFlagRemoteConfig,
+  RawFlags,
   TrackingMeta,
   TrackOptions,
   TypedFlagKey,

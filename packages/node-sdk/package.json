@@ -1,6 +1,6 @@
 {
   "name": "@reflag/node-sdk",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -10,14 +10,15 @@
     "dev": "vite",
     "start": "vite",
     "build": "tsc --project tsconfig.build.json",
-    "test": "vitest -c vite.config.js",
-    "test:ci": "vitest run -c vite.config.js --reporter=default --reporter=junit --outputFile=junit.xml",
-    "coverage": "vitest run --coverage",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ci": "yarn test --reporter=default --reporter=junit --outputFile=junit.xml",
+    "coverage": "yarn test --coverage",
     "lint": "eslint .",
     "lint:ci": "eslint --output-file eslint-report.json --format json .",
     "prettier": "prettier --check .",
     "format": "yarn lint --fix && yarn prettier --write",
-    "preversion": "yarn lint && yarn prettier && yarn vitest run -c vite.config.js && yarn build"
+    "preversion": "yarn lint && yarn prettier && yarn test && yarn build"
   },
   "files": [
     "dist"

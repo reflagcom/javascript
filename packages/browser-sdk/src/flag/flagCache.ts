@@ -1,4 +1,4 @@
-import { FetchedFlags } from "./flags";
+import { RawFlags } from "./flags";
 
 interface StorageItem {
   get(): string | null;
@@ -8,18 +8,16 @@ interface StorageItem {
 interface cacheEntry {
   expireAt: number;
   staleAt: number;
-  flags: FetchedFlags;
+  flags: RawFlags;
 }
 
 // Parse and validate an API flags response
-export function parseAPIFlagsResponse(
-  flagsInput: any,
-): FetchedFlags | undefined {
+export function parseAPIFlagsResponse(flagsInput: any): RawFlags | undefined {
   if (!isObject(flagsInput)) {
     return;
   }
 
-  const flags: FetchedFlags = {};
+  const flags: RawFlags = {};
   for (const key in flagsInput) {
     const flag = flagsInput[key];
 
@@ -49,7 +47,7 @@ export function parseAPIFlagsResponse(
 }
 
 export interface CacheResult {
-  flags: FetchedFlags;
+  flags: RawFlags;
   stale: boolean;
 }
 
@@ -77,7 +75,7 @@ export class FlagCache {
     {
       flags,
     }: {
-      flags: FetchedFlags;
+      flags: RawFlags;
     },
   ) {
     let cacheData: CacheData = {};
@@ -157,7 +155,12 @@ function validateCacheData(cacheDataInput: any) {
   return cacheData;
 }
 
-// Simple object check.
-export function isObject(item: any): boolean {
-  return item && typeof item === "object" && !Array.isArray(item);
+/**
+ * Check if the given item is an object.
+ *
+ * @param item - The item to check.
+ * @returns `true` if the item is an object, `false` otherwise.
+ **/
+export function isObject(item: any): item is Record<string, any> {
+  return (item && typeof item === "object" && !Array.isArray(item)) || false;
 }

@@ -6,7 +6,12 @@ export type {
   ToolbarOptions,
 } from "./client";
 export { ReflagClient } from "./client";
-export type { CompanyContext, ReflagContext, UserContext } from "./context";
+export type {
+  CompanyContext,
+  ReflagContext,
+  ReflagDeprecatedContext,
+  UserContext,
+} from "./context";
 export type {
   Feedback,
   FeedbackOptions,
@@ -31,11 +36,11 @@ export type {
 export type {
   CheckEvent,
   FallbackFlagOverride,
-  FetchedFlag,
+  FlagOverrides,
   RawFlag,
   RawFlags,
 } from "./flag/flags";
-export type { HookArgs, TrackEvent } from "./hooksManager";
+export type { HookArgs, State, TrackEvent } from "./hooksManager";
 export type { Logger } from "./logger";
 export { feedbackContainerId, propagatedEvents } from "./ui/constants";
 export type {

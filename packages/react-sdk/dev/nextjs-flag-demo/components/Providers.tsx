@@ -12,8 +12,14 @@ export const Providers = ({ publishableKey, children }: Props) => {
   return (
     <ReflagProvider
       publishableKey={publishableKey}
-      company={{ id: "acme_inc" }}
-      user={{ id: "john doe" }}
+      context={{
+        company: { id: "demo-company", name: "Demo Company" },
+        user: {
+          id: "demo-user",
+          email: "demo-user@example.com",
+          "optin-huddles": "true",
+        },
+      }}
       fallbackFlags={["fallback-feature"]}
     >
       {children}

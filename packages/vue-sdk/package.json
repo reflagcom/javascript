@@ -1,6 +1,6 @@
 {
   "name": "@reflag/vue-sdk",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -12,14 +12,15 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --project tsconfig.build.json && vite build",
-    "test": "vitest -c vite.config.mjs",
-    "test:ci": "vitest run -c vite.config.mjs --reporter=default --reporter=junit --outputFile=junit.xml",
-    "coverage": "vitest run --coverage",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ci": "yarn test --reporter=default --reporter=junit --outputFile=junit.xml",
+    "coverage": "yarn test --coverage",
     "lint": "eslint .",
     "lint:ci": "eslint --output-file eslint-report.json --format json .",
     "prettier": "prettier --check .",
     "format": "yarn lint --fix && yarn prettier --write",
-    "preversion": "yarn lint && yarn prettier && yarn vitest run -c vite.config.mjs && yarn build"
+    "preversion": "yarn lint && yarn prettier && yarn test && yarn build"
   },
   "files": [
     "dist"
@@ -34,8 +35,7 @@
     }
   },
   "dependencies": {
-    "@reflag/browser-sdk": "1.1.0",
-    "canonical-json": "^0.2.0"
+    "@reflag/browser-sdk": "1.2.0"
   },
   "peerDependencies": {
     "vue": "^3.0.0"

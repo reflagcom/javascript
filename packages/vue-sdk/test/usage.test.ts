@@ -1,20 +1,45 @@
 import { mount } from "@vue/test-utils";
-import { describe, expect, test, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { defineComponent, h, nextTick } from "vue";
 
-import { ReflagProvider, useClient } from "../src";
+import { ReflagClient } from "@reflag/browser-sdk";
 
-const fakeClient = {
-  initialize: vi.fn().mockResolvedValue(undefined),
-  stop: vi.fn(),
-  on: vi.fn(),
-};
+import {
+  ReflagBootstrappedProvider,
+  ReflagProvider,
+  useClient,
+  useFlag,
+} from "../src";
+
+// Mock ReflagClient prototype methods like the React SDK tests
+beforeAll(() => {
+  vi.spyOn(ReflagClient.prototype, "initialize").mockResolvedValue(undefined);
+  vi.spyOn(ReflagClient.prototype, "stop").mockResolvedValue(undefined);
+  vi.spyOn(ReflagClient.prototype, "getFlag").mockReturnValue({
+    isEnabled: true,
+    config: { key: "default", payload: { message: "Hello" } },
+    track: vi.fn().mockResolvedValue(undefined),
+    requestFeedback: vi.fn(),
+    setIsEnabledOverride: vi.fn(),
+    isEnabledOverride: null,
+  });
+  vi.spyOn(ReflagClient.prototype, "getFlags").mockReturnValue({});
+  vi.spyOn(ReflagClient.prototype, "on").mockReturnValue(() => {
+    // cleanup function
+  });
+  vi.spyOn(ReflagClient.prototype, "off").mockImplementation(() => {
+    // off implementation
+  });
+});
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 function getProvider() {
   return {
     props: {
       publishableKey: "key",
-      newReflagClient: () => fakeClient,
     },
   };
 }
@@ -35,7 +60,7 @@ describe("ReflagProvider", () => {
     });
 
     await nextTick();
-    expect(wrapper.findComponent(Child).vm.client).toStrictEqual(fakeClient);
+    expect(wrapper.findComponent(Child).vm.client).toBeDefined();
   });
 
   test("throws without provider", () => {
@@ -48,5 +73,44 @@ describe("ReflagProvider", () => {
     });
 
     expect(() => mount(Comp)).toThrow();
+  });
+});
+
+describe("ReflagBootstrappedProvider", () => {
+  test("provides the client with bootstrapped flags", async () => {
+    const bootstrappedFlags = {
+      context: {
+        user: { id: "test-user" },
+        company: { id: "test-company" },
+      },
+      flags: {
+        "test-flag": {
+          key: "test-flag",
+          isEnabled: true,
+          config: { key: "default", payload: { message: "Hello" } },
+        },
+      },
+    };
+
+    const Child = defineComponent({
+      setup() {
+        const client = useClient();
+        const flag = useFlag("test-flag");
+        return { client, flag };
+      },
+      template: "<div></div>",
+    });
+
+    const wrapper = mount(ReflagBootstrappedProvider, {
+      props: {
+        publishableKey: "key",
+        flags: bootstrappedFlags,
+      },
+      slots: { default: () => h(Child) },
+    });
+
+    await nextTick();
+    expect(wrapper.findComponent(Child).vm.client).toBeDefined();
+    expect(wrapper.findComponent(Child).vm.flag.isEnabled.value).toBe(true);
   });
 });

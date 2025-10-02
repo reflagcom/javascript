@@ -1,4 +1,4 @@
-import { ReflagClient, CheckEvent, RawFlags } from "../../src";
+import { ReflagClient, RawFlags } from "../../src";
 
 const urlParams = new URLSearchParams(window?.location?.search);
 const publishableKey = urlParams.get("publishableKey");

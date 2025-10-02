@@ -41,6 +41,11 @@ vi.mock("../src/flusher", () => ({
   subscribe: vi.fn(),
 }));
 
+// Mock NextJS headers module for dynamic import
+vi.mock("next/headers", () => ({
+  cookies: vi.fn(),
+}));
+
 const user = {
   id: "user123",
   age: 1,
@@ -1843,7 +1848,7 @@ describe("ReflagClient", () => {
     });
   });
 
-  describe("getFlagsRemote", () => {
+  describe("getFlagsForBootstrap", () => {
     let client: ReflagClient;
 
     beforeEach(async () => {
@@ -1852,181 +1857,559 @@ describe("ReflagClient", () => {
         status: 200,
         body: {
           success: true,
-          remoteContextUsed: true,
-          features: {
-            flag1: {
-              key: "flag1",
-              targetingVersion: 1,
-              isEnabled: true,
-              config: {
-                key: "config-1",
-                version: 3,
-                default: true,
-                payload: { something: "else" },
-                missingContextFields: ["funny"],
-              },
-              missingContextFields: ["something", "funny"],
-            },
-            flag2: {
-              key: "flag2",
-              targetingVersion: 2,
-              isEnabled: false,
-              missingContextFields: ["another"],
-            },
-            flag3: {
-              key: "flag3",
-              targetingVersion: 5,
-              isEnabled: true,
-            },
-          },
+          ...flagDefinitions,
         },
       });
 
       client = new ReflagClient(validOptions);
+
+      client["rateLimiter"].clearStale(true);
+
+      httpClient.post.mockResolvedValue({
+        ok: true,
+        status: 200,
+        body: { success: true },
+      });
     });
 
-    afterEach(() => {
-      httpClient.get.mockClear();
-    });
+    it("should return raw flags without wrapper functions", async () => {
+      httpClient.post.mockClear(); // not interested in updates
 
-    it("should return evaluated flags", async () => {
-      const result = await client.getFlagsRemote("c1", "u1", {
+      await client.initialize();
+      const result = client.getFlagsForBootstrap({
+        company,
+        user,
         other: otherContext,
+        enableTracking: true,
       });
 
       expect(result).toStrictEqual({
-        flag1: {
-          key: "flag1",
-          isEnabled: true,
-          config: {
-            key: "config-1",
-            payload: { something: "else" },
+        context: {
+          company,
+          user,
+          other: otherContext,
+          enableTracking: true,
+        },
+        flags: {
+          flag1: {
+            key: "flag1",
+            isEnabled: true,
+            targetingVersion: 1,
+            config: {
+              key: "config-1",
+              payload: {
+                something: "else",
+              },
+              targetingVersion: 1,
+              missingContextFields: [],
+              ruleEvaluationResults: [true],
+            },
+            ruleEvaluationResults: [true],
+            missingContextFields: [],
           },
-          track: expect.any(Function),
-        },
-        flag2: {
-          key: "flag2",
-          isEnabled: false,
-          config: { key: undefined, payload: undefined },
-          track: expect.any(Function),
-        },
-        flag3: {
-          key: "flag3",
-          isEnabled: true,
-          config: { key: undefined, payload: undefined },
-          track: expect.any(Function),
+          flag2: {
+            key: "flag2",
+            isEnabled: false,
+            targetingVersion: 2,
+            config: {
+              key: undefined,
+              payload: undefined,
+              targetingVersion: undefined,
+              missingContextFields: [],
+              ruleEvaluationResults: [],
+            },
+            ruleEvaluationResults: [false],
+            missingContextFields: ["attributeKey"],
+          },
         },
       });
 
-      expect(httpClient.get).toHaveBeenCalledTimes(1);
+      // Should not have track function like regular getFlags
+      expect(result.flags.flag1).not.toHaveProperty("track");
+      expect(result.flags.flag2).not.toHaveProperty("track");
 
-      expect(httpClient.get).toHaveBeenCalledWith(
-        "https://api.example.com/features/evaluated?context.other.custom=context&context.other.key=value&context.user.id=c1&context.company.id=u1",
-        expectedHeaders,
-        API_TIMEOUT_MS,
-      );
+      await client.flush();
+
+      expect(httpClient.post).toHaveBeenCalledTimes(1);
     });
 
-    it("should not try to append the context if it's empty", async () => {
-      await client.getFlagsRemote();
+    it("should return raw flags when only user is defined", async () => {
+      httpClient.post.mockClear(); // not interested in updates
 
-      expect(httpClient.get).toHaveBeenCalledTimes(1);
+      await client.initialize();
+      const flags = client.getFlagsForBootstrap({ user });
 
-      expect(httpClient.get).toHaveBeenCalledWith(
-        "https://api.example.com/features/evaluated?",
-        expectedHeaders,
-        API_TIMEOUT_MS,
-      );
+      expect(flags).toStrictEqual({
+        context: {
+          user,
+          enableTracking: true,
+        },
+        flags: {
+          flag1: {
+            key: "flag1",
+            isEnabled: false,
+            targetingVersion: 1,
+            config: {
+              key: undefined,
+              payload: undefined,
+              targetingVersion: 1,
+              missingContextFields: ["company.id"],
+              ruleEvaluationResults: [false],
+            },
+            ruleEvaluationResults: [false],
+            missingContextFields: ["company.id"],
+          },
+          flag2: {
+            key: "flag2",
+            isEnabled: false,
+            targetingVersion: 2,
+            config: {
+              key: undefined,
+              payload: undefined,
+              targetingVersion: undefined,
+              missingContextFields: [],
+              ruleEvaluationResults: [],
+            },
+            ruleEvaluationResults: [false],
+            missingContextFields: ["company.id"],
+          },
+        },
+      });
+
+      // Should not have track function
+      expect(flags.flags.flag1).not.toHaveProperty("track");
+      expect(flags.flags.flag2).not.toHaveProperty("track");
+
+      await client.flush();
+
+      expect(httpClient.post).toHaveBeenCalledTimes(1);
+    });
+
+    it("should return raw flags when only company is defined", async () => {
+      await client.initialize();
+      const flags = client.getFlagsForBootstrap({ company });
+
+      expect(flags).toStrictEqual({
+        context: {
+          company,
+          enableTracking: true,
+        },
+        flags: {
+          flag1: {
+            key: "flag1",
+            isEnabled: true,
+            targetingVersion: 1,
+            config: {
+              key: "config-1",
+              payload: {
+                something: "else",
+              },
+              targetingVersion: 1,
+              missingContextFields: [],
+              ruleEvaluationResults: [true],
+            },
+            ruleEvaluationResults: [true],
+            missingContextFields: [],
+          },
+          flag2: {
+            key: "flag2",
+            isEnabled: false,
+            targetingVersion: 2,
+            config: {
+              key: undefined,
+              payload: undefined,
+              targetingVersion: undefined,
+              missingContextFields: [],
+              ruleEvaluationResults: [],
+            },
+            ruleEvaluationResults: [false],
+            missingContextFields: ["attributeKey"],
+          },
+        },
+      });
+
+      // Should not have track function
+      expect(flags.flags.flag1).not.toHaveProperty("track");
+      expect(flags.flags.flag2).not.toHaveProperty("track");
+    });
+
+    it("should return raw flags when only other context is defined", async () => {
+      await client.initialize();
+      const flags = client.getFlagsForBootstrap({ other: otherContext });
+
+      expect(flags).toStrictEqual({
+        context: {
+          other: otherContext,
+          enableTracking: true,
+        },
+        flags: {
+          flag1: {
+            key: "flag1",
+            isEnabled: false,
+            targetingVersion: 1,
+            config: {
+              key: undefined,
+              payload: undefined,
+              targetingVersion: 1,
+              missingContextFields: ["company.id"],
+              ruleEvaluationResults: [false],
+            },
+            ruleEvaluationResults: [false],
+            missingContextFields: ["company.id"],
+          },
+          flag2: {
+            key: "flag2",
+            isEnabled: false,
+            targetingVersion: 2,
+            config: {
+              key: undefined,
+              payload: undefined,
+              targetingVersion: undefined,
+              missingContextFields: [],
+              ruleEvaluationResults: [],
+            },
+            ruleEvaluationResults: [false],
+            missingContextFields: ["company.id"],
+          },
+        },
+      });
+
+      // Should not have track function
+      expect(flags.flags.flag1).not.toHaveProperty("track");
+      expect(flags.flags.flag2).not.toHaveProperty("track");
+    });
+
+    it("should return fallback flags when client is not initialized", async () => {
+      const flags = client.getFlagsForBootstrap({
+        company,
+        user,
+        other: otherContext,
+        enableTracking: true,
+      });
+
+      // Should return the fallback flags defined in validOptions
+      expect(flags).toStrictEqual({
+        context: {
+          company,
+          user,
+          other: otherContext,
+          enableTracking: true,
+        },
+        flags: {
+          key: {
+            isEnabled: true,
+            key: "key",
+          },
+        },
+      });
+    });
+
+    it("should return fallback flags when flag definitions are not available", async () => {
+      httpClient.get.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        body: {
+          success: true,
+          features: [], // No flag definitions
+        },
+      });
+
+      await client.initialize();
+      const flags = client.getFlagsForBootstrap({
+        company,
+        user,
+        other: otherContext,
+      });
+
+      expect(flags).toStrictEqual({
+        context: {
+          company,
+          user,
+          other: otherContext,
+          enableTracking: true,
+        },
+        flags: {},
+      });
+    });
+
+    it("should handle enableTracking parameter", async () => {
+      await client.initialize();
+
+      // Test with enableTracking: true (default)
+      const flagsWithTracking = client.getFlagsForBootstrap({
+        company,
+        user,
+        other: otherContext,
+        enableTracking: true,
+      });
+
+      // Test with enableTracking: false
+      const flagsWithoutTracking = client.getFlagsForBootstrap({
+        company,
+        user,
+        other: otherContext,
+        enableTracking: true,
+      });
+
+      // Both should return the same raw flag structure
+      expect(flagsWithTracking).toStrictEqual(flagsWithoutTracking);
+
+      // Neither should have track functions
+      expect(flagsWithTracking.flags.flag1).not.toHaveProperty("track");
+      expect(flagsWithoutTracking.flags.flag1).not.toHaveProperty("track");
+    });
+
+    it("should properly define the rate limiter key", async () => {
+      const isAllowedSpy = vi.spyOn(client["rateLimiter"], "isAllowed");
+
+      await client.initialize();
+      client.getFlagsForBootstrap({ user, company, other: otherContext });
+
+      expect(isAllowedSpy).toHaveBeenCalledWith("1GHpP+QfYperQ0AtD8bWPiRE4H0=");
+    });
+
+    it("should work in offline mode", async () => {
+      const offlineClient = new ReflagClient({
+        ...validOptions,
+        offline: true,
+      });
+
+      const flags = offlineClient.getFlagsForBootstrap({
+        company,
+        user,
+        other: otherContext,
+        enableTracking: true,
+      });
+
+      expect(flags).toStrictEqual({
+        context: {
+          company,
+          user,
+          other: otherContext,
+          enableTracking: true,
+        },
+        flags: {},
+      });
+    });
+
+    it("should use fallback flags when provided and no definitions available", async () => {
+      const fallbackTestFlags = {
+        fallbackFlag: {
+          key: "fallbackFlag",
+          isEnabled: true,
+          config: { key: "fallback-config", payload: { test: "data" } },
+        },
+      };
+
+      const clientWithFallback = new ReflagClient({
+        ...validOptions,
+        fallbackFlags: fallbackTestFlags,
+      });
+
+      // Don't initialize to simulate no flag definitions
+      const flags = clientWithFallback.getFlagsForBootstrap({
+        company,
+        user,
+        other: otherContext,
+        enableTracking: true,
+      });
+
+      expect(flags).toStrictEqual({
+        context: {
+          company,
+          user,
+          other: otherContext,
+          enableTracking: true,
+        },
+        flags: fallbackTestFlags,
+      });
     });
   });
+});
 
-  describe("getFlagRemote", () => {
-    let client: ReflagClient;
+describe("getFlagsRemote", () => {
+  let client: ReflagClient;
 
-    beforeEach(async () => {
-      httpClient.get.mockResolvedValue({
-        ok: true,
-        status: 200,
-        body: {
-          success: true,
-          remoteContextUsed: true,
-          features: {
-            flag1: {
-              key: "flag1",
-              targetingVersion: 1,
-              isEnabled: true,
-              config: {
-                key: "config-1",
-                version: 3,
-                default: true,
-                payload: { something: "else" },
-                missingContextFields: ["two"],
-              },
-              missingContextFields: ["one", "two"],
+  beforeEach(async () => {
+    httpClient.get.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: {
+        success: true,
+        remoteContextUsed: true,
+        features: {
+          flag1: {
+            key: "flag1",
+            targetingVersion: 1,
+            isEnabled: true,
+            config: {
+              key: "config-1",
+              version: 3,
+              default: true,
+              payload: { something: "else" },
+              missingContextFields: ["funny"],
             },
+            missingContextFields: ["something", "funny"],
+          },
+          flag2: {
+            key: "flag2",
+            targetingVersion: 2,
+            isEnabled: false,
+            missingContextFields: ["another"],
+          },
+          flag3: {
+            key: "flag3",
+            targetingVersion: 5,
+            isEnabled: true,
           },
         },
-      });
-
-      client = new ReflagClient(validOptions);
+      },
     });
 
-    afterEach(() => {
-      httpClient.get.mockClear();
+    client = new ReflagClient(validOptions);
+  });
+
+  afterEach(() => {
+    httpClient.get.mockClear();
+  });
+
+  it("should return evaluated flags", async () => {
+    const result = await client.getFlagsRemote("c1", "u1", {
+      other: otherContext,
     });
 
-    it("should return evaluated flag", async () => {
-      const result = await client.getFlagRemote("flag1", "c1", "u1", {
-        other: otherContext,
-      });
-
-      expect(result).toStrictEqual({
+    expect(result).toStrictEqual({
+      flag1: {
         key: "flag1",
         isEnabled: true,
-        track: expect.any(Function),
         config: {
           key: "config-1",
           payload: { something: "else" },
         },
-      });
-
-      expect(httpClient.get).toHaveBeenCalledTimes(1);
-
-      expect(httpClient.get).toHaveBeenCalledWith(
-        "https://api.example.com/features/evaluated?context.other.custom=context&context.other.key=value&context.user.id=c1&context.company.id=u1&key=flag1",
-        expectedHeaders,
-        API_TIMEOUT_MS,
-      );
+        track: expect.any(Function),
+      },
+      flag2: {
+        key: "flag2",
+        isEnabled: false,
+        config: { key: undefined, payload: undefined },
+        track: expect.any(Function),
+      },
+      flag3: {
+        key: "flag3",
+        isEnabled: true,
+        config: { key: undefined, payload: undefined },
+        track: expect.any(Function),
+      },
     });
 
-    it("should not try to append the context if it's empty", async () => {
-      await client.getFlagRemote("flag1");
+    expect(httpClient.get).toHaveBeenCalledTimes(1);
 
-      expect(httpClient.get).toHaveBeenCalledWith(
-        "https://api.example.com/features/evaluated?key=flag1",
-        expectedHeaders,
-        API_TIMEOUT_MS,
-      );
-    });
+    expect(httpClient.get).toHaveBeenCalledWith(
+      "https://api.example.com/features/evaluated?context.other.custom=context&context.other.key=value&context.user.id=c1&context.company.id=u1",
+      expectedHeaders,
+      API_TIMEOUT_MS,
+    );
   });
 
-  describe("offline mode", () => {
-    let client: ReflagClient;
+  it("should not try to append the context if it's empty", async () => {
+    await client.getFlagsRemote();
 
-    beforeEach(async () => {
-      client = new ReflagClient({
-        ...validOptions,
-        offline: true,
-      });
-      await client.initialize();
+    expect(httpClient.get).toHaveBeenCalledTimes(1);
+
+    expect(httpClient.get).toHaveBeenCalledWith(
+      "https://api.example.com/features/evaluated?",
+      expectedHeaders,
+      API_TIMEOUT_MS,
+    );
+  });
+});
+
+describe("getFlagRemote", () => {
+  let client: ReflagClient;
+
+  beforeEach(async () => {
+    httpClient.get.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: {
+        success: true,
+        remoteContextUsed: true,
+        features: {
+          flag1: {
+            key: "flag1",
+            targetingVersion: 1,
+            isEnabled: true,
+            config: {
+              key: "config-1",
+              version: 3,
+              default: true,
+              payload: { something: "else" },
+              missingContextFields: ["two"],
+            },
+            missingContextFields: ["one", "two"],
+          },
+        },
+      },
     });
 
-    it("should send not send or fetch anything", async () => {
-      client.getFlags({});
+    client = new ReflagClient(validOptions);
+  });
 
-      expect(httpClient.get).toHaveBeenCalledTimes(0);
-      expect(httpClient.post).toHaveBeenCalledTimes(0);
+  afterEach(() => {
+    httpClient.get.mockClear();
+  });
+
+  it("should return evaluated flag", async () => {
+    const result = await client.getFlagRemote("flag1", "c1", "u1", {
+      other: otherContext,
     });
+
+    expect(result).toStrictEqual({
+      key: "flag1",
+      isEnabled: true,
+      track: expect.any(Function),
+      config: {
+        key: "config-1",
+        payload: { something: "else" },
+      },
+    });
+
+    expect(httpClient.get).toHaveBeenCalledTimes(1);
+
+    expect(httpClient.get).toHaveBeenCalledWith(
+      "https://api.example.com/features/evaluated?context.other.custom=context&context.other.key=value&context.user.id=c1&context.company.id=u1&key=flag1",
+      expectedHeaders,
+      API_TIMEOUT_MS,
+    );
+  });
+
+  it("should not try to append the context if it's empty", async () => {
+    await client.getFlagRemote("flag1");
+
+    expect(httpClient.get).toHaveBeenCalledWith(
+      "https://api.example.com/features/evaluated?key=flag1",
+      expectedHeaders,
+      API_TIMEOUT_MS,
+    );
+  });
+});
+
+describe("offline mode", () => {
+  let client: ReflagClient;
+
+  beforeEach(async () => {
+    client = new ReflagClient({
+      ...validOptions,
+      offline: true,
+    });
+    await client.initialize();
+  });
+
+  it("should send not send or fetch anything", async () => {
+    client.getFlags({});
+
+    expect(httpClient.get).toHaveBeenCalledTimes(0);
+    expect(httpClient.post).toHaveBeenCalledTimes(0);
   });
 });
 
@@ -2040,6 +2423,7 @@ describe("BoundReflagClient", () => {
     httpClient.post.mockResolvedValue(response);
 
     httpClient.get.mockResolvedValue({
+      ok: true,
       status: 200,
       body: {
         success: true,
@@ -2166,6 +2550,64 @@ describe("BoundReflagClient", () => {
     boundClient.getFlag("flag1");
 
     await boundClient.flush();
+  });
+
+  it("should return raw flags for bootstrap from bound client", async () => {
+    // Ensure client is properly initialized
+    await client.initialize();
+    const boundClient = client.bindClient({
+      user,
+      company,
+      other: otherContext,
+      enableTracking: true,
+    });
+
+    const result = boundClient.getFlagsForBootstrap();
+
+    expect(result).toStrictEqual({
+      context: {
+        user,
+        company,
+        other: otherContext,
+        enableTracking: true,
+      },
+      flags: {
+        flag1: {
+          key: "flag1",
+          isEnabled: true,
+          targetingVersion: 1,
+          config: {
+            key: "config-1",
+            payload: {
+              something: "else",
+            },
+            targetingVersion: 1,
+            missingContextFields: [],
+            ruleEvaluationResults: [true],
+          },
+          ruleEvaluationResults: [true],
+          missingContextFields: [],
+        },
+        flag2: {
+          key: "flag2",
+          isEnabled: false,
+          targetingVersion: 2,
+          config: {
+            key: undefined,
+            payload: undefined,
+            targetingVersion: undefined,
+            missingContextFields: [],
+            ruleEvaluationResults: [],
+          },
+          ruleEvaluationResults: [false],
+          missingContextFields: ["attributeKey"],
+        },
+      },
+    });
+
+    // Should not have track function like regular getFlags
+    expect(result.flags.flag1).not.toHaveProperty("track");
+    expect(result.flags.flag2).not.toHaveProperty("track");
   });
 
   describe("getFlagRemote/getFlagsRemote", () => {

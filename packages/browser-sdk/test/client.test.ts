@@ -171,4 +171,58 @@ describe("ReflagClient", () => {
       expect(httpClientGet).not.toHaveBeenCalled();
     });
   });
+
+  describe("bootstrap parameter", () => {
+    const flagsClientInitialize = vi.spyOn(FlagsClient.prototype, "initialize");
+
+    beforeEach(() => {
+      flagsClientInitialize.mockClear();
+    });
+
+    it("should use pre-fetched flags and skip initialization when flags are provided", async () => {
+      const preFetchedFlags = {
+        testFlag: {
+          key: "testFlag",
+          isEnabled: true,
+          targetingVersion: 1,
+        },
+      };
+
+      // Create a spy to monitor maybeFetchFlags which should not be called if already initialized
+      const maybeFetchFlags = vi.spyOn(
+        FlagsClient.prototype as any,
+        "maybeFetchFlags",
+      );
+
+      client = new ReflagClient({
+        publishableKey: "test-key",
+        user: { id: "user1" },
+        company: { id: "company1" },
+        bootstrappedFlags: preFetchedFlags,
+        feedback: { enableAutoFeedback: false }, // Disable to avoid HTTP calls
+      });
+
+      // FlagsClient should be bootstrapped but not initialized in constructor when flags are provided
+      expect(client["flagsClient"]["bootstrapped"]).toBe(true);
+      expect(client["flagsClient"]["initialized"]).toBe(false);
+      expect(client.getFlags()).toEqual({
+        testFlag: {
+          key: "testFlag",
+          isEnabled: true,
+          targetingVersion: 1,
+          isEnabledOverride: null,
+        },
+      });
+
+      maybeFetchFlags.mockClear();
+
+      await client.initialize();
+
+      // After initialize, flagsClient should be properly initialized
+      expect(client["flagsClient"]["initialized"]).toBe(true);
+
+      // maybeFetchFlags should not be called since flagsClient is already bootstrapped
+      expect(maybeFetchFlags).not.toHaveBeenCalled();
+    });
+  });
 });

@@ -27,8 +27,10 @@ import { ReflagProvider } from "@reflag/react-sdk";
 
 <ReflagProvider
   publishableKey="{YOUR_PUBLISHABLE_KEY}"
-  company={{ id: "acme_inc", plan: "pro" }}
-  user={{ id: "john doe" }}
+  context={{
+    company: { id: "acme_inc", plan: "pro" },
+    user: { id: "john doe" },
+  }}
   loadingComponent={<Loading />}
 >
   {/* children here are shown when loading finishes or immediately if no `loadingComponent` is given */}
@@ -90,14 +92,53 @@ function StartHuddleButton() {
 
 `useFlag` can help you do much more. See a full example for `useFlag` [see below](#useflag).
 
-## Setting `user` and `company`
+## Setting context
 
-Reflag determines which flags are active for a given `user`, `company`, or `otherContext`.
-You pass these to the `ReflagProvider` as props.
+Reflag determines which flags are active for a given `user`, `company`, or `other` context.
+You can pass these to the `ReflagProvider` using the `context` prop.
+
+### Using the `context` prop
+
+```tsx
+<ReflagProvider
+  publishableKey={YOUR_PUBLISHABLE_KEY}
+  context={{
+    user: { id: "user_123", name: "John Doe", email: "john@acme.com" },
+    company: { id: "company_123", name: "Acme, Inc" },
+    other: { source: "web" },
+  }}
+>
+  <LoadingReflag>
+    {/* children here are shown when loading finishes */}
+  </LoadingReflag>
+</ReflagProvider>
+```
+
+### Legacy individual props (deprecated)
+
+For backward compatibility, you can still use individual props, but these are deprecated and will be removed in the next major version:
+
+```tsx
+<ReflagProvider
+  publishableKey={YOUR_PUBLISHABLE_KEY}
+  user={{ id: "user_123", name: "John Doe", email: "john@acme.com" }}
+  company={{ id: "company_123", name: "Acme, Inc" }}
+  otherContext={{ source: "web" }}
+>
+  <LoadingReflag>
+    {/* children here are shown when loading finishes */}
+  </LoadingReflag>
+</ReflagProvider>
+```
+
+> [!Important]
+> The `user`, `company`, and `otherContext` props are deprecated. Use the `context` prop instead, which provides the same functionality in a more structured way.
+
+### Context requirements
 
 If you supply `user` or `company` objects, they must include at least the `id` property otherwise they will be ignored in their entirety.
 In addition to the `id`, you must also supply anything additional that you want to be able to evaluate flag targeting rules against.
-Attributes which are not properties of the `user` or `company` can be supplied using the `otherContext` prop.
+Attributes which are not properties of the `user` or `company` can be supplied using the `other` property.
 
 Attributes cannot be nested (multiple levels) and must be either strings, numbers or booleans.
 A number of special attributes exist:
@@ -105,19 +146,6 @@ A number of special attributes exist:
 - `name` -- display name for `user`/`company`,
 - `email` -- the email of the user,
 - `avatar` -- the URL for `user`/`company` avatar image.
-
-```tsx
-<ReflagProvider
-  publishableKey={YOUR_PUBLISHABLE_KEY}
-  user={{ id: "user_123", name: "John Doe", email: "john@acme.com" }}
-  company={{ id: "company_123", name: "Acme, Inc" }}
-  otherContext={{ completedSteps: [1, 4, 7] }}
->
-  <LoadingReflag>
-    {/* children here are shown when loading finishes */}
-  </LoadingReflag>
-</ReflagProvider>
-```
 
 To retrieve flags along with their targeting information, use `useFlag(key: string)` hook (described in a section below).
 
@@ -167,12 +195,295 @@ const {
 Note that, similar to `isEnabled`, accessing `config` on the object returned by `useFlag()` automatically
 generates a `check` event.
 
+## Server-side rendering and bootstrapping
+
+For server-side rendered applications, you can eliminate the initial network request by bootstrapping the client with pre-fetched flag data using the `ReflagBootstrappedProvider`.
+
+### Using `ReflagBootstrappedProvider`
+
+The `<ReflagBootstrappedProvider>` component is a specialized version of `ReflagProvider` designed for server-side rendering and preloaded flag scenarios. Instead of fetching flags on initialization, it uses pre-fetched flags, resulting in faster initial page loads and better SSR compatibility.
+
+```tsx
+import { useState, useEffect } from "react";
+import { BootstrappedFlags } from "@reflag/react-sdk";
+
+interface BootstrapData {
+  user: User;
+  flags: BootstrappedFlags;
+}
+
+function useBootstrap() {
+  const [data, setData] = useState<BootstrapData | null>(null);
+
+  useEffect(() => {
+    fetch("/bootstrap")
+      .then((res) => res.json())
+      .then(setData);
+  }, []);
+
+  return data;
+}
+
+// Usage in your app
+function App() {
+  const { user, flags } = useBootstrap();
+
+  return (
+    <AuthProvider user={user}>
+      <ReflagBootstrappedProvider
+        publishableKey="your-publishable-key"
+        flags={flags}
+      >
+        <Router />
+      </ReflagBootstrappedProvider>
+    </AuthProvider>
+  );
+}
+```
+
+### Server-side endpoint setup
+
+Create an endpoint that provides bootstrap data to your client application:
+
+```typescript
+// server.js or your Express app
+import { ReflagClient as ReflagNodeClient } from "@reflag/node-sdk";
+
+const reflagClient = new ReflagNodeClient({
+  secretKey: process.env.REFLAG_SECRET_KEY,
+});
+await reflagClient.initialize();
+
+app.get("/bootstrap", (req, res) => {
+  const user = getUser(req); // Get user from your auth system
+  const company = getCompany(req); // Get company from your auth system
+
+  const flags = reflagClient.getFlagsForBootstrap({
+    user: { id: "user123", name: "John Doe", email: "john@acme.com" },
+    company: { id: "company456", name: "Acme Inc", plan: "enterprise" },
+    other: { source: "web" },
+  });
+
+  res.status(200).json({
+    user,
+    flags,
+  });
+});
+```
+
+### Next.js Page Router SSR example
+
+For Next.js applications using server-side rendering, you can pre-fetch flags in `getServerSideProps`:
+
+```typescript
+// pages/index.tsx
+import { GetServerSideProps } from "next";
+import { ReflagClient as ReflagNodeClient } from "@reflag/node-sdk";
+import { ReflagBootstrappedProvider, BootstrappedFlags, useFlag } from "@reflag/react-sdk";
+
+interface PageProps {
+  bootstrapData: BootstrappedFlags;
+}
+
+export const getServerSideProps: GetServerSideProps = async (context) => {
+  const serverClient = new ReflagNodeClient({
+    secretKey: process.env.REFLAG_SECRET_KEY
+  });
+  await serverClient.initialize();
+
+  const user = await getUserFromSession(context.req);
+  const company = await getCompanyFromUser(user);
+
+  const bootstrapData = serverClient.getFlagsForBootstrap({
+    user: { id: "user123", name: "John Doe", email: "john@acme.com" },
+    company: { id: "company456", name: "Acme Inc", plan: "enterprise" },
+    other: { page: "homepage" }
+  });
+
+  return { props: { bootstrapData } };
+};
+
+export default function HomePage({ bootstrapData }: PageProps) {
+  return (
+    <ReflagBootstrappedProvider
+      publishableKey={process.env.NEXT_PUBLIC_REFLAG_PUBLISHABLE_KEY}
+      flags={bootstrapData}
+    >
+      <HuddleFeature />
+    </ReflagBootstrappedProvider>
+  );
+}
+
+function HuddleFeature() {
+  const { isEnabled, track, config } = useFlag("huddle");
+
+  if (!isEnabled) return null;
+
+  return (
+    <div>
+      <h2>Start a Huddle</h2>
+      <p>Max participants: {config.payload?.maxParticipants ?? 10}</p>
+      <p>Video quality: {config.payload?.videoQuality ?? "standard"}</p>
+      <button onClick={track}>Start Huddle</button>
+    </div>
+  );
+}
+```
+
+This approach eliminates loading states and improves performance by avoiding the initial flags API call.
+
+### Next.js App Router example
+
+For Next.js applications using the App Router (Next.js 13+), you can pre-fetch flags in Server Components and pass them to client components:
+
+```typescript
+// app/layout.tsx (Server Component)
+import { ReflagClient as ReflagNodeClient } from "@reflag/node-sdk";
+import { ClientProviders } from "./providers";
+
+async function getBootstrapData() {
+  const serverClient = new ReflagNodeClient({
+    secretKey: process.env.REFLAG_SECRET_KEY!
+  });
+  await serverClient.initialize();
+
+  // In a real app, you'd get user/company from your auth system
+  const bootstrapData = serverClient.getFlagsForBootstrap({
+    user: { id: "user123", name: "John Doe", email: "john@acme.com" },
+    company: { id: "company456", name: "Acme Inc", plan: "enterprise" },
+    other: { source: "web" }
+  });
+
+  return bootstrapData;
+}
+
+export default async function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const bootstrapData = await getBootstrapData();
+
+  return (
+    <html lang="en">
+      <body>
+        <ClientProviders bootstrapData={bootstrapData}>
+          {children}
+        </ClientProviders>
+      </body>
+    </html>
+  );
+}
+```
+
+```typescript
+// app/providers.tsx (Client Component)
+"use client";
+
+import { ReflagBootstrappedProvider, BootstrappedFlags } from "@reflag/react-sdk";
+
+interface ClientProvidersProps {
+  children: React.ReactNode;
+  bootstrapData: BootstrappedFlags;
+}
+
+export function ClientProviders({ children, bootstrapData }: ClientProvidersProps) {
+  return (
+    <ReflagBootstrappedProvider
+      publishableKey={process.env.NEXT_PUBLIC_REFLAG_PUBLISHABLE_KEY!}
+      flags={bootstrapData}
+    >
+      {children}
+    </ReflagBootstrappedProvider>
+  );
+}
+```
+
+```typescript
+// app/page.tsx (Server Component)
+import { HuddleFeature } from "./huddle-feature";
+
+export default function HomePage() {
+  return (
+    <main>
+      <h1>My App</h1>
+      <HuddleFeature />
+    </main>
+  );
+}
+```
+
+```typescript
+// app/huddle-feature.tsx (Client Component)
+"use client";
+
+import { useFlag } from "@reflag/react-sdk";
+
+export function HuddleFeature() {
+  const { isEnabled, track, config } = useFlag("huddle");
+
+  if (!isEnabled) return null;
+
+  return (
+    <div>
+      <h2>Start a Huddle</h2>
+      <p>Max participants: {config.payload?.maxParticipants ?? 10}</p>
+      <p>Video quality: {config.payload?.videoQuality ?? "standard"}</p>
+      <button onClick={track}>Start Huddle</button>
+    </div>
+  );
+}
+```
+
+This App Router approach leverages Server Components for server-side flag fetching while using Client Components only where React state and hooks are needed.
+
+## `<ReflagClientProvider>` component
+
+The `<ReflagClientProvider>` is a lower-level component that accepts a pre-initialized `ReflagClient` instance. This is useful for advanced use cases where you need full control over client initialization or want to share a client instance across multiple parts of your application.
+
+### Usage
+
+```tsx
+import { ReflagClient } from "@reflag/browser-sdk";
+import { ReflagClientProvider } from "@reflag/react-sdk";
+
+// Initialize the client yourself
+const client = new ReflagClient({
+  publishableKey: "your-publishable-key",
+  user: { id: "user123", name: "John Doe" },
+  company: { id: "company456", name: "Acme Inc" },
+  // ... other configuration options
+});
+
+// Initialize the client
+await client.initialize();
+
+function App() {
+  return (
+    <ReflagClientProvider client={client} loadingComponent={<Loading />}>
+      <Router />
+    </ReflagClientProvider>
+  );
+}
+```
+
+### Props
+
+The `ReflagClientProvider` accepts the following props:
+
+- `client`: A pre-initialized `ReflagClient` instance
+- `loadingComponent`: Optional React component to show while the client is initializing (same as `ReflagProvider`)
+
+> [!Note]
+> Most applications should use `ReflagProvider` or `ReflagBootstrappedProvider` instead of `ReflagClientProvider`. Only use this component when you need the advanced control it provides.
+
 ## `<ReflagProvider>` component
 
 The `<ReflagProvider>` initializes the Reflag SDK, fetches flags and starts listening for automated feedback survey events. The component can be configured using a number of props:
 
 - `publishableKey` is used to connect the provider to an _environment_ on Reflag. Find your `publishableKey` under [environment settings](https://app.reflag.com/env-current/settings/app-environments) in Reflag,
-- `company`, `user` and `otherContext` make up the _context_ that is used to determine if a flag is enabled or not. `company` and `user` contexts are automatically transmitted to Reflag servers so the Reflag app can show you which companies have access to which flags etc.
+- `context` (recommended): An object containing `user`, `company`, and `other` properties that make up the evaluation context used to determine if a flag is enabled or not. `company` and `user` contexts are automatically transmitted to Reflag servers so the Reflag app can show you which companies have access to which flags etc.
+- `company`, `user` and `other` (deprecated): Individual props for context. These are deprecated in favor of the `context` prop and will be removed in the next major version.
   > [!Note]
   > If you specify `company` and/or `user` they must have at least the `id` property, otherwise they will be ignored in their entirety. You should also supply anything additional you want to be able to evaluate flag targeting against,
 - `fallbackFlags`: A list of strings which specify which flags to consider enabled if the SDK is unable to fetch flags. Can be provided in two formats:
@@ -199,26 +510,7 @@ The `<ReflagProvider>` initializes the Reflag SDK, fetches flags and starts list
 - `expireTimeMs`: If set, flags will be cached between page loads for this duration (in milliseconds).
 - `staleTimeMs`: Maximum time (in milliseconds) that stale flags will be returned if `staleWhileRevalidate` is true and new flags cannot be fetched.
 - `offline`: Provide this option when testing or in local development environments to avoid contacting Reflag servers.
-- `loadingComponent` lets you specify an React component to be rendered instead of the children while the Reflag provider is initializing. If you want more control over loading screens, `useFlag()` returns `isLoading` which you can use to customize the loading experience:
-
-  ```tsx
-  function LoadingReflag({ children }) {
-    const { isLoading } = useFlag("myFlag");
-    if (isLoading) {
-      return <Spinner />;
-    }
-
-    return children;
-  }
-
-  //-- Initialize the Reflag provider
-  <ReflagProvider publishableKey={YOUR_PUBLISHABLE_KEY} /*...*/>
-    <LoadingReflag>
-      {/* children here are shown when loading finishes */}
-    </LoadingReflag>
-  </ReflagProvider>;
-  ```
-
+- `loadingComponent` lets you specify an React component to be rendered instead of the children while the Reflag provider is initializing. If you want more control over loading screens, `useFlag()` and `useIsLoading` returns `isLoading` which you can use to customize the loading experience.
 - `enableTracking`: Set to `false` to stop sending tracking events and user/company updates to Reflag. Useful when you're impersonating a user (defaults to `true`),
 - `apiBaseUrl`: Optional base URL for the Reflag API. Use this to override the default API endpoint,
 - `appBaseUrl`: Optional base URL for the Reflag application. Use this to override the default app URL,
@@ -226,6 +518,44 @@ The `<ReflagProvider>` initializes the Reflag SDK, fetches flags and starts list
 - `debug`: Set to `true` to enable debug logging to the console,
 - `toolbar`: Optional [configuration](https://docs.reflag.com/supported-languages/browser-sdk/globals#toolbaroptions) for the Reflag toolbar,
 - `feedback`: Optional configuration for feedback collection
+
+## `<ReflagBootstrappedProvider>` component
+
+The `<ReflagBootstrappedProvider>` is a specialized version of the `ReflagProvider` that uses pre-fetched flag data instead of making network requests during initialization. This is ideal for server-side rendering scenarios.
+
+The component accepts the following props:
+
+- `flags`: Pre-fetched flags data of type `BootstrappedFlags` obtained from the Node SDK's `getFlagsForBootstrap()` method. This contains both the context (user, company, other) and the flags data.
+- All other props available in [`ReflagProvider`](#reflagprovider-component) are supported except `context`, `user`, `company`, and `other` (which are extracted from `flags.context`).
+
+**Example:**
+
+```tsx
+import {
+  ReflagBootstrappedProvider,
+  BootstrappedFlags,
+} from "@reflag/react-sdk";
+
+interface AppProps {
+  bootstrapData: BootstrappedFlags;
+}
+
+function App({ bootstrapData }: AppProps) {
+  return (
+    <ReflagBootstrappedProvider
+      publishableKey="your-publishable-key"
+      flags={bootstrapData}
+      loadingComponent={<Loading />}
+      debug={process.env.NODE_ENV === "development"}
+    >
+      <Router />
+    </ReflagBootstrappedProvider>
+  );
+}
+```
+
+> [!Note]
+> When using `ReflagBootstrappedProvider`, the context (user, company, and other) is extracted from the `flags.context` property and doesn't need to be passed separately.
 
 ## Hooks
 
@@ -235,6 +565,7 @@ Returns the state of a given flag for the current context. The hook provides typ
 
 ```tsx
 import { useFlag } from "@reflag/react-sdk";
+import { Loading } from "./Loading";
 
 function StartHuddleButton() {
   const {
@@ -402,8 +733,6 @@ function FlagOptIn() {
 }
 ```
 
-Note: To change the `user.id` or `company.id`, you need to update the props passed to `ReflagProvider` instead of using these hooks.
-
 ### `useClient()`
 
 Returns the `ReflagClient` used by the `ReflagProvider`. The client offers more functionality that
@@ -415,11 +744,43 @@ import { useClient } from "@reflag/react-sdk";
 function LoggingWrapper({ children }: { children: ReactNode }) {
   const client = useClient();
 
-  useEffect(() => {
-    client.on("check", (evt) => {
-      console.log(`The flag ${evt.key} is ${evt.value} for user.`);
-    });
-  }, [client]);
+  console.log(client.getContext());
+
+  return children;
+}
+```
+
+### `useIsLoading()`
+
+Returns the loading state of the flags in the `ReflagClient`.
+Initially, the value will be `true` if no bootstrap flags have been provided and the client has not be initialized.
+
+```tsx
+import { useIsLoading } from "@reflag/react-sdk";
+import { Spinner } from "./Spinner";
+
+function LoadingWrapper({ children }: { children: ReactNode }) {
+  const isLoading = useIsLoading();
+
+  if (isLoading) {
+    return <Spinner />;
+  }
+
+  return children;
+}
+```
+
+### `useOnEvent()`
+
+Attach a callback handler to client events to act on changes. It automatically disposes itself on unmount.
+
+```tsx
+import { useOnEvent } from "@reflag/react-sdk";
+
+function LoggingWrapper({ children }: { children: ReactNode }) {
+  useOnEvent("flagsUpdated", (newFlags) => {
+    console.log(newFlags);
+  });
 
   return children;
 }

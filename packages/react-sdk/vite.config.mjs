@@ -5,6 +5,7 @@ import dts from "vite-plugin-dts";
 
 export default defineConfig({
   test: {
+    root: __dirname,
     environment: "jsdom",
   },
   optimizeDeps: {

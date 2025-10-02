@@ -72,9 +72,18 @@ export default function periodicallyUpdatingCache<T>(
     // no-op
   };
 
+  const destroy = () => {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      timeoutId = undefined;
+    }
+    refreshPromise = undefined;
+  };
+
   return {
     get,
     refresh,
     waitRefresh,
+    destroy,
   };
 }
