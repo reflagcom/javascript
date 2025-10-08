@@ -6,7 +6,7 @@ you can streamline your flagging workflow directly from your terminal.
 
 ## Installation
 
-Get started by installing the CLI locally in your project:
+Install the CLI as a development dependency in your project:
 
 ```bash
 # npm
@@ -16,8 +16,7 @@ npm install --save-dev @reflag/cli
 yarn add --dev @reflag/cli
 ```
 
-Then running the `new` command from your project's root directory,
-initializing the CLI, creating a flag, and generating the types all at once:
+Run the `new` command from your project's root directory to initialize the CLI, create a flag, and generate TypeScript types in one step:
 
 ```bash
 # npm
@@ -29,20 +28,20 @@ yarn reflag new
 
 ## Migrating from Bucket SDK
 
-If you have been using the Bucket CLI, the following list will help you migrate to Reflag CLI:
+If you're migrating from the Bucket CLI, here are the key changes to be aware of:
 
-- The command has been renamed from `bucket` to `reflag`
-- The default name of the file that contains the type definitions has been renamed to `flags.d.ts` from `features.d.ts`. You will need to manually remove `features.d.ts` if it was checked into the repository
-- The name of the file that stores personal authentication details has been changed to `.reflag-auth` from `.bucket-auth`. You will need to rename or remove `.bucket-auth`
-- The name of the file that stores CLI configuration has been changed to `reflag.config.json` from `bucket.config.json`. You will need to rename or remove `bucket.config.json`
-- The `features` command has been renamed to `flags`
-- The API key should now be supplied through `REFLAG_API_KEY` environment variable instead of `BUCKET_API_KEY`
+- **Command name**: Changed from `bucket` to `reflag`
+- **Type definitions file**: Renamed from `features.d.ts` to `flags.d.ts` (manually remove the old file if it was committed)
+- **Authentication file**: Changed from `.bucket-auth` to `.reflag-auth` (rename or remove the old file)
+- **Configuration file**: Changed from `bucket.config.json` to `reflag.config.json` (rename or remove the old file)
+- **Command**: `features` command is now `flags`
+- **Environment variable**: Use `REFLAG_API_KEY` instead of `BUCKET_API_KEY`
 
-Do not forget to update your scripts, build steps and `.gitignore` patterns
+**Important**: Update your scripts, build steps, and `.gitignore` patterns to reflect these changes.
 
-### Individual commands
+### Individual Commands
 
-Instead of running `new` you can call each step individually.
+For more control, you can run each command individually:
 
 ```bash
 # Initialize Reflag in your project (if not already setup)
@@ -57,12 +56,11 @@ npx reflag flags types
 
 ## Configuration
 
-The CLI creates a `reflag.config.json` file in your project directory when you run `reflag init`.
-This file contains all the necessary settings for your Reflag integration.
+The CLI creates a `reflag.config.json` file in your project directory when you run `reflag init`. This file contains all the necessary settings for your Reflag integration.
 
 ### Configuration File Structure
 
-Here's a comprehensive list of configuration options available in the `reflag.config.json` file:
+Here are all the configuration options available in the `reflag.config.json` file:
 
 ```json
 {
@@ -93,8 +91,7 @@ You can override these settings using command-line options for individual comman
 
 ### `reflag init`
 
-Initialize a new Reflag configuration in your project.
-This creates a `reflag.config.json` file with your settings and prompts for any required information not provided via options.
+Initialize a new Reflag configuration in your project. This creates a `reflag.config.json` file with your settings and prompts for any required information not provided via options.
 
 ```bash
 npx reflag init [--overwrite]
@@ -108,8 +105,7 @@ Options:
 
 ### `reflag new [flagName]`
 
-All-in-one command to get started quickly. This command combines `init`, flag creation,
-and type generation in a single step. Use this for the fastest way to get up and running with Reflag.
+All-in-one command to get started quickly. This command combines `init`, flag creation, and type generation in a single step. Use this for the fastest way to get up and running with Reflag.
 
 ```bash
 npx reflag new "My Flag" [--app-id ap123456789] [--key my-flag]  [--key-format custom] [--out gen/flags.ts] [--format react]
@@ -127,7 +123,7 @@ If you prefer more control over each step, you can use the individual commands (
 
 ### `reflag login`
 
-Log in to your Reflag account. This will authenticate your CLI for subsequent operations and store credentials securely.
+Authenticate with your Reflag account. This stores your credentials securely for subsequent operations.
 
 ```bash
 npx reflag login
@@ -135,7 +131,7 @@ npx reflag login
 
 ### `reflag logout`
 
-Log out from your Reflag account, removing stored credentials.
+Sign out from your Reflag account and remove stored credentials.
 
 ```bash
 npx reflag logout
@@ -143,12 +139,11 @@ npx reflag logout
 
 ### `reflag flags`
 
-Manage your Reflag flags with the following subcommands.
+Manage your Reflag flags with these subcommands:
 
 #### `reflag flags create [flagName]`
 
-Create a new flag in your Reflag app.
-The command guides you through the flag creation process with interactive prompts if options are not provided.
+Create a new flag in your Reflag app. The command guides you through the flag creation process with interactive prompts if options are not provided.
 
 ```bash
 npx reflag flags create "My Flag" [--app-id ap123456789] [--key my-flag] [--key-format custom]
@@ -162,8 +157,7 @@ Options:
 
 #### `reflag flags list`
 
-List all flags for the current app.
-This helps you visualize what flags are available and their current configurations.
+List all flags for the current app. This helps you visualize what flags are available and their current configurations.
 
 ```bash
 npx reflag flags list [--app-id ap123456789]
@@ -175,8 +169,7 @@ Options:
 
 #### `reflag flags types`
 
-Generate TypeScript types for your flags.
-This ensures type safety when using Reflag flags in your TypeScript/JavaScript applications.
+Generate TypeScript types for your flags. This ensures type safety when using Reflag flags in your TypeScript/JavaScript applications.
 
 ```bash
 npx reflag flags types [--app-id ap123456789] [--out gen/flags.ts] [--format react]
@@ -204,11 +197,11 @@ These options can be used with any command:
 
 ## AI-Assisted Development
 
-Reflag provides powerful AI-assisted development capabilities through rules and Model Context Protocol (MCP). These flags help your AI development tools better understand your flags and provide more accurate assistance.
+Reflag provides powerful AI-assisted development capabilities through rules and Model Context Protocol (MCP). These features help your AI development tools better understand your flags and provide more accurate assistance.
 
 ### Reflag Rules (Recommended)
 
-The `rules` command helps you set up AI-specific rules for your project. These rules enable AI tools to better understand how to work with Reflag and flags and how they should be used in your codebase.
+The `rules` command helps you set up AI-specific rules for your project. These rules enable AI tools to better understand how to work with Reflag flags and how they should be used in your codebase.
 
 ```bash
 npx reflag rules [--format <cursor|copilot>] [--yes]
@@ -221,11 +214,11 @@ Options:
   - `copilot`: Adds rules to `.github/copilot-instructions.md` for GitHub Copilot integration.
 - `--yes`: Skip confirmation prompts and overwrite existing files without asking.
 
-This command will add rules to your project that provide AI tools with context about how to setup and use Reflag flags. For the copilot format, the rules will be added to a dedicated section in the file, allowing you to maintain other copilot instructions alongside Reflag's rules.
+This command adds rules to your project that provide AI tools with context about how to set up and use Reflag flags. For the copilot format, the rules are added to a dedicated section in the file, allowing you to maintain other copilot instructions alongside Reflag's rules.
 
 ## Model Context Protocol
 
-The Model Context Protocol (MCP) is an open protocol that provides a standardized way to connect AI models to different data sources and tools. In the context of Reflag, MCP enables your code editor to understand your flags, their states, and their relationships within your codebase. This creates a seamless bridge between your flag management workflow and AI-powered development tools. The MCP server is hosted by Reflag, so it's very easy to get started.
+The Model Context Protocol (MCP) is an open protocol that provides a standardized way to connect AI models to different data sources and tools. In the context of Reflag, MCP enables your code editor to understand your flags, their states, and their relationships within your codebase. This creates a seamless bridge between your flag management workflow and AI-powered development tools. The MCP server is hosted by Reflag, making it easy to get started.
 
 _\*\*Note: The Reflag `mcp` CLI command was previously used for a \_local_ server. However, in recent versions of the Reflag CLI, the `mcp` command has been repurposed to help you connect to the new remote MCP server.\*\*\_
 
@@ -234,12 +227,11 @@ _\*\*Note: The Reflag `mcp` CLI command was previously used for a \_local_ serve
 The `mcp` command helps you configure your editor or AI client to connect with Reflag's remote MCP server. This allows your AI tools to understand your flags and provide more contextual assistance.
 
 ```bash
-npx reflag mcp [--app-id <id>] [--editor <editor>] [--scope <local|global>]
+npx reflag mcp [--editor <editor>] [--scope <local|global>]
 ```
 
 Options:
 
-- `--app-id`: App ID to use for the MCP connection.
 - `--editor`: The editor/client to configure:
   - `cursor`: [Cursor IDE](https://www.cursor.com/)
   - `vscode`: [Visual Studio Code](https://code.visualstudio.com/)
@@ -258,8 +250,7 @@ _**Note: The setup uses [mcp-remote](https://github.com/geelen/mcp-remote) as a 
 
 ## Using in CI/CD Pipelines (Beta)
 
-The Reflag CLI is designed to work seamlessly in CI/CD pipelines. For automated environments where interactive login is not possible, use the `--api-key` option,
-or specify the API key in `REFLAG_API_KEY` environment variable.
+The Reflag CLI is designed to work seamlessly in CI/CD pipelines. For automated environments where interactive login is not possible, use the `--api-key` option or specify the API key in the `REFLAG_API_KEY` environment variable.
 
 ```bash
 # Generate types in CI/CD
@@ -268,11 +259,10 @@ npx reflag apps list --api-key $REFLAG_API_KEY
 
 **Important restrictions:**
 
-- When using `--api-key`, the `login` and `logout` commands are disabled.
-- API keys bypass all interactive authentication flows.
-- Only _read-only_ access to Reflag API is granted at the moment.
-- API keys are bound to one app only. Commands such as `apps list` will only return the bound app.
-- Store API keys securely using your CI/CD platform's secret management.
+- When using `--api-key`, the `login` and `logout` commands are disabled
+- API keys bypass all interactive authentication flows
+- API keys are bound to one app only. Commands such as `apps list` will only return the bound app
+- Store API keys securely using your CI/CD platform's secret management
 
 Example CI workflow:
 
