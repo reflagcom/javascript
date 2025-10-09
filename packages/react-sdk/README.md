@@ -195,6 +195,25 @@ const {
 Note that, similar to `isEnabled`, accessing `config` on the object returned by `useFlag()` automatically
 generates a `check` event.
 
+## Toolbar
+
+The Reflag Toolbar is great for toggling flags on/off for yourself to ensure that everything works both when a flag is on and when it's off.
+
+<img width="310" height="265" alt="Toolbar" src="https://github.com/user-attachments/assets/61492915-0d30-446d-a163-3eb16d9024b2" />
+
+The toolbar will automatically appear on `localhost`. However, it can also be incredibly useful in production. You have full control over when it appears through the `toolbar` configuration option passed to the ReflagProvider.
+
+You can pass a simple boolean to force the toolbar to appear/disappear:
+
+```ts
+<ReflagProvider
+  ...
+  // show the toolbar even in production if the user is an internal/admin user
+  toolbar={user?.isInternal}
+  ...
+});
+```
+
 ## Server-side rendering and bootstrapping
 
 For server-side rendered applications, you can eliminate the initial network request by bootstrapping the client with pre-fetched flag data using the `ReflagBootstrappedProvider`.
