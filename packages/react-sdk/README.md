@@ -32,6 +32,7 @@ import { ReflagProvider } from "@reflag/react-sdk";
     user: { id: "john doe" },
   }}
   loadingComponent={<Loading />}
+  toolbar={true}
 >
   {/* children here are shown when loading finishes or immediately if no `loadingComponent` is given */}
 </ReflagProvider>;
