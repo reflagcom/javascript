@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   JSONToType,
   mergeTypeASTs,
+  quoteKey,
   stringifyTypeAST,
   toTypeAST,
   TypeAST,
@@ -300,6 +301,37 @@ describe("JSON utilities", () => {
       expect(stringifyTypeAST({ kind: "object", properties: [] })).toBe("{}");
     });
 
+    it("should quote object keys with special characters", () => {
+      const ast: TypeAST = {
+        kind: "object",
+        properties: [
+          {
+            key: "my-key",
+            type: { kind: "primitive", type: "string" },
+            optional: false,
+          },
+          {
+            key: "my key",
+            type: { kind: "primitive", type: "string" },
+            optional: false,
+          },
+          {
+            key: "my.key",
+            type: { kind: "primitive", type: "string" },
+            optional: false,
+          },
+          {
+            key: "123key",
+            type: { kind: "primitive", type: "string" },
+            optional: false,
+          },
+        ],
+      };
+
+      const expected = `{\n  "my-key": string,\n  "my key": string,\n  "my.key": string,\n  "123key": string\n}`;
+      expect(stringifyTypeAST(ast)).toBe(expected);
+    });
+
     it("should stringify union types", () => {
       const ast: TypeAST = {
         kind: "union",
@@ -420,6 +452,16 @@ describe("JSON utilities", () => {
           },
         ]),
       ).toBe(expected);
+    });
+  });
+
+  describe("quoteKey", () => {
+    it("should quote keys with special characters", () => {
+      expect(quoteKey("my-key")).toBe('"my-key"');
+      expect(quoteKey("my key")).toBe('"my key"');
+      expect(quoteKey("my.key")).toBe('"my.key"');
+      expect(quoteKey("123key")).toBe('"123key"');
+      expect(quoteKey("key")).toBe("key");
     });
   });
 });

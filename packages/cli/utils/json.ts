@@ -179,13 +179,12 @@ export function stringifyTypeAST(ast: TypeAST, nestLevel = 0): string {
       if (ast.properties.length === 0) return "{}";
 
       return `{\n${ast.properties
-        .map(
-          ({ key, optional, type }) =>
-            `${nextIndent}${key}${optional ? "?" : ""}: ${stringifyTypeAST(
-              type,
-              nestLevel + 1,
-            )}`,
-        )
+        .map(({ key, optional, type }) => {
+          return `${nextIndent}${quoteKey(key)}${optional ? "?" : ""}: ${stringifyTypeAST(
+            type,
+            nestLevel + 1,
+          )}`;
+        })
         .join(",\n")}\n${indent}}`;
 
     case "union":
@@ -196,6 +195,10 @@ export function stringifyTypeAST(ast: TypeAST, nestLevel = 0): string {
         .map((type) => stringifyTypeAST(type, nestLevel))
         .join(" | ");
   }
+}
+
+export function quoteKey(key: string): string {
+  return /[^a-zA-Z0-9_]/.test(key) || /^[0-9]/.test(key) ? `"${key}"` : key;
 }
 
 // Convert JSON array to TypeScript type
