@@ -1,6 +1,6 @@
 {
   "name": "@reflag/cli",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "packageManager": "yarn@4.1.1",
   "description": "CLI for Reflag service",
   "main": "./dist/index.js",
@@ -31,8 +31,9 @@
   "scripts": {
     "build": "tsc && shx chmod +x dist/index.js",
     "reflag": "yarn build && ./dist/index.js",
-    "test": "vitest -c vite.config.js",
-    "test:ci": "vitest run -c vite.config.js --reporter=default --reporter=junit --outputFile=junit.xml",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ci": "yarn test --reporter=default --reporter=junit --outputFile=junit.xml",
     "coverage": "vitest run --coverage",
     "lint": "eslint .",
     "lint:ci": "eslint --output-file eslint-report.json --format json .",

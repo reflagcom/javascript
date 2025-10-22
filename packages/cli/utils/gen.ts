@@ -4,7 +4,7 @@ import { dirname, isAbsolute, join } from "node:path";
 
 import { Flag, RemoteConfig } from "../services/flags.js";
 
-import { JSONToType } from "./json.js";
+import { JSONToType, quoteKey } from "./json.js";
 
 export type GenFormat = "react" | "node";
 
@@ -118,7 +118,7 @@ ${flags
   .map(({ key }) => {
     const config = configDefs.get(key);
     return indentLines(
-      `"${key}": ${config?.definition ? `{ config: { payload: ${config.name} } }` : "boolean"};`,
+      `${quoteKey(key)}: ${config?.definition ? `{ config: { payload: ${config.name} } }` : "boolean"};`,
       4,
     );
   })
