@@ -1883,7 +1883,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@inquirer/prompts@npm:7.9.0":
+"@inquirer/prompts@npm:^7.9.0":
   version: 7.9.0
   resolution: "@inquirer/prompts@npm:7.9.0"
   dependencies:
@@ -3075,7 +3075,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@reflag/cli@workspace:packages/cli"
   dependencies:
-    "@inquirer/prompts": "npm:7.9.0"
+    "@inquirer/prompts": "npm:^7.9.0"
     "@reflag/eslint-config": "npm:^0.0.2"
     "@reflag/tsconfig": "npm:^0.0.2"
     "@types/express": "npm:^5.0.0"
