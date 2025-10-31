@@ -6,6 +6,7 @@
   "workspaces": [
     "packages/*",
     "packages/react-sdk/dev/*",
+    "packages/icons/dev/*",
     "packages/openfeature-browser-provider/example"
   ],
   "scripts": {

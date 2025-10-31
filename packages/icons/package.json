@@ -1,0 +1,75 @@
+{
+  "name": "@reflag/icons",
+  "version": "1.0.0",
+  "packageManager": "yarn@4.1.1",
+  "description": "Icons for Reflag",
+  "type": "module",
+  "license": "MIT",
+  "author": "Reflag.",
+  "homepage": "https://docs.reflag.com/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/reflagcom/javascript.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    "./preact": {
+      "types": "./dist/icons.preact.d.ts",
+      "import": "./dist/icons.preact.js"
+    },
+    "./react": {
+      "types": "./dist/icons.react.d.ts",
+      "import": "./dist/icons.react.js"
+    },
+    "./icons.svg": "./dist/icons.svg"
+  },
+  "scripts": {
+    "sync": "node sync.mjs",
+    "compile": "tsc",
+    "build": "yarn sync && yarn compile",
+    "lint": "eslint .",
+    "lint:ci": "eslint --output-file eslint-report.json --format json .",
+    "prettier": "prettier --check .",
+    "format": "yarn lint --fix && yarn prettier --write",
+    "preversion": "yarn lint && yarn prettier && yarn build"
+  },
+  "peerDependencies": {
+    "preact": ">=10.0.0",
+    "react": ">=16.8.0"
+  },
+  "peerDependenciesMeta": {
+    "preact": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@figma-export/core": "^6.2.3",
+    "@preact/preset-vite": "^2.10.2",
+    "@reflag/eslint-config": "^0.0.2",
+    "@reflag/tsconfig": "^0.0.2",
+    "@types/node": "^24.9.2",
+    "@types/react": "^18.3.12",
+    "@types/svg-sprite": "^0.0.39",
+    "dotenv": "^17.2.3",
+    "eslint": "^9.38.0",
+    "preact": "^10.27.2",
+    "prettier": "^3.6.2",
+    "react": "^18.3.1",
+    "svg-sprite": "^2.0.4",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.12",
+    "vite-plugin-dts": "^4.5.4",
+    "vite-plugin-static-copy": "^3.1.4"
+  }
+}

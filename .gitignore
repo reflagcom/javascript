@@ -10,6 +10,7 @@ coverage
 
 node_modules
 gen
+!packages/icons/lib/gen
 dist
 dist-ssr
 *.local
