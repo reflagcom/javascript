@@ -35,7 +35,12 @@
     }
   },
   "dependencies": {
+<<<<<<< HEAD
     "@reflag/browser-sdk": "1.2.0"
+=======
+    "@reflag/browser-sdk": "1.2.0",
+    "canonical-json": "^0.2.0"
+>>>>>>> 8915afc (feat: showToolbarToggle())
   },
   "peerDependencies": {
     "vue": "^3.0.0"
