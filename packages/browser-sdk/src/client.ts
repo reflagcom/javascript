@@ -468,7 +468,8 @@ export class ReflagClient {
     }
 
     if (shouldShowToolbar(opts)) {
-      const position = typeof opts.toolbar === "object" ? opts.toolbar.position : undefined;
+      const position =
+        typeof opts.toolbar === "object" ? opts.toolbar.position : undefined;
       this.showToolbarToggle(position);
     }
 
