@@ -391,6 +391,8 @@ export class ReflagClient {
 
   private readonly hooks: HooksManager;
 
+  private toolbarToggleShown = false;
+
   /**
    * Create a new ReflagClient instance.
    */
@@ -466,12 +468,9 @@ export class ReflagClient {
     }
 
     if (shouldShowToolbar(opts)) {
-      this.logger.info("opening toolbar toggler");
-      showToolbarToggle({
-        reflagClient: this,
-        position:
-          typeof opts.toolbar === "object" ? opts.toolbar.position : undefined,
-      });
+      const position =
+        typeof opts.toolbar === "object" ? opts.toolbar.position : undefined;
+      this.showToolbarToggle(position);
     }
 
     // Register hooks
@@ -945,6 +944,19 @@ export class ReflagClient {
         self.flagsClient.setFlagOverride(flagKey, isEnabled);
       },
     };
+  }
+
+  showToolbarToggle(position?: ToolbarPosition) {
+    if (this.toolbarToggleShown) {
+      return;
+    }
+    this.toolbarToggleShown = true;
+    this.logger.info("opening toolbar toggler");
+
+    showToolbarToggle({
+      reflagClient: this,
+      position,
+    });
   }
 
   private setState(state: State) {
