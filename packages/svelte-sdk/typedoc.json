@@ -1,0 +1,6 @@
+{
+  "extends": "../../typedoc.json",
+  "entryPoints": ["src/index.ts"],
+  "out": "docs",
+  "name": "Reflag Svelte SDK"
+}
