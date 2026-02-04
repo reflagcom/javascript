@@ -78,7 +78,16 @@ export type {
 };
 
 export function ReflagProvider(props: ReflagProps) {
-  return <BaseProvider {...props} storage={props.storage ?? AsyncStorage} />;
+  return (
+    <BaseProvider
+      {...props}
+      storage={props.storage ?? AsyncStorage}
+      feedback={{
+        ...props.feedback,
+        enableAutoFeedback: props.feedback?.enableAutoFeedback ?? false,
+      }}
+    />
+  );
 }
 
 export function ReflagBootstrappedProvider(props: ReflagBootstrappedProps) {
@@ -86,6 +95,10 @@ export function ReflagBootstrappedProvider(props: ReflagBootstrappedProps) {
     <BaseBootstrappedProvider
       {...props}
       storage={props.storage ?? AsyncStorage}
+      feedback={{
+        ...props.feedback,
+        enableAutoFeedback: props.feedback?.enableAutoFeedback ?? false,
+      }}
     />
   );
 }

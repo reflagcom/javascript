@@ -31,9 +31,6 @@ import { showToolbarToggle } from "./toolbar";
 
 const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
 const isNode = typeof document === "undefined"; // deno supports "window" but not "document" according to https://remix.run/docs/en/main/guides/gotchas
-const isReactNative =
-  typeof navigator !== "undefined" &&
-  /ReactNative/i.test(navigator.userAgent ?? "");
 
 /**
  * (Internal) User context.
@@ -461,7 +458,6 @@ export class ReflagClient {
       !this.config.offline &&
       this.context?.user &&
       !isNode && // do not prompt on server-side
-      !isReactNative && // disable SSE-based auto feedback in React Native
       opts?.feedback?.enableAutoFeedback !== false // default to on
     ) {
       if (isMobile) {
