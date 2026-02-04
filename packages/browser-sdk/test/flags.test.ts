@@ -5,7 +5,7 @@ import { FLAGS_EXPIRE_MS } from "../src/config";
 import { FlagsClient, RawFlag } from "../src/flag/flags";
 import { HttpClient } from "../src/httpClient";
 
-import { flagsResult } from "./mocks/handlers";
+import { flagResponse, flagsResult } from "./mocks/handlers";
 import { newCache, TEST_STALE_MS } from "./flagCache.test";
 import { testLogger } from "./testLogger";
 
@@ -26,6 +26,12 @@ function flagsClientFactory() {
 
   vi.spyOn(httpClient, "get");
   vi.spyOn(httpClient, "post");
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(JSON.stringify(flagResponse), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }),
+  );
 
   return {
     cache,

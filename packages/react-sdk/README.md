@@ -163,8 +163,8 @@ An Expo example app lives at `packages/react-sdk/dev/expo`.
 AsyncStorage is automatically detected in React Native if you have
 `@react-native-async-storage/async-storage` installed.
 
-Since the toolbar is not available in React Native, you can set local overrides
-programmatically:
+If you have your own toolbar-like UI in React Native, you can set local
+overrides programmatically:
 
 ```tsx
 const client = useClient();

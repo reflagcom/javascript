@@ -35,7 +35,6 @@ export function newCache(): {
           cacheItem[0] = value;
         },
       },
-      storageKey: "flags-cache",
       staleTimeMs: TEST_STALE_MS,
       expireTimeMs: TEST_EXPIRE_MS,
     }),
