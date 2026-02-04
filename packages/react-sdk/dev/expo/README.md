@@ -1,6 +1,6 @@
 # Reflag React SDK Expo Example
 
-This Expo app demonstrates using `@reflag/react-sdk` inside a React Native project.
+This Expo app demonstrates using `@reflag/react-native-sdk` inside a React Native project.
 
 ## Quick start
 

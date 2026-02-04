@@ -2,7 +2,12 @@ import React from "react";
 import { Button, StyleSheet, Text, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 
-import { ReflagProvider, useClient, useFlag, useIsLoading } from "@reflag/react-sdk";
+import {
+  ReflagProvider,
+  useClient,
+  useFlag,
+  useIsLoading,
+} from "@reflag/react-native-sdk";
 
 const publishableKey =
   process.env.EXPO_PUBLIC_REFLAG_PUBLISHABLE_KEY ?? "";

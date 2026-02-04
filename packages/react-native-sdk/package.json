@@ -1,0 +1,47 @@
+{
+  "name": "@reflag/react-native-sdk",
+  "version": "1.0.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/reflagcom/javascript.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.build.json",
+    "lint": "eslint .",
+    "lint:ci": "eslint --output-file eslint-report.json --format json .",
+    "prettier": "prettier --check .",
+    "format": "yarn lint --fix && yarn prettier --write"
+  },
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "dependencies": {
+    "@reflag/react-sdk": "1.2.0",
+    "@react-native-async-storage/async-storage": "^2.2.0"
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*"
+  },
+  "devDependencies": {
+    "@reflag/eslint-config": "^0.0.2",
+    "@reflag/tsconfig": "^0.0.2",
+    "@types/react": "^19.0.12",
+    "eslint": "^9.21.0",
+    "prettier": "^3.5.2",
+    "typescript": "^5.7.3"
+  }
+}

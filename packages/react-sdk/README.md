@@ -154,22 +154,10 @@ generates a `check` event.
 
 ## React Native
 
-The React SDK works in React Native for flag evaluation and tracking.
-Web-only UI features (the toolbar and built-in feedback form) are not supported on React Native.
-Use your own UI and call `useSendFeedback` or `client.feedback` instead.
+For React Native, use `@reflag/react-native-sdk`, which is a thin wrapper around
+`@reflag/react-sdk` and wires up AsyncStorage by default.
 
 An Expo example app lives at `packages/react-sdk/dev/expo`.
-
-AsyncStorage is automatically detected in React Native if you have
-`@react-native-async-storage/async-storage` installed.
-
-If you have your own toolbar-like UI in React Native, you can set local
-overrides programmatically:
-
-```tsx
-const client = useClient();
-client.getFlag("my-flag").setIsEnabledOverride(true);
-```
 
 ## Remote config
 
