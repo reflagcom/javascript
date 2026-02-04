@@ -16,7 +16,6 @@
     "test:watch": "vitest",
     "test:ci": "yarn test --reporter=default --reporter=junit --outputFile=junit.xml",
     "coverage": "yarn test --coverage",
-    "typecheck:native": "tsc --project tsconfig.native.json",
     "lint": "eslint .",
     "lint:ci": "eslint --output-file eslint-report.json --format json .",
     "prettier": "prettier --check .",

@@ -12,7 +12,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc --project tsconfig.build.json && vite build && node scripts/create-native-entry.cjs",
+    "build": "tsc --project tsconfig.native.json && tsc --project tsconfig.build.json && vite build",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "yarn build && playwright test",
@@ -66,6 +66,7 @@
     "typescript": "^5.7.3",
     "vite": "^5.3.5",
     "vite-plugin-dts": "^4.0.0-beta.1",
+    "vite-plugin-static-copy": "^1.0.6",
     "vitest": "^2.0.4"
   }
 }
