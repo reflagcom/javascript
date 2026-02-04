@@ -1,17 +1,15 @@
 import React from "react";
-import { Button, SafeAreaView, StyleSheet, Text, View } from "react-native";
+import { Button, StyleSheet, Text, View } from "react-native";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 
-import {
-  ReflagProvider,
-  useFlag,
-  useIsLoading,
-} from "@reflag/react-sdk";
+import { ReflagProvider, useClient, useFlag, useIsLoading } from "@reflag/react-sdk";
 
 const publishableKey =
   process.env.EXPO_PUBLIC_REFLAG_PUBLISHABLE_KEY ?? "";
 const isConfigured = publishableKey.length > 0;
 
 function FlagCard() {
+  const client = useClient();
   const isLoading = useIsLoading();
   const { isEnabled, track } = useFlag("expo-demo");
 
@@ -21,34 +19,39 @@ function FlagCard() {
       <Text style={styles.cardBody}>
         Status: {isLoading ? "loading" : isEnabled ? "enabled" : "disabled"}
       </Text>
-      <Button title="Track usage" onPress={() => void track()} />
+      <View style={styles.buttonRow}>
+        <Button title="Track usage" onPress={() => void track()} />
+        <Button title="Refresh" onPress={() => void client.refresh()} />
+      </View>
     </View>
   );
 }
 
 export default function App() {
   return (
-    <SafeAreaView style={styles.container}>
-      <ReflagProvider
-        publishableKey={publishableKey || "demo"}
-        offline={!isConfigured}
-        fallbackFlags={["expo-demo"]}
-        context={{
-          user: { id: "expo-user", name: "Expo User" },
-          other: { platform: "react-native" },
-        }}
-      >
-        <View style={styles.header}>
-          <Text style={styles.title}>Reflag React SDK + Expo</Text>
-          <Text style={styles.subtitle}>
-            {isConfigured
-              ? "Connected to Reflag"
-              : "Set EXPO_PUBLIC_REFLAG_PUBLISHABLE_KEY to fetch real flags"}
-          </Text>
-        </View>
-        <FlagCard />
-      </ReflagProvider>
-    </SafeAreaView>
+    <SafeAreaProvider>
+      <SafeAreaView style={styles.container}>
+        <ReflagProvider
+          publishableKey={publishableKey || "demo"}
+          offline={!isConfigured}
+          fallbackFlags={["expo-demo"]}
+          context={{
+            user: { id: "expo-user", name: "Expo User" },
+            other: { platform: "react-native" },
+          }}
+        >
+          <View style={styles.header}>
+            <Text style={styles.title}>Reflag React SDK + Expo</Text>
+            <Text style={styles.subtitle}>
+              {isConfigured
+                ? "Connected to Reflag"
+                : "Set EXPO_PUBLIC_REFLAG_PUBLISHABLE_KEY to fetch real flags"}
+            </Text>
+          </View>
+          <FlagCard />
+        </ReflagProvider>
+      </SafeAreaView>
+    </SafeAreaProvider>
   );
 }
 
@@ -78,6 +81,9 @@ const styles = StyleSheet.create({
     gap: 12,
     borderWidth: 1,
     borderColor: "#1f2937",
+  },
+  buttonRow: {
+    gap: 12,
   },
   cardTitle: {
     fontSize: 16,
