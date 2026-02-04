@@ -1,0 +1,24 @@
+{
+  "name": "reflag-react-sdk-expo",
+  "private": true,
+  "version": "0.0.0",
+  "main": "index.js",
+  "scripts": {
+    "build:deps": "yarn workspace @reflag/browser-sdk build && yarn workspace @reflag/react-sdk build",
+    "prestart": "yarn build:deps",
+    "preandroid": "yarn build:deps",
+    "preios": "yarn build:deps",
+    "preweb": "yarn build:deps",
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web"
+  },
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "^2.2.0",
+    "@reflag/react-sdk": "workspace:*",
+    "expo": "~54.0.0",
+    "react": "19.1.0",
+    "react-native": "0.81.5"
+  }
+}

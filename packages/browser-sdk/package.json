@@ -12,7 +12,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc --project tsconfig.build.json && vite build",
+    "build": "tsc --project tsconfig.build.json && vite build && node scripts/create-native-entry.cjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "yarn build && playwright test",
@@ -29,8 +29,10 @@
   ],
   "main": "./dist/reflag-browser-sdk.umd.js",
   "types": "./dist/types/src/index.d.ts",
+  "react-native": "./dist/index.native.js",
   "exports": {
     ".": {
+      "react-native": "./dist/index.native.js",
       "import": "./dist/reflag-browser-sdk.mjs",
       "require": "./dist/reflag-browser-sdk.umd.js",
       "types": "./dist/types/src/index.d.ts"

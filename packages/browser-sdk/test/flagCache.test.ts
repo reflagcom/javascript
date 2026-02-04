@@ -30,9 +30,12 @@ export function newCache(): {
   return {
     cache: new FlagCache({
       storage: {
-        get: () => cacheItem[0],
-        set: (value) => (cacheItem[0] = value),
+        getItem: async () => cacheItem[0],
+        setItem: async (_key, value) => {
+          cacheItem[0] = value;
+        },
       },
+      storageKey: "flags-cache",
       staleTimeMs: TEST_STALE_MS,
       expireTimeMs: TEST_EXPIRE_MS,
     }),
@@ -48,8 +51,8 @@ describe("cache", () => {
   test("caches items", async () => {
     const { cache } = newCache();
 
-    cache.set("key", { flags });
-    expect(cache.get("key")).toEqual({
+    await cache.set("key", { flags });
+    await expect(cache.get("key")).resolves.toEqual({
       stale: false,
       flags,
     } satisfies CacheResult);
@@ -58,28 +61,28 @@ describe("cache", () => {
   test("sets stale", async () => {
     const { cache } = newCache();
 
-    cache.set("key", { flags });
+    await cache.set("key", { flags });
 
     vitest.advanceTimersByTime(TEST_STALE_MS + 1);
 
-    const cacheItem = cache.get("key");
+    const cacheItem = await cache.get("key");
     expect(cacheItem?.stale).toBe(true);
   });
 
   test("expires on set", async () => {
     const { cache, cacheItem } = newCache();
 
-    cache.set("first key", {
+    await cache.set("first key", {
       flags,
     });
     expect(cacheItem[0]).not.toBeNull();
     vitest.advanceTimersByTime(TEST_EXPIRE_MS + 1);
 
-    cache.set("other key", {
+    await cache.set("other key", {
       flags,
     });
 
-    const item = cache.get("key");
+    const item = await cache.get("key");
     expect(item).toBeUndefined();
     expect(cacheItem[0]).not.toContain("first key"); // should have been removed
   });

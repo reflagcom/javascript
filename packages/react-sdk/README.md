@@ -14,6 +14,30 @@ Install via npm:
 npm i @reflag/react-sdk
 ```
 
+### React Native (Expo)
+
+The React SDK works in React Native for flag evaluation and tracking. Web-only UI
+features (the toolbar and built-in feedback form) are not supported on React Native.
+Use your own UI and call `useSendFeedback` or `client.feedback` instead.
+
+An Expo example app lives at `packages/react-sdk/dev/expo`.
+
+AsyncStorage is automatically detected in React Native if you have
+`@react-native-async-storage/async-storage` installed. You can also pass it
+explicitly if you prefer:
+
+```tsx
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+<ReflagProvider
+  publishableKey="{YOUR_PUBLISHABLE_KEY}"
+  storage={AsyncStorage}
+  context={{ user: { id: "user_123" } }}
+>
+  {children}
+</ReflagProvider>;
+```
+
 ## Get started
 
 ### 1. Add the `ReflagProvider` context provider

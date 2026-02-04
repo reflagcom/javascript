@@ -1,10 +1,12 @@
 import { deepEqual } from "fast-equals";
 
-import { FLAG_EVENTS_PER_MIN, FLAGS_EXPIRE_MS, IS_SERVER } from "../config";
+import { FLAG_EVENTS_PER_MIN, FLAGS_EXPIRE_MS } from "../config";
 import { ReflagContext } from "../context";
 import { HttpClient } from "../httpClient";
 import { Logger, loggerWithPrefix } from "../logger";
 import RateLimiter from "../rateLimiter";
+import { resolveStorageAdapter, StorageAdapter } from "../storage";
+import { createEventTarget } from "../utils/eventTarget";
 
 import { FlagCache, isObject, parseAPIFlagsResponse } from "./flagCache";
 
@@ -184,6 +186,7 @@ type FlagsClientOptions = Partial<Config> & {
   fallbackFlags?: Record<string, FallbackFlagOverride> | string[];
   cache?: FlagCache;
   rateLimiter?: RateLimiter;
+  storage?: StorageAdapter;
 };
 
 /**
@@ -201,10 +204,11 @@ export class FlagsClient {
   private flagOverrides: FlagOverrides = {};
   private flags: RawFlags = {};
   private fallbackFlags: FallbackFlags = {};
+  private storage: StorageAdapter | null;
 
   private config: Config = DEFAULT_FLAGS_CONFIG;
 
-  private eventTarget = new EventTarget();
+  private eventTarget = createEventTarget();
   private abortController: AbortController = new AbortController();
 
   constructor(
@@ -216,6 +220,7 @@ export class FlagsClient {
       cache,
       rateLimiter,
       fallbackFlags,
+      storage,
       ...config
     }: FlagsClientOptions = {},
   ) {
@@ -227,6 +232,7 @@ export class FlagsClient {
     this.logger = loggerWithPrefix(logger, "[Flags]");
     this.rateLimiter =
       rateLimiter ?? new RateLimiter(FLAG_EVENTS_PER_MIN, this.logger);
+    this.storage = resolveStorageAdapter(cache ? undefined : storage);
     this.cache =
       cache ??
       this.setupCache(this.config.staleTimeMs, this.config.expireTimeMs);
@@ -236,8 +242,6 @@ export class FlagsClient {
       this.bootstrapped = true;
       this.setFetchedFlags(bootstrappedFlags, false);
     }
-
-    this.flagOverrides = this.getOverridesCache();
   }
 
   async initialize() {
@@ -246,6 +250,11 @@ export class FlagsClient {
       return;
     }
     this.initialized = true;
+
+    const cachedOverrides = await this.getOverridesCache();
+    if (Object.keys(cachedOverrides).length > 0) {
+      this.flagOverrides = { ...cachedOverrides, ...this.flagOverrides };
+    }
 
     if (!this.bootstrapped) {
       this.setFetchedFlags((await this.maybeFetchFlags()) || {});
@@ -300,7 +309,7 @@ export class FlagsClient {
     } else {
       this.flagOverrides[key] = isEnabled;
     }
-    this.setOverridesCache(this.flagOverrides);
+    void this.setOverridesCache(this.flagOverrides);
 
     this.updateFlags();
   }
@@ -399,30 +408,45 @@ export class FlagsClient {
     }
   }
 
-  private setOverridesCache(overrides: FlagOverrides) {
-    if (IS_SERVER) return;
+  /**
+   * Force refresh flags from the API, bypassing cache.
+   */
+  async refreshFlags(): Promise<RawFlags | undefined> {
+    if (this.config.offline) {
+      return;
+    }
+
+    const flags = await this.fetchFlags();
+    if (flags) {
+      this.setFetchedFlags(flags);
+    }
+    return flags;
+  }
+
+  private async setOverridesCache(overrides: FlagOverrides) {
     try {
-      localStorage.setItem(storageOverridesKey, JSON.stringify(overrides));
+      if (!this.storage) return;
+      await this.storage.setItem(
+        storageOverridesKey,
+        JSON.stringify(overrides),
+      );
     } catch (error) {
       this.logger.warn(
-        "storing flag overrides in localStorage failed, overrides won't persist",
+        "storing flag overrides failed, overrides won't persist",
         error,
       );
     }
   }
 
-  private getOverridesCache(): FlagOverrides {
-    if (IS_SERVER) return {};
+  private async getOverridesCache(): Promise<FlagOverrides> {
     try {
-      const overridesStored = localStorage.getItem(storageOverridesKey);
+      if (!this.storage) return {};
+      const overridesStored = await this.storage.getItem(storageOverridesKey);
       const overrides = JSON.parse(overridesStored || "{}");
       if (!isObject(overrides)) throw new Error("invalid overrides");
       return overrides;
     } catch (error) {
-      this.logger.warn(
-        "getting flag overrides from localStorage failed",
-        error,
-      );
+      this.logger.warn("getting flag overrides failed", error);
       return {};
     }
   }
@@ -433,7 +457,7 @@ export class FlagsClient {
     }
 
     const cacheKey = this.fetchParams().toString();
-    const cachedItem = this.cache.get(cacheKey);
+    const cachedItem = await this.cache.get(cacheKey);
 
     if (cachedItem) {
       if (!cachedItem.stale) return cachedItem.flags;
@@ -442,10 +466,10 @@ export class FlagsClient {
       if (this.config.staleWhileRevalidate) {
         // re-fetch in the background, but immediately return last successful value
         this.fetchFlags()
-          .then((flags) => {
+          .then(async (flags) => {
             if (!flags) return;
 
-            this.cache.set(cacheKey, {
+            await this.cache.set(cacheKey, {
               flags,
             });
             this.setFetchedFlags(flags);
@@ -462,7 +486,7 @@ export class FlagsClient {
     const fetchedFlags = await this.fetchFlags();
 
     if (fetchedFlags) {
-      this.cache.set(cacheKey, {
+      await this.cache.set(cacheKey, {
         flags: fetchedFlags,
       });
       return fetchedFlags;
@@ -503,21 +527,13 @@ export class FlagsClient {
   }
 
   private triggerFlagsUpdated() {
-    this.eventTarget.dispatchEvent(new Event("flagsUpdated"));
+    this.eventTarget.dispatchEvent({ type: "flagsUpdated" });
   }
 
   private setupCache(staleTimeMs = 0, expireTimeMs = FLAGS_EXPIRE_MS) {
     return new FlagCache({
-      storage: !IS_SERVER
-        ? {
-            get: () => localStorage.getItem(localStorageFetchedFlagsKey),
-            set: (value) =>
-              localStorage.setItem(localStorageFetchedFlagsKey, value),
-          }
-        : {
-            get: () => null,
-            set: () => void 0,
-          },
+      storage: this.storage,
+      storageKey: localStorageFetchedFlagsKey,
       staleTimeMs,
       expireTimeMs,
     });
