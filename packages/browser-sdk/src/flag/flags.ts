@@ -311,6 +311,7 @@ export class FlagsClient {
     } else {
       this.flagOverrides[key] = isEnabled;
     }
+    // TODO(next major): make this async and await storage persistence.
     void this.setOverridesCache(this.flagOverrides);
 
     this.updateFlags();
