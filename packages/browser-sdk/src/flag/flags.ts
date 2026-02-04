@@ -5,7 +5,7 @@ import { ReflagContext } from "../context";
 import { HttpClient } from "../httpClient";
 import { Logger, loggerWithPrefix } from "../logger";
 import RateLimiter from "../rateLimiter";
-import { resolveStorageAdapter, StorageAdapter } from "../storage";
+import { getLocalStorageAdapter, StorageAdapter } from "../storage";
 import { createEventTarget } from "../utils/eventTarget";
 
 import { FlagCache, isObject, parseAPIFlagsResponse } from "./flagCache";
@@ -234,11 +234,7 @@ export class FlagsClient {
     this.logger = loggerWithPrefix(logger, "[Flags]");
     this.rateLimiter =
       rateLimiter ?? new RateLimiter(FLAG_EVENTS_PER_MIN, this.logger);
-    const { adapter, type } = resolveStorageAdapter(
-      cache ? undefined : storage,
-    );
-    this.storage = adapter;
-    this.logger.debug(`storage adapter: ${type}`);
+    this.storage = (cache ? undefined : storage) ?? getLocalStorageAdapter();
     this.cache =
       cache ??
       this.setupCache(this.config.staleTimeMs, this.config.expireTimeMs);
