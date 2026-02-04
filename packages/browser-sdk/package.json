@@ -18,6 +18,7 @@
     "test:e2e": "yarn build && playwright test",
     "test:ci": "yarn test --reporter=default --reporter=junit --outputFile=junit.xml && yarn test:e2e",
     "coverage": "yarn test --coverage",
+    "typecheck:native": "tsc --project tsconfig.native.json",
     "lint": "eslint .",
     "lint:ci": "eslint --output-file eslint-report.json --format json .",
     "prettier": "prettier --check .",

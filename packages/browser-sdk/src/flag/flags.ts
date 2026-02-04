@@ -176,8 +176,9 @@ export interface CheckEvent {
   missingContextFields?: string[];
 }
 
-const localStorageFetchedFlagsKey = `__reflag_fetched_flags`;
 const storageOverridesKey = `__reflag_overrides`;
+const REFRESH_LIMIT_COUNT = 10;
+const REFRESH_LIMIT_WINDOW_MS = 5 * 60 * 1000;
 
 export type FlagOverrides = Record<string, boolean | undefined>;
 
@@ -205,6 +206,7 @@ export class FlagsClient {
   private flags: RawFlags = {};
   private fallbackFlags: FallbackFlags = {};
   private storage: StorageAdapter | null;
+  private refreshEvents: number[] = [];
 
   private config: Config = DEFAULT_FLAGS_CONFIG;
 
@@ -232,7 +234,11 @@ export class FlagsClient {
     this.logger = loggerWithPrefix(logger, "[Flags]");
     this.rateLimiter =
       rateLimiter ?? new RateLimiter(FLAG_EVENTS_PER_MIN, this.logger);
-    this.storage = resolveStorageAdapter(cache ? undefined : storage);
+    const storageResolution = resolveStorageAdapter(
+      cache ? undefined : storage,
+    );
+    this.storage = storageResolution.adapter;
+    this.logger.debug(`storage adapter: ${storageResolution.type}`);
     this.cache =
       cache ??
       this.setupCache(this.config.staleTimeMs, this.config.expireTimeMs);
@@ -416,6 +422,17 @@ export class FlagsClient {
       return;
     }
 
+    // rate limit refreshes to prevent accidental abuse
+    const now = Date.now();
+    this.refreshEvents = this.refreshEvents.filter(
+      (timestamp) => now - timestamp < REFRESH_LIMIT_WINDOW_MS,
+    );
+    if (this.refreshEvents.length >= REFRESH_LIMIT_COUNT) {
+      this.logger.warn("refresh rate limit exceeded");
+      return;
+    }
+    this.refreshEvents.push(now);
+
     const flags = await this.fetchFlags();
     if (flags) {
       this.setFetchedFlags(flags);
@@ -533,7 +550,6 @@ export class FlagsClient {
   private setupCache(staleTimeMs = 0, expireTimeMs = FLAGS_EXPIRE_MS) {
     return new FlagCache({
       storage: this.storage,
-      storageKey: localStorageFetchedFlagsKey,
       staleTimeMs,
       expireTimeMs,
     });

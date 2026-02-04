@@ -2,6 +2,8 @@ import { StorageAdapter } from "../storage";
 
 import { RawFlags } from "./flags";
 
+const DEFAULT_STORAGE_KEY = "__reflag_fetched_flags";
+
 interface cacheEntry {
   expireAt: number;
   staleAt: number;
@@ -48,25 +50,36 @@ export interface CacheResult {
   stale: boolean;
 }
 
+const memoryStorage = (): StorageAdapter => {
+  let value: string | null = null;
+  return {
+    getItem: async () => value,
+    setItem: async (_key, nextValue) => {
+      value = nextValue;
+    },
+    removeItem: async () => {
+      value = null;
+    },
+  };
+};
+
 export class FlagCache {
-  private storage: StorageAdapter | null;
+  private storage: StorageAdapter;
   private readonly storageKey: string;
   private readonly staleTimeMs: number;
   private readonly expireTimeMs: number;
 
   constructor({
     storage,
-    storageKey,
     staleTimeMs,
     expireTimeMs,
   }: {
     storage: StorageAdapter | null;
-    storageKey: string;
     staleTimeMs: number;
     expireTimeMs: number;
   }) {
-    this.storage = storage;
-    this.storageKey = storageKey;
+    this.storage = storage ?? memoryStorage();
+    this.storageKey = DEFAULT_STORAGE_KEY;
     this.staleTimeMs = staleTimeMs;
     this.expireTimeMs = expireTimeMs;
   }
@@ -82,7 +95,6 @@ export class FlagCache {
     let cacheData: CacheData = {};
 
     try {
-      if (!this.storage) return cacheData;
       const cachedResponseRaw = await this.storage.getItem(this.storageKey);
       if (cachedResponseRaw) {
         cacheData = validateCacheData(JSON.parse(cachedResponseRaw)) ?? {};
@@ -101,7 +113,6 @@ export class FlagCache {
       Object.entries(cacheData).filter(([_k, v]) => v.expireAt > Date.now()),
     );
 
-    if (!this.storage) return cacheData;
     await this.storage.setItem(this.storageKey, JSON.stringify(cacheData));
 
     return cacheData;
@@ -109,7 +120,6 @@ export class FlagCache {
 
   async get(key: string): Promise<CacheResult | undefined> {
     try {
-      if (!this.storage) return;
       const cachedResponseRaw = await this.storage.getItem(this.storageKey);
       if (cachedResponseRaw) {
         const cachedResponse = validateCacheData(JSON.parse(cachedResponseRaw));

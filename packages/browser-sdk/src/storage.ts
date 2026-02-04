@@ -4,6 +4,12 @@ export type StorageAdapter = {
   removeItem?(key: string): Promise<void>;
 };
 
+export type StorageAdapterType =
+  | "custom"
+  | "localStorage"
+  | "asyncStorage"
+  | "none";
+
 function isLocalStorageUsable() {
   return (
     typeof localStorage !== "undefined" &&
@@ -14,17 +20,20 @@ function isLocalStorageUsable() {
 
 export function resolveStorageAdapter(
   storage?: StorageAdapter,
-): StorageAdapter | null {
-  if (storage) return storage;
+): { adapter: StorageAdapter | null; type: StorageAdapterType } {
+  if (storage) return { adapter: storage, type: "custom" };
   if (isLocalStorageUsable()) {
     return {
-      getItem: async (key) => localStorage.getItem(key),
-      setItem: async (key, value) => {
-        localStorage.setItem(key, value);
+      adapter: {
+        getItem: async (key) => localStorage.getItem(key),
+        setItem: async (key, value) => {
+          localStorage.setItem(key, value);
+        },
+        removeItem: async (key) => {
+          localStorage.removeItem(key);
+        },
       },
-      removeItem: async (key) => {
-        localStorage.removeItem(key);
-      },
+      type: "localStorage",
     };
   }
   // React Native: try AsyncStorage if available.
@@ -33,10 +42,10 @@ export function resolveStorageAdapter(
     const asyncStorage = require("@react-native-async-storage/async-storage");
     const adapter = asyncStorage?.default ?? asyncStorage;
     if (adapter?.getItem && adapter?.setItem) {
-      return adapter as StorageAdapter;
+      return { adapter: adapter as StorageAdapter, type: "asyncStorage" };
     }
   } catch {
     // ignore - not running in React Native or AsyncStorage not installed
   }
-  return null;
+  return { adapter: null, type: "none" };
 }

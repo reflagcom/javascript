@@ -13,6 +13,7 @@
     "build": "lerna run build --stream",
     "test:ci": "lerna run test:ci --stream",
     "test": "lerna run test --stream",
+    "typecheck:native": "lerna run typecheck:native --stream",
     "format": "lerna run format --stream",
     "prettier": "lerna run prettier --stream",
     "prettier:fix": "lerna run prettier -- --write",
