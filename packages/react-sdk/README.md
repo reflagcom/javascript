@@ -157,7 +157,7 @@ generates a `check` event.
 For React Native, use `@reflag/react-native-sdk`, which is a thin wrapper around
 `@reflag/react-sdk` and wires up AsyncStorage by default.
 
-An Expo example app lives at `packages/react-sdk/dev/expo`.
+An Expo example app lives at `packages/react-native-sdk/dev/expo`.
 
 ## Remote config
 

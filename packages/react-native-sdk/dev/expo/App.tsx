@@ -9,8 +9,7 @@ import {
   useIsLoading,
 } from "@reflag/react-native-sdk";
 
-const publishableKey =
-  process.env.EXPO_PUBLIC_REFLAG_PUBLISHABLE_KEY ?? "";
+const publishableKey = process.env.EXPO_PUBLIC_REFLAG_PUBLISHABLE_KEY ?? "";
 const isConfigured = publishableKey.length > 0;
 
 function FlagCard() {

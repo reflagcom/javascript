@@ -19,7 +19,7 @@ yarn install
 3. Start the Expo app:
 
 ```shell
-cd packages/react-sdk/dev/expo
+cd packages/react-native-sdk/dev/expo
 yarn start
 ```
 

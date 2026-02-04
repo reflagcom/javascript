@@ -1,12 +1,15 @@
 # Reflag React Native SDK
 
-A thin React Native wrapper around `@reflag/react-sdk` that automatically
-configures AsyncStorage for flag caching.
+A thin React Native wrapper around `@reflag/react-sdk`.
+
+For more usage details, see the React SDK README in `packages/react-sdk/README.md`.
+
+An Expo example app lives at `packages/react-native-sdk/dev/expo`.
 
 ## Install
 
 ```shell
-npm i @reflag/react-native-sdk @react-native-async-storage/async-storage
+npm i @reflag/react-native-sdk
 ```
 
 ## Usage
@@ -24,6 +27,3 @@ import { ReflagProvider, useFlag } from "@reflag/react-native-sdk";
   <MyApp />
 </ReflagProvider>;
 ```
-
-The wrapper uses AsyncStorage by default. You can still pass a custom `storage`
-adapter if needed.
