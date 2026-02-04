@@ -205,7 +205,7 @@ export class FlagsClient {
   private flagOverrides: FlagOverrides = {};
   private flags: RawFlags = {};
   private fallbackFlags: FallbackFlags = {};
-  private storage: StorageAdapter | null;
+  private storage: StorageAdapter;
   private refreshEvents: number[] = [];
 
   private config: Config = DEFAULT_FLAGS_CONFIG;
@@ -234,11 +234,11 @@ export class FlagsClient {
     this.logger = loggerWithPrefix(logger, "[Flags]");
     this.rateLimiter =
       rateLimiter ?? new RateLimiter(FLAG_EVENTS_PER_MIN, this.logger);
-    const storageResolution = resolveStorageAdapter(
+    const { adapter, type } = resolveStorageAdapter(
       cache ? undefined : storage,
     );
-    this.storage = storageResolution.adapter;
-    this.logger.debug(`storage adapter: ${storageResolution.type}`);
+    this.storage = adapter;
+    this.logger.debug(`storage adapter: ${type}`);
     this.cache =
       cache ??
       this.setupCache(this.config.staleTimeMs, this.config.expireTimeMs);
@@ -442,7 +442,6 @@ export class FlagsClient {
 
   private async setOverridesCache(overrides: FlagOverrides) {
     try {
-      if (!this.storage) return;
       await this.storage.setItem(
         storageOverridesKey,
         JSON.stringify(overrides),
@@ -457,7 +456,6 @@ export class FlagsClient {
 
   private async getOverridesCache(): Promise<FlagOverrides> {
     try {
-      if (!this.storage) return {};
       const overridesStored = await this.storage.getItem(storageOverridesKey);
       const overrides = JSON.parse(overridesStored || "{}");
       if (!isObject(overrides)) throw new Error("invalid overrides");

@@ -50,19 +50,6 @@ export interface CacheResult {
   stale: boolean;
 }
 
-const memoryStorage = (): StorageAdapter => {
-  let value: string | null = null;
-  return {
-    getItem: async () => value,
-    setItem: async (_key, nextValue) => {
-      value = nextValue;
-    },
-    removeItem: async () => {
-      value = null;
-    },
-  };
-};
-
 export class FlagCache {
   private storage: StorageAdapter;
   private readonly storageKey: string;
@@ -74,11 +61,11 @@ export class FlagCache {
     staleTimeMs,
     expireTimeMs,
   }: {
-    storage: StorageAdapter | null;
+    storage: StorageAdapter;
     staleTimeMs: number;
     expireTimeMs: number;
   }) {
-    this.storage = storage ?? memoryStorage();
+    this.storage = storage;
     this.storageKey = DEFAULT_STORAGE_KEY;
     this.staleTimeMs = staleTimeMs;
     this.expireTimeMs = expireTimeMs;

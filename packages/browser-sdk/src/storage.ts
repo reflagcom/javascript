@@ -8,7 +8,20 @@ export type StorageAdapterType =
   | "custom"
   | "localStorage"
   | "asyncStorage"
-  | "none";
+  | "memory";
+
+export const createMemoryStorageAdapter = (): StorageAdapter => {
+  let value: string | null = null;
+  return {
+    getItem: async () => value,
+    setItem: async (_key, nextValue) => {
+      value = nextValue;
+    },
+    removeItem: async () => {
+      value = null;
+    },
+  };
+};
 
 function isLocalStorageUsable() {
   return (
@@ -18,9 +31,10 @@ function isLocalStorageUsable() {
   );
 }
 
-export function resolveStorageAdapter(
-  storage?: StorageAdapter,
-): { adapter: StorageAdapter | null; type: StorageAdapterType } {
+export function resolveStorageAdapter(storage?: StorageAdapter): {
+  adapter: StorageAdapter;
+  type: StorageAdapterType;
+} {
   if (storage) return { adapter: storage, type: "custom" };
   if (isLocalStorageUsable()) {
     return {
@@ -47,5 +61,5 @@ export function resolveStorageAdapter(
   } catch {
     // ignore - not running in React Native or AsyncStorage not installed
   }
-  return { adapter: null, type: "none" };
+  return { adapter: createMemoryStorageAdapter(), type: "memory" };
 }
