@@ -4943,7 +4943,7 @@ __metadata:
   dependencies:
     "@react-native-async-storage/async-storage": "npm:^2.2.0"
     "@reflag/eslint-config": "npm:^0.0.2"
-    "@reflag/react-sdk": "npm:1.3.0"
+    "@reflag/react-sdk": "npm:1.4.0"
     "@reflag/tsconfig": "npm:^0.0.2"
     "@types/react": "npm:^19.0.12"
     eslint: "npm:^9.21.0"
@@ -4955,7 +4955,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@reflag/react-sdk@npm:1.3.0, @reflag/react-sdk@workspace:^, @reflag/react-sdk@workspace:packages/react-sdk":
+"@reflag/react-sdk@npm:1.4.0, @reflag/react-sdk@workspace:^, @reflag/react-sdk@workspace:packages/react-sdk":
   version: 0.0.0-use.local
   resolution: "@reflag/react-sdk@workspace:packages/react-sdk"
   dependencies:
