@@ -24,14 +24,12 @@ jobs:
           cache-dependency-path: "**/yarn.lock"
           registry-url: "https://registry.npmjs.org"
           scope: "@reflag"
+      - name: npm version
+        run: npm version
       - name: Install dependencies
         run: yarn install --immutable
       - name: Build packages
         run: yarn build
-      - name: npm login
-        run: echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > .npmrc
-        env:
-          NPM_TOKEN: ${{ secrets.REFLAG_NPM_TOKEN }}
       - name: Publish
         run: yarn lerna publish from-package --no-private --yes
       - name: Build docs
