@@ -2,6 +2,7 @@ import { resolve } from "path";
 import preserveDirectives from "rollup-preserve-directives";
 import { defineConfig } from "vite";
 import dts from "vite-plugin-dts";
+import { viteStaticCopy } from "vite-plugin-static-copy";
 
 export default defineConfig({
   test: {
@@ -14,6 +15,14 @@ export default defineConfig({
   plugins: [
     dts({ insertTypesEntry: true, exclude: ["dev"] }),
     preserveDirectives(),
+    viteStaticCopy({
+      targets: [
+        {
+          src: "src/index.native.js",
+          dest: ".",
+        },
+      ],
+    }),
   ],
   build: {
     exclude: ["**/node_modules/**", "test/e2e/**", "dev"],

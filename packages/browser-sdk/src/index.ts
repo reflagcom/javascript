@@ -42,6 +42,7 @@ export type {
 } from "./flag/flags";
 export type { HookArgs, State, TrackEvent } from "./hooksManager";
 export type { Logger } from "./logger";
+export type { StorageAdapter } from "./storage";
 export { feedbackContainerId, propagatedEvents } from "./ui/constants";
 export type {
   DialogPlacement,

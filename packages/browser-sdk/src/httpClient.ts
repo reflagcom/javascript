@@ -1,3 +1,4 @@
+import { createAbortController } from "./utils/abortController";
 import { API_BASE_URL, SDK_VERSION, SDK_VERSION_HEADER_NAME } from "./config";
 
 export interface HttpClientOptions {
@@ -57,7 +58,7 @@ export class HttpClient {
       return fetch(url, this.fetchOptions);
     }
 
-    const controller = new AbortController();
+    const controller = createAbortController();
     const id = setTimeout(() => controller.abort(), timeoutMs);
 
     const res = await fetch(url, {

@@ -26,6 +26,7 @@ import { ReflagContext, ReflagDeprecatedContext } from "./context";
 import { HookArgs, HooksManager, State } from "./hooksManager";
 import { HttpClient } from "./httpClient";
 import { Logger, loggerWithPrefix, quietConsoleLogger } from "./logger";
+import { StorageAdapter } from "./storage";
 import { showToolbarToggle } from "./toolbar";
 
 const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
@@ -297,6 +298,12 @@ export type InitOptions = ReflagDeprecatedContext & {
    * Pre-fetched flags to be used instead of fetching them from the server.
    */
   bootstrappedFlags?: RawFlags;
+
+  /**
+   * Optional storage adapter used for caching flags and overrides.
+   * Useful for React Native (AsyncStorage).
+   */
+  storage?: StorageAdapter;
 };
 
 const defaultConfig: Config = {
@@ -366,7 +373,9 @@ export interface Flag {
 
 function shouldShowToolbar(opts: InitOptions) {
   const toolbarOpts = opts.toolbar;
-  if (typeof window === "undefined") return false;
+  if (typeof window === "undefined" || typeof window.location === "undefined") {
+    return false;
+  }
   if (typeof toolbarOpts === "boolean") return toolbarOpts;
   if (typeof toolbarOpts?.show === "boolean") return toolbarOpts.show;
   return window.location.hostname === "localhost";
@@ -441,6 +450,7 @@ export class ReflagClient {
         timeoutMs: opts.timeoutMs,
         fallbackFlags: opts.fallbackFlags,
         offline: this.config.offline,
+        storage: opts.storage,
       },
     );
 
@@ -867,6 +877,13 @@ export class ReflagClient {
    */
   getFlags(): RawFlags {
     return this.flagsClient.getFlags();
+  }
+
+  /**
+   * Force refresh flags from the API, bypassing cache.
+   */
+  refresh() {
+    return this.flagsClient.refreshFlags();
   }
 
   /**

@@ -1,6 +1,6 @@
 {
   "name": "@reflag/browser-sdk",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "packageManager": "yarn@4.1.1",
   "license": "MIT",
   "repository": {
@@ -12,7 +12,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc --project tsconfig.build.json && vite build",
+    "build": "tsc --project tsconfig.native.json && tsc --project tsconfig.build.json && vite build",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "yarn build && playwright test",
@@ -29,8 +29,10 @@
   ],
   "main": "./dist/reflag-browser-sdk.umd.js",
   "types": "./dist/types/src/index.d.ts",
+  "react-native": "./dist/index.native.js",
   "exports": {
     ".": {
+      "react-native": "./dist/index.native.js",
       "import": "./dist/reflag-browser-sdk.mjs",
       "require": "./dist/reflag-browser-sdk.umd.js",
       "types": "./dist/types/src/index.d.ts"
@@ -63,6 +65,7 @@
     "typescript": "^5.7.3",
     "vite": "^5.3.5",
     "vite-plugin-dts": "^4.0.0-beta.1",
+    "vite-plugin-static-copy": "^1.0.6",
     "vitest": "^2.0.4"
   }
 }
