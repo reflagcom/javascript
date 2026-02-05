@@ -5,10 +5,6 @@ on:
     branches:
       - main
 
-permissions:
-  id-token: write # Required publishing to npm using OIDC
-  contents: read
-
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -42,7 +38,7 @@ jobs:
           npm whoami --registry https://registry.npmjs.org || true
       - name: Publish
         run: |
-          NODE_AUTH_TOKEN="" yarn lerna exec --toposort --concurrency 1 --no-private -- npm publish --access public --provenance
+          yarn lerna exec --toposort --concurrency 1 --no-private -- npm publish --access public --provenance
         env:
           NPM_CONFIG_USERCONFIG: "${{ runner.temp }}/.npmrc"
       - name: Build docs
