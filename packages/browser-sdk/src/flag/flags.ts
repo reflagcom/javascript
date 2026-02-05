@@ -6,8 +6,8 @@ import { HttpClient } from "../httpClient";
 import { Logger, loggerWithPrefix } from "../logger";
 import RateLimiter from "../rateLimiter";
 import { getLocalStorageAdapter, StorageAdapter } from "../storage";
-import { createEventTarget } from "../utils/eventTarget";
 import { createAbortController } from "../utils/abortController";
+import { createEventTarget } from "../utils/eventTarget";
 
 import { FlagCache, isObject, parseAPIFlagsResponse } from "./flagCache";
 
