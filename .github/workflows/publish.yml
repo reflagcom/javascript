@@ -35,9 +35,14 @@ jobs:
         run: yarn install --immutable
       - name: Build packages
         run: yarn build
+      - name: Prepare npmrc for OIDC
+        run: |
+          echo "@reflag:registry=https://registry.npmjs.org/" > "${RUNNER_TEMP}/.npmrc"
       - name: Publish
         run: yarn lerna publish from-package --no-private --yes
         env:
+          NPM_CONFIG_USERCONFIG: "${{ runner.temp }}/.npmrc"
+          NODE_AUTH_TOKEN: ""
           NPM_CONFIG_PROVENANCE: "true"
           NPM_CONFIG_ACCESS: "public"
       - name: Build docs
