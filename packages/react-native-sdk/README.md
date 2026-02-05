@@ -20,8 +20,8 @@ import { ReflagProvider, useFlag } from "@reflag/react-native-sdk";
 <ReflagProvider
   publishableKey="{YOUR_PUBLISHABLE_KEY}"
   context={{
-    user: { id: "user_123" },
-    company: { id: "company_123" },
+    user: { id: "user_123", name: "John Doe", email: "john@acmeinc.com" },
+    company: { id: "company_123", name: "Acme, Inc" },
   }}
 >
   <MyApp />
