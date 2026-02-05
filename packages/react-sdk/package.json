@@ -1,6 +1,6 @@
 {
   "name": "@reflag/react-sdk",
-  "version": "1.2.0",
+  "version": "1.4.0",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -27,19 +27,26 @@
   ],
   "main": "./dist/reflag-react-sdk.umd.js",
   "types": "./dist/index.d.ts",
+  "react-native": "./dist/index.native.js",
   "exports": {
     ".": {
+      "react-native": "./dist/index.native.js",
       "import": "./dist/reflag-react-sdk.mjs",
       "require": "./dist/reflag-react-sdk.umd.js",
       "types": "./dist/index.d.ts"
     }
   },
   "dependencies": {
-    "@reflag/browser-sdk": "1.2.0"
+    "@reflag/browser-sdk": "1.4.0"
   },
   "peerDependencies": {
     "react": "*",
     "react-dom": "*"
+  },
+  "peerDependenciesMeta": {
+    "react-dom": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@reflag/eslint-config": "^0.0.2",
@@ -47,21 +54,22 @@
     "@testing-library/react": "^15.0.7",
     "@types/jsdom": "^21.1.6",
     "@types/node": "^22.12.0",
-    "@types/react": "^18.3.2",
-    "@types/react-dom": "^18.3.0",
+    "@types/react": "^19.0.12",
+    "@types/react-dom": "^19.0.5",
     "@types/webpack": "^5.28.5",
     "eslint": "^9.21.0",
     "jsdom": "^24.1.0",
     "msw": "^2.3.5",
     "prettier": "^3.5.2",
-    "react": "*",
-    "react-dom": "*",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
     "rollup": "^4.2.0",
     "rollup-preserve-directives": "^1.1.2",
     "ts-node": "^10.9.2",
     "typescript": "^5.7.3",
     "vite": "^5.0.13",
     "vite-plugin-dts": "^4.0.0-beta.1",
+    "vite-plugin-static-copy": "^1.0.6",
     "vitest": "^2.0.4",
     "webpack": "^5.89.0",
     "webpack-cli": "^5.1.4"

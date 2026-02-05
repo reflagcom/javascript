@@ -20,6 +20,7 @@ dist-ssr
 !.vscode/settings.json
 .idea
 .DS_Store
+.expo/
 *.suo
 *.ntvs*
 *.njsproj

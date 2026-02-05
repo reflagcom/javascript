@@ -5,6 +5,10 @@ on:
     branches:
       - main
 
+permissions:
+  id-token: write # Required publishing to npm using OIDC
+  contents: read
+
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -20,14 +24,14 @@ jobs:
           cache-dependency-path: "**/yarn.lock"
           registry-url: "https://registry.npmjs.org"
           scope: "@reflag"
+      - name: update npm - remove this once we upgrade Node.js
+        run: npm install -g npm@11.8.0
+      - name: npm version
+        run: npm version
       - name: Install dependencies
         run: yarn install --immutable
       - name: Build packages
         run: yarn build
-      - name: npm login
-        run: echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > .npmrc
-        env:
-          NPM_TOKEN: ${{ secrets.REFLAG_NPM_TOKEN }}
       - name: Publish
         run: yarn lerna publish from-package --no-private --yes
       - name: Build docs

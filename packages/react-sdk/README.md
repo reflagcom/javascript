@@ -152,6 +152,13 @@ To retrieve flags along with their targeting information, use `useFlag(key: stri
 Note that accessing `isEnabled` on the object returned by `useFlag()` automatically
 generates a `check` event.
 
+## React Native
+
+For React Native, use `@reflag/react-native-sdk`, which is a thin wrapper around
+`@reflag/react-sdk` and wires up AsyncStorage by default.
+
+An Expo example app lives at `packages/react-native-sdk/dev/expo`.
+
 ## Remote config
 
 Remote config is a dynamic and flexible approach to configuring flag behavior outside of your app – without needing to re-deploy it.
