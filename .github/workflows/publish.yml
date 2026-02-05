@@ -25,7 +25,7 @@ jobs:
           registry-url: "https://registry.npmjs.org"
           scope: "@reflag"
       - name: update npm - remove this once we upgrade Node.js
-        run: npm update
+        run: npm install -g npm@11.8.0
       - name: npm version
         run: npm version
       - name: Install dependencies
