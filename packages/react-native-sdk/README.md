@@ -28,9 +28,14 @@ import { ReflagProvider, useFlag } from "@reflag/react-native-sdk";
 </ReflagProvider>;
 ```
 
+See the React SDK README in `packages/react-sdk/README.md` for more details.
+
 ## Cookbook
 
 ### Refresh flags when the app returns to the foreground
+
+Flags are updated if the context passed to <ReflagProvider> changes, but you might also want to update them in when the app comes to the foreground.
+See this snipped on how to achieve that:
 
 ```tsx
 import React, { useEffect, useRef } from "react";
