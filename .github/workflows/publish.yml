@@ -27,20 +27,9 @@ jobs:
         run: yarn install --immutable
       - name: Build packages
         run: yarn build
-      - name: Prepare npmrc for OIDC
-        run: |
-          echo "@reflag:registry=https://registry.npmjs.org/" > "${RUNNER_TEMP}/.npmrc"
-      - name: Debug npm auth (non-fatal)
-        run: |
-          npm --version
-          npm config get userconfig
-          npm config get registry
-          npm whoami --registry https://registry.npmjs.org || true
       - name: Publish
         run: |
-          yarn lerna exec --toposort --concurrency 1 --no-private -- npm publish --access public --provenance
-        env:
-          NPM_CONFIG_USERCONFIG: "${{ runner.temp }}/.npmrc"
+          yarn lerna exec --sort --concurrency 1 --no-private -- npm publish --access public --provenance
       - name: Build docs
         run: yarn docs
       - name: Checkout docs with SSH
