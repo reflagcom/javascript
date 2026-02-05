@@ -1,5 +1,5 @@
-import React from "react";
-import { Button, StyleSheet, Text, View } from "react-native";
+import React, { useEffect, useRef } from "react";
+import { AppState, Button, StyleSheet, Text, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 
 import {
@@ -32,6 +32,25 @@ function FlagCard() {
 }
 
 export default function App() {
+  const appState = useRef(AppState.currentState);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextAppState) => {
+      if (
+        appState.current.match(/inactive|background/) &&
+        nextAppState === "active"
+      ) {
+        console.log("App came to foreground");
+        // Your global logic here
+      }
+      appState.current = nextAppState;
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
   return (
     <SafeAreaProvider>
       <SafeAreaView style={styles.container}>
