@@ -7,6 +7,7 @@ import { Logger, loggerWithPrefix } from "../logger";
 import RateLimiter from "../rateLimiter";
 import { getLocalStorageAdapter, StorageAdapter } from "../storage";
 import { createEventTarget } from "../utils/eventTarget";
+import { createAbortController } from "../utils/abortController";
 
 import { FlagCache, isObject, parseAPIFlagsResponse } from "./flagCache";
 
@@ -211,7 +212,7 @@ export class FlagsClient {
   private config: Config = DEFAULT_FLAGS_CONFIG;
 
   private eventTarget = createEventTarget();
-  private abortController: AbortController = new AbortController();
+  private abortController = createAbortController();
 
   constructor(
     private httpClient: HttpClient,
