@@ -32,25 +32,6 @@ function FlagCard() {
 }
 
 export default function App() {
-  const appState = useRef(AppState.currentState);
-
-  useEffect(() => {
-    const subscription = AppState.addEventListener("change", (nextAppState) => {
-      if (
-        appState.current.match(/inactive|background/) &&
-        nextAppState === "active"
-      ) {
-        console.log("App came to foreground");
-        // Your global logic here
-      }
-      appState.current = nextAppState;
-    });
-
-    return () => {
-      subscription.remove();
-    };
-  }, []);
-
   return (
     <SafeAreaProvider>
       <SafeAreaView style={styles.container}>
@@ -71,11 +52,36 @@ export default function App() {
                 : "Set EXPO_PUBLIC_REFLAG_PUBLISHABLE_KEY to fetch real flags"}
             </Text>
           </View>
+          <AppStateListener />
           <FlagCard />
         </ReflagProvider>
       </SafeAreaView>
     </SafeAreaProvider>
   );
+}
+
+function AppStateListener() {
+  const client = useClient();
+  const appState = useRef(AppState.currentState);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextAppState) => {
+      if (
+        appState.current.match(/inactive|background/) &&
+        nextAppState === "active"
+      ) {
+        console.log("App came to foreground");
+        void client.refresh();
+      }
+      appState.current = nextAppState;
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [client]);
+
+  return null;
 }
 
 const styles = StyleSheet.create({
