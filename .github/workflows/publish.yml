@@ -29,7 +29,17 @@ jobs:
         run: yarn build
       - name: Publish
         run: |
-          yarn lerna exec --sort --concurrency 1 --no-private -- npm publish --access public --provenance
+          yarn lerna list --since --parseable --no-private | while read -r pkg; do
+            name=$(node -p "require('$pkg/package.json').name")
+            version=$(node -p "require('$pkg/package.json').version")
+            published=$(npm view "$name" version --json 2>/dev/null || echo "")
+            if [ "$published" = "\"$version\"" ]; then
+              echo "SKIP $name@$version"
+            else
+              echo "PUBLISH $name@$version (registry has $published)"
+              (cd "$pkg" && npm publish --access public --provenance)
+            fi
+          done
       - name: Build docs
         run: yarn docs
       - name: Checkout docs with SSH
