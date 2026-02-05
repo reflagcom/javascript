@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "main": "index.js",
   "scripts": {
-    "build:deps": "yarn workspace @reflag/browser-sdk build && yarn workspace @reflag/react-sdk build && yarn workspace @reflag/react-native-sdk build",
+    "build:deps": "rm -rf ../../browser-sdk/dist ../../react-sdk/dist ../../react-native-sdk/dist && yarn workspace @reflag/browser-sdk build && yarn workspace @reflag/react-sdk build && yarn workspace @reflag/react-native-sdk build",
     "prestart": "yarn build:deps",
     "preandroid": "yarn build:deps",
     "preios": "yarn build:deps",
