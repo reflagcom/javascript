@@ -12,6 +12,9 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
       # Setup .npmrc file to publish to npm
@@ -34,6 +37,9 @@ jobs:
         run: yarn build
       - name: Publish
         run: yarn lerna publish from-package --no-private --yes
+        env:
+          NPM_CONFIG_PROVENANCE: "true"
+          NPM_CONFIG_ACCESS: "public"
       - name: Build docs
         run: yarn docs
       - name: Checkout docs with SSH
