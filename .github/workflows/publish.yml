@@ -24,6 +24,8 @@ jobs:
           cache-dependency-path: "**/yarn.lock"
           registry-url: "https://registry.npmjs.org"
           scope: "@reflag"
+      - name: npm version
+        run: npm version
       - name: Install dependencies
         run: yarn install --immutable
       - name: Build packages
