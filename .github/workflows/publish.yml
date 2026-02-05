@@ -45,9 +45,8 @@ jobs:
           npm config get registry
           npm whoami --registry https://registry.npmjs.org || true
       - name: Publish
-        run: yarn lerna publish from-package --no-private --yes
+        run: NODE_AUTH_TOKEN="" yarn lerna publish from-package --no-private --yes
         env:
-          NODE_AUTH_TOKEN: ""
           NPM_CONFIG_USERCONFIG: "${{ runner.temp }}/.npmrc"
           NPM_CONFIG_PROVENANCE: "true"
           NPM_CONFIG_ACCESS: "public"
