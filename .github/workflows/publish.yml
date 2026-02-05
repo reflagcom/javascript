@@ -45,11 +45,10 @@ jobs:
           npm config get registry
           npm whoami --registry https://registry.npmjs.org || true
       - name: Publish
-        run: NODE_AUTH_TOKEN="" yarn lerna publish from-package --no-private --yes
+        run: |
+          NODE_AUTH_TOKEN="" npm publish --workspace=packages/browser-sdk --workspace=packages/react-native-sdk --workspace=packages/react-sdk --access public --provenance
         env:
           NPM_CONFIG_USERCONFIG: "${{ runner.temp }}/.npmrc"
-          NPM_CONFIG_PROVENANCE: "true"
-          NPM_CONFIG_ACCESS: "public"
       - name: Build docs
         run: yarn docs
       - name: Checkout docs with SSH
