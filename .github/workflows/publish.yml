@@ -5,6 +5,10 @@ on:
     branches:
       - main
 
+permissions:
+  id-token: write # Required publishing to npm using OIDC
+  contents: read
+
 jobs:
   release:
     runs-on: ubuntu-latest
