@@ -27,10 +27,6 @@ jobs:
           cache-dependency-path: "**/yarn.lock"
           registry-url: "https://registry.npmjs.org"
           scope: "@reflag"
-      - name: update npm - remove this once we upgrade Node.js
-        run: npm install -g npm@11.8.0
-      - name: npm version
-        run: npm version
       - name: Install dependencies
         run: yarn install --immutable
       - name: Build packages
@@ -46,7 +42,7 @@ jobs:
           npm whoami --registry https://registry.npmjs.org || true
       - name: Publish
         run: |
-          NODE_AUTH_TOKEN="" npm publish --workspace=packages/browser-sdk --workspace=packages/react-native-sdk --workspace=packages/react-sdk --access public --provenance
+          NODE_AUTH_TOKEN="" yarn lerna exec --toposort --concurrency 1 --no-private -- npm publish --access public --provenance
         env:
           NPM_CONFIG_USERCONFIG: "${{ runner.temp }}/.npmrc"
       - name: Build docs
