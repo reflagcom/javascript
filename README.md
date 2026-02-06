@@ -8,7 +8,7 @@ Client side React SDK
 
 [Read the docs](packages/react-sdk/README.md)
 
-## React Native SDK
+## React Native SDK (beta)
 
 React Native SDK for mobile apps
 
