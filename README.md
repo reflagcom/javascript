@@ -8,6 +8,12 @@ Client side React SDK
 
 [Read the docs](packages/react-sdk/README.md)
 
+## React Native SDK
+
+React Native SDK for mobile apps
+
+[Read the docs](packages/react-native-sdk/README.md)
+
 ## Vue SDK (beta)
 
 Client side Vue SDK
