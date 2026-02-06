@@ -6,29 +6,51 @@ For more usage details, see the React SDK README in `packages/react-sdk/README.m
 
 An Expo example app lives at `packages/react-native-sdk/dev/expo`.
 
-## Install
+## Get started
+
+### Install
 
 ```shell
 npm i @reflag/react-native-sdk
 ```
 
-## Usage
+### 1. Add the ReflagProvider
+
+Wrap your app with the provider from `@reflag/react-native-sdk`:
 
 ```tsx
-import { ReflagProvider, useFlag } from "@reflag/react-native-sdk";
+import { ReflagProvider } from "@reflag/react-native-sdk";
 
 <ReflagProvider
   publishableKey="{YOUR_PUBLISHABLE_KEY}"
   context={{
-    user: { id: "user_123", name: "John Doe", email: "john@acmeinc.com" },
-    company: { id: "company_123", name: "Acme, Inc" },
+    company: { id: "acme_inc", plan: "pro" },
+    user: { id: "john doe" },
   }}
 >
-  <MyApp />
+  {/* children here are shown when loading finishes */}
 </ReflagProvider>;
 ```
 
-See the React SDK README in `packages/react-sdk/README.md` for more details.
+### 2. Use `useFlag(<flagKey>)`
+
+```tsx
+import { useFlag } from "@reflag/react-native-sdk";
+
+function StartHuddleButton() {
+  const { isEnabled, track } = useFlag("huddle");
+
+  if (!isEnabled) return null;
+
+  return <Button title="Start huddle" onPress={track} />;
+}
+```
+
+## Reference
+
+The React Native SDK shares its API with the React SDK. Use the React SDK reference for full types and details:
+
+[React SDK Reference](../react-sdk/README.md)
 
 ## Cookbook
 
