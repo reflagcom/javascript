@@ -24,8 +24,8 @@ import { ReflagProvider } from "@reflag/react-native-sdk";
 <ReflagProvider
   publishableKey="{YOUR_PUBLISHABLE_KEY}"
   context={{
-    company: { id: "acme_inc", plan: "pro" },
-    user: { id: "john doe" },
+    user: { id: "user_123", name: "John Doe", email: "john@acmeinc.com" },
+    company: { id: "company_123", name: "Acme, Inc", plan: "pro" },
   }}
 >
   {/* children here are shown when loading finishes */}
