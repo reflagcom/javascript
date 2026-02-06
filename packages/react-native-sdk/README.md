@@ -1,4 +1,4 @@
-# Reflag React Native SDK
+# Reflag React Native SDK (beta)
 
 A thin React Native wrapper around `@reflag/react-sdk`.
 
