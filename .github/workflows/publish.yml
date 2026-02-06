@@ -38,7 +38,6 @@ jobs:
       - name: Publish
         run: yarn lerna publish from-package --no-private --yes
         env:
-          NODE_AUTH_TOKEN: ""
           NPM_CONFIG_PROVENANCE: "true"
           NPM_CONFIG_ACCESS: "public"
       - name: Build docs
