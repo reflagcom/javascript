@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(yarn install)",
+      "Bash(yarn generate)",
+      "WebFetch(domain:heyapi.dev)",
+      "Bash(yarn build)",
+      "Bash(yarn tsc:*)",
+      "Bash(yarn format:*)",
+      "Bash(yarn lint)",
+      "Bash(yarn prettier)",
+      "Bash(yarn prettier:*)",
+      "Bash(NODE_TLS_REJECT_UNAUTHORIZED=0 yarn build:*)"
+    ]
+  }
+}

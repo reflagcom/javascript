@@ -5,6 +5,7 @@
   "license": "MIT",
   "workspaces": [
     "packages/*",
+    "packages/rest-api-sdk/examples/*",
     "packages/react-sdk/dev/*",
     "packages/openfeature-browser-provider/example"
   ],

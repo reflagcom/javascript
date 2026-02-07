@@ -1,0 +1,12 @@
+{
+  "extends": "@reflag/tsconfig/library",
+  "compilerOptions": {
+    "lib": ["ES2020", "DOM"],
+    "outDir": "./dist/",
+    "declarationDir": "./dist/types",
+    "declarationMap": true,
+    "noUncheckedIndexedAccess": true
+  },
+  "include": ["src"],
+  "typeRoots": ["./node_modules/@types"]
+}

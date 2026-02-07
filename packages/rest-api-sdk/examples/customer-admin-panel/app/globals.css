@@ -1,0 +1,77 @@
+:root {
+  color-scheme: light;
+  font-family: "Inter", "SF Pro Text", system-ui, -apple-system, sans-serif;
+  line-height: 1.5;
+  background: #f7f7f8;
+  color: #111827;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #f7f7f8;
+}
+
+main {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+
+h1 {
+  margin-top: 0;
+}
+
+label span {
+  font-size: 0.9rem;
+  color: #4b5563;
+}
+
+input,
+select,
+button {
+  font: inherit;
+  border-radius: 10px;
+  border: 1px solid #d1d5db;
+  padding: 8px 12px;
+}
+
+button {
+  background: #111827;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+a {
+  color: #111827;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+thead th {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6b7280;
+}
+
+tbody tr:nth-child(even) {
+  background: #f9fafb;
+}

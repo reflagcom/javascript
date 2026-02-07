@@ -1,0 +1,14 @@
+generatorName: typescript-fetch
+inputSpec: ./openapi.json
+outputDir: src/generated
+additionalProperties:
+  supportsES6: true
+  typescriptThreePlus: true
+  useSingleRequestParameter: true
+  withInterfaces: true
+  useTags: false
+globalProperties:
+  apiDocs: false
+  modelDocs: false
+  apiTests: false
+  modelTests: false
