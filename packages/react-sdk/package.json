@@ -1,6 +1,6 @@
 {
   "name": "@reflag/react-sdk",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -37,7 +37,7 @@
     }
   },
   "dependencies": {
-    "@reflag/browser-sdk": "1.4.0"
+    "@reflag/browser-sdk": "1.4.1"
   },
   "peerDependencies": {
     "react": "*",
