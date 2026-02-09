@@ -42,7 +42,7 @@
   margin: auto;
   margin-top: 4rem;
 
-  &[open] {
+  &.open {
     animation: /* easeOutQuint */
       scale 100ms cubic-bezier(0.22, 1, 0.36, 1),
       fade 100ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -59,7 +59,7 @@
   position: absolute;
   margin: 0;
 
-  &[open] {
+  &.open {
     animation: /* easeOutQuint */
       scale 100ms cubic-bezier(0.22, 1, 0.36, 1),
       fade 100ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -92,7 +92,7 @@
 
 /* Unanchored */
 
-.dialog[open].unanchored {
+.dialog.open.unanchored {
   &.unanchored-bottom-left,
   &.unanchored-bottom-right {
     animation: /* easeOutQuint */

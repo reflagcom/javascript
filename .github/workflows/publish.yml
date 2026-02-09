@@ -5,10 +5,6 @@ on:
     branches:
       - main
 
-permissions:
-  id-token: write # Required publishing to npm using OIDC
-  contents: read
-
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -20,27 +16,30 @@ jobs:
       # Setup .npmrc file to publish to npm
       - name: Enable corepack
         run: corepack enable
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version-file: ".nvmrc"
           cache: "yarn"
           cache-dependency-path: "**/yarn.lock"
           registry-url: "https://registry.npmjs.org"
           scope: "@reflag"
-      - name: update npm - remove this once we upgrade Node.js
-        run: npm install -g npm@11.8.0
-      - name: npm version
-        run: npm version
       - name: Install dependencies
         run: yarn install --immutable
       - name: Build packages
         run: yarn build
       - name: Publish
-        run: yarn lerna publish from-package --no-private --yes
-        env:
-          NODE_AUTH_TOKEN: ""
-          NPM_CONFIG_PROVENANCE: "true"
-          NPM_CONFIG_ACCESS: "public"
+        run: |
+          yarn lerna list --since --parseable --no-private | while read -r pkg; do
+            name=$(node -p "require('$pkg/package.json').name")
+            version=$(node -p "require('$pkg/package.json').version")
+            published=$(npm view "$name" version --json 2>/dev/null || echo "")
+            if [ "$published" = "\"$version\"" ]; then
+              echo "SKIP $name@$version"
+            else
+              echo "PUBLISH $name@$version (registry has $published)"
+              (cd "$pkg" && npm publish --access public --provenance)
+            fi
+          done
       - name: Build docs
         run: yarn docs
       - name: Checkout docs with SSH

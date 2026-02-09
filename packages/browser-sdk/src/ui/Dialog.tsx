@@ -81,7 +81,7 @@ export const Dialog: FunctionComponent<OpenDialogOptions> = ({
   showArrow = true,
 }) => {
   const arrowRef = useRef<HTMLDivElement>(null);
-  const dialogRef = useRef<HTMLDialogElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
 
   const anchor = position.type === "POPOVER" ? position.anchor : null;
   const placement =
@@ -173,23 +173,56 @@ export const Dialog: FunctionComponent<OpenDialogOptions> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- anchor only exists in popover
   }, [position.type, close, (position as any).anchor, dismiss, containerId]);
 
-  function setDiagRef(node: HTMLDialogElement | null) {
+  function setDiagRef(node: HTMLElement | null) {
     refs.setFloating(node);
     dialogRef.current = node;
   }
 
   useEffect(() => {
     if (!dialogRef.current) return;
-    if (isOpen && !dialogRef.current.hasAttribute("open")) {
-      dialogRef.current[position.type === "MODAL" ? "showModal" : "show"]();
+
+    const isPopoverOpen = () => {
+      try {
+        return dialogRef.current?.matches(":popover-open") ?? false;
+      } catch {
+        return false;
+      }
+    };
+
+    const isModalOpen =
+      dialogRef.current instanceof HTMLDialogElement &&
+      dialogRef.current.hasAttribute("open");
+
+    if (
+      isOpen &&
+      ((position.type === "MODAL" && !isModalOpen) ||
+        (position.type !== "MODAL" && !isPopoverOpen()))
+    ) {
+      if (
+        position.type === "MODAL" &&
+        dialogRef.current instanceof HTMLDialogElement
+      ) {
+        dialogRef.current.showModal();
+      } else {
+        dialogRef.current.showPopover();
+      }
     }
-    if (!isOpen && dialogRef.current.hasAttribute("open")) {
-      dialogRef.current.close();
+    if (!isOpen) {
+      if (
+        position.type === "MODAL" &&
+        dialogRef.current instanceof HTMLDialogElement &&
+        dialogRef.current.hasAttribute("open")
+      ) {
+        dialogRef.current.close();
+      } else if (position.type !== "MODAL" && isPopoverOpen()) {
+        dialogRef.current.hidePopover();
+      }
     }
   }, [dialogRef, isOpen, position.type]);
 
   const classes = [
     "dialog",
+    isOpen ? "open" : "",
     position.type === "MODAL"
       ? "modal"
       : position.type === "POPOVER"
@@ -201,21 +234,40 @@ export const Dialog: FunctionComponent<OpenDialogOptions> = ({
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: styles }} />
-      <dialog
-        ref={setDiagRef}
-        class={classes}
-        style={anchor ? floatingStyles : unanchoredPosition}
-      >
-        {children && <Fragment>{children}</Fragment>}
+      {position.type === "MODAL" ? (
+        <dialog
+          ref={setDiagRef}
+          class={classes}
+          style={anchor ? floatingStyles : unanchoredPosition}
+        >
+          {children && <Fragment>{children}</Fragment>}
 
-        {anchor && showArrow && (
-          <DialogArrow
-            arrowData={middlewareData?.arrow}
-            arrowRef={arrowRef}
-            placement={actualPlacement}
-          />
-        )}
-      </dialog>
+          {anchor && showArrow && (
+            <DialogArrow
+              arrowData={middlewareData?.arrow}
+              arrowRef={arrowRef}
+              placement={actualPlacement}
+            />
+          )}
+        </dialog>
+      ) : (
+        <div
+          ref={setDiagRef}
+          class={classes}
+          style={anchor ? floatingStyles : unanchoredPosition}
+          popover="manual"
+        >
+          {children && <Fragment>{children}</Fragment>}
+
+          {anchor && showArrow && (
+            <DialogArrow
+              arrowData={middlewareData?.arrow}
+              arrowRef={arrowRef}
+              placement={actualPlacement}
+            />
+          )}
+        </div>
+      )}
     </>
   );
 };
