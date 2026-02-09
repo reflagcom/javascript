@@ -12,6 +12,7 @@
     "packages/browser-sdk/",
     "packages/node-sdk/",
     "packages/react-sdk/",
+    "packages/react-native-sdk/",
     "packages/vue-sdk/"
   ],
   "packageOptions": {
@@ -19,7 +20,9 @@
   },
   "projectDocuments": [
     "packages/browser-sdk/FEEDBACK.md",
-    "packages/cli/README.md"
+    "packages/cli/README.md",
+    "packages/react-sdk/README.md",
+    "packages/react-native-sdk/README.md"
   ],
   "readme": "none",
   "useHTMLAnchors": false,
