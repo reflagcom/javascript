@@ -37,7 +37,7 @@
     }
   },
   "dependencies": {
-    "@reflag/browser-sdk": "1.4.0"
+    "@reflag/browser-sdk": "1.4.1"
   },
   "peerDependencies": {
     "react": "*",

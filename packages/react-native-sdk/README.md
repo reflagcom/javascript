@@ -1,41 +1,70 @@
-# Reflag React Native SDK
+# Reflag React Native SDK (beta)
 
 A thin React Native wrapper around `@reflag/react-sdk`.
 
-For more usage details, see the React SDK README in `packages/react-sdk/README.md`.
+For more usage details, see the [React SDK README](../react-sdk/README.md).
 
-An Expo example app lives at `packages/react-native-sdk/dev/expo`.
+An Expo example app lives in [packages/react-native-sdk/dev/expo](https://github.com/reflagcom/javascript/tree/main/packages/react-native-sdk/dev/expo).
 
-## Install
+## Get started
+
+### Install
 
 ```shell
 npm i @reflag/react-native-sdk
 ```
 
-## Usage
+### 1. Add the ReflagProvider
+
+Wrap your app with the provider from `@reflag/react-native-sdk`:
 
 ```tsx
-import { ReflagProvider, useFlag } from "@reflag/react-native-sdk";
+import { ReflagProvider } from "@reflag/react-native-sdk";
 
 <ReflagProvider
   publishableKey="{YOUR_PUBLISHABLE_KEY}"
   context={{
     user: { id: "user_123", name: "John Doe", email: "john@acmeinc.com" },
-    company: { id: "company_123", name: "Acme, Inc" },
+    company: { id: "company_123", name: "Acme, Inc", plan: "pro" },
   }}
 >
-  <MyApp />
+  {/* children here are shown when loading finishes */}
 </ReflagProvider>;
 ```
 
-See the React SDK README in `packages/react-sdk/README.md` for more details.
+### 2. Use `useFlag(<flagKey>)`
+
+```tsx
+import { useFlag } from "@reflag/react-native-sdk";
+
+function StartHuddleButton() {
+  const { isEnabled, track } = useFlag("huddle");
+
+  if (!isEnabled) return null;
+
+  return <Button title="Start huddle" onPress={track} />;
+}
+```
+
+See the [React SDK README](../react-sdk/README.md) for more details.
+
+## React Native differences
+
+- The Reflag toolbar is web-only and is not available in React Native.
+- Built-in feedback UI is web-only. In React Native, use your own UI and call `useSendFeedback` or `client.feedback` when you're ready to send feedback.
+
+## Reference
+
+The React Native SDK shares its API with the React SDK. Use the React SDK reference for full types and details:
+
+[React SDK Reference](../react-sdk/README.md)
 
 ## Cookbook
 
 ### Refresh flags when the app returns to the foreground
 
-Flags are updated if the context passed to <ReflagProvider> changes, but you might also want to update them in when the app comes to the foreground.
-See this snipped on how to achieve that:
+Flags are updated if the context passed to `<ReflagProvider>` changes, but you might also want to update them when the app comes to the foreground.
+See this snippet:
 
 ```tsx
 import React, { useEffect, useRef } from "react";
@@ -72,3 +101,8 @@ export function App() {
   );
 }
 ```
+
+## Bootstrapping
+
+You can use `<ReflagBootstrappedProvider>` in React Native when you already have pre-fetched flags and want to avoid an initial fetch.
+For bootstrap usage patterns and options, see the [React SDK bootstrapping docs](../react-sdk/README.md#server-side-rendering-and-bootstrapping).
