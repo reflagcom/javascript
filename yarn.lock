@@ -4765,18 +4765,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@reflag/browser-sdk@npm:1.4.0":
-  version: 1.4.0
-  resolution: "@reflag/browser-sdk@npm:1.4.0"
-  dependencies:
-    "@floating-ui/dom": "npm:^1.6.8"
-    fast-equals: "npm:^5.2.2"
-    js-cookie: "npm:^3.0.5"
-    preact: "npm:^10.22.1"
-  checksum: 10c0/9496a96c476b7b02e687641c8866217b98baea9b6da70eb6c419dbcd39391f34b2b473c0b3737b126eb189dde279800b3a5ef7a2bf9ec32ed619a1c2825855ca
-  languageName: node
-  linkType: hard
-
 "@reflag/browser-sdk@npm:1.4.1, @reflag/browser-sdk@workspace:packages/browser-sdk":
   version: 0.0.0-use.local
   resolution: "@reflag/browser-sdk@workspace:packages/browser-sdk"
