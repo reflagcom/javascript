@@ -1,6 +1,5 @@
 import React from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { version } from "../package.json";
 
 import type {
   BootstrappedFlags,
@@ -24,8 +23,6 @@ import type {
   TypedFlags,
   UserContext,
 } from "@reflag/react-sdk";
-
-const SDK_VERSION = `react-native-sdk/${version}`;
 import {
   ReflagBootstrappedProvider as BaseBootstrappedProvider,
   ReflagClientProvider,
@@ -42,6 +39,10 @@ import {
   useUpdateOtherContext,
   useUpdateUser,
 } from "@reflag/react-sdk";
+
+import { version } from "../package.json";
+
+const SDK_VERSION = `react-native-sdk/${version}`;
 
 export {
   ReflagClientProvider,
