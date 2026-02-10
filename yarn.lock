@@ -4797,18 +4797,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@reflag/browser-sdk@npm:1.4.0":
-  version: 1.4.0
-  resolution: "@reflag/browser-sdk@npm:1.4.0"
-  dependencies:
-    "@floating-ui/dom": "npm:^1.6.8"
-    fast-equals: "npm:^5.2.2"
-    js-cookie: "npm:^3.0.5"
-    preact: "npm:^10.22.1"
-  checksum: 10c0/9496a96c476b7b02e687641c8866217b98baea9b6da70eb6c419dbcd39391f34b2b473c0b3737b126eb189dde279800b3a5ef7a2bf9ec32ed619a1c2825855ca
-  languageName: node
-  linkType: hard
-
 "@reflag/browser-sdk@npm:1.4.1, @reflag/browser-sdk@workspace:packages/browser-sdk":
   version: 0.0.0-use.local
   resolution: "@reflag/browser-sdk@workspace:packages/browser-sdk"
@@ -4987,7 +4975,7 @@ __metadata:
   dependencies:
     "@react-native-async-storage/async-storage": "npm:^2.2.0"
     "@reflag/eslint-config": "npm:^0.0.2"
-    "@reflag/react-sdk": "npm:1.4.0"
+    "@reflag/react-sdk": "npm:1.4.1"
     "@reflag/tsconfig": "npm:^0.0.2"
     "@types/react": "npm:^19.0.12"
     eslint: "npm:^9.21.0"
@@ -4999,22 +4987,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@reflag/react-sdk@npm:1.4.0":
-  version: 1.4.0
-  resolution: "@reflag/react-sdk@npm:1.4.0"
-  dependencies:
-    "@reflag/browser-sdk": "npm:1.4.0"
-  peerDependencies:
-    react: "*"
-    react-dom: "*"
-  peerDependenciesMeta:
-    react-dom:
-      optional: true
-  checksum: 10c0/f761d2d1aa5743b442ead8acf0c826699eb98f7a5a92b8a7ed39bc6215f813cff1f9efd2d854f83e3cec15a43b11342ec4fda564de3583432bec7a1e6c7e5869
-  languageName: node
-  linkType: hard
-
-"@reflag/react-sdk@workspace:^, @reflag/react-sdk@workspace:packages/react-sdk":
+"@reflag/react-sdk@npm:1.4.1, @reflag/react-sdk@workspace:^, @reflag/react-sdk@workspace:packages/react-sdk":
   version: 0.0.0-use.local
   resolution: "@reflag/react-sdk@workspace:packages/react-sdk"
   dependencies:

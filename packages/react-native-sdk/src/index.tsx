@@ -40,6 +40,10 @@ import {
   useUpdateUser,
 } from "@reflag/react-sdk";
 
+import { version } from "../package.json";
+
+const SDK_VERSION = `react-native-sdk/${version}`;
+
 export {
   ReflagClientProvider,
   useClient,
@@ -81,6 +85,7 @@ export function ReflagProvider(props: ReflagProps) {
   return (
     <BaseProvider
       {...props}
+      sdkVersion={SDK_VERSION}
       storage={props.storage ?? AsyncStorage}
       feedback={{
         ...props.feedback,
@@ -94,6 +99,7 @@ export function ReflagBootstrappedProvider(props: ReflagBootstrappedProps) {
   return (
     <BaseBootstrappedProvider
       {...props}
+      sdkVersion={SDK_VERSION}
       storage={props.storage ?? AsyncStorage}
       feedback={{
         ...props.feedback,
