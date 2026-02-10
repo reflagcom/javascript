@@ -199,6 +199,35 @@ describe("<ReflagProvider />", () => {
     expect(initialize).toHaveBeenCalled();
   });
 
+  test("uses provided sdkVersion when set", async () => {
+    let capturedSdkVersion: string | null = null;
+    server.use(
+      http.get(/\/features\/evaluated$/, ({ request }) => {
+        capturedSdkVersion = new URL(request.url).searchParams.get(
+          "reflag-sdk-version",
+        );
+        return new HttpResponse(
+          JSON.stringify({
+            success: true,
+            features: {},
+          }),
+          { status: 200 },
+        );
+      }),
+    );
+
+    render(
+      getProvider({
+        sdkVersion: "react-native-sdk/test",
+        context: { other },
+      }),
+    );
+
+    await waitFor(() => {
+      expect(capturedSdkVersion).toBe("react-native-sdk/test");
+    });
+  });
+
   test("only calls init once with the same args", () => {
     const node = getProvider();
     const initialize = vi.spyOn(ReflagClient.prototype, "initialize");

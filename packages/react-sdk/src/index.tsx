@@ -184,7 +184,7 @@ function useReflagClient(initOptions: InitOptions, debug = false) {
     const client = new ReflagClient({
       ...initOptions,
       logger: debug ? console : undefined,
-      sdkVersion: SDK_VERSION,
+      sdkVersion: initOptions.sdkVersion ?? SDK_VERSION,
     });
     if (!isServer) {
       reflagClients.set(initOptions.publishableKey, client);

@@ -1,6 +1,6 @@
 {
   "name": "@reflag/react-native-sdk",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -30,7 +30,7 @@
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "^2.2.0",
-    "@reflag/react-sdk": "1.4.0"
+    "@reflag/react-sdk": "1.4.1"
   },
   "peerDependencies": {
     "react": "*",

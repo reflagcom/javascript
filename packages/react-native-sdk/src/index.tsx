@@ -1,5 +1,6 @@
 import React from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { version } from "../package.json";
 
 import type {
   BootstrappedFlags,
@@ -23,6 +24,8 @@ import type {
   TypedFlags,
   UserContext,
 } from "@reflag/react-sdk";
+
+const SDK_VERSION = `react-native-sdk/${version}`;
 import {
   ReflagBootstrappedProvider as BaseBootstrappedProvider,
   ReflagClientProvider,
@@ -81,6 +84,7 @@ export function ReflagProvider(props: ReflagProps) {
   return (
     <BaseProvider
       {...props}
+      sdkVersion={SDK_VERSION}
       storage={props.storage ?? AsyncStorage}
       feedback={{
         ...props.feedback,
@@ -94,6 +98,7 @@ export function ReflagBootstrappedProvider(props: ReflagBootstrappedProps) {
   return (
     <BaseBootstrappedProvider
       {...props}
+      sdkVersion={SDK_VERSION}
       storage={props.storage ?? AsyncStorage}
       feedback={{
         ...props.feedback,
