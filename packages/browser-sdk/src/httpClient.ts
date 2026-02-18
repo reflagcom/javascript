@@ -51,8 +51,13 @@ export class HttpClient {
     params.set(SDK_VERSION_HEADER_NAME, this.sdkVersion);
     params.set("publishableKey", this.publishableKey);
 
-    const url = this.getUrl(path);
-    url.search = params.toString();
+    // Do not assign `url.search` directly: some React Native URL implementations
+    // expose `search` as getter-only and throw at runtime on assignment.
+    const query = params.toString();
+    const pathWithQuery = query
+      ? `${path}${path.includes("?") ? "&" : "?"}${query}`
+      : path;
+    const url = this.getUrl(pathWithQuery);
 
     if (timeoutMs === undefined) {
       return fetch(url, this.fetchOptions);

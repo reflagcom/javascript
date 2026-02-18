@@ -1,0 +1,37 @@
+{
+  "name": "reflag-react-native-sdk-bare-rn",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "build:deps": "rm -rf ../../../browser-sdk/dist ../../../react-sdk/dist ../../dist && yarn workspace @reflag/browser-sdk build && yarn workspace @reflag/react-sdk build && yarn workspace @reflag/react-native-sdk build",
+    "ensure:deps": "test -f ../../../browser-sdk/dist/index.native.js && test -f ../../../react-sdk/dist/index.native.js && test -f ../../dist/src/index.js || yarn build:deps",
+    "prestart": "yarn ensure:deps",
+    "preandroid": "yarn ensure:deps",
+    "preios": "yarn ensure:deps",
+    "android": "react-native run-android",
+    "ios": "react-native run-ios",
+    "start": "react-native start"
+  },
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "^2.2.0",
+    "@reflag/react-native-sdk": "workspace:*",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-safe-area-context": "^5.6.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.25.2",
+    "@babel/runtime": "^7.25.0",
+    "@react-native-community/cli": "20.0.0",
+    "@react-native-community/cli-platform-android": "20.0.0",
+    "@react-native-community/cli-platform-ios": "20.0.0",
+    "@react-native/babel-preset": "0.81.5",
+    "@react-native/metro-config": "0.81.5",
+    "@react-native/typescript-config": "0.81.5",
+    "@types/react": "^19.1.0",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
