@@ -19901,6 +19901,7 @@ __metadata:
     "@react-native-community/cli-platform-android": "npm:20.0.0"
     "@react-native-community/cli-platform-ios": "npm:20.0.0"
     "@react-native/babel-preset": "npm:0.81.5"
+    "@react-native/codegen": "npm:0.81.5"
     "@react-native/metro-config": "npm:0.81.5"
     "@react-native/typescript-config": "npm:0.81.5"
     "@reflag/react-native-sdk": "workspace:*"
