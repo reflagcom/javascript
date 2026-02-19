@@ -1,6 +1,6 @@
 {
   "name": "@reflag/react-native-sdk",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -19,18 +19,20 @@
   "files": [
     "dist"
   ],
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "react-native": "./dist/src/index.js",
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "require": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "react-native": "./dist/src/index.js",
+      "import": "./dist/src/index.js",
+      "require": "./dist/src/index.js",
+      "types": "./dist/src/index.d.ts"
     }
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "^2.2.0",
-    "@reflag/react-sdk": "1.4.1"
+    "@reflag/react-sdk": "1.4.2"
   },
   "peerDependencies": {
     "react": "*",
