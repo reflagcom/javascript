@@ -1,6 +1,7 @@
 generatorName: typescript-fetch
 inputSpec: ./openapi.json
 outputDir: src/generated
+templateDir: ./openapi-templates
 additionalProperties:
   supportsES6: true
   typescriptThreePlus: true

@@ -4,14 +4,7 @@ import type {
   RequestOpts,
 } from "./generated/runtime";
 import { ResponseError } from "./generated/runtime";
-import {
-  Configuration,
-  DefaultApi,
-  type EntityFlagsResponse,
-  type UpdateCompanyFlagsRequest,
-  type UpdateEntityFlagsBody,
-  type UpdateUserFlagsRequest,
-} from "./generated";
+import { Configuration, DefaultApi } from "./generated";
 
 type OmitAppIdParam<F> = F extends (
   arg1: infer A,
@@ -25,28 +18,6 @@ type OmitAppIdParam<F> = F extends (
 export type AppScopedApi<T> = {
   [K in keyof T]: OmitAppIdParam<T[K]>;
 };
-
-type EntityFlagUpdatesPayload = {
-  updates: UpdateEntityFlagsBody["updates"];
-  changeDescription?: UpdateEntityFlagsBody["changeDescription"];
-  notifications?: UpdateEntityFlagsBody["notifications"];
-};
-
-type FlattenEntityFlagsBody<
-  T extends { updateEntityFlagsBody?: UpdateEntityFlagsBody },
-> = Omit<T, "updateEntityFlagsBody"> & EntityFlagUpdatesPayload;
-
-type UpdateCompanyFlagsFriendlyParams =
-  FlattenEntityFlagsBody<UpdateCompanyFlagsRequest>;
-type UpdateUserFlagsFriendlyParams =
-  FlattenEntityFlagsBody<UpdateUserFlagsRequest>;
-
-export type UpdateCompanyFlagsParams =
-  | UpdateCompanyFlagsRequest
-  | UpdateCompanyFlagsFriendlyParams;
-export type UpdateUserFlagsParams =
-  | UpdateUserFlagsRequest
-  | UpdateUserFlagsFriendlyParams;
 
 export class ReflagApiError extends Error {
   status: number;
@@ -104,44 +75,6 @@ async function buildApiError(response: Response) {
   return new ReflagApiError(status, message, code, details);
 }
 
-function normalizeUpdateCompanyFlagsRequest(
-  requestParameters: UpdateCompanyFlagsParams,
-): UpdateCompanyFlagsRequest {
-  if ("updateEntityFlagsBody" in requestParameters) {
-    return requestParameters;
-  }
-
-  const { updates, changeDescription, notifications, ...rest } =
-    requestParameters as UpdateCompanyFlagsFriendlyParams;
-  return {
-    ...rest,
-    updateEntityFlagsBody: {
-      updates,
-      changeDescription,
-      notifications,
-    },
-  };
-}
-
-function normalizeUpdateUserFlagsRequest(
-  requestParameters: UpdateUserFlagsParams,
-): UpdateUserFlagsRequest {
-  if ("updateEntityFlagsBody" in requestParameters) {
-    return requestParameters;
-  }
-
-  const { updates, changeDescription, notifications, ...rest } =
-    requestParameters as UpdateUserFlagsFriendlyParams;
-  return {
-    ...rest,
-    updateEntityFlagsBody: {
-      updates,
-      changeDescription,
-      notifications,
-    },
-  };
-}
-
 export class Api extends DefaultApi {
   constructor(config?: ConfigurationParameters) {
     super(new Configuration(config));
@@ -159,26 +92,6 @@ export class Api extends DefaultApi {
       }
       throw error;
     }
-  }
-
-  async updateCompanyFlags(
-    requestParameters: UpdateCompanyFlagsParams,
-    initOverrides?: RequestInit | InitOverrideFunction,
-  ): Promise<EntityFlagsResponse> {
-    return await super.updateCompanyFlags(
-      normalizeUpdateCompanyFlagsRequest(requestParameters),
-      initOverrides,
-    );
-  }
-
-  async updateUserFlags(
-    requestParameters: UpdateUserFlagsParams,
-    initOverrides?: RequestInit | InitOverrideFunction,
-  ): Promise<EntityFlagsResponse> {
-    return await super.updateUserFlags(
-      normalizeUpdateUserFlagsRequest(requestParameters),
-      initOverrides,
-    );
   }
 }
 

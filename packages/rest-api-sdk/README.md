@@ -116,15 +116,13 @@ await api.updateCompanyFlags({
 await api.updateBulkFlagSpecificTargets({
   appId: "app-123",
   envId: "env-456",
-  bulkUpdateFlagSpecificTargetsSchema: {
-    updates: [
-      { flagKey: "new-checkout", value: true, companyId: "company-1" },
-      { flagKey: "new-checkout", value: true, userId: "user-1" },
-      { flagKey: "legacy-checkout", value: null, userId: "user-1" },
-    ],
-    notifications: true,
-    changeDescription: "Rolling out new checkout to pilot accounts",
-  },
+  updates: [
+    { flagKey: "new-checkout", value: true, companyId: "company-1" },
+    { flagKey: "new-checkout", value: true, userId: "user-1" },
+    { flagKey: "legacy-checkout", value: null, userId: "user-1" },
+  ],
+  notifications: true,
+  changeDescription: "Rolling out new checkout to pilot accounts",
 });
 ```
 

@@ -102,21 +102,72 @@ export interface ListFlagsRequest {
 export interface UpdateBulkFlagSpecificTargetsRequest {
     appId: string;
     envId: string;
-    bulkUpdateFlagSpecificTargetsSchema?: BulkUpdateFlagSpecificTargetsSchema;
+    /**
+     * List of flag updates to apply
+     * @type BulkUpdateFlagSpecificTargetsSchema['updates']
+     * @memberof BulkUpdateFlagSpecificTargetsSchema
+     */
+    updates: BulkUpdateFlagSpecificTargetsSchema['updates'];
+    /**
+     * Description of the change for audit history
+     * @type {string}
+     * @memberof BulkUpdateFlagSpecificTargetsSchema
+     */
+    changeDescription?: BulkUpdateFlagSpecificTargetsSchema['changeDescription'];
+    /**
+     * Whether to send notifications about the change (default: true)
+     * @type {boolean}
+     * @memberof BulkUpdateFlagSpecificTargetsSchema
+     */
+    notifications?: BulkUpdateFlagSpecificTargetsSchema['notifications'];
 }
 
 export interface UpdateCompanyFlagsRequest {
     appId: string;
     companyId: string;
     envId: string;
-    updateEntityFlagsBody?: UpdateEntityFlagsBody;
+    /**
+     * List of flag updates to apply
+     * @type UpdateEntityFlagsBody['updates']
+     * @memberof UpdateEntityFlagsBody
+     */
+    updates: UpdateEntityFlagsBody['updates'];
+    /**
+     * Description of the change for audit history
+     * @type {string}
+     * @memberof UpdateEntityFlagsBody
+     */
+    changeDescription?: UpdateEntityFlagsBody['changeDescription'];
+    /**
+     * Whether to send notifications about the change (default: true)
+     * @type {boolean}
+     * @memberof UpdateEntityFlagsBody
+     */
+    notifications?: UpdateEntityFlagsBody['notifications'];
 }
 
 export interface UpdateUserFlagsRequest {
     appId: string;
     userId: string;
     envId: string;
-    updateEntityFlagsBody?: UpdateEntityFlagsBody;
+    /**
+     * List of flag updates to apply
+     * @type UpdateEntityFlagsBody['updates']
+     * @memberof UpdateEntityFlagsBody
+     */
+    updates: UpdateEntityFlagsBody['updates'];
+    /**
+     * Description of the change for audit history
+     * @type {string}
+     * @memberof UpdateEntityFlagsBody
+     */
+    changeDescription?: UpdateEntityFlagsBody['changeDescription'];
+    /**
+     * Whether to send notifications about the change (default: true)
+     * @type {boolean}
+     * @memberof UpdateEntityFlagsBody
+     */
+    notifications?: UpdateEntityFlagsBody['notifications'];
 }
 
 /**
@@ -268,7 +319,9 @@ export interface DefaultApiInterface {
      * @summary Update flag specific targets for an environment
      * @param {string} appId App identifier
      * @param {string} envId Environment identifier
-     * @param {BulkUpdateFlagSpecificTargetsSchema} [bulkUpdateFlagSpecificTargetsSchema] 
+     * @param {BulkUpdateFlagSpecificTargetsSchema['updates']} updates List of flag updates to apply
+     * @param {BulkUpdateFlagSpecificTargetsSchema['changeDescription']} [changeDescription] Description of the change for audit history
+     * @param {BulkUpdateFlagSpecificTargetsSchema['notifications']} [notifications] Whether to send notifications about the change (default: true)
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      * @memberof DefaultApiInterface
@@ -287,7 +340,9 @@ export interface DefaultApiInterface {
      * @param {string} appId App identifier
      * @param {string} companyId Company ID within your application
      * @param {string} envId Environment ID to evaluate targeting for
-     * @param {UpdateEntityFlagsBody} [updateEntityFlagsBody] 
+     * @param {UpdateEntityFlagsBody['updates']} updates List of flag updates to apply
+     * @param {UpdateEntityFlagsBody['changeDescription']} [changeDescription] Description of the change for audit history
+     * @param {UpdateEntityFlagsBody['notifications']} [notifications] Whether to send notifications about the change (default: true)
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      * @memberof DefaultApiInterface
@@ -306,7 +361,9 @@ export interface DefaultApiInterface {
      * @param {string} appId App identifier
      * @param {string} userId User ID within your application
      * @param {string} envId Environment ID to evaluate targeting for
-     * @param {UpdateEntityFlagsBody} [updateEntityFlagsBody] 
+     * @param {UpdateEntityFlagsBody['updates']} updates List of flag updates to apply
+     * @param {UpdateEntityFlagsBody['changeDescription']} [changeDescription] Description of the change for audit history
+     * @param {UpdateEntityFlagsBody['notifications']} [notifications] Whether to send notifications about the change (default: true)
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      * @memberof DefaultApiInterface
@@ -811,7 +868,11 @@ export class DefaultApi extends runtime.BaseAPI implements DefaultApiInterface {
             method: 'PATCH',
             headers: headerParameters,
             query: queryParameters,
-            body: BulkUpdateFlagSpecificTargetsSchemaToJSON(requestParameters['bulkUpdateFlagSpecificTargetsSchema']),
+            body: BulkUpdateFlagSpecificTargetsSchemaToJSON({
+                updates: requestParameters['updates'],
+                changeDescription: requestParameters['changeDescription'],
+                notifications: requestParameters['notifications'],
+            }),
         }, initOverrides);
 
         return new runtime.JSONApiResponse(response, (jsonValue) => FlagTargetingCollectionFromJSON(jsonValue));
@@ -880,7 +941,11 @@ export class DefaultApi extends runtime.BaseAPI implements DefaultApiInterface {
             method: 'PATCH',
             headers: headerParameters,
             query: queryParameters,
-            body: UpdateEntityFlagsBodyToJSON(requestParameters['updateEntityFlagsBody']),
+            body: UpdateEntityFlagsBodyToJSON({
+                updates: requestParameters['updates'],
+                changeDescription: requestParameters['changeDescription'],
+                notifications: requestParameters['notifications'],
+            }),
         }, initOverrides);
 
         return new runtime.JSONApiResponse(response, (jsonValue) => EntityFlagsResponseFromJSON(jsonValue));
@@ -949,7 +1014,11 @@ export class DefaultApi extends runtime.BaseAPI implements DefaultApiInterface {
             method: 'PATCH',
             headers: headerParameters,
             query: queryParameters,
-            body: UpdateEntityFlagsBodyToJSON(requestParameters['updateEntityFlagsBody']),
+            body: UpdateEntityFlagsBodyToJSON({
+                updates: requestParameters['updates'],
+                changeDescription: requestParameters['changeDescription'],
+                notifications: requestParameters['notifications'],
+            }),
         }, initOverrides);
 
         return new runtime.JSONApiResponse(response, (jsonValue) => EntityFlagsResponseFromJSON(jsonValue));
