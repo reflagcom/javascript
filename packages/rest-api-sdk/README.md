@@ -1,6 +1,6 @@
 # @reflag/rest-api-sdk
 
-Type-safe REST API client for the Reflag API.
+Typed Node/browser SDK for Reflag's REST API.
 
 ## Installation
 
@@ -10,30 +10,47 @@ npm install @reflag/rest-api-sdk
 yarn add @reflag/rest-api-sdk
 ```
 
-## Quick Start
+## Create a client
 
-All API requests require a Bearer token. Get your API key from the Reflag dashboard.
+All requests require a Reflag API key.
 
 ```typescript
 import { Api } from "@reflag/rest-api-sdk";
 
 const api = new Api({
   accessToken: process.env.REFLAG_API_KEY,
+  // Optional when using non-default host:
+  // basePath: "https://app.reflag.com/api",
 });
-
-const apps = await api.listApps();
-// {
-//   data: [{ id, name, demo, flagKeyFormat, org: { id, name } }]
-// }
-console.log(apps.data);
 ```
 
-Most methods take an `appId`, or you can create an app-scoped client to avoid passing it in:
+## Quick start
+
+```typescript
+const apps = await api.listApps();
+console.log(apps.data);
+
+const app = apps.data[0];
+const appId = app?.id;
+
+if (appId) {
+  const environments = await api.listEnvironments({
+    appId,
+    sortBy: "order",
+    sortOrder: "asc",
+  });
+
+  console.log(environments.data);
+}
+```
+
+## App-scoped client
+
+If most calls are for one app, use `createAppClient` to avoid repeating `appId`.
 
 ```typescript
 import { createAppClient } from "@reflag/rest-api-sdk";
 
-// App-scoped client keeps appId out of each call.
 const appApi = createAppClient("app-123", {
   accessToken: process.env.REFLAG_API_KEY,
 });
@@ -42,268 +59,111 @@ const environments = await appApi.listEnvironments({
   sortBy: "order",
   sortOrder: "asc",
 });
-// {
-//   data: [{ id, name, isProduction, order }],
-//   sortBy,
-//   sortOrder
-// }
-console.log(environments.data);
+
+const flags = await appApi.listFlags({});
 ```
 
-## API Methods
+## Common workflows
 
-### Applications
+### Read user flags for an environment
 
-```typescript
-import { Api } from "@reflag/rest-api-sdk";
-
-const api = new Api();
-
-// List all apps
-const apps = await api.listApps();
-// {
-//   data: [{ id, name, demo, flagKeyFormat, org: { id, name } }]
-// }
-
-// Filter by organization
-const appsByOrg = await api.listApps({ orgId: "org-123" });
-// same return shape as listApps()
-
-// Get a single app
-const app = await api.getApp({
-  appId: "app-123",
-});
-// {
-//   id,
-//   name,
-//   demo,
-//   flagKeyFormat,
-//   environments: [{ id, name, isProduction, order, sdkAccess }],
-//   stages: [{ id, name, color, assignedFlagCount, order }],
-//   segments: [{ id, name, type }],
-//   org: { id, name }
-// }
-```
-
-### Environments
-
-```typescript
-import { createAppClient } from "@reflag/rest-api-sdk";
-
-const appApi = createAppClient("app-123");
-
-// App-scoped client (appId is implicit)
-const environments = await appApi.listEnvironments({
-  sortBy: "order",
-  sortOrder: "asc",
-});
-// {
-//   data: [{ id, name, isProduction, order }],
-//   sortBy,
-//   sortOrder
-// }
-
-const environment = await appApi.getEnvironment({
-  envId: "env-456",
-});
-// {
-//   id,
-//   name,
-//   isProduction,
-//   order,
-//   sdkAccess: { publishableKey, secretKey }
-// }
-```
-
-### Flags
-
-```typescript
-const flags = await api.listFlags({ appId: "app-123" });
-// {
-//   data: [
-//     {
-//       id,
-//       key,
-//       name,
-//       description?,
-//       stage?,
-//       owner?,
-//       archived,
-//       stale,
-//       permanent,
-//       createdAt?,
-//       lastCheckAt?,
-//       lastTrackAt?
-//     }
-//   ],
-//   totalCount,
-//   pageSize,
-//   pageIndex,
-//   sortBy,
-//   sortOrder
-// }
-
-const targeting = await api.getFlagTargeting({
-  appId: "app-123",
-  flagKey: "my-feature-flag",
-  envId: "env-456",
-});
-// {
-//   flagKey,
-//   version,
-//   updatedAt,
-//   specificTargets: {
-//     // Currently only "true" exists because this API supports the true variant.
-//     "true": { companyIds, userIds }
-//   }
-// }
-
-const updated = await api.updateBulkFlagSpecificTargets({
-  appId: "app-123",
-  envId: "env-456",
-  bulkUpdateFlagSpecificTargetsSchema: {
-    updates: [
-      { flagKey: "new-feature", value: true, companyId: "company-1" },
-      { flagKey: "new-feature", value: true, userId: "user-1" },
-      { flagKey: "old-feature", value: null, companyId: "company-1" },
-    ],
-    notifications: true,
-    changeDescription: "Enabling new feature for beta testers",
-  },
-});
-// {
-//   data: [{ flagKey, version, updatedAt, specificTargets }]
-// }
-```
-
-### Company Flags
-
-```typescript
-const companyFlags = await api.getCompanyFlags({
-  appId: "app-123",
-  companyId: "company-1",
-  envId: "env-456",
-});
-// {
-//   data: [
-//     {
-//       id,
-//       key,
-//       name,
-//       value,
-//       specificallyTargetedValue,
-//       firstExposureAt,
-//       lastExposureAt,
-//       lastCheckAt,
-//       exposureCount,
-//       firstTrackAt,
-//       lastTrackAt,
-//       trackCount
-//     }
-//   ],
-//   totalCount,
-//   pageSize,
-//   pageIndex
-// }
-
-const updatedCompanyFlags = await api.updateCompanyFlags({
-  appId: "app-123",
-  companyId: "company-1",
-  envId: "env-456",
-  updateEntityFlagsBody: {
-    updates: [
-      { flagKey: "feature-flag", value: true },
-      { flagKey: "another-flag", value: null },
-    ],
-  },
-});
-// same return shape as getCompanyFlags()
-```
-
-### User Flags
+`getUserFlags` evaluates flag results for one user in one environment and returns
+the user’s current values plus exposure/check metadata for each flag.
 
 ```typescript
 const userFlags = await api.getUserFlags({
   appId: "app-123",
-  userId: "user-1",
   envId: "env-456",
+  userId: "user-1",
 });
-// {
-//   data: [
-//     {
-//       id,
-//       key,
-//       name,
-//       value,
-//       specificallyTargetedValue,
-//       firstExposureAt,
-//       lastExposureAt,
-//       lastCheckAt,
-//       exposureCount,
-//       firstTrackAt,
-//       lastTrackAt,
-//       trackCount
-//     }
-//   ],
-//   totalCount,
-//   pageSize,
-//   pageIndex
-// }
 
-const updatedUserFlags = await api.updateUserFlags({
-  appId: "app-123",
-  userId: "user-1",
-  envId: "env-456",
-  updateEntityFlagsBody: {
-    updates: [
-      { flagKey: "feature-flag", value: true },
-      { flagKey: "beta-feature", value: true },
-    ],
-  },
-});
-// same return shape as getUserFlags()
+console.log(userFlags.data);
 ```
 
-## Error Handling
+### Toggle a user flag
 
-Methods throw on non-2xx responses. Catch errors and inspect the response when needed.
+Use `true` to explicitly target on, and `null` to remove specific targeting.
 
 ```typescript
+await api.updateUserFlags({
+  appId: "app-123",
+  envId: "env-456",
+  userId: "user-1",
+  updates: [{ flagKey: "new-checkout", value: true }],
+});
+```
+
+### Read and update company flags
+
+```typescript
+const companyFlags = await api.getCompanyFlags({
+  appId: "app-123",
+  envId: "env-456",
+  companyId: "company-1",
+});
+
+await api.updateCompanyFlags({
+  appId: "app-123",
+  envId: "env-456",
+  companyId: "company-1",
+  updates: [{ flagKey: "new-checkout", value: null }],
+});
+```
+
+### Bulk update specific targets for multiple flags
+
+```typescript
+await api.updateBulkFlagSpecificTargets({
+  appId: "app-123",
+  envId: "env-456",
+  bulkUpdateFlagSpecificTargetsSchema: {
+    updates: [
+      { flagKey: "new-checkout", value: true, companyId: "company-1" },
+      { flagKey: "new-checkout", value: true, userId: "user-1" },
+      { flagKey: "legacy-checkout", value: null, userId: "user-1" },
+    ],
+    notifications: true,
+    changeDescription: "Rolling out new checkout to pilot accounts",
+  },
+});
+```
+
+## Error handling
+
+The SDK throws `ReflagApiError` for non-2xx API responses.
+
+```typescript
+import { ReflagApiError } from "@reflag/rest-api-sdk";
+
 try {
-  const apps = await api.listApps();
-  console.log(apps.data);
+  await api.listApps();
 } catch (error) {
-  if (error instanceof Error) {
-    console.error("Request failed", error.message);
+  if (error instanceof ReflagApiError) {
+    console.error(error.status, error.code, error.message, error.details);
   }
   throw error;
 }
 ```
 
-## Types
+## API surface
 
-All generated types are exported for use in your application:
+Main exports:
 
-```typescript
-import type {
-  AppHeader,
-  EnvironmentHeader,
-  Environment,
-  FlagHeader,
-  FlagTargeting,
-  ErrorResponse,
-} from "@reflag/rest-api-sdk";
-```
+- `Api`: base client
+- `createAppClient(appId, config)`: app-scoped client
+- `ReflagApiError`: normalized API error type
+- Generated request/response types and models from `@reflag/rest-api-sdk`
 
-## Regenerating the SDK
+Core method groups:
 
-To regenerate the SDK:
+- Applications: `listApps`, `getApp`
+- Environments: `listEnvironments`, `getEnvironment`
+- Flags: `listFlags`, `getFlagTargeting`, `updateBulkFlagSpecificTargets`
+- User/company evaluation: `getUserFlags`, `updateUserFlags`, `getCompanyFlags`, `updateCompanyFlags`
 
-```bash
-yarn generate
-```
+## Example app
 
-The schema source lives at `https://app.reflag.com/openapi.json`.
+See `packages/rest-api-sdk/examples/customer-admin-panel/README.md` for a small Next.js app using this SDK in server actions.
 
 ## License
 

@@ -1,3 +1,7 @@
+export type {
+  AppScopedApi,
+  UpdateCompanyFlagsParams,
+  UpdateUserFlagsParams,
+} from "./api";
+export { Api, createAppClient,ReflagApiError } from "./api";
 export * from "./generated";
-export { Api, ReflagApiError, createAppClient, withAppId } from "./api";
-export type { AppScopedApi } from "./api";

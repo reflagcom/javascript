@@ -86,9 +86,7 @@ export async function toggleUserFlag(
   await client.updateUserFlags({
     envId,
     userId,
-    updateEntityFlagsBody: {
-      updates: [{ flagKey, value: enabled ? true : null }],
-    },
+    updates: [{ flagKey, value: enabled ? true : null }],
   });
   return await fetchUserFlags(appId, envId, userId);
 }
@@ -128,9 +126,7 @@ export async function toggleCompanyFlag(
   await client.updateCompanyFlags({
     envId,
     companyId,
-    updateEntityFlagsBody: {
-      updates: [{ flagKey, value: enabled ? true : null }],
-    },
+    updates: [{ flagKey, value: enabled ? true : null }],
   });
   return await fetchCompanyFlags(appId, envId, companyId);
 }
