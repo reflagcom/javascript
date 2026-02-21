@@ -24,6 +24,22 @@ const api = new Api({
 });
 ```
 
+## API surface
+
+Main exports:
+
+- `Api`: base client
+- `createAppClient(appId, config)`: app-scoped client
+- `ReflagApiError`: normalized API error type
+- Generated request/response types and models from `@reflag/rest-api-sdk`
+
+Core method groups:
+
+- Applications: `listApps`, `getApp`
+- Environments: `listEnvironments`, `getEnvironment`
+- Flags: `listFlags`, `getFlagTargeting`
+- User/company evaluation: `getUserFlags`, `updateUserFlags`, `getCompanyFlags`, `updateCompanyFlags`
+
 ## Quick start
 
 ```typescript
@@ -110,22 +126,6 @@ await api.updateCompanyFlags({
 });
 ```
 
-### Bulk update specific targets for multiple flags
-
-```typescript
-await api.updateBulkFlagSpecificTargets({
-  appId: "app-123",
-  envId: "env-456",
-  updates: [
-    { flagKey: "new-checkout", value: true, companyId: "company-1" },
-    { flagKey: "new-checkout", value: true, userId: "user-1" },
-    { flagKey: "legacy-checkout", value: null, userId: "user-1" },
-  ],
-  notifications: true,
-  changeDescription: "Rolling out new checkout to pilot accounts",
-});
-```
-
 ## Error handling
 
 The SDK throws `ReflagApiError` for non-2xx API responses.
@@ -142,22 +142,6 @@ try {
   throw error;
 }
 ```
-
-## API surface
-
-Main exports:
-
-- `Api`: base client
-- `createAppClient(appId, config)`: app-scoped client
-- `ReflagApiError`: normalized API error type
-- Generated request/response types and models from `@reflag/rest-api-sdk`
-
-Core method groups:
-
-- Applications: `listApps`, `getApp`
-- Environments: `listEnvironments`, `getEnvironment`
-- Flags: `listFlags`, `getFlagTargeting`, `updateBulkFlagSpecificTargets`
-- User/company evaluation: `getUserFlags`, `updateUserFlags`, `getCompanyFlags`, `updateCompanyFlags`
 
 ## Example app
 
