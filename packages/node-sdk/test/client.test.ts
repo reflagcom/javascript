@@ -992,6 +992,34 @@ describe("ReflagClient", () => {
     });
   });
 
+  describe("refreshFlags", () => {
+    it("should call flagsCache.refresh()", async () => {
+      const client = new ReflagClient(validOptions);
+
+      const refresh = vi
+        .spyOn(client["flagsCache"], "refresh")
+        .mockResolvedValue(undefined);
+
+      await client.refreshFlags();
+
+      expect(refresh).toHaveBeenCalledTimes(1);
+    });
+
+    it("should call flagsCache.refresh() on each invocation", async () => {
+      const client = new ReflagClient(validOptions);
+
+      const refresh = vi
+        .spyOn(client["flagsCache"], "refresh")
+        .mockResolvedValue(undefined);
+
+      await client.refreshFlags();
+      await client.refreshFlags();
+      await client.refreshFlags();
+
+      expect(refresh).toHaveBeenCalledTimes(3);
+    });
+  });
+
   describe("getFlag", () => {
     let client: ReflagClient;
 

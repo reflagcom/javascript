@@ -5140,7 +5140,16 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@reflag/node-sdk@npm:1.1.0, @reflag/node-sdk@workspace:packages/node-sdk":
+"@reflag/node-sdk@npm:1.1.0":
+  version: 1.1.0
+  resolution: "@reflag/node-sdk@npm:1.1.0"
+  dependencies:
+    "@reflag/flag-evaluation": "npm:1.0.0"
+  checksum: 10c0/32f1ba05ac40fe7c3b8a772efd04cc577ba6d6c043873ca0253fee3db00c51c1a3489982e8f60849e86bc3c958f5eb43f6995ead02cee90dae4d2c6df44e7a2c
+  languageName: node
+  linkType: hard
+
+"@reflag/node-sdk@workspace:packages/node-sdk":
   version: 0.0.0-use.local
   resolution: "@reflag/node-sdk@workspace:packages/node-sdk"
   dependencies:
