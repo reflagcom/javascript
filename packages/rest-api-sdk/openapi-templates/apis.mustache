@@ -26,24 +26,9 @@ import {
 export interface {{#prefixParameterInterfaces}}{{classname}}{{/prefixParameterInterfaces}}{{operationIdCamelCase}}Request {
 {{#allParams}}
     {{#isBodyParam}}
-    /**
-     * List of flag updates to apply
-     * @type {{=<% %>=}}<%&dataType%>['updates']<%={{ }}=%>
-     * @memberof {{{dataType}}}
-     */
-    updates: {{=<% %>=}}<%&dataType%>['updates']<%={{ }}=%>;
-    /**
-     * Description of the change for audit history
-     * @type {string}
-     * @memberof {{{dataType}}}
-     */
-    changeDescription?: {{=<% %>=}}<%&dataType%>['changeDescription']<%={{ }}=%>;
-    /**
-     * Whether to send notifications about the change (default: true)
-     * @type {boolean}
-     * @memberof {{{dataType}}}
-     */
-    notifications?: {{=<% %>=}}<%&dataType%>['notifications']<%={{ }}=%>;
+    {{#vars}}
+    {{name}}{{^required}}?{{/required}}: {{{dataType}}}{{#isNullable}} | null{{/isNullable}};
+    {{/vars}}
     {{/isBodyParam}}
     {{^isBodyParam}}
     {{paramName}}{{^required}}?{{/required}}: {{#isEnum}}{{{datatypeWithEnum}}}{{/isEnum}}{{^isEnum}}{{#hasReadOnly}}Omit<{{{dataType}}}, {{#readOnlyVars}}'{{baseName}}'{{^-last}}|{{/-last}}{{/readOnlyVars}}>{{/hasReadOnly}}{{^hasReadOnly}}{{{dataType}}}{{/hasReadOnly}}{{#isNullable}} | null{{/isNullable}}{{/isEnum}};
@@ -71,9 +56,9 @@ export interface {{classname}}Interface {
      {{/summary}}
      {{#allParams}}
      {{#isBodyParam}}
-     * @param {{=<% %>=}}{<%&dataType%>['updates']}<%={{ }}=%> updates List of flag updates to apply
-     * @param {{=<% %>=}}{<%&dataType%>['changeDescription']}<%={{ }}=%> [changeDescription] Description of the change for audit history
-     * @param {{=<% %>=}}{<%&dataType%>['notifications']}<%={{ }}=%> [notifications] Whether to send notifications about the change (default: true)
+     {{#vars}}
+     * @param {{=<% %>=}}{<%&dataType%>}<%={{ }}=%> {{^required}}[{{/required}}{{name}}{{^required}}]{{/required}} {{description}}
+     {{/vars}}
      {{/isBodyParam}}
      {{^isBodyParam}}
      * @param {{=<% %>=}}{<%&dataType%>}<%={{ }}=%> {{^required}}[{{/required}}{{paramName}}{{^required}}]{{/required}} {{description}}
@@ -342,16 +327,16 @@ export class {{classname}} extends runtime.BaseAPI {
             {{#bodyParam}}
             {{^withoutRuntimeChecks}}
             body: {{dataType}}ToJSON({
-                updates: requestParameters['updates'],
-                changeDescription: requestParameters['changeDescription'],
-                notifications: requestParameters['notifications'],
+                {{#vars}}
+                {{name}}: requestParameters['{{name}}'],
+                {{/vars}}
             }),
             {{/withoutRuntimeChecks}}
             {{#withoutRuntimeChecks}}
             body: {
-                updates: requestParameters['updates'],
-                changeDescription: requestParameters['changeDescription'],
-                notifications: requestParameters['notifications'],
+                {{#vars}}
+                {{name}}: requestParameters['{{name}}'],
+                {{/vars}}
             },
             {{/withoutRuntimeChecks}}
             {{/bodyParam}}

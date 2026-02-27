@@ -8,7 +8,7 @@
     "url": "https://github.com/reflagcom/javascript.git"
   },
   "scripts": {
-    "generate": "rm -rf src/generated && openapi-generator-cli generate -c openapi-generator.config.yaml",
+    "generate": "rm -rf src/generated && npx @openapitools/openapi-generator-cli generate -c openapi-generator.config.yaml",
     "build": "yarn generate && tsc --project tsconfig.build.json",
     "test": "vitest run",
     "test:watch": "vitest",

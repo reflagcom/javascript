@@ -1,5 +1,5 @@
 generatorName: typescript-fetch
-inputSpec: ./openapi.json
+inputSpec: https://app.reflag.com/openapi.json
 outputDir: src/generated
 templateDir: ./openapi-templates
 additionalProperties:

@@ -37,7 +37,7 @@ Core method groups:
 
 - Applications: `listApps`, `getApp`
 - Environments: `listEnvironments`, `getEnvironment`
-- Flags: `listFlags`, `getFlagTargeting`
+- Flags: `listFlags`, `createFlag`, `updateFlag`, `getFlagTargeting`
 - User/company evaluation: `getUserFlags`, `updateUserFlags`, `getCompanyFlags`, `updateCompanyFlags`
 
 ## Quick start
@@ -80,6 +80,29 @@ const flags = await appApi.listFlags({});
 ```
 
 ## Common workflows
+
+### Create and update a flag
+
+`createFlag` and `updateFlag` return `{ flag }` with the latest flag details.
+
+Use `null` to clear nullable fields like `description` or `ownerUserId` on update.
+
+```typescript
+const created = await api.createFlag({
+  appId: "app-123",
+  key: "new-checkout",
+  name: "New checkout",
+  description: "Rollout for redesigned checkout flow",
+  secret: false,
+});
+
+await api.updateFlag({
+  appId: "app-123",
+  flagId: created.flag.id,
+  name: "New checkout experience",
+  ownerUserId: null,
+});
+```
 
 ### Read user flags for an environment
 

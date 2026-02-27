@@ -29,89 +29,101 @@ import {
 } from './ReflagUserHeader';
 
 /**
- * Basic flag information
+ * 
  * @export
- * @interface FlagHeader
+ * @interface CreateFlag200ResponseFlag
  */
-export interface FlagHeader {
+export interface CreateFlag200ResponseFlag {
     /**
      * Flag ID
      * @type {string}
-     * @memberof FlagHeader
+     * @memberof CreateFlag200ResponseFlag
      */
     id: string;
     /**
      * Unique flag key
      * @type {string}
-     * @memberof FlagHeader
+     * @memberof CreateFlag200ResponseFlag
      */
     key: string;
     /**
      * Flag name
      * @type {string}
-     * @memberof FlagHeader
+     * @memberof CreateFlag200ResponseFlag
      */
     name: string;
     /**
      * Flag description
      * @type {string}
-     * @memberof FlagHeader
+     * @memberof CreateFlag200ResponseFlag
      */
     description?: string;
     /**
      * 
      * @type {StageHeader}
-     * @memberof FlagHeader
+     * @memberof CreateFlag200ResponseFlag
      */
     stage?: StageHeader;
     /**
      * 
      * @type {ReflagUserHeader}
-     * @memberof FlagHeader
+     * @memberof CreateFlag200ResponseFlag
      */
     owner?: ReflagUserHeader;
     /**
      * Whether the flag is archived
      * @type {boolean}
-     * @memberof FlagHeader
+     * @memberof CreateFlag200ResponseFlag
      */
     archived: boolean;
     /**
      * Whether the flag is stale
      * @type {boolean}
-     * @memberof FlagHeader
+     * @memberof CreateFlag200ResponseFlag
      */
     stale: boolean;
     /**
      * Whether the flag is permanent
      * @type {boolean}
-     * @memberof FlagHeader
+     * @memberof CreateFlag200ResponseFlag
      */
     permanent: boolean;
     /**
      * Timestamp when the flag was created
      * @type {string}
-     * @memberof FlagHeader
+     * @memberof CreateFlag200ResponseFlag
      */
     createdAt?: string;
     /**
      * Timestamp when the flag was last checked
      * @type {string}
-     * @memberof FlagHeader
+     * @memberof CreateFlag200ResponseFlag
      */
     lastCheckAt?: string;
     /**
      * Timestamp when the flag was last tracked
      * @type {string}
-     * @memberof FlagHeader
+     * @memberof CreateFlag200ResponseFlag
      */
     lastTrackAt?: string;
+    /**
+     * Timestamp when the flag was rolled out to everyone
+     * @type {string}
+     * @memberof CreateFlag200ResponseFlag
+     */
+    rolledOutToEveryoneAt?: string;
+    /**
+     * Parent flag ID
+     * @type {string}
+     * @memberof CreateFlag200ResponseFlag
+     */
+    parentFlagId?: string;
 }
 
 /**
- * Check if a given object implements the FlagHeader interface.
+ * Check if a given object implements the CreateFlag200ResponseFlag interface.
  */
-export function instanceOfFlagHeader(value: object): value is FlagHeader {
+export function instanceOfCreateFlag200ResponseFlag(value: object): value is CreateFlag200ResponseFlag {
     if (!('id' in value) || value['id'] === undefined) return false;
     if (!('key' in value) || value['key'] === undefined) return false;
     if (!('name' in value) || value['name'] === undefined) return false;
@@ -121,11 +133,11 @@ export function instanceOfFlagHeader(value: object): value is FlagHeader {
     return true;
 }
 
-export function FlagHeaderFromJSON(json: any): FlagHeader {
-    return FlagHeaderFromJSONTyped(json, false);
+export function CreateFlag200ResponseFlagFromJSON(json: any): CreateFlag200ResponseFlag {
+    return CreateFlag200ResponseFlagFromJSONTyped(json, false);
 }
 
-export function FlagHeaderFromJSONTyped(json: any, ignoreDiscriminator: boolean): FlagHeader {
+export function CreateFlag200ResponseFlagFromJSONTyped(json: any, ignoreDiscriminator: boolean): CreateFlag200ResponseFlag {
     if (json == null) {
         return json;
     }
@@ -143,14 +155,16 @@ export function FlagHeaderFromJSONTyped(json: any, ignoreDiscriminator: boolean)
         'createdAt': json['createdAt'] == null ? undefined : json['createdAt'],
         'lastCheckAt': json['lastCheckAt'] == null ? undefined : json['lastCheckAt'],
         'lastTrackAt': json['lastTrackAt'] == null ? undefined : json['lastTrackAt'],
+        'rolledOutToEveryoneAt': json['rolledOutToEveryoneAt'] == null ? undefined : json['rolledOutToEveryoneAt'],
+        'parentFlagId': json['parentFlagId'] == null ? undefined : json['parentFlagId'],
     };
 }
 
-export function FlagHeaderToJSON(json: any): FlagHeader {
-    return FlagHeaderToJSONTyped(json, false);
+export function CreateFlag200ResponseFlagToJSON(json: any): CreateFlag200ResponseFlag {
+    return CreateFlag200ResponseFlagToJSONTyped(json, false);
 }
 
-export function FlagHeaderToJSONTyped(value?: FlagHeader | null, ignoreDiscriminator: boolean = false): any {
+export function CreateFlag200ResponseFlagToJSONTyped(value?: CreateFlag200ResponseFlag | null, ignoreDiscriminator: boolean = false): any {
     if (value == null) {
         return value;
     }
@@ -169,6 +183,8 @@ export function FlagHeaderToJSONTyped(value?: FlagHeader | null, ignoreDiscrimin
         'createdAt': value['createdAt'],
         'lastCheckAt': value['lastCheckAt'],
         'lastTrackAt': value['lastTrackAt'],
+        'rolledOutToEveryoneAt': value['rolledOutToEveryoneAt'],
+        'parentFlagId': value['parentFlagId'],
     };
 }
 

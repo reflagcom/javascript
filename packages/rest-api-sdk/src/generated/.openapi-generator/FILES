@@ -1,10 +1,13 @@
+.openapi-generator-ignore
 apis/DefaultApi.ts
 apis/index.ts
 index.ts
 models/App.ts
 models/AppHeader.ts
 models/AppHeaderCollection.ts
-models/BulkUpdateFlagSpecificTargetsSchema.ts
+models/CreateFlag200Response.ts
+models/CreateFlag200ResponseFlag.ts
+models/CreateFlagRequest.ts
 models/EntityFlag.ts
 models/EntityFlagUpdate.ts
 models/EntityFlagsResponse.ts
@@ -19,7 +22,6 @@ models/FlagHeader.ts
 models/FlagHeaderCollection.ts
 models/FlagKeyFormat.ts
 models/FlagTargeting.ts
-models/FlagTargetingCollection.ts
 models/FlagValue.ts
 models/FlagValueTargeting.ts
 models/OrgHeader.ts
@@ -29,7 +31,6 @@ models/SegmentType.ts
 models/SortOrder.ts
 models/StageHeader.ts
 models/UpdateEntityFlagsBody.ts
-models/UpdateFlagSpecificTargets.ts
-models/UpdateFlagSpecificTargetsValue.ts
+models/UpdateFlagRequest.ts
 models/index.ts
 runtime.ts
