@@ -61,15 +61,8 @@ import {
     UpdateFlagRequestToJSON,
 } from '../models/index';
 
-export interface CreateFlagOperationRequest {
+export interface CreateFlagOperationRequest extends CreateFlagRequest {
     appId: string;
-    key: string;
-    name: string;
-    description?: string | null;
-    stageId?: string;
-    ownerUserId?: string | null;
-    permanent?: boolean;
-    secret?: boolean;
 }
 
 export interface GetAppRequest {
@@ -113,34 +106,21 @@ export interface ListFlagsRequest {
     appId: string;
 }
 
-export interface UpdateCompanyFlagsRequest {
+export interface UpdateCompanyFlagsRequest extends UpdateEntityFlagsBody {
     appId: string;
     envId: string;
     companyId: string;
-    updates: Array<EntityFlagUpdate>;
-    changeDescription?: string;
-    notifications?: boolean;
 }
 
-export interface UpdateFlagOperationRequest {
+export interface UpdateFlagOperationRequest extends UpdateFlagRequest {
     appId: string;
     flagId: string;
-    name?: string;
-    description?: string | null;
-    ownerUserId?: string | null;
-    permanent?: boolean;
-    secret?: boolean;
-    isArchived?: boolean;
-    stageId?: string;
 }
 
-export interface UpdateUserFlagsRequest {
+export interface UpdateUserFlagsRequest extends UpdateEntityFlagsBody {
     appId: string;
     envId: string;
     userId: string;
-    updates: Array<EntityFlagUpdate>;
-    changeDescription?: string;
-    notifications?: boolean;
 }
 
 /**

@@ -23,13 +23,8 @@ import {
 {{#operations}}
 {{#operation}}
 {{#allParams.0}}
-export interface {{#prefixParameterInterfaces}}{{classname}}{{/prefixParameterInterfaces}}{{operationIdCamelCase}}Request {
+export interface {{#prefixParameterInterfaces}}{{classname}}{{/prefixParameterInterfaces}}{{operationIdCamelCase}}Request {{#bodyParam}}extends {{{dataType}}} {{/bodyParam}}{
 {{#allParams}}
-    {{#isBodyParam}}
-    {{#vars}}
-    {{name}}{{^required}}?{{/required}}: {{{dataType}}}{{#isNullable}} | null{{/isNullable}};
-    {{/vars}}
-    {{/isBodyParam}}
     {{^isBodyParam}}
     {{paramName}}{{^required}}?{{/required}}: {{#isEnum}}{{{datatypeWithEnum}}}{{/isEnum}}{{^isEnum}}{{#hasReadOnly}}Omit<{{{dataType}}}, {{#readOnlyVars}}'{{baseName}}'{{^-last}}|{{/-last}}{{/readOnlyVars}}>{{/hasReadOnly}}{{^hasReadOnly}}{{{dataType}}}{{/hasReadOnly}}{{#isNullable}} | null{{/isNullable}}{{/isEnum}};
     {{/isBodyParam}}

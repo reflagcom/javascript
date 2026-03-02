@@ -126,7 +126,7 @@ export default async function CompanyFlagsPage({ searchParams }: PageProps) {
           </thead>
           <tbody>
             {flags.map((flag) => {
-              const isInherited = flag.value && flag.specificallyTargetedValue === null;
+              const isInherited = flag.value && flag.specificTargetValue === null;
               const canToggle = !isInherited;
               const nextValue = !flag.value;
 
