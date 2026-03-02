@@ -75,7 +75,7 @@ export async function toggleUserFlag(
   userId: string,
   flagKey: string,
   enabled: boolean,
-): Promise<EntityFlagsResponse> {
+): Promise<void> {
   if (!envId) {
     throw new Error("envId is required");
   }
@@ -88,7 +88,6 @@ export async function toggleUserFlag(
     userId,
     updates: [{ flagKey, specificTargetValue: enabled ? true : null }],
   });
-  return await fetchUserFlags(appId, envId, userId);
 }
 
 export async function fetchCompanyFlags(
@@ -115,7 +114,7 @@ export async function toggleCompanyFlag(
   companyId: string,
   flagKey: string,
   enabled: boolean,
-): Promise<EntityFlagsResponse> {
+): Promise<void> {
   if (!envId) {
     throw new Error("envId is required");
   }
@@ -128,5 +127,4 @@ export async function toggleCompanyFlag(
     companyId,
     updates: [{ flagKey, specificTargetValue: enabled ? true : null }],
   });
-  return await fetchCompanyFlags(appId, envId, companyId);
 }

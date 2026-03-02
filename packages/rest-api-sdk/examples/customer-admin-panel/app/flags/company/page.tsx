@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import {
   fetchCompanyFlags,
   listApps,
@@ -54,6 +55,7 @@ export default async function CompanyFlagsPage({ searchParams }: PageProps) {
     await toggleCompanyFlag(appId, envId, nextCompanyId, flagKey, nextValue);
 
     const query = new URLSearchParams({ appId, envId, companyId: nextCompanyId });
+    revalidatePath("/flags/company");
     redirect(`/flags/company?${query.toString()}`);
   }
 
@@ -120,35 +122,33 @@ export default async function CompanyFlagsPage({ searchParams }: PageProps) {
               <th style={{ textAlign: "left", padding: 8 }}>Flag</th>
               <th style={{ textAlign: "left", padding: 8 }}>Key</th>
               <th style={{ textAlign: "left", padding: 8 }}>Enabled</th>
-              <th style={{ textAlign: "left", padding: 8 }}>Status</th>
               <th style={{ textAlign: "left", padding: 8 }}>Action</th>
             </tr>
           </thead>
           <tbody>
             {flags.map((flag) => {
               const isInherited = flag.value && flag.specificTargetValue === null;
-              const canToggle = !isInherited;
-              const nextValue = !flag.value;
 
               return (
                 <tr key={flag.id} style={{ borderTop: "1px solid #ddd" }}>
                   <td style={{ padding: 8 }}>{flag.name}</td>
                   <td style={{ padding: 8 }}>{flag.key}</td>
                   <td style={{ padding: 8 }}>
-                    <input type="checkbox" checked={flag.value} readOnly disabled={isInherited} />
+                    {flag.value ? (isInherited ? "Yes (implicitly)" : "Yes") : "No"}
                   </td>
-                  <td style={{ padding: 8 }}>{isInherited ? "Inherited" : "Targeted"}</td>
                   <td style={{ padding: 8 }}>
-                    <form action={updateCompanyFlagAction}>
-                      <input type="hidden" name="appId" value={selectedAppId} />
-                      <input type="hidden" name="envId" value={selectedEnvId} />
-                      <input type="hidden" name="companyId" value={companyId} />
-                      <input type="hidden" name="flagKey" value={flag.key} />
-                      <input type="hidden" name="nextValue" value={String(nextValue)} />
-                      <button type="submit" disabled={!canToggle}>
-                        {canToggle ? (flag.value ? "Turn off" : "Turn on") : "Inherited"}
-                      </button>
-                    </form>
+                    {!isInherited && (
+                      <form action={updateCompanyFlagAction}>
+                        <input type="hidden" name="appId" value={selectedAppId} />
+                        <input type="hidden" name="envId" value={selectedEnvId} />
+                        <input type="hidden" name="companyId" value={companyId} />
+                        <input type="hidden" name="flagKey" value={flag.key} />
+                        <input type="hidden" name="nextValue" value={String(!flag.value)} />
+                        <button type="submit">
+                          {flag.value ? "Turn off" : "Turn on"}
+                        </button>
+                      </form>
+                    )}
                   </td>
                 </tr>
               );
