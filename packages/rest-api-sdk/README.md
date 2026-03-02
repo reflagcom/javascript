@@ -19,8 +19,6 @@ import { Api } from "@reflag/rest-api-sdk";
 
 const api = new Api({
   accessToken: process.env.REFLAG_API_KEY,
-  // Optional when using non-default host:
-  // basePath: "https://app.reflag.com/api",
 });
 ```
 
@@ -128,7 +126,7 @@ await api.updateUserFlags({
   appId: "app-123",
   envId: "env-456",
   userId: "user-1",
-  updates: [{ flagKey: "new-checkout", value: true }],
+  updates: [{ flagKey: "new-checkout", specificTargetValue: true }],
 });
 ```
 
@@ -145,7 +143,7 @@ await api.updateCompanyFlags({
   appId: "app-123",
   envId: "env-456",
   companyId: "company-1",
-  updates: [{ flagKey: "new-checkout", value: null }],
+  updates: [{ flagKey: "new-checkout", specificTargetValue: null }],
 });
 ```
 
