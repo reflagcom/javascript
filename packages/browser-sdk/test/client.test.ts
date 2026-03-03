@@ -27,6 +27,21 @@ describe("ReflagClient", () => {
     vi.unstubAllGlobals();
   });
 
+  describe("storage runtime compatibility", () => {
+    it("can be constructed without localStorage", () => {
+      vi.stubGlobal("localStorage", undefined);
+
+      expect(
+        () =>
+          new ReflagClient({
+            publishableKey: "test-key",
+            user: { id: "user1" },
+            company: { id: "company1" },
+          }),
+      ).not.toThrow();
+    });
+  });
+
   describe("updateUser", () => {
     it("should update the user context", async () => {
       // and send new user data and trigger flag update
