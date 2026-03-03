@@ -25,8 +25,11 @@ function getAppClient(appId: string) {
   if (!appId) {
     throw new Error("appId is required");
   }
+  if (!apiKey) {
+    throw new Error("REFLAG_API_KEY is not set");
+  }
   return createAppClient(appId, {
-    accessToken: apiKey ?? "",
+    accessToken: apiKey,
     basePath,
   });
 }
