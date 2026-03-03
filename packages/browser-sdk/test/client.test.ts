@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ReflagClient } from "../src/client";
 import { FlagsClient } from "../src/flag/flags";
@@ -21,6 +21,10 @@ describe("ReflagClient", () => {
     });
 
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   describe("updateUser", () => {

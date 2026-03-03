@@ -1,8 +1,18 @@
+import { IS_SERVER } from "./config";
+
 export type StorageAdapter = {
   getItem(key: string): Promise<string | null>;
   setItem(key: string, value: string): Promise<void>;
   removeItem?(key: string): Promise<void>;
 };
+
+export function createNoopStorageAdapter(): StorageAdapter {
+  return {
+    getItem: async () => null,
+    setItem: async () => undefined,
+    removeItem: async () => undefined,
+  };
+}
 
 export function getLocalStorageAdapter(): StorageAdapter {
   if (
@@ -23,4 +33,9 @@ export function getLocalStorageAdapter(): StorageAdapter {
       localStorage.removeItem(key);
     },
   };
+}
+
+export function getDefaultStorageAdapter(): StorageAdapter {
+  if (IS_SERVER) return createNoopStorageAdapter();
+  return getLocalStorageAdapter();
 }
