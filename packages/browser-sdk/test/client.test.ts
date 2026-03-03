@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ReflagClient } from "../src/client";
 import { FlagsClient } from "../src/flag/flags";
@@ -21,6 +21,25 @@ describe("ReflagClient", () => {
     });
 
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  describe("storage runtime compatibility", () => {
+    it("can be constructed without localStorage", () => {
+      vi.stubGlobal("localStorage", undefined);
+
+      expect(
+        () =>
+          new ReflagClient({
+            publishableKey: "test-key",
+            user: { id: "user1" },
+            company: { id: "company1" },
+          }),
+      ).not.toThrow();
+    });
   });
 
   describe("updateUser", () => {
