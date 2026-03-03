@@ -43,6 +43,19 @@ Core method groups:
 ```typescript
 const apps = await api.listApps();
 console.log(apps.data);
+// [
+//   {
+//     "org": { "id": "org-1", "name": "Acme Org" },
+//     "id": "app-123",
+//     "name": "Acme App",
+//     "demo": false,
+//     "flagKeyFormat": "kebabCaseLower",
+//     "environments": [
+//       { "id": "env-123", "name": "Development", "isProduction": false, "order": 0 },
+//       { "id": "env-456", "name": "Production", "isProduction": true, "order": 1 }
+//     ]
+//   }
+// ]
 
 const app = apps.data[0];
 const appId = app?.id;
@@ -55,6 +68,9 @@ if (appId) {
   });
 
   console.log(environments.data);
+  // [
+  //   { "id": "env-456", "name": "Production", "isProduction": true, "order": 1 }
+  // ]
 }
 ```
 
@@ -73,8 +89,34 @@ const environments = await appApi.listEnvironments({
   sortBy: "order",
   sortOrder: "asc",
 });
+console.log(environments.data);
+// [
+//   { "id": "env-456", "name": "Production", "isProduction": true, "order": 1 }
+// ]
 
 const flags = await appApi.listFlags({});
+console.log(flags.data);
+// [
+//   {
+//     "id": "flag-1",
+//     "key": "new-checkout",
+//     "name": "New checkout",
+//     "description": "Rollout for redesigned checkout flow",
+//     "stage": { "id": "stage-1", "name": "Beta", "color": "#4f46e5", "order": 2 },
+//     "owner": {
+//       "id": "user-99",
+//       "name": "Jane Doe",
+//       "email": "jane@acme.com",
+//       "avatarUrl": "https://example.com/avatar.png"
+//     },
+//     "archived": false,
+//     "stale": false,
+//     "permanent": false,
+//     "createdAt": "2026-03-03T09:00:00.000Z",
+//     "lastCheckAt": "2026-03-03T09:30:00.000Z",
+//     "lastTrackAt": "2026-03-03T09:31:00.000Z"
+//   }
+// ]
 ```
 
 ## Common workflows
@@ -94,12 +136,34 @@ const created = await api.createFlag({
   secret: false,
 });
 
-await api.updateFlag({
+const updated = await api.updateFlag({
   appId: "app-123",
   flagId: created.flag.id,
   name: "New checkout experience",
   ownerUserId: null,
 });
+console.log(updated.flag);
+// {
+//   "id": "flag-1",
+//   "key": "new-checkout",
+//   "name": "New checkout experience",
+//   "description": "Rollout for redesigned checkout flow",
+//   "stage": { "id": "stage-1", "name": "Beta", "color": "#4f46e5", "order": 2 },
+//   "owner": {
+//     "id": "user-99",
+//     "name": "Jane Doe",
+//     "email": "jane@acme.com",
+//     "avatarUrl": "https://example.com/avatar.png"
+//   },
+//   "archived": false,
+//   "stale": false,
+//   "permanent": false,
+//   "createdAt": "2026-03-03T09:00:00.000Z",
+//   "lastCheckAt": "2026-03-03T09:35:00.000Z",
+//   "lastTrackAt": "2026-03-03T09:36:00.000Z",
+//   "rolledOutToEveryoneAt": "2026-03-10T12:00:00.000Z",
+//   "parentFlagId": "flag-parent-1"
+// }
 ```
 
 ### Read user flags for an environment
@@ -115,6 +179,23 @@ const userFlags = await api.getUserFlags({
 });
 
 console.log(userFlags.data);
+// [
+//   {
+//     "id": "flag-1",
+//     "key": "new-checkout",
+//     "name": "New checkout",
+//     "createdAt": "2026-03-03T09:00:00.000Z",
+//     "value": true,
+//     "specificTargetValue": true,
+//     "firstExposureAt": "2026-03-03T09:05:00.000Z",
+//     "lastExposureAt": "2026-03-03T09:30:00.000Z",
+//     "lastCheckAt": "2026-03-03T09:31:00.000Z",
+//     "exposureCount": 12,
+//     "firstTrackAt": "2026-03-03T09:06:00.000Z",
+//     "lastTrackAt": "2026-03-03T09:32:00.000Z",
+//     "trackCount": 5
+//   }
+// ]
 ```
 
 ### Toggle a user flag
@@ -122,15 +203,33 @@ console.log(userFlags.data);
 Use `true` to explicitly target on, and `null` to remove specific targeting.
 
 ```typescript
-await api.updateUserFlags({
+const updatedUserFlags = await api.updateUserFlags({
   appId: "app-123",
   envId: "env-456",
   userId: "user-1",
   updates: [{ flagKey: "new-checkout", specificTargetValue: true }],
 });
+console.log(updatedUserFlags.data);
+// [
+//   {
+//     "id": "flag-1",
+//     "key": "new-checkout",
+//     "name": "New checkout",
+//     "createdAt": "2026-03-03T09:00:00.000Z",
+//     "value": true,
+//     "specificTargetValue": true,
+//     "firstExposureAt": "2026-03-03T09:05:00.000Z",
+//     "lastExposureAt": "2026-03-03T09:35:00.000Z",
+//     "lastCheckAt": "2026-03-03T09:36:00.000Z",
+//     "exposureCount": 13,
+//     "firstTrackAt": "2026-03-03T09:06:00.000Z",
+//     "lastTrackAt": "2026-03-03T09:37:00.000Z",
+//     "trackCount": 6
+//   }
+// ]
 ```
 
-### Read and update company flags
+### Read company flags for an environment
 
 ```typescript
 const companyFlags = await api.getCompanyFlags({
@@ -138,13 +237,56 @@ const companyFlags = await api.getCompanyFlags({
   envId: "env-456",
   companyId: "company-1",
 });
+console.log(companyFlags.data);
+// [
+//   {
+//     "id": "flag-1",
+//     "key": "new-checkout",
+//     "name": "New checkout",
+//     "createdAt": "2026-03-03T09:00:00.000Z",
+//     "value": false,
+//     "specificTargetValue": null,
+//     "firstExposureAt": null,
+//     "lastExposureAt": null,
+//     "lastCheckAt": "2026-03-03T09:31:00.000Z",
+//     "exposureCount": 0,
+//     "firstTrackAt": null,
+//     "lastTrackAt": null,
+//     "trackCount": 0
+//   }
+// ]
+```
 
-await api.updateCompanyFlags({
+### Toggle a company flag
+
+Use `true` to explicitly target on, and `null` to remove specific targeting.
+
+```typescript
+const updatedCompanyFlags = await api.updateCompanyFlags({
   appId: "app-123",
   envId: "env-456",
   companyId: "company-1",
+  // Use `null` to stop targeting the company specifically for that flag.
   updates: [{ flagKey: "new-checkout", specificTargetValue: null }],
 });
+console.log(updatedCompanyFlags.data);
+// [
+//   {
+//     "id": "flag-1",
+//     "key": "new-checkout",
+//     "name": "New checkout",
+//     "createdAt": "2026-03-03T09:00:00.000Z",
+//     "value": false,
+//     "specificTargetValue": null,
+//     "firstExposureAt": null,
+//     "lastExposureAt": null,
+//     "lastCheckAt": "2026-03-03T09:36:00.000Z",
+//     "exposureCount": 0,
+//     "firstTrackAt": null,
+//     "lastTrackAt": null,
+//     "trackCount": 0
+//   }
+// ]
 ```
 
 ## Error handling
