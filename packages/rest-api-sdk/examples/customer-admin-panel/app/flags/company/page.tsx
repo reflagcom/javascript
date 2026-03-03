@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import EntityFlagsFilterForm from "../EntityFlagsFilterForm";
 import {
   fetchCompanyFlags,
   listApps,
@@ -64,53 +65,17 @@ export default async function CompanyFlagsPage({ searchParams }: PageProps) {
       <Link href="/flags">Back to flags</Link>
       <h1>Company Flags</h1>
 
-      <form
-        method="get"
+      <EntityFlagsFilterForm
         action="/flags/company"
-        style={{ display: "grid", gap: 12, marginBottom: 16 }}
-      >
-        <label style={{ display: "grid", gap: 6 }}>
-          <span>App</span>
-          <select name="appId" defaultValue={selectedAppId} style={{ padding: 8 }}>
-            {apps.map((app) => (
-              <option key={app.id} value={app.id}>
-                {app.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label style={{ display: "grid", gap: 6 }}>
-          <span>Environment</span>
-          <select
-            name="envId"
-            defaultValue={selectedEnvId}
-            style={{ padding: 8 }}
-            disabled={!selectedAppId}
-          >
-            {envs.map((env) => (
-              <option key={env.id} value={env.id}>
-                {env.name}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <div style={{ display: "flex", gap: 8, alignItems: "end" }}>
-          <label style={{ display: "grid", gap: 6, flex: 1 }}>
-            <span>Company ID</span>
-            <input
-              name="companyId"
-              defaultValue={companyId}
-              placeholder="Company ID"
-              style={{ padding: 8 }}
-              required
-            />
-          </label>
-          <button type="submit" disabled={!selectedAppId || !selectedEnvId}>
-            Load company flags
-          </button>
-        </div>
-      </form>
+        apps={apps}
+        envs={envs}
+        selectedAppId={selectedAppId}
+        selectedEnvId={selectedEnvId}
+        entityIdName="companyId"
+        entityIdLabel="Company ID"
+        entityIdValue={companyId}
+        submitLabel="Load company flags"
+      />
 
       {!companyId ? <p>Enter a company ID to load flags.</p> : null}
       {companyId && flags.length === 0 ? <p>No flags loaded.</p> : null}

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import AppEnvForm from "./AppEnvForm";
 import { listApps, listEnvironments, listFlags } from "./actions";
 
 type QueryValue = string | string[] | undefined;
@@ -34,38 +35,12 @@ export default async function FlagsPage({ searchParams }: PageProps) {
     <main style={{ maxWidth: 900, margin: "40px auto", padding: 16 }}>
       <h1>Flags</h1>
 
-      <form method="get" action="/flags" style={{ display: "grid", gap: 12, marginBottom: 16 }}>
-        <label style={{ display: "grid", gap: 6 }}>
-          <span>App</span>
-          <select name="appId" defaultValue={selectedAppId} style={{ padding: 8 }}>
-            {apps.map((app) => (
-              <option key={app.id} value={app.id}>
-                {app.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label style={{ display: "grid", gap: 6 }}>
-          <span>Environment</span>
-          <select
-            name="envId"
-            defaultValue={selectedEnvId}
-            style={{ padding: 8 }}
-            disabled={!selectedAppId}
-          >
-            {envs.map((env) => (
-              <option key={env.id} value={env.id}>
-                {env.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div>
-          <button type="submit" disabled={!selectedAppId}>
-            Apply
-          </button>
-        </div>
-      </form>
+      <AppEnvForm
+        apps={apps}
+        envs={envs}
+        selectedAppId={selectedAppId}
+        selectedEnvId={selectedEnvId}
+      />
 
       <div style={{ display: "grid", gap: 12, marginBottom: 24 }}>
         <form

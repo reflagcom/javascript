@@ -21,5 +21,4 @@ yarn dev
 ```
 
 Visit:
-- http://localhost:3000/flags/user
-- http://localhost:3000/flags/company
+- http://localhost:3000/

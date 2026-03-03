@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import EntityFlagsFilterForm from "../EntityFlagsFilterForm";
 import { fetchUserFlags, listApps, listEnvironments, toggleUserFlag } from "../actions";
 
 type QueryValue = string | string[] | undefined;
@@ -59,49 +60,17 @@ export default async function UserFlagsPage({ searchParams }: PageProps) {
       <Link href="/flags">Back to flags</Link>
       <h1>User Flags</h1>
 
-      <form method="get" action="/flags/user" style={{ display: "grid", gap: 12, marginBottom: 16 }}>
-        <label style={{ display: "grid", gap: 6 }}>
-          <span>App</span>
-          <select name="appId" defaultValue={selectedAppId} style={{ padding: 8 }}>
-            {apps.map((app) => (
-              <option key={app.id} value={app.id}>
-                {app.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label style={{ display: "grid", gap: 6 }}>
-          <span>Environment</span>
-          <select
-            name="envId"
-            defaultValue={selectedEnvId}
-            style={{ padding: 8 }}
-            disabled={!selectedAppId}
-          >
-            {envs.map((env) => (
-              <option key={env.id} value={env.id}>
-                {env.name}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <div style={{ display: "flex", gap: 8, alignItems: "end" }}>
-          <label style={{ display: "grid", gap: 6, flex: 1 }}>
-            <span>User ID</span>
-            <input
-              name="userId"
-              defaultValue={userId}
-              placeholder="User ID"
-              style={{ padding: 8 }}
-              required
-            />
-          </label>
-          <button type="submit" disabled={!selectedAppId || !selectedEnvId}>
-            Load user flags
-          </button>
-        </div>
-      </form>
+      <EntityFlagsFilterForm
+        action="/flags/user"
+        apps={apps}
+        envs={envs}
+        selectedAppId={selectedAppId}
+        selectedEnvId={selectedEnvId}
+        entityIdName="userId"
+        entityIdLabel="User ID"
+        entityIdValue={userId}
+        submitLabel="Load user flags"
+      />
 
       {!userId ? <p>Enter a user ID to load flags.</p> : null}
       {userId && flags.length === 0 ? <p>No flags loaded.</p> : null}
