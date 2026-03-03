@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import EntityFlagsFilterForm from "../EntityFlagsFilterForm";
 import { fetchUserFlags, listApps, listEnvironments, toggleUserFlag } from "../actions";
 
+export const dynamic = "force-dynamic";
+
 type QueryValue = string | string[] | undefined;
 
 type PageProps = {

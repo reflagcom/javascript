@@ -2,6 +2,8 @@ import Link from "next/link";
 import AppEnvForm from "./AppEnvForm";
 import { listApps, listEnvironments, listFlags } from "./actions";
 
+export const dynamic = "force-dynamic";
+
 type QueryValue = string | string[] | undefined;
 
 type PageProps = {

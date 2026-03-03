@@ -9,6 +9,8 @@ import {
   toggleCompanyFlag,
 } from "../actions";
 
+export const dynamic = "force-dynamic";
+
 type QueryValue = string | string[] | undefined;
 
 type PageProps = {
