@@ -4,6 +4,20 @@ export type StorageAdapter = {
   removeItem?(key: string): Promise<void>;
 };
 
+export function createMemoryStorageAdapter(): StorageAdapter {
+  const memoryStorage = new Map<string, string>();
+
+  return {
+    getItem: async (key) => memoryStorage.get(key) ?? null,
+    setItem: async (key, value) => {
+      memoryStorage.set(key, value);
+    },
+    removeItem: async (key) => {
+      memoryStorage.delete(key);
+    },
+  };
+}
+
 export function getLocalStorageAdapter(): StorageAdapter {
   if (
     typeof localStorage === "undefined" ||
@@ -23,4 +37,12 @@ export function getLocalStorageAdapter(): StorageAdapter {
       localStorage.removeItem(key);
     },
   };
+}
+
+export function getDefaultStorageAdapter(): StorageAdapter {
+  try {
+    return getLocalStorageAdapter();
+  } catch {
+    return createMemoryStorageAdapter();
+  }
 }
