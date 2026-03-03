@@ -1,6 +1,6 @@
 {
   "name": "@reflag/rest-api-sdk",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Reflag REST API SDK",
   "license": "MIT",
   "repository": {
