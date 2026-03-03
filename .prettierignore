@@ -2,4 +2,5 @@
 **/gen
 **/node_modules
 **/dist
+**/.next
 **/.expo

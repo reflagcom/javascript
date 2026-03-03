@@ -1,6 +1,11 @@
 :root {
   color-scheme: light;
-  font-family: "Inter", "SF Pro Text", system-ui, -apple-system, sans-serif;
+  font-family:
+    "Inter",
+    "SF Pro Text",
+    system-ui,
+    -apple-system,
+    sans-serif;
   line-height: 1.5;
   background: #f7f7f8;
   color: #111827;

@@ -31,7 +31,11 @@ export default function AppEnvForm({
     >
       <label style={{ display: "grid", gap: 6 }}>
         <span>App</span>
-        <select name="appId" defaultValue={selectedAppId} style={{ padding: 8 }}>
+        <select
+          name="appId"
+          defaultValue={selectedAppId}
+          style={{ padding: 8 }}
+        >
           {apps.map((app) => (
             <option key={app.id} value={app.id}>
               {app.name}

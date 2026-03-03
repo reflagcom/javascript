@@ -2,7 +2,8 @@ import "./globals.css";
 
 export const metadata = {
   title: "Customer Admin Panel",
-  description: "Customer admin panel example app powered by the Reflag REST API SDK",
+  description:
+    "Customer admin panel example app powered by the Reflag REST API SDK",
 };
 
 export default function RootLayout({

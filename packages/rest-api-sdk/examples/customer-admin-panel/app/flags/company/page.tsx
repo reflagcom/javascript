@@ -43,7 +43,8 @@ export default async function CompanyFlagsPage({ searchParams }: PageProps) {
 
   const flags =
     selectedAppId && selectedEnvId && companyId
-      ? (await fetchCompanyFlags(selectedAppId, selectedEnvId, companyId)).data ?? []
+      ? ((await fetchCompanyFlags(selectedAppId, selectedEnvId, companyId))
+          .data ?? [])
       : [];
 
   async function updateCompanyFlagAction(formData: FormData) {
@@ -57,7 +58,11 @@ export default async function CompanyFlagsPage({ searchParams }: PageProps) {
 
     await toggleCompanyFlag(appId, envId, nextCompanyId, flagKey, nextValue);
 
-    const query = new URLSearchParams({ appId, envId, companyId: nextCompanyId });
+    const query = new URLSearchParams({
+      appId,
+      envId,
+      companyId: nextCompanyId,
+    });
     revalidatePath("/flags/company");
     redirect(`/flags/company?${query.toString()}`);
   }
@@ -94,23 +99,44 @@ export default async function CompanyFlagsPage({ searchParams }: PageProps) {
           </thead>
           <tbody>
             {flags.map((flag) => {
-              const isInherited = flag.value && flag.specificTargetValue === null;
+              const isInherited =
+                flag.value && flag.specificTargetValue === null;
 
               return (
                 <tr key={flag.id} style={{ borderTop: "1px solid #ddd" }}>
                   <td style={{ padding: 8 }}>{flag.name}</td>
                   <td style={{ padding: 8 }}>{flag.key}</td>
                   <td style={{ padding: 8 }}>
-                    {flag.value ? (isInherited ? "Yes (implicitly)" : "Yes") : "No"}
+                    {flag.value
+                      ? isInherited
+                        ? "Yes (implicitly)"
+                        : "Yes"
+                      : "No"}
                   </td>
                   <td style={{ padding: 8 }}>
                     {!isInherited && (
                       <form action={updateCompanyFlagAction}>
-                        <input type="hidden" name="appId" value={selectedAppId} />
-                        <input type="hidden" name="envId" value={selectedEnvId} />
-                        <input type="hidden" name="companyId" value={companyId} />
+                        <input
+                          type="hidden"
+                          name="appId"
+                          value={selectedAppId}
+                        />
+                        <input
+                          type="hidden"
+                          name="envId"
+                          value={selectedEnvId}
+                        />
+                        <input
+                          type="hidden"
+                          name="companyId"
+                          value={companyId}
+                        />
                         <input type="hidden" name="flagKey" value={flag.key} />
-                        <input type="hidden" name="nextValue" value={String(!flag.value)} />
+                        <input
+                          type="hidden"
+                          name="nextValue"
+                          value={String(!flag.value)}
+                        />
                         <button type="submit">
                           {flag.value ? "Turn off" : "Turn on"}
                         </button>

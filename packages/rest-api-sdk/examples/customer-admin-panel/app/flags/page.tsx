@@ -31,7 +31,9 @@ export default async function FlagsPage({ searchParams }: PageProps) {
   const selectedEnvId =
     envs.find((env) => env.id === requestedEnvId)?.id ?? envs[0]?.id ?? "";
 
-  const flags = selectedAppId ? (await listFlags(selectedAppId)).data ?? [] : [];
+  const flags = selectedAppId
+    ? ((await listFlags(selectedAppId)).data ?? [])
+    : [];
 
   return (
     <main style={{ maxWidth: 900, margin: "40px auto", padding: 16 }}>
@@ -54,7 +56,12 @@ export default async function FlagsPage({ searchParams }: PageProps) {
           <input type="hidden" name="envId" value={selectedEnvId} />
           <label style={{ display: "grid", gap: 6, flex: 1 }}>
             <span>User ID</span>
-            <input name="userId" placeholder="User ID" style={{ padding: 8 }} required />
+            <input
+              name="userId"
+              placeholder="User ID"
+              style={{ padding: 8 }}
+              required
+            />
           </label>
           <button type="submit" disabled={!selectedAppId || !selectedEnvId}>
             Go to user flags

@@ -2,7 +2,12 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import EntityFlagsFilterForm from "../EntityFlagsFilterForm";
-import { fetchUserFlags, listApps, listEnvironments, toggleUserFlag } from "../actions";
+import {
+  fetchUserFlags,
+  listApps,
+  listEnvironments,
+  toggleUserFlag,
+} from "../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -38,7 +43,8 @@ export default async function UserFlagsPage({ searchParams }: PageProps) {
 
   const flags =
     selectedAppId && selectedEnvId && userId
-      ? (await fetchUserFlags(selectedAppId, selectedEnvId, userId)).data ?? []
+      ? ((await fetchUserFlags(selectedAppId, selectedEnvId, userId)).data ??
+        [])
       : [];
 
   async function updateUserFlagAction(formData: FormData) {
@@ -89,23 +95,40 @@ export default async function UserFlagsPage({ searchParams }: PageProps) {
           </thead>
           <tbody>
             {flags.map((flag) => {
-              const isInherited = flag.value && flag.specificTargetValue === null;
+              const isInherited =
+                flag.value && flag.specificTargetValue === null;
 
               return (
                 <tr key={flag.id} style={{ borderTop: "1px solid #ddd" }}>
                   <td style={{ padding: 8 }}>{flag.name}</td>
                   <td style={{ padding: 8 }}>{flag.key}</td>
                   <td style={{ padding: 8 }}>
-                    {flag.value ? (isInherited ? "Yes (implicitly)" : "Yes") : "No"}
+                    {flag.value
+                      ? isInherited
+                        ? "Yes (implicitly)"
+                        : "Yes"
+                      : "No"}
                   </td>
                   <td style={{ padding: 8 }}>
                     {!isInherited && (
                       <form action={updateUserFlagAction}>
-                        <input type="hidden" name="appId" value={selectedAppId} />
-                        <input type="hidden" name="envId" value={selectedEnvId} />
+                        <input
+                          type="hidden"
+                          name="appId"
+                          value={selectedAppId}
+                        />
+                        <input
+                          type="hidden"
+                          name="envId"
+                          value={selectedEnvId}
+                        />
                         <input type="hidden" name="userId" value={userId} />
                         <input type="hidden" name="flagKey" value={flag.key} />
-                        <input type="hidden" name="nextValue" value={String(!flag.value)} />
+                        <input
+                          type="hidden"
+                          name="nextValue"
+                          value={String(!flag.value)}
+                        />
                         <button type="submit">
                           {flag.value ? "Turn off" : "Turn on"}
                         </button>
