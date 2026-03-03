@@ -95,6 +95,17 @@ export class Api extends DefaultApi {
   }
 }
 
+function isPlainObject(
+  value: unknown,
+): value is Record<string, unknown> | Record<string, never> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
 function scopeApiToAppId<T extends object>(
   api: T,
   appId: string,
@@ -118,9 +129,11 @@ function scopeApiToAppId<T extends object>(
       };
 
       return (arg1: unknown, ...rest: unknown[]) => {
-        if (arg1 && typeof arg1 === "object" && !Array.isArray(arg1)) {
+        const isWithMethod =
+          typeof prop === "string" && prop.startsWith("with");
+        if (!isWithMethod && isPlainObject(arg1)) {
           const args =
-            "appId" in (arg1 as object) ? arg1 : { ...(arg1 as object), appId };
+            "appId" in arg1 ? arg1 : { ...arg1, appId };
           const result = (value as (...args: unknown[]) => unknown).call(
             target,
             args,

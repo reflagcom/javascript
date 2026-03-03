@@ -71,4 +71,36 @@ describe("createAppClient", () => {
       "https://example.test/apps/app-123/flags",
     );
   });
+
+  it("preserves class-based middleware hooks after withMiddleware", async () => {
+    const fetchApi = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(JSON.stringify(listFlagsResponse), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+    );
+    const client = createAppClient("app-123", {
+      basePath: "https://example.test",
+      fetchApi,
+    });
+
+    class PrototypePreMiddleware implements Middleware {
+      preCalls = 0;
+
+      async pre({ url, init }: { url: string; init: RequestInit }) {
+        this.preCalls += 1;
+        return { url, init };
+      }
+    }
+
+    const middleware = new PrototypePreMiddleware();
+    const withMiddleware = client.withMiddleware(middleware);
+
+    await expect(
+      (withMiddleware as unknown as ScopedListFlagsClient).listFlags({}),
+    ).resolves.toEqual(listFlagsResponse);
+    expect(middleware.preCalls).toBe(1);
+    expect(fetchApi).toHaveBeenCalledTimes(1);
+  });
 });
