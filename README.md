@@ -8,6 +8,12 @@ Client side React SDK
 
 [Read the docs](packages/react-sdk/README.md)
 
+## React Native SDK (beta)
+
+React Native SDK for mobile apps
+
+[Read the docs](packages/react-native-sdk/README.md)
+
 ## Vue SDK (beta)
 
 Client side Vue SDK
@@ -29,7 +35,7 @@ Use this for Cloudflare Workers as well.
 
 ## REST API SDK (beta)
 
-Typed Node/browser SDK for Reflag's REST API.
+Typed SDK for Reflag's REST API.
 
 [Read the docs](packages/rest-api-sdk/README.md)
 

@@ -1,6 +1,7 @@
 .dialog {
   position: fixed;
   width: 210px;
+  overflow: visible;
   padding: 16px 22px 10px;
   font-size: var(--reflag-feedback-dialog-font-size, 1rem);
   font-family: var(

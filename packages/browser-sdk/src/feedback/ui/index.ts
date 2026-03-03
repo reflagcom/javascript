@@ -11,6 +11,14 @@ export const DEFAULT_POSITION: Position = {
   placement: "bottom-right",
 };
 
+function supportsPopoverApi() {
+  return (
+    typeof HTMLElement !== "undefined" &&
+    "showPopover" in HTMLElement.prototype &&
+    "hidePopover" in HTMLElement.prototype
+  );
+}
+
 function stopPropagation(e: Event) {
   e.stopPropagation();
 }
@@ -39,8 +47,17 @@ function attachDialogContainer() {
 let openInstances = 0;
 
 export function openFeedbackForm(options: OpenFeedbackFormOptions): void {
-  const shadowRoot = attachDialogContainer();
   const position = options.position || DEFAULT_POSITION;
+
+  if (position.type !== "MODAL" && !supportsPopoverApi()) {
+    console.warn(
+      "[Reflag]",
+      "Unable to open feedback popup. Popover API is not supported in this browser",
+    );
+    return;
+  }
+
+  const shadowRoot = attachDialogContainer();
 
   if (position.type === "POPOVER") {
     if (!position.anchor) {

@@ -18,6 +18,7 @@ import {
   ReflagClient,
   ReflagContext,
   RequestFeedbackData,
+  StorageAdapter,
   TrackEvent,
   UnassignedFeedback,
   UserContext,
@@ -25,7 +26,13 @@ import {
 
 import { version } from "../package.json";
 
-export type { CheckEvent, CompanyContext, TrackEvent, UserContext };
+export type {
+  CheckEvent,
+  CompanyContext,
+  StorageAdapter,
+  TrackEvent,
+  UserContext,
+};
 
 export type EmptyFlagRemoteConfig = { key: undefined; payload: undefined };
 
@@ -177,7 +184,7 @@ function useReflagClient(initOptions: InitOptions, debug = false) {
     const client = new ReflagClient({
       ...initOptions,
       logger: debug ? console : undefined,
-      sdkVersion: SDK_VERSION,
+      sdkVersion: initOptions.sdkVersion ?? SDK_VERSION,
     });
     if (!isServer) {
       reflagClients.set(initOptions.publishableKey, client);

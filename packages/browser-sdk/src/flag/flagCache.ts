@@ -1,9 +1,8 @@
+import { StorageAdapter } from "../storage";
+
 import { RawFlags } from "./flags";
 
-interface StorageItem {
-  get(): string | null;
-  set(value: string): void;
-}
+const DEFAULT_STORAGE_KEY = "__reflag_fetched_flags";
 
 interface cacheEntry {
   expireAt: number;
@@ -52,7 +51,8 @@ export interface CacheResult {
 }
 
 export class FlagCache {
-  private storage: StorageItem;
+  private storage: StorageAdapter;
+  private readonly storageKey: string;
   private readonly staleTimeMs: number;
   private readonly expireTimeMs: number;
 
@@ -61,16 +61,17 @@ export class FlagCache {
     staleTimeMs,
     expireTimeMs,
   }: {
-    storage: StorageItem;
+    storage: StorageAdapter;
     staleTimeMs: number;
     expireTimeMs: number;
   }) {
     this.storage = storage;
+    this.storageKey = DEFAULT_STORAGE_KEY;
     this.staleTimeMs = staleTimeMs;
     this.expireTimeMs = expireTimeMs;
   }
 
-  set(
+  async set(
     key: string,
     {
       flags,
@@ -81,7 +82,7 @@ export class FlagCache {
     let cacheData: CacheData = {};
 
     try {
-      const cachedResponseRaw = this.storage.get();
+      const cachedResponseRaw = await this.storage.getItem(this.storageKey);
       if (cachedResponseRaw) {
         cacheData = validateCacheData(JSON.parse(cachedResponseRaw)) ?? {};
       }
@@ -99,14 +100,14 @@ export class FlagCache {
       Object.entries(cacheData).filter(([_k, v]) => v.expireAt > Date.now()),
     );
 
-    this.storage.set(JSON.stringify(cacheData));
+    await this.storage.setItem(this.storageKey, JSON.stringify(cacheData));
 
     return cacheData;
   }
 
-  get(key: string): CacheResult | undefined {
+  async get(key: string): Promise<CacheResult | undefined> {
     try {
-      const cachedResponseRaw = this.storage.get();
+      const cachedResponseRaw = await this.storage.getItem(this.storageKey);
       if (cachedResponseRaw) {
         const cachedResponse = validateCacheData(JSON.parse(cachedResponseRaw));
         if (

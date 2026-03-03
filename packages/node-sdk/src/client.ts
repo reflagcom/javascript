@@ -599,6 +599,21 @@ export class ReflagClient {
   }
 
   /**
+   * Refreshes the flag definitions from the server.
+   *
+   * @remarks
+   * This triggers an on-demand refresh of the cached flag definitions.
+   * Useful when you know flags have changed and don't want to wait for the next automatic refresh cycle.
+   *
+   * Note: updated flag rules take a few seconds to propagate to all servers.
+   *
+   * Concurrent calls are deduplicated — multiple calls share the same in-flight request.
+   */
+  public async refreshFlags() {
+    await this.flagsCache.refresh();
+  }
+
+  /**
    * Destroys the client and cleans up all resources including timers and background processes.
    *
    * @remarks
@@ -1490,6 +1505,13 @@ export class BoundReflagClient {
    */
   public async flush() {
     await this._client.flush();
+  }
+
+  /**
+   * Refreshes the flag definitions from the server.
+   */
+  public async refreshFlags() {
+    await this._client.refreshFlags();
   }
 }
 

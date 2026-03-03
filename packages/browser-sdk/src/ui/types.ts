@@ -28,7 +28,9 @@ export type Position =
     }
   | {
       type: "POPOVER";
-      anchor: HTMLElement | null;
+      // In browsers this is expected to be an HTMLElement, but we keep it
+      // loosely typed to avoid React Native type issues.
+      anchor: any | null;
       placement?: PopoverPlacement;
     };
 

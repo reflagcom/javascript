@@ -1,6 +1,7 @@
 import { resolve } from "path";
 import { defineConfig } from "vite";
 import dts from "vite-plugin-dts";
+import { viteStaticCopy } from "vite-plugin-static-copy";
 import { defaultExclude } from "vitest/config";
 
 export default defineConfig({
@@ -11,7 +12,17 @@ export default defineConfig({
     setupFiles: ["./vitest.setup.ts"],
     exclude: [...defaultExclude, "test/e2e/**"],
   },
-  plugins: [dts({ insertTypesEntry: true })],
+  plugins: [
+    dts({ insertTypesEntry: true }),
+    viteStaticCopy({
+      targets: [
+        {
+          src: "src/index.native.js",
+          dest: ".",
+        },
+      ],
+    }),
+  ],
   build: {
     exclude: ["**/node_modules/**", "test/e2e/**"],
     sourcemap: true,

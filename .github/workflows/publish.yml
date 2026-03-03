@@ -8,12 +8,15 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
       # Setup .npmrc file to publish to npm
       - name: Enable corepack
         run: corepack enable
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version-file: ".nvmrc"
           cache: "yarn"
@@ -24,12 +27,19 @@ jobs:
         run: yarn install --immutable
       - name: Build packages
         run: yarn build
-      - name: npm login
-        run: echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > .npmrc
-        env:
-          NPM_TOKEN: ${{ secrets.REFLAG_NPM_TOKEN }}
       - name: Publish
-        run: yarn lerna publish from-package --no-private --yes
+        run: |
+          yarn lerna list --since --parseable --no-private | while read -r pkg; do
+            name=$(node -p "require('$pkg/package.json').name")
+            version=$(node -p "require('$pkg/package.json').version")
+            published=$(npm view "$name" version --json 2>/dev/null || echo "")
+            if [ "$published" = "\"$version\"" ]; then
+              echo "SKIP $name@$version"
+            else
+              echo "PUBLISH $name@$version (registry has $published)"
+              (cd "$pkg" && npm publish --access public --provenance)
+            fi
+          done
       - name: Build docs
         run: yarn docs
       - name: Checkout docs with SSH

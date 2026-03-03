@@ -1,0 +1,12 @@
+{
+  "extends": "@reflag/tsconfig/library",
+  "compilerOptions": {
+    "lib": [],
+    "outDir": "./dist/",
+    "declarationDir": "./dist/",
+    "jsx": "react",
+    "declaration": true,
+    "declarationMap": true
+  },
+  "include": ["src"]
+}

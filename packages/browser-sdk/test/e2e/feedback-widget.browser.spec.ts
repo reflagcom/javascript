@@ -115,6 +115,42 @@ async function submitForm(container: Locator) {
   await container.locator(".form-expanded-content").getByRole("button").click();
 }
 
+async function isFocusInsideFeedbackDialog(page: Page) {
+  return await page.evaluate((containerElementId) => {
+    const container = document.querySelector(`#${containerElementId}`);
+
+    if (!container || !container.shadowRoot) return false;
+
+    let activeElement: Element | null = document.activeElement;
+    while (activeElement instanceof HTMLElement && activeElement.shadowRoot) {
+      const shadowActiveElement = activeElement.shadowRoot.activeElement;
+      if (!shadowActiveElement) break;
+      activeElement = shadowActiveElement;
+    }
+
+    return activeElement ? container.shadowRoot.contains(activeElement) : false;
+  }, feedbackContainerId);
+}
+
+async function isFeedbackDialogOpen(page: Page) {
+  return await page.evaluate((containerElementId) => {
+    const container = document.querySelector(`#${containerElementId}`);
+    const dialog = container?.shadowRoot?.querySelector(".dialog");
+    if (!dialog) return false;
+
+    const modalOpen = dialog.hasAttribute("open");
+    let popoverOpen = false;
+
+    try {
+      popoverOpen = dialog.matches(":popover-open");
+    } catch {
+      popoverOpen = false;
+    }
+
+    return modalOpen || popoverOpen;
+  }, feedbackContainerId);
+}
+
 test.beforeEach(async ({ page, browserName }) => {
   // Log any calls to front.reflag.com which aren't mocked by subsequent
   // `page.route` calls. With page.route, the last matching mock takes
@@ -142,7 +178,7 @@ test("Opens a feedback widget", async ({ page }) => {
   const container = await getOpenedWidgetContainer(page);
 
   await expect(container).toBeAttached();
-  await expect(container.locator("dialog")).toHaveAttribute("open", "");
+  await expect.poll(() => isFeedbackDialogOpen(page)).toBe(true);
 });
 
 test("Opens a feedback widget multiple times in same session", async ({
@@ -152,14 +188,54 @@ test("Opens a feedback widget multiple times in same session", async ({
 
   await page.getByTestId("give-feedback-button").click();
   await expect(container).toBeAttached();
-  await expect(container.locator("dialog")).toHaveAttribute("open", "");
+  await expect.poll(() => isFeedbackDialogOpen(page)).toBe(true);
 
-  await container.locator("dialog .close").click();
-  await expect(container.locator("dialog")).not.toHaveAttribute("open", "");
+  await container.locator(".dialog .close").click();
+  await expect.poll(() => isFeedbackDialogOpen(page)).toBe(false);
 
   await page.getByTestId("give-feedback-button").click();
   await expect(container).toBeAttached();
-  await expect(container.locator("dialog")).toHaveAttribute("open", "");
+  await expect.poll(() => isFeedbackDialogOpen(page)).toBe(true);
+});
+
+test("Does not steal focus in DIALOG mode", async ({ page }) => {
+  await getGiveFeedbackPageContainer(page, {
+    feedback: {
+      ui: {
+        position: {
+          type: "DIALOG",
+          placement: "bottom-right",
+        },
+      },
+    },
+  });
+
+  await page.getByTestId("give-feedback-button").focus();
+  await expect(page.getByTestId("give-feedback-button")).toBeFocused();
+
+  await page.getByTestId("give-feedback-button").click();
+  await expect.poll(() => isFeedbackDialogOpen(page)).toBe(true);
+  await expect.poll(() => isFocusInsideFeedbackDialog(page)).toBe(false);
+});
+
+test("Steals focus in MODAL mode", async ({ page }) => {
+  await getGiveFeedbackPageContainer(page, {
+    feedback: {
+      ui: {
+        position: {
+          type: "MODAL",
+        },
+      },
+    },
+  });
+
+  await page.getByTestId("give-feedback-button").focus();
+  await expect(page.getByTestId("give-feedback-button")).toBeFocused();
+
+  await page.getByTestId("give-feedback-button").click();
+  await expect.poll(() => isFeedbackDialogOpen(page)).toBe(true);
+  await expect(page.getByTestId("give-feedback-button")).not.toBeFocused();
+  await expect.poll(() => isFocusInsideFeedbackDialog(page)).toBe(true);
 });
 
 test("Opens a feedback widget in the bottom right by default", async ({
@@ -169,7 +245,7 @@ test("Opens a feedback widget in the bottom right by default", async ({
 
   await expect(container).toBeAttached();
 
-  const bbox = await container.locator("dialog").boundingBox();
+  const bbox = await container.locator(".dialog").boundingBox();
   expect(bbox?.x).toEqual(WINDOW_WIDTH - bbox!.width - 16);
   expect(bbox?.y).toBeGreaterThan(WINDOW_HEIGHT - bbox!.height - 30); // Account for browser differences
   expect(bbox?.y).toBeLessThan(WINDOW_HEIGHT - bbox!.height);
@@ -191,7 +267,7 @@ test("Opens a feedback widget in the correct position when overridden", async ({
 
   await expect(container).toBeAttached();
 
-  const bbox = await container.locator("dialog").boundingBox();
+  const bbox = await container.locator(".dialog").boundingBox();
   expect(bbox?.x).toEqual(16);
   expect(bbox?.y).toBeGreaterThan(0); // Account for browser differences
   expect(bbox?.y).toBeLessThanOrEqual(16);
@@ -411,7 +487,7 @@ test("Closes the dialog shortly after submitting", async ({ page }) => {
   await setComment(container, "Test comment!");
   await submitForm(container);
 
-  await expect(container.locator("dialog")).not.toHaveAttribute("open", "");
+  await expect.poll(() => isFeedbackDialogOpen(page)).toBe(false);
 });
 
 test("Blocks event propagation to the containing document", async ({

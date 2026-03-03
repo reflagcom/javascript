@@ -1,0 +1,9 @@
+{
+  "expo": {
+    "name": "Reflag React SDK Expo",
+    "slug": "reflag-react-sdk-expo",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "assetBundlePatterns": ["**/*"]
+  }
+}
