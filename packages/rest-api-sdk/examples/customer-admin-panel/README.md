@@ -2,6 +2,8 @@
 
 Small Next.js (App Router) app that uses `@reflag/rest-api-sdk` with server actions to view and toggle flags for users and companies.
 
+![Company Flags Screenshot](docs/company-flags-screenshot.png)
+
 ## Setup
 
 Create a `.env.local` file in this folder with:
