@@ -132,8 +132,7 @@ function scopeApiToAppId<T extends object>(
         const isWithMethod =
           typeof prop === "string" && prop.startsWith("with");
         if (!isWithMethod && isPlainObject(arg1)) {
-          const args =
-            "appId" in arg1 ? arg1 : { ...arg1, appId };
+          const args = "appId" in arg1 ? arg1 : { ...arg1, appId };
           const result = (value as (...args: unknown[]) => unknown).call(
             target,
             args,
