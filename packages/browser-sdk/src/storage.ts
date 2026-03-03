@@ -1,20 +1,16 @@
+import { IS_SERVER } from "./config";
+
 export type StorageAdapter = {
   getItem(key: string): Promise<string | null>;
   setItem(key: string, value: string): Promise<void>;
   removeItem?(key: string): Promise<void>;
 };
 
-export function createMemoryStorageAdapter(): StorageAdapter {
-  const memoryStorage = new Map<string, string>();
-
+export function createNoopStorageAdapter(): StorageAdapter {
   return {
-    getItem: async (key) => memoryStorage.get(key) ?? null,
-    setItem: async (key, value) => {
-      memoryStorage.set(key, value);
-    },
-    removeItem: async (key) => {
-      memoryStorage.delete(key);
-    },
+    getItem: async () => null,
+    setItem: async () => undefined,
+    removeItem: async () => undefined,
   };
 }
 
@@ -40,9 +36,6 @@ export function getLocalStorageAdapter(): StorageAdapter {
 }
 
 export function getDefaultStorageAdapter(): StorageAdapter {
-  try {
-    return getLocalStorageAdapter();
-  } catch {
-    return createMemoryStorageAdapter();
-  }
+  if (IS_SERVER) return createNoopStorageAdapter();
+  return getLocalStorageAdapter();
 }
