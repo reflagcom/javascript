@@ -98,29 +98,48 @@ export class Api extends DefaultApi {
 function scopeApiToAppId<T extends object>(
   api: T,
   appId: string,
+  scopedCache: WeakMap<object, object> = new WeakMap(),
 ): AppScopedApi<T> {
-  return new Proxy(api, {
+  const cached = scopedCache.get(api as object);
+  if (cached) {
+    return cached as AppScopedApi<T>;
+  }
+
+  const scopedApi = new Proxy(api, {
     get(target, prop, receiver) {
       const value = Reflect.get(target, prop, receiver);
       if (typeof value !== "function") return value;
+
+      const wrapResult = (result: unknown) => {
+        if (result instanceof Api) {
+          return scopeApiToAppId(result, appId, scopedCache);
+        }
+        return result;
+      };
+
       return (arg1: unknown, ...rest: unknown[]) => {
         if (arg1 && typeof arg1 === "object" && !Array.isArray(arg1)) {
           const args =
             "appId" in (arg1 as object) ? arg1 : { ...(arg1 as object), appId };
-          return (value as (...args: unknown[]) => unknown).call(
+          const result = (value as (...args: unknown[]) => unknown).call(
             target,
             args,
             ...rest,
           );
+          return wrapResult(result);
         }
-        return (value as (...args: unknown[]) => unknown).call(
+        const result = (value as (...args: unknown[]) => unknown).call(
           target,
           arg1,
           ...rest,
         );
+        return wrapResult(result);
       };
     },
   }) as AppScopedApi<T>;
+
+  scopedCache.set(api as object, scopedApi as object);
+  return scopedApi;
 }
 
 export function createAppClient(

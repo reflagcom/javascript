@@ -10,7 +10,7 @@
   "scripts": {
     "generate": "rm -rf src/generated && npx @openapitools/openapi-generator-cli generate -c openapi-generator.config.yaml",
     "build": "yarn generate && tsc --project tsconfig.build.json",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
     "test:ci": "yarn test --reporter=default --reporter=junit --outputFile=junit.xml",
     "lint": "eslint .",

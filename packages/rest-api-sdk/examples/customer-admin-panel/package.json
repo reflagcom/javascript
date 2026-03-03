@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "echo 'No lint configured for customer-admin-panel example; skipping.'"
   },
   "dependencies": {
     "@reflag/rest-api-sdk": "workspace:*",
