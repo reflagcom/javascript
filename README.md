@@ -27,6 +27,12 @@ Use this for Cloudflare Workers as well.
 
 [Read the docs](packages/node-sdk/README.md)
 
+## REST API SDK (beta)
+
+Typed Node/browser SDK for Reflag's REST API.
+
+[Read the docs](packages/rest-api-sdk/README.md)
+
 ## Reflag CLI
 
 CLI to interact with Reflag and generate types

@@ -1,4 +1,4 @@
-# @reflag/rest-api-sdk
+# @reflag/rest-api-sdk (beta)
 
 Typed Node/browser SDK for Reflag's REST API.
 
