@@ -1,7 +1,7 @@
 import { ReflagClient as ReflagNodeClient } from "@reflag/node-sdk";
 
-const secretKey = process.env.REFLAG_SECRET_KEY || "";
-const offline = process.env.CI === "true";
+const secretKey = process.env.REFLAG_SECRET_KEY;
+const offline = process.env.CI === "true" || !secretKey;
 
 declare global {
   var serverClient: ReflagNodeClient;
