@@ -12,7 +12,7 @@ yarn add @reflag/rest-api-sdk
 
 ## Create a client
 
-All requests require a Reflag API key.
+Initialize the SDK with a [Reflag REST API Key](https://app.reflag.com/env-current/settings/org-api-access).
 
 ```typescript
 import { Api } from "@reflag/rest-api-sdk";
@@ -35,7 +35,7 @@ Core method groups:
 
 - Applications: `listApps`, `getApp`
 - Environments: `listEnvironments`, `getEnvironment`
-- Flags: `listFlags`, `createFlag`, `updateFlag`, `getFlagTargeting`
+- Flags: `listFlags`, `createFlag`, `updateFlag`
 - User/company evaluation: `getUserFlags`, `updateUserFlags`, `getCompanyFlags`, `updateCompanyFlags`
 
 ## Quick start
