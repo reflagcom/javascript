@@ -186,28 +186,33 @@ export type ReflagInitOptionsBase = Omit<
  */
 const reflagClients = new Map<string, ReflagClient>();
 
+type UseReflagClientOptions = Omit<InitOptions, "logger"> & {
+  debug?: boolean;
+  logger?: Logger;
+};
+
 /**
  * Returns the ReflagClient for a given publishable key.
  * Only creates a new ReflagClient is not already created or if it hook is run on the server.
  * @internal
  */
 function useReflagClient(
-  initOptions: Omit<InitOptions, "logger">,
-  { debug = false, logger }: { debug?: boolean; logger?: Logger } = {},
+  initOptions: UseReflagClientOptions,
 ) {
+  const { debug = false, logger, ...clientOptions } = initOptions;
   const isServer = typeof window === "undefined";
-  if (isServer || !reflagClients.has(initOptions.publishableKey)) {
+  if (isServer || !reflagClients.has(clientOptions.publishableKey)) {
     const client = new ReflagClient({
-      ...initOptions,
+      ...clientOptions,
       logger: logger ?? (debug ? console : undefined),
-      sdkVersion: initOptions.sdkVersion ?? SDK_VERSION,
+      sdkVersion: clientOptions.sdkVersion ?? SDK_VERSION,
     });
     if (!isServer) {
-      reflagClients.set(initOptions.publishableKey, client);
+      reflagClients.set(clientOptions.publishableKey, client);
     }
     return client;
   }
-  return reflagClients.get(initOptions.publishableKey)!;
+  return reflagClients.get(clientOptions.publishableKey)!;
 }
 
 type ProviderContextType = {
@@ -313,8 +318,9 @@ export function ReflagProvider({
     {
       ...config,
       ...resolvedContext,
+      debug,
+      logger,
     },
-    { debug, logger },
   );
 
   // Initialize the client if it is not already initialized
@@ -369,8 +375,9 @@ export function ReflagBootstrappedProvider({
       ...config,
       ...flags.context,
       bootstrappedFlags: flags.flags,
+      debug,
+      logger,
     },
-    { debug, logger },
   );
 
   // Initialize the client if it is not already initialized
