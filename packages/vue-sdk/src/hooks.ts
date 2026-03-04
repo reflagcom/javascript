@@ -38,22 +38,28 @@ const reflagClients = new Map<string, ReflagClient>();
  * @internal
  */
 export function useReflagClient(
-  initOptions: InitOptions,
-  debug = false,
+  initOptions: InitOptions & { debug?: boolean },
 ): ReflagClient {
+  const {
+    debug = false,
+    logger,
+    publishableKey,
+    ...clientOptions
+  } = initOptions;
   const isServer = typeof window === "undefined";
-  if (isServer || !reflagClients.has(initOptions.publishableKey)) {
+  if (isServer || !reflagClients.has(publishableKey)) {
     const client = new ReflagClient({
-      ...initOptions,
+      ...clientOptions,
+      publishableKey,
       sdkVersion: SDK_VERSION,
-      logger: debug ? console : undefined,
+      logger: logger ?? (debug ? console : undefined),
     });
     if (!isServer) {
-      reflagClients.set(initOptions.publishableKey, client);
+      reflagClients.set(publishableKey, client);
     }
     return client;
   }
-  return reflagClients.get(initOptions.publishableKey)!;
+  return reflagClients.get(publishableKey)!;
 }
 
 /**

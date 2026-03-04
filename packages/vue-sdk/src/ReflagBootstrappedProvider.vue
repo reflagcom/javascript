@@ -8,19 +8,19 @@ const {
   flags,
   initialLoading = false,
   enableTracking = true,
+  logger,
   debug,
   ...config
 } = defineProps<ReflagBootstrappedProps>();
 
-const client = useReflagClient(
-  {
-    ...config,
-    ...flags?.context,
-    enableTracking,
-    bootstrappedFlags: flags?.flags,
-  },
+const client = useReflagClient({
+  ...config,
+  ...flags?.context,
+  enableTracking,
+  bootstrappedFlags: flags?.flags,
   debug,
-);
+  logger,
+});
 
 const isLoading = ref(
   client.getState() !== "initialized" ? initialLoading : false,
