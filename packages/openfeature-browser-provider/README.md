@@ -44,10 +44,7 @@ import { OpenFeature } from "@openfeature/web-sdk";
 // initialize provider
 const publishableKey = "<your-reflag-publishable-key>";
 
-const reflagProvider = new ReflagBrowserProvider({
-  publishableKey,
-  logger: console, // optional advanced logging control
-});
+const reflagProvider = new ReflagBrowserProvider({ publishableKey });
 
 // set open feature provider and get client
 await OpenFeature.setProviderAndWait(reflagProvider);
@@ -64,9 +61,6 @@ const feedbackConfig = client.getObjectValue("ask-feedback", {
 
 Initializing the Reflag Browser Provider will
 also initialize [automatic feedback surveys](https://github.com/reflagcom/javascript/tree/main/packages/browser-sdk#qualitative-feedback).
-
-`ReflagBrowserProvider` accepts `@reflag/browser-sdk` initialization options, including `logger`.
-Unlike the React/Vue wrappers, this provider does not expose a separate `debug` option.
 
 ## Feature resolution methods
 

@@ -59,11 +59,6 @@ The React Native SDK shares its API with the React SDK. Use the React SDK refere
 
 [React SDK Reference](../react-sdk/README.md)
 
-Logging options are also shared:
-- `debug`: Enables console debug logging.
-- `logger`: Optional custom logger (`debug`, `info`, `warn`, `error`) for advanced filtering/control.
-- If both `logger` and `debug` are provided, `logger` takes precedence.
-
 ## Cookbook
 
 ### Refresh flags when the app returns to the foreground

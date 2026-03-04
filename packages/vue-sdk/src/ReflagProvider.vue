@@ -31,8 +31,9 @@ const client = useReflagClient(
     ...config,
     ...resolvedContext.value,
     enableTracking,
+    debug,
+    logger,
   },
-  { debug, logger },
 );
 
 const isLoading = ref(

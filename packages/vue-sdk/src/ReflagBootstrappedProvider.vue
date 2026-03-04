@@ -19,8 +19,9 @@ const client = useReflagClient(
     ...flags?.context,
     enableTracking,
     bootstrappedFlags: flags?.flags,
+    debug,
+    logger,
   },
-  { debug, logger },
 );
 
 const isLoading = ref(
