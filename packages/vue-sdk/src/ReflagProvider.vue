@@ -14,6 +14,7 @@ const {
   otherContext,
   initialLoading = true,
   enableTracking = true,
+  logger,
   debug,
   ...config
 } = defineProps<ReflagProps>();
@@ -31,7 +32,7 @@ const client = useReflagClient(
     ...resolvedContext.value,
     enableTracking,
   },
-  debug,
+  { debug, logger },
 );
 
 const isLoading = ref(

@@ -8,6 +8,7 @@ const {
   flags,
   initialLoading = false,
   enableTracking = true,
+  logger,
   debug,
   ...config
 } = defineProps<ReflagBootstrappedProps>();
@@ -19,7 +20,7 @@ const client = useReflagClient(
     enableTracking,
     bootstrappedFlags: flags?.flags,
   },
-  debug,
+  { debug, logger },
 );
 
 const isLoading = ref(

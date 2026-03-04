@@ -14,6 +14,7 @@ import {
   CompanyContext,
   HookArgs,
   InitOptions,
+  Logger,
   RawFlag,
   ReflagClient,
   ReflagContext,
@@ -153,6 +154,13 @@ export type ReflagPropsBase = {
   initialLoading?: boolean;
 
   /**
+   * A custom logger to use for SDK logs.
+   * Use this for advanced control or filtering of SDK logs.
+   * If both `logger` and `debug` are provided, `logger` takes precedence.
+   */
+  logger?: Logger;
+
+  /**
    * Set to `true` to enable debug logging to the console,
    */
   debug?: boolean;
@@ -164,7 +172,12 @@ export type ReflagPropsBase = {
  */
 export type ReflagInitOptionsBase = Omit<
   InitOptions,
-  "user" | "company" | "other" | "otherContext" | "bootstrappedFlags"
+  | "user"
+  | "company"
+  | "other"
+  | "otherContext"
+  | "bootstrappedFlags"
+  | "logger"
 >;
 
 /**
@@ -178,12 +191,15 @@ const reflagClients = new Map<string, ReflagClient>();
  * Only creates a new ReflagClient is not already created or if it hook is run on the server.
  * @internal
  */
-function useReflagClient(initOptions: InitOptions, debug = false) {
+function useReflagClient(
+  initOptions: Omit<InitOptions, "logger">,
+  { debug = false, logger }: { debug?: boolean; logger?: Logger } = {},
+) {
   const isServer = typeof window === "undefined";
   if (isServer || !reflagClients.has(initOptions.publishableKey)) {
     const client = new ReflagClient({
       ...initOptions,
-      logger: debug ? console : undefined,
+      logger: logger ?? (debug ? console : undefined),
       sdkVersion: initOptions.sdkVersion ?? SDK_VERSION,
     });
     if (!isServer) {
@@ -204,7 +220,10 @@ const ProviderContext = createContext<ProviderContextType | null>(null);
 /**
  * Props for the ReflagClientProvider.
  */
-export type ReflagClientProviderProps = Omit<ReflagPropsBase, "debug"> & {
+export type ReflagClientProviderProps = Omit<
+  ReflagPropsBase,
+  "debug" | "logger"
+> & {
   client: ReflagClient;
 };
 
@@ -282,6 +301,7 @@ export function ReflagProvider({
   otherContext,
   loadingComponent,
   initialLoading = true,
+  logger,
   debug,
   ...config
 }: ReflagProps) {
@@ -294,7 +314,7 @@ export function ReflagProvider({
       ...config,
       ...resolvedContext,
     },
-    debug,
+    { debug, logger },
   );
 
   // Initialize the client if it is not already initialized
@@ -340,6 +360,7 @@ export function ReflagBootstrappedProvider({
   children,
   loadingComponent,
   initialLoading = false,
+  logger,
   debug,
   ...config
 }: ReflagBootstrappedProps) {
@@ -349,7 +370,7 @@ export function ReflagBootstrappedProvider({
       ...flags.context,
       bootstrappedFlags: flags.flags,
     },
-    debug,
+    { debug, logger },
   );
 
   // Initialize the client if it is not already initialized

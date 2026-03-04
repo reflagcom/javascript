@@ -10,6 +10,7 @@ import {
 import {
   HookArgs,
   InitOptions,
+  Logger,
   ReflagClient,
   RequestFeedbackData,
   UnassignedFeedback,
@@ -38,15 +39,15 @@ const reflagClients = new Map<string, ReflagClient>();
  * @internal
  */
 export function useReflagClient(
-  initOptions: InitOptions,
-  debug = false,
+  initOptions: Omit<InitOptions, "logger">,
+  { debug = false, logger }: { debug?: boolean; logger?: Logger } = {},
 ): ReflagClient {
   const isServer = typeof window === "undefined";
   if (isServer || !reflagClients.has(initOptions.publishableKey)) {
     const client = new ReflagClient({
       ...initOptions,
       sdkVersion: SDK_VERSION,
-      logger: debug ? console : undefined,
+      logger: logger ?? (debug ? console : undefined),
     });
     if (!isServer) {
       reflagClients.set(initOptions.publishableKey, client);

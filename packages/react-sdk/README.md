@@ -541,7 +541,8 @@ The `<ReflagProvider>` initializes the Reflag SDK, fetches flags and starts list
 - `apiBaseUrl`: Optional base URL for the Reflag API. Use this to override the default API endpoint,
 - `appBaseUrl`: Optional base URL for the Reflag application. Use this to override the default app URL,
 - `sseBaseUrl`: Optional base URL for Server-Sent Events. Use this to override the default SSE endpoint,
-- `debug`: Set to `true` to enable debug logging to the console,
+- `logger`: Optional custom logger implementation (`debug`, `info`, `warn`, `error`) used by the underlying client,
+- `debug`: Set to `true` to enable debug logging to the console. If both `logger` and `debug` are provided, `logger` takes precedence,
 - `toolbar`: Optional [configuration](https://docs.reflag.com/supported-languages/browser-sdk/globals#toolbaroptions) for the Reflag toolbar,
 - `feedback`: Optional configuration for feedback collection
 

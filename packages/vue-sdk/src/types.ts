@@ -3,6 +3,7 @@ import type { Ref } from "vue";
 import type {
   CompanyContext,
   InitOptions,
+  Logger,
   RawFlags,
   ReflagClient,
   ReflagContext,
@@ -70,7 +71,12 @@ export type RequestFlagFeedbackOptions = Omit<
  */
 export type ReflagInitOptionsBase = Omit<
   InitOptions,
-  "user" | "company" | "other" | "otherContext" | "bootstrappedFlags"
+  | "user"
+  | "company"
+  | "other"
+  | "otherContext"
+  | "bootstrappedFlags"
+  | "logger"
 >;
 
 /**
@@ -84,6 +90,13 @@ export type ReflagBaseProps = {
   initialLoading?: boolean;
 
   /**
+   * A custom logger to use for SDK logs.
+   * Use this for advanced control or filtering of SDK logs.
+   * If both `logger` and `debug` are provided, `logger` takes precedence.
+   */
+  logger?: Logger;
+
+  /**
    * Set to `true` to enable debug logging to the console.
    */
   debug?: boolean;
@@ -92,7 +105,10 @@ export type ReflagBaseProps = {
 /**
  * Props for the ReflagClientProvider.
  */
-export type ReflagClientProviderProps = Omit<ReflagBaseProps, "debug"> & {
+export type ReflagClientProviderProps = Omit<
+  ReflagBaseProps,
+  "debug" | "logger"
+> & {
   /**
    * A pre-initialized ReflagClient to use.
    */

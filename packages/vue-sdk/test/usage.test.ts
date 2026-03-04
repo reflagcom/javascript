@@ -63,6 +63,71 @@ describe("ReflagProvider", () => {
     expect(wrapper.findComponent(Child).vm.client).toBeDefined();
   });
 
+  test("uses provided logger", async () => {
+    const logger = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+
+    const Child = defineComponent({
+      setup() {
+        const client = useClient();
+        return { client };
+      },
+      template: "<div></div>",
+    });
+
+    const wrapper = mount(ReflagProvider, {
+      props: {
+        publishableKey: "key-with-logger",
+        logger,
+      },
+      slots: { default: () => h(Child) },
+    });
+
+    await nextTick();
+    const clientLogger = wrapper.findComponent(Child).vm.client.logger;
+    expect(clientLogger.debug).toBe(logger.debug);
+    expect(clientLogger.info).toBe(logger.info);
+    expect(clientLogger.warn).toBe(logger.warn);
+    expect(clientLogger.error).toBe(logger.error);
+  });
+
+  test("prefers logger over debug mode", async () => {
+    const logger = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+
+    const Child = defineComponent({
+      setup() {
+        const client = useClient();
+        return { client };
+      },
+      template: "<div></div>",
+    });
+
+    const wrapper = mount(ReflagProvider, {
+      props: {
+        publishableKey: "key-with-logger-and-debug",
+        logger,
+        debug: true,
+      },
+      slots: { default: () => h(Child) },
+    });
+
+    await nextTick();
+    const clientLogger = wrapper.findComponent(Child).vm.client.logger;
+    expect(clientLogger.debug).toBe(logger.debug);
+    expect(clientLogger.info).toBe(logger.info);
+    expect(clientLogger.warn).toBe(logger.warn);
+    expect(clientLogger.error).toBe(logger.error);
+  });
+
   test("throws without provider", () => {
     const Comp = defineComponent({
       setup() {
