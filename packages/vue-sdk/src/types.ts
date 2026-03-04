@@ -71,12 +71,7 @@ export type RequestFlagFeedbackOptions = Omit<
  */
 export type ReflagInitOptionsBase = Omit<
   InitOptions,
-  | "user"
-  | "company"
-  | "other"
-  | "otherContext"
-  | "bootstrappedFlags"
-  | "logger"
+  "user" | "company" | "other" | "otherContext" | "bootstrappedFlags" | "logger"
 >;
 
 /**

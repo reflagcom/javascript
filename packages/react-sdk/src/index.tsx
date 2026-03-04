@@ -172,12 +172,7 @@ export type ReflagPropsBase = {
  */
 export type ReflagInitOptionsBase = Omit<
   InitOptions,
-  | "user"
-  | "company"
-  | "other"
-  | "otherContext"
-  | "bootstrappedFlags"
-  | "logger"
+  "user" | "company" | "other" | "otherContext" | "bootstrappedFlags" | "logger"
 >;
 
 /**
@@ -196,9 +191,7 @@ type UseReflagClientOptions = Omit<InitOptions, "logger"> & {
  * Only creates a new ReflagClient is not already created or if it hook is run on the server.
  * @internal
  */
-function useReflagClient(
-  initOptions: UseReflagClientOptions,
-) {
+function useReflagClient(initOptions: UseReflagClientOptions) {
   const { debug = false, logger, ...clientOptions } = initOptions;
   const isServer = typeof window === "undefined";
   if (isServer || !reflagClients.has(clientOptions.publishableKey)) {
@@ -314,14 +307,12 @@ export function ReflagProvider({
     () => ({ user, company, other: otherContext, ...context }),
     [user, company, otherContext, context],
   );
-  const client = useReflagClient(
-    {
-      ...config,
-      ...resolvedContext,
-      debug,
-      logger,
-    },
-  );
+  const client = useReflagClient({
+    ...config,
+    ...resolvedContext,
+    debug,
+    logger,
+  });
 
   // Initialize the client if it is not already initialized
   useEffect(() => {
@@ -370,15 +361,13 @@ export function ReflagBootstrappedProvider({
   debug,
   ...config
 }: ReflagBootstrappedProps) {
-  const client = useReflagClient(
-    {
-      ...config,
-      ...flags.context,
-      bootstrappedFlags: flags.flags,
-      debug,
-      logger,
-    },
-  );
+  const client = useReflagClient({
+    ...config,
+    ...flags.context,
+    bootstrappedFlags: flags.flags,
+    debug,
+    logger,
+  });
 
   // Initialize the client if it is not already initialized
   useEffect(() => {

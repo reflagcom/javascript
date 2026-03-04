@@ -26,15 +26,13 @@ const resolvedContext = computed(() => ({
   ...context,
 }));
 
-const client = useReflagClient(
-  {
-    ...config,
-    ...resolvedContext.value,
-    enableTracking,
-    debug,
-    logger,
-  },
-);
+const client = useReflagClient({
+  ...config,
+  ...resolvedContext.value,
+  enableTracking,
+  debug,
+  logger,
+});
 
 const isLoading = ref(
   client.getState() !== "initialized" ? initialLoading : false,
