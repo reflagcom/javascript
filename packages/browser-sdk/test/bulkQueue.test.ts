@@ -78,6 +78,40 @@ describe("BulkQueue", () => {
     expect(sendBulk).toHaveBeenNthCalledWith(2, [trackEvent]);
   });
 
+  it("drops 4xx responses, logs error, and does not retry", async () => {
+    const sendBulk = vi
+      .fn<(events: BulkEvent[]) => Promise<Response>>()
+      .mockResolvedValue(new Response("invalid payload", { status: 400 }));
+    const logger = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+    const queue = new BulkQueue(sendBulk, {
+      flushDelayMs: 10,
+      retryBaseDelayMs: 20,
+      retryMaxDelayMs: 20,
+      logger,
+    });
+
+    await queue.enqueue(trackEvent);
+
+    await vi.advanceTimersByTimeAsync(10);
+    expect(sendBulk).toHaveBeenCalledTimes(1);
+    expect(await queue.size()).toBe(0);
+    expect(logger.error).toHaveBeenCalledWith(
+      "bulk request failed with non-retriable status; dropping batch",
+      expect.objectContaining({
+        status: 400,
+        responseBody: "invalid payload",
+      }),
+    );
+
+    await vi.advanceTimersByTimeAsync(100);
+    expect(sendBulk).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps only the newest events when max size is exceeded", async () => {
     let resolveSend: ((value: Response) => void) | undefined;
     const sendBulk = vi

@@ -145,6 +145,24 @@ export class BulkQueue {
     try {
       const res = await this.sendBulk(batch);
       if (!res.ok) {
+        if (res.status >= 400 && res.status < 500) {
+          const responseBody = await this.getResponseBodyPreview(res);
+          this.queue.splice(0, batch.length);
+          this.retryCount = 0;
+          this.firstFailureAt = null;
+          this.consecutiveFailures = 0;
+          this.lastWarnAt = null;
+          this.logger?.error(
+            "bulk request failed with non-retriable status; dropping batch",
+            {
+              status: res.status,
+              statusText: res.statusText,
+              responseBody,
+            },
+          );
+          nextDelayMs = this.flushDelayMs;
+          return;
+        }
         throw new Error(`unexpected status ${res.status}`);
       }
 
@@ -233,5 +251,17 @@ export class BulkQueue {
       this.timer = null;
       void this.flush();
     }, delayMs);
+  }
+
+  private async getResponseBodyPreview(res: Response) {
+    try {
+      const body = await res.text();
+      if (!body) {
+        return undefined;
+      }
+      return body.slice(0, 500);
+    } catch {
+      return undefined;
+    }
   }
 }
