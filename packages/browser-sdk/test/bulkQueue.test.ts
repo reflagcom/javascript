@@ -1,21 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BulkEvent, BulkQueue } from "../src/bulkQueue";
-import { StorageAdapter } from "../src/storage";
-
-function createMemoryStorage(): StorageAdapter {
-  const store = new Map<string, string>();
-
-  return {
-    getItem: async (key) => store.get(key) ?? null,
-    setItem: async (key, value) => {
-      store.set(key, value);
-    },
-    removeItem: async (key) => {
-      store.delete(key);
-    },
-  };
-}
 
 const userEvent: BulkEvent = {
   type: "user",
@@ -54,7 +39,6 @@ describe("BulkQueue", () => {
       .mockResolvedValue(new Response("", { status: 200 }));
     const queue = new BulkQueue(sendBulk, {
       flushDelayMs: 75,
-      storage: createMemoryStorage(),
     });
 
     await queue.enqueue(userEvent);
@@ -79,7 +63,6 @@ describe("BulkQueue", () => {
       flushDelayMs: 10,
       retryBaseDelayMs: 20,
       retryMaxDelayMs: 20,
-      storage: createMemoryStorage(),
     });
 
     await queue.enqueue(trackEvent);
@@ -108,7 +91,6 @@ describe("BulkQueue", () => {
     const queue = new BulkQueue(sendBulk, {
       flushDelayMs: 10_000,
       maxSize: 2,
-      storage: createMemoryStorage(),
     });
 
     await queue.enqueue(userEvent);
@@ -122,14 +104,12 @@ describe("BulkQueue", () => {
     resolveSend?.(new Response("", { status: 200 }));
   });
 
-  it("restores queued events from storage", async () => {
-    const storage = createMemoryStorage();
+  it("does not share queue state between instances", async () => {
     const firstSend = vi
       .fn<(events: BulkEvent[]) => Promise<Response>>()
       .mockResolvedValue(new Response("", { status: 200 }));
     const firstQueue = new BulkQueue(firstSend, {
       flushDelayMs: 10_000,
-      storage,
     });
 
     await firstQueue.enqueue(userEvent);
@@ -140,12 +120,10 @@ describe("BulkQueue", () => {
       .mockResolvedValue(new Response("", { status: 200 }));
     const secondQueue = new BulkQueue(secondSend, {
       flushDelayMs: 10_000,
-      storage,
     });
 
-    expect(await secondQueue.size()).toBe(1);
-
+    expect(await secondQueue.size()).toBe(0);
     await secondQueue.flush();
-    expect(secondSend).toHaveBeenCalledWith([userEvent]);
+    expect(secondSend).not.toHaveBeenCalled();
   });
 });

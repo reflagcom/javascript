@@ -5,9 +5,6 @@ import {
   BULK_QUEUE_RETRY_MAX_DELAY_MS,
 } from "./config";
 import { Logger } from "./logger";
-import { getDefaultStorageAdapter, StorageAdapter } from "./storage";
-
-const BULK_QUEUE_STORAGE_KEY = "__reflag_bulk_queue_v1";
 const WARN_AFTER_CONSECUTIVE_FAILURES = 10;
 const WARN_AFTER_FAILURE_MS = 5 * 60 * 1000;
 const WARN_THROTTLE_MS = 15 * 60 * 1000;
@@ -63,61 +60,14 @@ export type BulkQueueOptions = {
   maxSize?: number;
   retryBaseDelayMs?: number;
   retryMaxDelayMs?: number;
-  storage?: StorageAdapter;
-  storageKey?: string;
   logger?: Logger;
 };
-
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function isBulkEvent(value: unknown): value is BulkEvent {
-  if (!isObject(value) || typeof value.type !== "string") {
-    return false;
-  }
-
-  if (value.type === "user") {
-    return typeof value.userId === "string";
-  }
-
-  if (value.type === "company") {
-    return typeof value.companyId === "string";
-  }
-
-  if (value.type === "event") {
-    return typeof value.userId === "string" && typeof value.event === "string";
-  }
-
-  if (value.type === "feature-flag-event") {
-    return (
-      typeof value.key === "string" &&
-      (value.action === "check-is-enabled" || value.action === "check-config")
-    );
-  }
-
-  if (value.type === "prompt-event") {
-    return (
-      typeof value.featureId === "string" &&
-      typeof value.promptId === "string" &&
-      typeof value.userId === "string" &&
-      typeof value.promptedQuestion === "string" &&
-      (value.action === "received" ||
-        value.action === "shown" ||
-        value.action === "dismissed")
-    );
-  }
-
-  return false;
-}
 
 export class BulkQueue {
   private readonly flushDelayMs: number;
   private readonly maxSize: number;
   private readonly retryBaseDelayMs: number;
   private readonly retryMaxDelayMs: number;
-  private readonly storageKey: string;
-  private readonly storage: StorageAdapter;
   private readonly logger?: Logger;
   private readonly sendBulk: (events: BulkEvent[]) => Promise<Response>;
 
@@ -132,8 +82,6 @@ export class BulkQueue {
   private totalDroppedEvents = 0;
   private droppedSinceLastError = 0;
 
-  private readonly initialized: Promise<void>;
-
   constructor(
     sendBulk: (events: BulkEvent[]) => Promise<Response>,
     opts: BulkQueueOptions = {},
@@ -144,19 +92,10 @@ export class BulkQueue {
     this.retryBaseDelayMs =
       opts.retryBaseDelayMs ?? BULK_QUEUE_RETRY_BASE_DELAY_MS;
     this.retryMaxDelayMs = opts.retryMaxDelayMs ?? BULK_QUEUE_RETRY_MAX_DELAY_MS;
-    this.storageKey = opts.storageKey ?? BULK_QUEUE_STORAGE_KEY;
-    this.storage = opts.storage ?? getDefaultStorageAdapter();
     this.logger = opts.logger;
-
-    this.initialized = this.loadFromStorage().then(() => {
-      if (this.queue.length > 0) {
-        this.schedule(this.flushDelayMs);
-      }
-    });
   }
 
   async enqueue(event: BulkEvent) {
-    await this.initialized;
     this.queue.push(event);
 
     if (this.queue.length > this.maxSize) {
@@ -181,8 +120,6 @@ export class BulkQueue {
       }
     }
 
-    await this.saveToStorage();
-
     if (this.queue.length >= this.maxSize) {
       void this.flush();
       return;
@@ -192,8 +129,6 @@ export class BulkQueue {
   }
 
   async flush() {
-    await this.initialized;
-
     if (this.inFlight || this.queue.length === 0) {
       return;
     }
@@ -224,7 +159,6 @@ export class BulkQueue {
       this.firstFailureAt = null;
       this.consecutiveFailures = 0;
       this.lastWarnAt = null;
-      await this.saveToStorage();
       nextDelayMs = this.flushDelayMs;
     } catch (error) {
       const now = Date.now();
@@ -273,7 +207,6 @@ export class BulkQueue {
   }
 
   async size() {
-    await this.initialized;
     return this.queue.length;
   }
 
@@ -300,37 +233,5 @@ export class BulkQueue {
       this.timer = null;
       void this.flush();
     }, delayMs);
-  }
-
-  private async saveToStorage() {
-    try {
-      if (this.queue.length === 0 && this.storage.removeItem) {
-        await this.storage.removeItem(this.storageKey);
-        return;
-      }
-      await this.storage.setItem(this.storageKey, JSON.stringify(this.queue));
-    } catch (error) {
-      this.logger?.warn("failed to persist bulk queue", error);
-    }
-  }
-
-  private async loadFromStorage() {
-    try {
-      const raw = await this.storage.getItem(this.storageKey);
-      if (!raw) {
-        return;
-      }
-
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) {
-        throw new Error("invalid stored bulk queue");
-      }
-
-      this.queue = parsed.filter(isBulkEvent).slice(-this.maxSize);
-    } catch (error) {
-      this.logger?.warn("failed to restore bulk queue from storage", error);
-      this.queue = [];
-      await this.saveToStorage();
-    }
   }
 }

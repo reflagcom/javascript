@@ -309,6 +309,7 @@ export type InitOptions = ReflagDeprecatedContext & {
   /**
    * Queue settings for tracking updates sent to `/bulk`.
    * Applies to user/company updates, check events, and prompt events.
+   * This queue is in-memory only and does not persist across page reloads.
    */
   trackingQueue?: {
     /**
@@ -479,8 +480,6 @@ export class ReflagClient {
           maxSize: opts.trackingQueue?.maxSize,
           retryBaseDelayMs: opts.trackingQueue?.retryBaseDelayMs,
           retryMaxDelayMs: opts.trackingQueue?.retryMaxDelayMs,
-          storage: opts.storage,
-          storageKey: `__reflag_bulk_queue_v1:${this.config.apiBaseUrl}:${this.publishableKey}`,
           logger: this.logger,
         },
       );
