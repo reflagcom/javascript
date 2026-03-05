@@ -14,16 +14,22 @@ describe("ReflagClient", () => {
   const flagClientSetContext = vi.spyOn(FlagsClient.prototype, "setContext");
 
   beforeEach(() => {
+    localStorage.clear();
     client = new ReflagClient({
       publishableKey: "test-key",
       user: { id: "user1" },
       company: { id: "company1" },
+      trackingQueue: {
+        flushDelayMs: 0,
+      },
     });
 
     vi.clearAllMocks();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await client.stop();
+    localStorage.clear();
     vi.unstubAllGlobals();
   });
 
@@ -35,13 +41,18 @@ describe("ReflagClient", () => {
       await client.updateUser(updatedUser);
 
       expect(client["context"].user).toEqual({ id: "user1", ...updatedUser });
-      expect(httpClientPost).toHaveBeenCalledWith({
-        path: "/user",
-        body: {
-          userId: "user1",
-          attributes: { name: updatedUser.name },
-        },
-      });
+      await vi.waitFor(() =>
+        expect(httpClientPost).toHaveBeenCalledWith({
+          path: "/bulk",
+          body: [
+            {
+              type: "user",
+              userId: "user1",
+              attributes: { name: updatedUser.name },
+            },
+          ],
+        }),
+      );
       expect(flagClientSetContext).toHaveBeenCalledWith(client["context"]);
     });
   });
@@ -57,14 +68,19 @@ describe("ReflagClient", () => {
         id: "company1",
         ...updatedCompany,
       });
-      expect(httpClientPost).toHaveBeenCalledWith({
-        path: "/company",
-        body: {
-          userId: "user1",
-          companyId: "company1",
-          attributes: { name: updatedCompany.name },
-        },
-      });
+      await vi.waitFor(() =>
+        expect(httpClientPost).toHaveBeenCalledWith({
+          path: "/bulk",
+          body: [
+            {
+              type: "company",
+              userId: "user1",
+              companyId: "company1",
+              attributes: { name: updatedCompany.name },
+            },
+          ],
+        }),
+      );
       expect(flagClientSetContext).toHaveBeenCalledWith(client["context"]);
     });
   });
@@ -76,6 +92,30 @@ describe("ReflagClient", () => {
       expect(client.getFlag("flagA").isEnabled).toBe(true);
       client.getFlag("flagA").setIsEnabledOverride(false);
       expect(client.getFlag("flagA").isEnabled).toBe(false);
+    });
+  });
+
+  describe("track", () => {
+    it("sends events directly and returns the delivery response", async () => {
+      const response = await client.track("test-event", { a: 1 });
+
+      expect(response?.ok).toBe(true);
+      expect(httpClientPost).toHaveBeenCalledWith({
+        path: "/event",
+        body: {
+          userId: "user1",
+          companyId: "company1",
+          event: "test-event",
+          attributes: { a: 1 },
+        },
+      });
+
+      const bulkCalls = vi
+        .mocked(httpClientPost)
+        .mock.calls.filter(
+          ([request]) => (request as { path?: string }).path === "/bulk",
+        );
+      expect(bulkCalls).toHaveLength(0);
     });
   });
 

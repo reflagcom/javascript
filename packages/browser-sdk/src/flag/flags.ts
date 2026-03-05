@@ -1,5 +1,6 @@
 import { deepEqual } from "fast-equals";
 
+import type { BulkEvent } from "../bulkQueue";
 import { FLAG_EVENTS_PER_MIN, FLAGS_EXPIRE_MS } from "../config";
 import { ReflagContext } from "../context";
 import { HttpClient } from "../httpClient";
@@ -189,6 +190,7 @@ type FlagsClientOptions = Partial<Config> & {
   cache?: FlagCache;
   rateLimiter?: RateLimiter;
   storage?: StorageAdapter;
+  enqueueBulkEvent?: (event: BulkEvent) => Promise<void>;
 };
 
 /**
@@ -208,6 +210,7 @@ export class FlagsClient {
   private fallbackFlags: FallbackFlags = {};
   private storage: StorageAdapter;
   private refreshEvents: number[] = [];
+  private enqueueBulkEvent?: (event: BulkEvent) => Promise<void>;
 
   private config: Config = DEFAULT_FLAGS_CONFIG;
 
@@ -224,6 +227,7 @@ export class FlagsClient {
       rateLimiter,
       fallbackFlags,
       storage,
+      enqueueBulkEvent,
       ...config
     }: FlagsClientOptions = {},
   ) {
@@ -235,6 +239,7 @@ export class FlagsClient {
     this.logger = loggerWithPrefix(logger, "[Flags]");
     this.rateLimiter =
       rateLimiter ?? new RateLimiter(FLAG_EVENTS_PER_MIN, this.logger);
+    this.enqueueBulkEvent = enqueueBulkEvent;
     this.storage = (cache ? undefined : storage) ?? getDefaultStorageAdapter();
     this.cache =
       cache ??
@@ -359,14 +364,29 @@ export class FlagsClient {
         evalMissingFields: checkEvent.missingContextFields,
       };
 
-      this.httpClient
-        .post({
-          path: "features/events",
-          body: payload,
-        })
-        .catch((e: any) => {
-          this.logger.warn(`failed to send flag check event`, e);
+      if (this.enqueueBulkEvent) {
+        this.enqueueBulkEvent({
+          type: "feature-flag-event",
+          action: payload.action,
+          key: payload.key,
+          targetingVersion: payload.targetingVersion,
+          evalContext: payload.evalContext,
+          evalResult: payload.evalResult,
+          evalRuleResults: payload.evalRuleResults,
+          evalMissingFields: payload.evalMissingFields,
+        }).catch((e: any) => {
+          this.logger.warn(`failed to enqueue flag check event`, e);
         });
+      } else {
+        this.httpClient
+          .post({
+            path: "features/events",
+            body: payload,
+          })
+          .catch((e: any) => {
+            this.logger.warn(`failed to send flag check event`, e);
+          });
+      }
 
       this.logger.debug(`sent flag event`, payload);
       cb();

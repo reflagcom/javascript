@@ -1,5 +1,5 @@
 import { DefaultBodyType, http, StrictRequest } from "msw";
-import { beforeEach, describe, expect, test, vi, vitest } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi, vitest } from "vitest";
 
 import { ReflagClient } from "../src";
 import { HttpClient } from "../src/httpClient";
@@ -17,7 +17,12 @@ const logger = {
 };
 
 beforeEach(() => {
+  localStorage.clear();
   vi.clearAllMocks();
+});
+
+afterEach(() => {
+  localStorage.clear();
 });
 
 describe("init", () => {
@@ -33,6 +38,7 @@ describe("init", () => {
     await reflagInstance.initialize();
     expect(spyInit).toHaveBeenCalled();
     expect(logger.debug).toHaveBeenCalled();
+    await reflagInstance.stop();
   });
 
   test("will accept setup with custom host", async () => {
@@ -51,10 +57,12 @@ describe("init", () => {
       publishableKey: KEY,
       user: { id: "foo" },
       apiBaseUrl: "https://example.com",
+      enableTracking: false,
     });
     await reflagInstance.initialize();
 
     expect(usedSpecialHost).toBe(true);
+    await reflagInstance.stop();
   });
 
   test("automatically does user/company tracking", async () => {
@@ -70,6 +78,7 @@ describe("init", () => {
 
     expect(user).toHaveBeenCalled();
     expect(company).toHaveBeenCalled();
+    await reflagInstance.stop();
   });
 
   test("can disable tracking and auto. feedback surveys", async () => {
@@ -88,6 +97,7 @@ describe("init", () => {
     await reflagInstance.track("test");
 
     expect(post).not.toHaveBeenCalled();
+    await reflagInstance.stop();
   });
 
   test("passes credentials correctly to httpClient", async () => {
@@ -103,5 +113,6 @@ describe("init", () => {
     expect(reflagInstance["httpClient"]["fetchOptions"].credentials).toBe(
       credentials,
     );
+    await reflagInstance.stop();
   });
 });

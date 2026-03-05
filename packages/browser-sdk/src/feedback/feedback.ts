@@ -1,3 +1,4 @@
+import type { BulkEvent } from "../bulkQueue";
 import { HttpClient } from "../httpClient";
 import { Logger } from "../logger";
 import { AblySSEChannel, openAblySSEChannel } from "../sse";
@@ -277,6 +278,7 @@ export class AutoFeedback {
     private userId: string,
     private position: Position = DEFAULT_POSITION,
     private feedbackTranslations: Partial<FeedbackTranslations> = {},
+    private enqueueBulkEvent?: (event: BulkEvent) => Promise<void>,
   ) {}
 
   /**
@@ -444,6 +446,15 @@ export class AutoFeedback {
       userId: args.userId,
       promptedQuestion: args.promptedQuestion,
     };
+
+    if (this.enqueueBulkEvent) {
+      await this.enqueueBulkEvent({
+        type: "prompt-event",
+        ...payload,
+      });
+      this.logger.debug(`queued prompt event`, payload);
+      return;
+    }
 
     const res = await this.httpClient.post({
       path: `/feedback/prompt-events`,

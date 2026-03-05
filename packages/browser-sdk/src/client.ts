@@ -16,6 +16,7 @@ import {
   RawFlags,
 } from "./flag/flags";
 import { ToolbarPosition } from "./ui/types";
+import { BulkEvent, BulkQueue } from "./bulkQueue";
 import {
   API_BASE_URL,
   APP_BASE_URL,
@@ -304,6 +305,38 @@ export type InitOptions = ReflagDeprecatedContext & {
    * Useful for React Native (AsyncStorage).
    */
   storage?: StorageAdapter;
+
+  /**
+   * Queue settings for tracking updates sent to `/bulk`.
+   * Applies to user/company updates, check events, and prompt events.
+   */
+  trackingQueue?: {
+    /**
+     * Delay in milliseconds before flushing queued events.
+     * Lower values send sooner; slightly higher values batch better.
+     * Defaults to 200ms.
+     */
+    flushDelayMs?: number;
+
+    /**
+     * Maximum number of queued events retained locally.
+     * Oldest events are dropped when the cap is exceeded.
+     * Defaults to 100.
+     */
+    maxSize?: number;
+
+    /**
+     * Base retry delay in milliseconds after a failed bulk request.
+     * Defaults to 5000ms.
+     */
+    retryBaseDelayMs?: number;
+
+    /**
+     * Maximum retry delay in milliseconds after repeated failures.
+     * Defaults to 60000ms.
+     */
+    retryMaxDelayMs?: number;
+  };
 };
 
 const defaultConfig: Config = {
@@ -395,6 +428,7 @@ export class ReflagClient {
   private readonly autoFeedback: AutoFeedback | undefined;
   private autoFeedbackInit: Promise<void> | undefined;
   private readonly flagsClient: FlagsClient;
+  private readonly bulkQueue: BulkQueue | undefined;
 
   public readonly logger: Logger;
 
@@ -437,6 +471,22 @@ export class ReflagClient {
       sdkVersion: opts?.sdkVersion,
       credentials: opts?.credentials,
     });
+    if (!this.config.offline && this.config.enableTracking) {
+      this.bulkQueue = new BulkQueue(
+        (events) => this.httpClient.post({ path: "/bulk", body: events }),
+        {
+          flushDelayMs: opts.trackingQueue?.flushDelayMs,
+          maxSize: opts.trackingQueue?.maxSize,
+          retryBaseDelayMs: opts.trackingQueue?.retryBaseDelayMs,
+          retryMaxDelayMs: opts.trackingQueue?.retryMaxDelayMs,
+          storage: opts.storage,
+          storageKey: `__reflag_bulk_queue_v1:${this.config.apiBaseUrl}:${this.publishableKey}`,
+          logger: this.logger,
+        },
+      );
+    }
+
+    const bulkQueue = this.bulkQueue;
 
     this.flagsClient = new FlagsClient(
       this.httpClient,
@@ -451,6 +501,9 @@ export class ReflagClient {
         fallbackFlags: opts.fallbackFlags,
         offline: this.config.offline,
         storage: opts.storage,
+        enqueueBulkEvent: bulkQueue
+          ? (event) => bulkQueue.enqueue(event)
+          : undefined,
       },
     );
 
@@ -473,6 +526,7 @@ export class ReflagClient {
           String(this.context.user?.id),
           opts?.feedback?.ui?.position,
           opts?.feedback?.ui?.translations,
+          bulkQueue ? (event) => bulkQueue.enqueue(event) : undefined,
         );
       }
     }
@@ -541,6 +595,8 @@ export class ReflagClient {
    *
    **/
   async stop() {
+    await this.bulkQueue?.flush();
+
     if (this.autoFeedback) {
       // ensure fully initialized before stopping
       await this.autoFeedbackInit;
@@ -731,7 +787,10 @@ export class ReflagClient {
    * @param eventName The name of the event.
    * @param attributes Any attributes you want to attach to the event.
    */
-  async track(eventName: string, attributes?: Record<string, any> | null) {
+  async track(
+    eventName: string,
+    attributes?: Record<string, any> | null,
+  ): Promise<Response | undefined> {
     if (!this.context.user) {
       this.logger.warn("'track' call ignored. No user context provided");
       return;
@@ -753,8 +812,8 @@ export class ReflagClient {
     if (this.context.company?.id)
       payload.companyId = String(this.context.company?.id);
 
-    const res = await this.httpClient.post({ path: `/event`, body: payload });
-    this.logger.debug(`sent event`, res);
+    const res = await this.httpClient.post({ path: "/event", body: payload });
+    this.logger.debug(`sent event`, payload);
 
     this.hooks.trigger("track", {
       eventName,
@@ -1001,17 +1060,24 @@ export class ReflagClient {
     if (this.config.offline) {
       return;
     }
+    if (!this.config.enableTracking) {
+      return;
+    }
+    if (!this.bulkQueue) {
+      return;
+    }
 
     const { id, ...attributes } = this.context.user;
-    const payload: User = {
+    const payload: BulkEvent = {
+      type: "user",
       userId: String(id),
       attributes,
     };
-    const res = await this.httpClient.post({ path: `/user`, body: payload });
-    this.logger.debug(`sent user`, res);
+    await this.bulkQueue.enqueue(payload);
+    this.logger.debug(`queued user`, payload);
 
     this.hooks.trigger("user", this.context.user);
-    return res;
+    return;
   }
 
   /**
@@ -1035,18 +1101,24 @@ export class ReflagClient {
     if (this.config.offline) {
       return;
     }
+    if (!this.config.enableTracking) {
+      return;
+    }
+    if (!this.bulkQueue) {
+      return;
+    }
 
     const { id, ...attributes } = this.context.company;
-    const payload: Company = {
+    const payload: BulkEvent = {
+      type: "company",
       userId: String(this.context.user.id),
       companyId: String(id),
       attributes,
     };
-
-    const res = await this.httpClient.post({ path: `/company`, body: payload });
-    this.logger.debug(`sent company`, res);
+    await this.bulkQueue.enqueue(payload);
+    this.logger.debug(`queued company`, payload);
     this.hooks.trigger("company", this.context.company);
-    return res;
+    return;
   }
 
   private async updateAutoFeedbackUser(userId: string) {
