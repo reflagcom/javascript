@@ -79,6 +79,59 @@ export function getFlags({
 }
 
 export const handlers = [
+  http.post("https://front.reflag.com/bulk", async ({ request }) => {
+    if (!checkRequest(request)) return invalidReqResponse;
+
+    const data = await request.json();
+    if (!Array.isArray(data) || data.length === 0) {
+      return HttpResponse.error();
+    }
+
+    const valid = data.every((item) => {
+      if (typeof item !== "object" || item === null || !("type" in item)) {
+        return false;
+      }
+      const event = item as Record<string, unknown>;
+      if (event.type === "user") {
+        return typeof event.userId === "string";
+      }
+      if (event.type === "company") {
+        return typeof event.companyId === "string";
+      }
+      if (event.type === "event") {
+        return (
+          typeof event.userId === "string" && typeof event.event === "string"
+        );
+      }
+      if (event.type === "feature-flag-event") {
+        return (
+          typeof event.key === "string" &&
+          (event.action === "check-is-enabled" ||
+            event.action === "check-config")
+        );
+      }
+      if (event.type === "prompt-event") {
+        return (
+          typeof event.featureId === "string" &&
+          typeof event.promptId === "string" &&
+          typeof event.userId === "string" &&
+          typeof event.promptedQuestion === "string" &&
+          (event.action === "received" ||
+            event.action === "shown" ||
+            event.action === "dismissed")
+        );
+      }
+      return false;
+    });
+
+    if (!valid) {
+      return HttpResponse.error();
+    }
+
+    return HttpResponse.json({
+      success: true,
+    });
+  }),
   http.post("https://front.reflag.com/user", async ({ request }) => {
     if (!checkRequest(request)) return invalidReqResponse;
 

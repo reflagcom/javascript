@@ -48,6 +48,11 @@ afterEach(() => {
   server.resetHandlers();
 });
 
+beforeEach(() => {
+  localStorage.clear();
+  sessionStorage.clear();
+});
+
 describe("usage", () => {
   afterEach(() => {
     vi.clearAllMocks();
@@ -217,17 +222,27 @@ describe("feedback state management", () => {
     });
     events = [];
     server.use(
-      http.post(
-        `${API_BASE_URL}/feedback/prompt-events`,
-        async ({ request }) => {
-          const body = await request.json();
-          if (!(body && typeof body === "object" && "action" in body)) {
-            throw new Error("invalid request");
-          }
-          events.push(String(body["action"]));
-          return HttpResponse.json({ success: true });
-        },
-      ),
+      http.post(`${API_BASE_URL}/bulk`, async ({ request }) => {
+        const body = await request.json();
+        if (!Array.isArray(body)) {
+          throw new Error("invalid request");
+        }
+
+        body
+          .filter(
+            (event) =>
+              event &&
+              typeof event === "object" &&
+              "type" in event &&
+              event["type"] === "prompt-event" &&
+              "action" in event,
+          )
+          .forEach((event) => {
+            events.push(String(event["action"]));
+          });
+
+        return HttpResponse.json({ success: true });
+      }),
     );
   });
 
@@ -241,6 +256,9 @@ describe("feedback state management", () => {
     reflagInstance = new ReflagClient({
       publishableKey: KEY,
       user: { id: "foo" },
+      trackingQueue: {
+        flushDelayMs: 0,
+      },
       feedback: {
         autoFeedbackHandler: callback,
       },
@@ -473,6 +491,9 @@ describe(`sends "check" events `, () => {
         publishableKey: KEY,
         user: { id: "uid" },
         company: { id: "cid" },
+        trackingQueue: {
+          flushDelayMs: 0,
+        },
       });
       await client.initialize();
 
@@ -494,25 +515,36 @@ describe(`sends "check" events `, () => {
         expect.any(Function),
       );
 
-      expect(postSpy).toHaveBeenCalledWith({
-        body: {
-          action: "check-is-enabled",
-          evalContext: {
-            company: {
-              id: "cid",
-            },
-            other: {},
-            user: {
-              id: "uid",
-            },
-          },
-          evalResult: true,
-          evalRuleResults: [false, true],
-          evalMissingFields: ["field1", "field2"],
-          key: "flagA",
-          targetingVersion: 1,
-        },
-        path: "features/events",
+      await vi.waitFor(() => {
+        const bulkEvents = vi
+          .mocked(postSpy)
+          .mock.calls.filter(([request]) => request.path === "/bulk")
+          .flatMap(([request]) =>
+            Array.isArray(request.body) ? request.body : [],
+          );
+
+        expect(bulkEvents).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              type: "feature-flag-event",
+              action: "check-is-enabled",
+              key: "flagA",
+              targetingVersion: 1,
+              evalContext: {
+                company: {
+                  id: "cid",
+                },
+                other: {},
+                user: {
+                  id: "uid",
+                },
+              },
+              evalResult: true,
+              evalRuleResults: [false, true],
+              evalMissingFields: ["field1", "field2"],
+            }),
+          ]),
+        );
       });
     });
 
@@ -522,6 +554,9 @@ describe(`sends "check" events `, () => {
       const client = new ReflagClient({
         publishableKey: KEY,
         user: { id: "uid" },
+        trackingQueue: {
+          flushDelayMs: 0,
+        },
       });
 
       await client.initialize();
@@ -530,26 +565,37 @@ describe(`sends "check" events `, () => {
         key: "gpt3",
       });
 
-      expect(postSpy).toHaveBeenCalledWith({
-        body: {
-          action: "check-config",
-          evalContext: {
-            company: undefined,
-            other: {},
-            user: {
-              id: "uid",
-            },
-          },
-          evalResult: {
-            key: "gpt3",
-            payload: { model: "gpt-something", temperature: 0.5 },
-          },
-          evalRuleResults: [true, false, false],
-          evalMissingFields: ["field3"],
-          key: "flagB",
-          targetingVersion: 12,
-        },
-        path: "features/events",
+      await vi.waitFor(() => {
+        const bulkEvents = vi
+          .mocked(postSpy)
+          .mock.calls.filter(([request]) => request.path === "/bulk")
+          .flatMap(([request]) =>
+            Array.isArray(request.body) ? request.body : [],
+          );
+
+        expect(bulkEvents).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              type: "feature-flag-event",
+              action: "check-config",
+              key: "flagB",
+              targetingVersion: 12,
+              evalContext: {
+                company: undefined,
+                other: {},
+                user: {
+                  id: "uid",
+                },
+              },
+              evalResult: {
+                key: "gpt3",
+                payload: { model: "gpt-something", temperature: 0.5 },
+              },
+              evalRuleResults: [true, false, false],
+              evalMissingFields: ["field3"],
+            }),
+          ]),
+        );
       });
     });
 
