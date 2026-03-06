@@ -73,7 +73,8 @@ export class BulkQueue {
 
   private queue: BulkEvent[] = [];
   private timer: ReturnType<typeof setTimeout> | null = null;
-  private inFlight = false;
+  private inFlightBatch: BulkEvent[] | null = null;
+  private inFlightPromise: Promise<number | null> | null = null;
   private retryCount = 0;
   private consecutiveFailures = 0;
   private firstFailureAt: number | null = null;
@@ -97,30 +98,10 @@ export class BulkQueue {
 
   async enqueue(event: BulkEvent) {
     this.queue.push(event);
+    this.trimPendingQueueToCapacity();
 
-    if (this.queue.length > this.maxSize) {
-      const removed = this.queue.length - this.maxSize;
-      this.queue = this.queue.slice(-this.maxSize);
-      this.totalDroppedEvents += removed;
-      this.droppedSinceLastError += removed;
-
-      const now = Date.now();
-      if (
-        !this.lastDropErrorAt ||
-        now - this.lastDropErrorAt >= DROP_ERROR_THROTTLE_MS
-      ) {
-        this.logger?.error("bulk queue dropped events due to max size", {
-          droppedEvents: this.droppedSinceLastError,
-          totalDroppedEvents: this.totalDroppedEvents,
-          queueSize: this.queue.length,
-          maxSize: this.maxSize,
-        });
-        this.lastDropErrorAt = now;
-        this.droppedSinceLastError = 0;
-      }
-    }
-
-    if (this.queue.length >= this.maxSize) {
+    const maxPending = Math.max(0, this.maxSize - this.getInFlightBatchSize());
+    if (this.queue.length > 0 && this.queue.length >= maxPending) {
       void this.flush();
       return;
     }
@@ -129,7 +110,12 @@ export class BulkQueue {
   }
 
   async flush() {
-    if (this.inFlight || this.queue.length === 0) {
+    if (this.inFlightPromise) {
+      await this.inFlightPromise;
+      return;
+    }
+
+    if (this.queue.length === 0) {
       return;
     }
 
@@ -138,8 +124,56 @@ export class BulkQueue {
       this.timer = null;
     }
 
-    this.inFlight = true;
-    const batch = this.queue.slice(0, this.maxSize);
+    const batch = this.queue.splice(0, this.maxSize);
+    this.inFlightBatch = batch;
+
+    const sendPromise = this.sendBatch(batch);
+    this.inFlightPromise = sendPromise;
+    let nextDelayMs: number | null = null;
+    try {
+      nextDelayMs = await sendPromise;
+    } finally {
+      if (this.inFlightPromise === sendPromise) {
+        this.inFlightPromise = null;
+      }
+      this.inFlightBatch = null;
+    }
+
+    if (this.queue.length > 0 && !this.timer && nextDelayMs !== null) {
+      this.schedule(nextDelayMs);
+    }
+  }
+
+  async size() {
+    return this.queue.length + this.getInFlightBatchSize();
+  }
+
+  private getRetryDelay() {
+    const maxExponent = 6;
+    const exponent = Math.min(this.retryCount - 1, maxExponent);
+    return Math.min(
+      this.retryBaseDelayMs * 2 ** exponent,
+      this.retryMaxDelayMs,
+    );
+  }
+
+  private schedule(delayMs: number) {
+    if (this.timer || this.inFlightPromise || this.queue.length === 0) {
+      return;
+    }
+
+    if (delayMs <= 0) {
+      void this.flush();
+      return;
+    }
+
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      void this.flush();
+    }, delayMs);
+  }
+
+  private async sendBatch(batch: BulkEvent[]) {
     let nextDelayMs: number | null = null;
 
     try {
@@ -147,7 +181,6 @@ export class BulkQueue {
       if (!res.ok) {
         if (res.status >= 400 && res.status < 500) {
           const responseBody = await this.getResponseBodyPreview(res);
-          this.queue.splice(0, batch.length);
           this.retryCount = 0;
           this.firstFailureAt = null;
           this.consecutiveFailures = 0;
@@ -161,24 +194,25 @@ export class BulkQueue {
             },
           );
           nextDelayMs = this.flushDelayMs;
-          return;
+        } else {
+          throw new Error(`unexpected status ${res.status}`);
         }
-        throw new Error(`unexpected status ${res.status}`);
+      } else {
+        this.retryCount = 0;
+        if (this.firstFailureAt !== null && this.consecutiveFailures > 0) {
+          this.logger?.info("bulk delivery recovered", {
+            outageMs: Date.now() - this.firstFailureAt,
+            failedAttempts: this.consecutiveFailures,
+          });
+        }
+        this.firstFailureAt = null;
+        this.consecutiveFailures = 0;
+        this.lastWarnAt = null;
+        nextDelayMs = this.flushDelayMs;
       }
-
-      this.queue.splice(0, batch.length);
-      this.retryCount = 0;
-      if (this.firstFailureAt !== null && this.consecutiveFailures > 0) {
-        this.logger?.info("bulk delivery recovered", {
-          outageMs: Date.now() - this.firstFailureAt,
-          failedAttempts: this.consecutiveFailures,
-        });
-      }
-      this.firstFailureAt = null;
-      this.consecutiveFailures = 0;
-      this.lastWarnAt = null;
-      nextDelayMs = this.flushDelayMs;
     } catch (error) {
+      this.queue = batch.concat(this.queue);
+
       const now = Date.now();
       if (this.firstFailureAt === null) {
         this.firstFailureAt = now;
@@ -189,7 +223,7 @@ export class BulkQueue {
       nextDelayMs = retryInMs;
       this.logger?.info("bulk retry scheduled", {
         retryInMs,
-        queueSize: this.queue.length,
+        queueSize: this.queue.length + this.getInFlightBatchSize(),
         consecutiveFailures: this.consecutiveFailures,
       });
 
@@ -203,54 +237,43 @@ export class BulkQueue {
         this.logger?.warn("bulk delivery degraded", {
           consecutiveFailures: this.consecutiveFailures,
           outageMs,
-          queueSize: this.queue.length,
+          queueSize: this.queue.length + this.getInFlightBatchSize(),
           retryInMs,
           error,
         });
         this.lastWarnAt = now;
       }
-      this.schedule(retryInMs);
-    } finally {
-      this.inFlight = false;
     }
 
-    if (
-      this.queue.length > 0 &&
-      !this.timer &&
-      !this.inFlight &&
-      nextDelayMs !== null
-    ) {
-      this.schedule(nextDelayMs);
-    }
+    return nextDelayMs;
   }
 
-  async size() {
-    return this.queue.length;
+  private getInFlightBatchSize() {
+    return this.inFlightBatch?.length ?? 0;
   }
 
-  private getRetryDelay() {
-    const maxExponent = 6;
-    const exponent = Math.min(this.retryCount - 1, maxExponent);
-    return Math.min(
-      this.retryBaseDelayMs * 2 ** exponent,
-      this.retryMaxDelayMs,
-    );
-  }
-
-  private schedule(delayMs: number) {
-    if (this.timer || this.inFlight || this.queue.length === 0) {
+  private trimPendingQueueToCapacity() {
+    const maxPending = Math.max(0, this.maxSize - this.getInFlightBatchSize());
+    if (this.queue.length <= maxPending) {
       return;
     }
 
-    if (delayMs <= 0) {
-      void this.flush();
-      return;
-    }
+    const removed = this.queue.length - maxPending;
+    this.queue = maxPending === 0 ? [] : this.queue.slice(-maxPending);
+    this.totalDroppedEvents += removed;
+    this.droppedSinceLastError += removed;
 
-    this.timer = setTimeout(() => {
-      this.timer = null;
-      void this.flush();
-    }, delayMs);
+    const now = Date.now();
+    if (!this.lastDropErrorAt || now - this.lastDropErrorAt >= DROP_ERROR_THROTTLE_MS) {
+      this.logger?.error("bulk queue dropped events due to max size", {
+        droppedEvents: this.droppedSinceLastError,
+        totalDroppedEvents: this.totalDroppedEvents,
+        queueSize: this.queue.length + this.getInFlightBatchSize(),
+        maxSize: this.maxSize,
+      });
+      this.lastDropErrorAt = now;
+      this.droppedSinceLastError = 0;
+    }
   }
 
   private async getResponseBodyPreview(res: Response) {

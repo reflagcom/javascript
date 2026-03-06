@@ -23,6 +23,14 @@ const trackEvent: BulkEvent = {
   attributes: { source: "banner" },
 };
 
+const lateTrackEvent: BulkEvent = {
+  type: "event",
+  userId: "u1",
+  companyId: "c1",
+  event: "late-clicked",
+  attributes: { source: "footer" },
+};
+
 describe("BulkQueue", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -112,6 +120,40 @@ describe("BulkQueue", () => {
     expect(sendBulk).toHaveBeenCalledTimes(1);
   });
 
+  it("does not drop newly queued events when an older batch completes", async () => {
+    let resolveFirstSend: ((res: Response) => void) | undefined;
+    const firstSend = new Promise<Response>((resolve) => {
+      resolveFirstSend = resolve;
+    });
+    const sendBulk = vi
+      .fn<(events: BulkEvent[]) => Promise<Response>>()
+      .mockReturnValueOnce(firstSend)
+      .mockResolvedValue(new Response("", { status: 200 }));
+
+    const queue = new BulkQueue(sendBulk, {
+      flushDelayMs: 1,
+      maxSize: 3,
+    });
+
+    await queue.enqueue(userEvent);
+    await queue.enqueue(companyEvent);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(sendBulk).toHaveBeenCalledTimes(1);
+    expect(sendBulk).toHaveBeenNthCalledWith(1, [userEvent, companyEvent]);
+
+    await queue.enqueue(trackEvent);
+    await queue.enqueue(lateTrackEvent);
+
+    expect(await queue.size()).toBe(3);
+
+    resolveFirstSend?.(new Response("", { status: 200 }));
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(sendBulk).toHaveBeenCalledTimes(2);
+    expect(sendBulk).toHaveBeenNthCalledWith(2, [lateTrackEvent]);
+    expect(await queue.size()).toBe(0);
+  });
+
   it("keeps only the newest events when max size is exceeded", async () => {
     let resolveSend: ((value: Response) => void) | undefined;
     const sendBulk = vi
@@ -159,5 +201,49 @@ describe("BulkQueue", () => {
     expect(await secondQueue.size()).toBe(0);
     await secondQueue.flush();
     expect(secondSend).not.toHaveBeenCalled();
+  });
+
+  it("requires a second flush to send pending events after an in-flight batch", async () => {
+    let resolveFirstSend: ((res: Response) => void) | undefined;
+    const firstSend = new Promise<Response>((resolve) => {
+      resolveFirstSend = resolve;
+    });
+    const sendBulk = vi
+      .fn<(events: BulkEvent[]) => Promise<Response>>()
+      .mockReturnValueOnce(firstSend)
+      .mockResolvedValue(new Response("", { status: 200 }));
+
+    const queue = new BulkQueue(sendBulk, {
+      flushDelayMs: 10_000,
+      maxSize: 4,
+    });
+
+    await queue.enqueue(userEvent);
+    await queue.enqueue(companyEvent);
+    void queue.flush();
+    expect(sendBulk).toHaveBeenNthCalledWith(1, [userEvent, companyEvent]);
+
+    await queue.enqueue(trackEvent);
+    await queue.enqueue(lateTrackEvent);
+
+    let waitedForInFlight = false;
+    const flushWhileInFlight = queue.flush().then(() => {
+      waitedForInFlight = true;
+    });
+
+    await Promise.resolve();
+    expect(waitedForInFlight).toBe(false);
+
+    resolveFirstSend?.(new Response("", { status: 200 }));
+    await flushWhileInFlight;
+
+    expect(waitedForInFlight).toBe(true);
+    expect(sendBulk).toHaveBeenCalledTimes(1);
+    expect(await queue.size()).toBe(2);
+
+    await queue.flush();
+    expect(sendBulk).toHaveBeenCalledTimes(2);
+    expect(sendBulk).toHaveBeenNthCalledWith(2, [trackEvent, lateTrackEvent]);
+    expect(await queue.size()).toBe(0);
   });
 });

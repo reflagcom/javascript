@@ -194,6 +194,20 @@ describe("ReflagClient", () => {
     });
   });
 
+  describe("stop", () => {
+    it("throws if queued bulk events remain after final flush attempt", async () => {
+      const bulkQueue = client["bulkQueue"];
+      expect(bulkQueue).toBeDefined();
+
+      vi.spyOn(bulkQueue!, "flush").mockResolvedValueOnce().mockResolvedValueOnce();
+      vi.spyOn(bulkQueue!, "size").mockResolvedValueOnce(1).mockResolvedValueOnce(1);
+
+      await expect(client.stop()).rejects.toThrow(
+        "failed to flush all queued bulk events during stop (1 remaining)",
+      );
+    });
+  });
+
   describe("offline mode", () => {
     it("should not make HTTP calls when offline", async () => {
       client = new ReflagClient({

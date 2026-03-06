@@ -594,7 +594,19 @@ export class ReflagClient {
    *
    **/
   async stop() {
-    await this.bulkQueue?.flush();
+    if (this.bulkQueue) {
+      await this.bulkQueue.flush();
+      let remaining = await this.bulkQueue.size();
+      if (remaining > 0) {
+        await this.bulkQueue.flush();
+        remaining = await this.bulkQueue.size();
+      }
+      if (remaining > 0) {
+        throw new Error(
+          `failed to flush all queued bulk events during stop (${remaining} remaining)`,
+        );
+      }
+    }
 
     if (this.autoFeedback) {
       // ensure fully initialized before stopping
