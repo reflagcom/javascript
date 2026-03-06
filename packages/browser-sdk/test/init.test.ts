@@ -18,11 +18,13 @@ const logger = {
 
 beforeEach(() => {
   localStorage.clear();
+  sessionStorage.clear();
   vi.clearAllMocks();
 });
 
 afterEach(() => {
   localStorage.clear();
+  sessionStorage.clear();
 });
 
 describe("init", () => {

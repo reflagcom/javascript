@@ -50,6 +50,7 @@ afterEach(() => {
 
 beforeEach(() => {
   localStorage.clear();
+  sessionStorage.clear();
 });
 
 describe("usage", () => {
@@ -255,6 +256,9 @@ describe("feedback state management", () => {
     reflagInstance = new ReflagClient({
       publishableKey: KEY,
       user: { id: "foo" },
+      trackingQueue: {
+        flushDelayMs: 0,
+      },
       feedback: {
         autoFeedbackHandler: callback,
       },

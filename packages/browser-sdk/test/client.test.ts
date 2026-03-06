@@ -15,6 +15,7 @@ describe("ReflagClient", () => {
 
   beforeEach(() => {
     localStorage.clear();
+    sessionStorage.clear();
     client = new ReflagClient({
       publishableKey: "test-key",
       user: { id: "user1" },
@@ -30,6 +31,7 @@ describe("ReflagClient", () => {
   afterEach(async () => {
     await client.stop();
     localStorage.clear();
+    sessionStorage.clear();
     vi.unstubAllGlobals();
   });
 

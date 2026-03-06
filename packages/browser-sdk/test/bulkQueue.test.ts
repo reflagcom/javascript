@@ -34,11 +34,13 @@ const lateTrackEvent: BulkEvent = {
 describe("BulkQueue", () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    sessionStorage.clear();
   });
 
   afterEach(() => {
     vi.useRealTimers();
     vi.clearAllMocks();
+    sessionStorage.clear();
   });
 
   it("batches events and flushes after the delay", async () => {
@@ -180,7 +182,7 @@ describe("BulkQueue", () => {
     resolveSend?.(new Response("", { status: 200 }));
   });
 
-  it("does not share queue state between instances", async () => {
+  it("restores queue state between instances in the same tab", async () => {
     const firstSend = vi
       .fn<(events: BulkEvent[]) => Promise<Response>>()
       .mockResolvedValue(new Response("", { status: 200 }));
@@ -198,9 +200,9 @@ describe("BulkQueue", () => {
       flushDelayMs: 10_000,
     });
 
-    expect(await secondQueue.size()).toBe(0);
+    expect(await secondQueue.size()).toBe(1);
     await secondQueue.flush();
-    expect(secondSend).not.toHaveBeenCalled();
+    expect(secondSend).toHaveBeenCalledWith([userEvent]);
   });
 
   it("requires a second flush to send pending events after an in-flight batch", async () => {
