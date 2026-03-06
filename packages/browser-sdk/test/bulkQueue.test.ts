@@ -122,6 +122,48 @@ describe("BulkQueue", () => {
     expect(sendBulk).toHaveBeenCalledTimes(1);
   });
 
+  it("includes parsed API error details for non-retriable 4xx responses", async () => {
+    const body = JSON.stringify({
+      success: false,
+      error: {
+        message:
+          'Invalid publishableKey "pub_prod_vxuMahSZOnhzvAfiOnZ9rj"',
+        code: "INVALID_API_KEY",
+      },
+    });
+    const sendBulk = vi
+      .fn<(events: BulkEvent[]) => Promise<Response>>()
+      .mockResolvedValue(
+        new Response(body, {
+          status: 401,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    const logger = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+    const queue = new BulkQueue(sendBulk, {
+      flushDelayMs: 10,
+      logger,
+    });
+
+    await queue.enqueue(trackEvent);
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining("INVALID_API_KEY"),
+      expect.objectContaining({
+        status: 401,
+        apiErrorCode: "INVALID_API_KEY",
+        apiErrorMessage:
+          'Invalid publishableKey "pub_prod_vxuMahSZOnhzvAfiOnZ9rj"',
+      }),
+    );
+  });
+
   it("does not drop newly queued events when an older batch completes", async () => {
     let resolveFirstSend: ((res: Response) => void) | undefined;
     const firstSend = new Promise<Response>((resolve) => {
