@@ -1,6 +1,7 @@
 import type { BulkEvent } from "../bulkQueue";
 import { HttpClient } from "../httpClient";
 import { Logger } from "../logger";
+import { logResponseError } from "../utils/responseError";
 import { AblySSEChannel, openAblySSEChannel } from "../sse";
 import { Position } from "../ui/types";
 
@@ -262,6 +263,14 @@ export async function feedback(
     body: feedbackPayload,
   });
 
+  if (!res.ok) {
+    await logResponseError({
+      logger,
+      res,
+      message: "feedback request failed",
+    });
+  }
+
   logger.debug(`sent feedback`, res);
   return res;
 }
@@ -460,6 +469,18 @@ export class AutoFeedback {
       path: `/feedback/prompt-events`,
       body: payload,
     });
+    if (!res.ok) {
+      await logResponseError({
+        logger: this.logger,
+        res,
+        message: "prompt event request failed",
+        extra: {
+          action: payload.action,
+          featureId: payload.featureId,
+          promptId: payload.promptId,
+        },
+      });
+    }
     this.logger.debug(`sent prompt event`, res);
     return res;
   }
@@ -482,11 +503,18 @@ export class AutoFeedback {
         });
 
         this.logger.debug(`automatic feedback status sent`, res);
-        if (res.ok) {
-          const body: { success: boolean; channel?: string } = await res.json();
-          if (body.success && body.channel) {
-            return body.channel;
-          }
+        if (!res.ok) {
+          await logResponseError({
+            logger: this.logger,
+            res,
+            message: "automatic feedback init request failed",
+          });
+          return;
+        }
+
+        const body: { success: boolean; channel?: string } = await res.json();
+        if (body.success && body.channel) {
+          return body.channel;
         }
       }
     } catch (e) {

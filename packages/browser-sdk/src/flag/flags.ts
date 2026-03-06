@@ -9,6 +9,10 @@ import RateLimiter from "../rateLimiter";
 import { getDefaultStorageAdapter, StorageAdapter } from "../storage";
 import { createAbortController } from "../utils/abortController";
 import { createEventTarget } from "../utils/eventTarget";
+import {
+  logResponseError,
+  parseResponseError,
+} from "../utils/responseError";
 
 import { FlagCache, isObject, parseAPIFlagsResponse } from "./flagCache";
 
@@ -383,6 +387,18 @@ export class FlagsClient {
             path: "features/events",
             body: payload,
           })
+          .then(async (res) => {
+            if (res.ok) {
+              return;
+            }
+
+            await logResponseError({
+              logger: this.logger,
+              level: "warn",
+              res,
+              message: "failed to send flag check event",
+            });
+          })
           .catch((e: any) => {
             this.logger.warn(`failed to send flag check event`, e);
           });
@@ -405,18 +421,15 @@ export class FlagsClient {
       });
 
       if (!res.ok) {
-        let errorBody = null;
-        try {
-          errorBody = await res.json();
-        } catch {
-          // ignore
-        }
+        const { errorDetails, errorSummary } = await parseResponseError(res);
+        const fallbackBody = errorDetails.responseBody
+          ? ` - ${errorDetails.responseBody}`
+          : "";
 
         throw new Error(
-          "unexpected response code: " +
-            res.status +
-            " - " +
-            JSON.stringify(errorBody),
+          `unexpected response code: ${res.status}${
+            errorSummary ? ` - ${errorSummary}` : fallbackBody
+          }`,
         );
       }
 

@@ -5,13 +5,13 @@ import {
   BULK_QUEUE_RETRY_MAX_DELAY_MS,
 } from "./config";
 import { Logger } from "./logger";
+import { logResponseError } from "./utils/responseError";
 
 const BULK_QUEUE_STORAGE_KEY = "__reflag_bulk_queue_v1";
 const WARN_AFTER_CONSECUTIVE_FAILURES = 10;
 const WARN_AFTER_FAILURE_MS = 5 * 60 * 1000;
 const WARN_THROTTLE_MS = 15 * 60 * 1000;
 const DROP_ERROR_THROTTLE_MS = 15 * 60 * 1000;
-const MAX_RESPONSE_BODY_PREVIEW_CHARS = 500;
 
 type PayloadContext = {
   active?: boolean;
@@ -65,12 +65,6 @@ export type BulkQueueOptions = {
   retryMaxDelayMs?: number;
   storageKey?: string;
   logger?: Logger;
-};
-
-type BulkErrorDetails = {
-  responseBody?: string;
-  apiErrorCode?: string;
-  apiErrorMessage?: string;
 };
 
 function getSessionStorage(): Storage | null {
@@ -255,22 +249,18 @@ export class BulkQueue {
       const res = await this.sendBulk(batch);
       if (!res.ok) {
         if (res.status >= 400 && res.status < 500) {
-          const errorDetails = await this.getResponseErrorDetails(res);
-          const errorSummary = this.getApiErrorSummary(errorDetails);
           this.retryCount = 0;
           this.firstFailureAt = null;
           this.consecutiveFailures = 0;
           this.lastWarnAt = null;
-          this.logger?.error(
-            errorSummary
-              ? `bulk request failed with non-retriable status; dropping batch: ${errorSummary}`
-              : "bulk request failed with non-retriable status; dropping batch",
-            {
-              status: res.status,
-              statusText: res.statusText,
-              ...errorDetails,
-            },
-          );
+          if (this.logger) {
+            await logResponseError({
+              logger: this.logger,
+              res,
+              message:
+                "bulk request failed with non-retriable status; dropping batch",
+            });
+          }
           nextDelayMs = this.flushDelayMs;
         } else {
           throw new Error(`unexpected status ${res.status}`);
@@ -405,66 +395,5 @@ export class BulkQueue {
       this.lastDropErrorAt = now;
       this.droppedSinceLastError = 0;
     }
-  }
-
-  private getApiErrorSummary(errorDetails: BulkErrorDetails) {
-    const code = errorDetails.apiErrorCode;
-    const message = errorDetails.apiErrorMessage;
-    if (code && message) {
-      return `${code}: ${message}`;
-    }
-    return message ?? code;
-  }
-
-  private async getResponseErrorDetails(res: Response): Promise<BulkErrorDetails> {
-    try {
-      const body = await res.text();
-      if (!body) {
-        return {};
-      }
-
-    let apiErrorCode: string | undefined;
-    let apiErrorMessage: string | undefined;
-    try {
-      const parsed: unknown = JSON.parse(body);
-      const parsedError = this.extractApiError(parsed);
-      apiErrorCode = parsedError.code;
-      apiErrorMessage = parsedError.message;
-    } catch {
-      // ignore JSON parse failures
-    }
-
-      return {
-        responseBody: body.slice(0, MAX_RESPONSE_BODY_PREVIEW_CHARS),
-        apiErrorCode,
-        apiErrorMessage,
-      };
-    } catch {
-      return {};
-    }
-  }
-
-  private extractApiError(value: unknown): { code?: string; message?: string } {
-    if (!isObject(value)) {
-      return {};
-    }
-
-    const topLevelCode = typeof value.code === "string" ? value.code : undefined;
-    const topLevelMessage =
-      typeof value.message === "string" ? value.message : undefined;
-
-    const error = value.error;
-    if (!isObject(error)) {
-      return {
-        code: topLevelCode,
-        message: topLevelMessage,
-      };
-    }
-
-    return {
-      code: typeof error.code === "string" ? error.code : topLevelCode,
-      message:
-        typeof error.message === "string" ? error.message : topLevelMessage,
-    };
   }
 }

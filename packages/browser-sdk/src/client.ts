@@ -29,6 +29,7 @@ import { HttpClient } from "./httpClient";
 import { Logger, loggerWithPrefix, quietConsoleLogger } from "./logger";
 import { StorageAdapter } from "./storage";
 import { showToolbarToggle } from "./toolbar";
+import { logResponseError } from "./utils/responseError";
 
 const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
 const isNode = typeof document === "undefined"; // deno supports "window" but not "document" according to https://remix.run/docs/en/main/guides/gotchas
@@ -826,6 +827,14 @@ export class ReflagClient {
       payload.companyId = String(this.context.company?.id);
 
     const res = await this.httpClient.post({ path: "/event", body: payload });
+    if (!res.ok) {
+      await logResponseError({
+        logger: this.logger,
+        res,
+        message: "track request failed",
+        extra: { event: eventName },
+      });
+    }
     this.logger.debug(`sent event`, payload);
 
     this.hooks.trigger("track", {
