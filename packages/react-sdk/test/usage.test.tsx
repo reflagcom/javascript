@@ -228,6 +228,44 @@ describe("<ReflagProvider />", () => {
     });
   });
 
+  test("uses provided logger", async () => {
+    const logger = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+
+    const { result, unmount } = renderHook(() => useClient(), {
+      wrapper: ({ children }) => getProvider({ children, logger }),
+    });
+
+    await waitFor(() => {
+      expect(result.current.logger).toBe(logger);
+    });
+
+    unmount();
+  });
+
+  test("prefers logger over debug mode", async () => {
+    const logger = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+
+    const { result, unmount } = renderHook(() => useClient(), {
+      wrapper: ({ children }) => getProvider({ children, logger, debug: true }),
+    });
+
+    await waitFor(() => {
+      expect(result.current.logger).toBe(logger);
+    });
+
+    unmount();
+  });
+
   test("only calls init once with the same args", () => {
     const node = getProvider();
     const initialize = vi.spyOn(ReflagClient.prototype, "initialize");

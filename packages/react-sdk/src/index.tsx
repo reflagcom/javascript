@@ -14,6 +14,7 @@ import {
   CompanyContext,
   HookArgs,
   InitOptions,
+  Logger,
   RawFlag,
   ReflagClient,
   ReflagContext,
@@ -153,6 +154,13 @@ export type ReflagPropsBase = {
   initialLoading?: boolean;
 
   /**
+   * A custom logger to use for SDK logs.
+   * Use this for advanced control or filtering of SDK logs.
+   * If both `logger` and `debug` are provided, `logger` takes precedence.
+   */
+  logger?: Logger;
+
+  /**
    * Set to `true` to enable debug logging to the console,
    */
   debug?: boolean;
@@ -164,7 +172,7 @@ export type ReflagPropsBase = {
  */
 export type ReflagInitOptionsBase = Omit<
   InitOptions,
-  "user" | "company" | "other" | "otherContext" | "bootstrappedFlags"
+  "user" | "company" | "other" | "otherContext" | "bootstrappedFlags" | "logger"
 >;
 
 /**
@@ -178,20 +186,28 @@ const reflagClients = new Map<string, ReflagClient>();
  * Only creates a new ReflagClient is not already created or if it hook is run on the server.
  * @internal
  */
-function useReflagClient(initOptions: InitOptions, debug = false) {
+function useReflagClient(initOptions: InitOptions & { debug?: boolean }) {
+  const {
+    debug = false,
+    logger,
+    publishableKey,
+    sdkVersion,
+    ...clientOptions
+  } = initOptions;
   const isServer = typeof window === "undefined";
-  if (isServer || !reflagClients.has(initOptions.publishableKey)) {
+  if (isServer || !reflagClients.has(publishableKey)) {
     const client = new ReflagClient({
-      ...initOptions,
-      logger: debug ? console : undefined,
-      sdkVersion: initOptions.sdkVersion ?? SDK_VERSION,
+      ...clientOptions,
+      publishableKey,
+      logger: logger ?? (debug ? console : undefined),
+      sdkVersion: sdkVersion ?? SDK_VERSION,
     });
     if (!isServer) {
-      reflagClients.set(initOptions.publishableKey, client);
+      reflagClients.set(publishableKey, client);
     }
     return client;
   }
-  return reflagClients.get(initOptions.publishableKey)!;
+  return reflagClients.get(publishableKey)!;
 }
 
 type ProviderContextType = {
@@ -204,7 +220,10 @@ const ProviderContext = createContext<ProviderContextType | null>(null);
 /**
  * Props for the ReflagClientProvider.
  */
-export type ReflagClientProviderProps = Omit<ReflagPropsBase, "debug"> & {
+export type ReflagClientProviderProps = Omit<
+  ReflagPropsBase,
+  "debug" | "logger"
+> & {
   client: ReflagClient;
 };
 
@@ -282,6 +301,7 @@ export function ReflagProvider({
   otherContext,
   loadingComponent,
   initialLoading = true,
+  logger,
   debug,
   ...config
 }: ReflagProps) {
@@ -289,13 +309,12 @@ export function ReflagProvider({
     () => ({ user, company, other: otherContext, ...context }),
     [user, company, otherContext, context],
   );
-  const client = useReflagClient(
-    {
-      ...config,
-      ...resolvedContext,
-    },
+  const client = useReflagClient({
+    ...config,
+    ...resolvedContext,
     debug,
-  );
+    logger,
+  });
 
   // Initialize the client if it is not already initialized
   useEffect(() => {
@@ -340,17 +359,17 @@ export function ReflagBootstrappedProvider({
   children,
   loadingComponent,
   initialLoading = false,
+  logger,
   debug,
   ...config
 }: ReflagBootstrappedProps) {
-  const client = useReflagClient(
-    {
-      ...config,
-      ...flags.context,
-      bootstrappedFlags: flags.flags,
-    },
+  const client = useReflagClient({
+    ...config,
+    ...flags.context,
+    bootstrappedFlags: flags.flags,
     debug,
-  );
+    logger,
+  });
 
   // Initialize the client if it is not already initialized
   useEffect(() => {
