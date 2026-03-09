@@ -212,6 +212,8 @@ If your app should be able to start when Reflag is temporarily unreachable, you 
 The SDK remains network-first: it still tries Reflag during `initialize()`, but if the initial fetch fails it will try to load
 previously saved raw flag definitions from the provider instead.
 
+#### Built-in file provider
+
 ```typescript
 import {
   ReflagClient,
@@ -224,6 +226,71 @@ const client = new ReflagClient({
 });
 
 await client.initialize();
+```
+
+#### Built-in S3 provider
+
+The built-in S3 provider works out of the box with the AWS SDK's default credential and region resolution.
+
+```typescript
+import {
+  ReflagClient,
+  createS3FlagsFallbackProvider,
+} from "@reflag/node-sdk";
+
+const client = new ReflagClient({
+  secretKey: process.env.REFLAG_SECRET_KEY,
+  flagsFallbackProvider: createS3FlagsFallbackProvider({
+    bucket: process.env.REFLAG_SNAPSHOT_BUCKET!,
+  }),
+});
+
+await client.initialize();
+```
+
+#### Simple custom disk provider
+
+If you want your own file layout instead of the built-in provider, a custom provider can be very small:
+
+```typescript
+import { mkdir, readFile, rename, writeFile } from "fs/promises";
+import path from "path";
+
+import type {
+  FlagsFallbackProvider,
+  FlagsFallbackSnapshot,
+} from "@reflag/node-sdk";
+
+function getSnapshotPath(secretKeyHash: string) {
+  return path.join(
+    process.cwd(),
+    ".reflag",
+    `flags-fallback-${secretKeyHash.slice(0, 16)}.json`,
+  );
+}
+
+export const diskFallbackProvider: FlagsFallbackProvider = {
+  async load({ secretKeyHash }) {
+    try {
+      const raw = await readFile(getSnapshotPath(secretKeyHash), "utf-8");
+      return JSON.parse(raw) as FlagsFallbackSnapshot;
+    } catch (error: any) {
+      if (error?.code === "ENOENT") {
+        return undefined;
+      }
+      throw error;
+    }
+  },
+
+  async save({ secretKeyHash }, snapshot) {
+    const filePath = getSnapshotPath(secretKeyHash);
+    const tempPath = `${filePath}.tmp`;
+
+    await mkdir(path.dirname(filePath), { recursive: true });
+    await writeFile(tempPath, JSON.stringify(snapshot), "utf-8");
+    await rename(tempPath, filePath);
+  },
+};
 ```
 
 The provider receives successful live flag-definition fetches as best-effort saves, so future startups can recover from the latest known definitions.
