@@ -206,6 +206,31 @@ const flagDefs = await client.getFlagDefinitions();
 // }]
 ```
 
+### Fallback provider
+
+If your app should be able to start when Reflag is temporarily unreachable, you can configure a `flagsFallbackProvider`.
+The SDK remains network-first: it still tries Reflag during `initialize()`, but if the initial fetch fails it will try to load
+previously saved raw flag definitions from the provider instead.
+
+```typescript
+import {
+  ReflagClient,
+  createFileFlagsFallbackProvider,
+} from "@reflag/node-sdk";
+
+const client = new ReflagClient({
+  secretKey: process.env.REFLAG_SECRET_KEY,
+  flagsFallbackProvider: createFileFlagsFallbackProvider(),
+});
+
+await client.initialize();
+```
+
+The provider receives successful live flag-definition fetches as best-effort saves, so future startups can recover from the latest known definitions.
+
+> [!NOTE]
+> `fallbackFlags` is deprecated. Prefer `flagsFallbackProvider` for startup fallback and outage recovery.
+
 ## Bootstrapping client-side applications
 
 The `getFlagsForBootstrap()` method is designed for server-side rendering (SSR) scenarios where you need to pass flag data to client-side applications. This method returns raw flag data without wrapper functions, making it suitable for serialization and client-side hydration.
@@ -407,6 +432,7 @@ current working directory.
 | `offline`       | boolean                 | Operate in offline mode. Default: `false`, except in tests it will default to `true` based off of the `TEST` env. var.                                                                                                                              | REFLAG_OFFLINE                              |
 | `apiBaseUrl`    | string                  | The base API URL for the Reflag servers.                                                                                                                                                                                                            | REFLAG_API_BASE_URL                         |
 | `flagOverrides` | Record<string, boolean> | An object specifying flag overrides for testing or local development. See [examples/express/app.test.ts](https://github.com/reflagcom/javascript/tree/main/packages/node-sdk/examples/express/app.test.ts) for how to use `flagOverrides` in tests. | REFLAG_FLAGS_ENABLED, REFLAG_FLAGS_DISABLED |
+| `flagsFallbackProvider` | `FlagsFallbackProvider` | Optional provider used to load and save raw flag definitions for fallback startup when the initial live fetch fails. Available only through the constructor.                                                                                       | -                                           |
 | `configFile`    | string                  | Load this config file from disk. Default: `reflag.config.json`                                                                                                                                                                                      | REFLAG_CONFIG_FILE                          |
 
 > [!NOTE] > `REFLAG_FLAGS_ENABLED` and `REFLAG_FLAGS_DISABLED` are comma separated lists of flags which will be enabled or disabled respectively.

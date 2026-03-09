@@ -24,7 +24,12 @@ import {
 import fetchClient from "../src/fetch-http-client";
 import { subscribe as triggerOnExit } from "../src/flusher";
 import { newRateLimiter } from "../src/rate-limiter";
-import { ClientOptions, Context, FlagsAPIResponse } from "../src/types";
+import {
+  ClientOptions,
+  Context,
+  FlagsAPIResponse,
+  FlagsFallbackProvider,
+} from "../src/types";
 
 const BULK_ENDPOINT = "https://api.example.com/bulk";
 
@@ -338,6 +343,14 @@ describe("ReflagClient", () => {
       };
       expect(() => new ReflagClient(invalidOptions)).toThrow(
         "fallbackFlags must be an array or object",
+      );
+
+      invalidOptions = {
+        ...validOptions,
+        flagsFallbackProvider: {} as any,
+      };
+      expect(() => new ReflagClient(invalidOptions)).toThrow(
+        "flagsFallbackProvider must be an object with load/save functions",
       );
     });
 
@@ -942,6 +955,111 @@ describe("ReflagClient", () => {
         `https://api.example.com/features`,
         expectedHeaders,
         API_TIMEOUT_MS,
+      );
+    });
+
+    it("should load flag definitions from flagsFallbackProvider when live fetch fails", async () => {
+      const flagsFallbackProvider: FlagsFallbackProvider = {
+        load: vi.fn().mockResolvedValue({
+          version: 1,
+          savedAt: "2026-03-09T00:00:00.000Z",
+          apiBaseUrl: validOptions.apiBaseUrl!,
+          flags: flagDefinitions.features,
+        }),
+        save: vi.fn(),
+      };
+
+      httpClient.get.mockResolvedValue({ success: false });
+
+      const client = new ReflagClient({
+        ...validOptions,
+        flagsFallbackProvider,
+      });
+
+      await client.initialize();
+
+      expect(flagsFallbackProvider.load).toHaveBeenCalledWith(
+        expect.objectContaining({
+          secretKeyHash: expect.any(String),
+        }),
+      );
+
+      expect(
+        client.getFlag({ company, user, other: otherContext }, "flag1"),
+      ).toStrictEqual({
+        key: "flag1",
+        isEnabled: true,
+        config: {
+          key: "config-1",
+          payload: { something: "else" },
+        },
+        track: expect.any(Function),
+      });
+    });
+
+    it("should save fetched flag definitions to flagsFallbackProvider", async () => {
+      const flagsFallbackProvider: FlagsFallbackProvider = {
+        load: vi.fn(),
+        save: vi.fn().mockResolvedValue(undefined),
+      };
+
+      httpClient.get.mockResolvedValue({
+        ok: true,
+        status: 200,
+        body: {
+          success: true,
+          ...flagDefinitions,
+        },
+      });
+
+      const client = new ReflagClient({
+        ...validOptions,
+        flagsFallbackProvider,
+      });
+
+      await client.initialize();
+      await flushPromises();
+
+      expect(flagsFallbackProvider.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          secretKeyHash: expect.any(String),
+        }),
+        expect.objectContaining({
+          version: 1,
+          apiBaseUrl: validOptions.apiBaseUrl,
+          flags: flagDefinitions.features,
+          savedAt: expect.any(String),
+        }),
+      );
+    });
+
+    it("should not fail initialize when flagsFallbackProvider.save fails", async () => {
+      const error = new Error("save failed");
+      const flagsFallbackProvider: FlagsFallbackProvider = {
+        load: vi.fn(),
+        save: vi.fn().mockRejectedValue(error),
+      };
+
+      httpClient.get.mockResolvedValue({
+        ok: true,
+        status: 200,
+        body: {
+          success: true,
+          ...flagDefinitions,
+        },
+      });
+
+      const client = new ReflagClient({
+        ...validOptions,
+        flagsFallbackProvider,
+      });
+
+      await client.initialize();
+      await flushPromises();
+
+      expect(logger.error).toHaveBeenCalledWith(
+        "flagsFallbackProvider: failed to save flag definitions",
+        error,
       );
     });
   });

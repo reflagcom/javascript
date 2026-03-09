@@ -1,5 +1,9 @@
 export { BoundReflagClient, ReflagClient } from "./client";
 export { EdgeClient, EdgeClientOptions } from "./edgeClient";
+export {
+  createFileFlagsFallbackProvider,
+  createS3FlagsFallbackProvider,
+} from "./flagsFallbackProvider";
 export type {
   Attributes,
   BatchBufferOptions,
@@ -10,6 +14,7 @@ export type {
   ContextWithTracking,
   EmptyFlagRemoteConfig,
   Flag,
+  FlagAPIResponse,
   FlagConfigVariant,
   FlagDefinition,
   FlagOverride,
@@ -17,6 +22,10 @@ export type {
   FlagOverridesFn,
   FlagRemoteConfig,
   Flags,
+  FlagsAPIResponse,
+  FlagsFallbackProvider,
+  FlagsFallbackProviderContext,
+  FlagsFallbackSnapshot,
   FlagType,
   HttpClient,
   HttpClientResponse,
