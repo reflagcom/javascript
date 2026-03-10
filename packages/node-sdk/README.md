@@ -248,47 +248,39 @@ const client = new ReflagClient({
 await client.initialize();
 ```
 
-#### Simple custom disk provider
+#### Simple custom provider
 
-If you want your own file layout instead of the built-in provider, a custom provider can be very small:
+If you just want a fixed fallback snapshot, a custom provider can be very small:
 
 ```typescript
-import { mkdir, readFile, rename, writeFile } from "fs/promises";
-import path from "path";
-
 import type {
   FlagsFallbackProvider,
   FlagsFallbackSnapshot,
 } from "@reflag/node-sdk";
 
-function getSnapshotPath(secretKeyHash: string) {
-  return path.join(
-    process.cwd(),
-    ".reflag",
-    `flags-fallback-${secretKeyHash.slice(0, 16)}.json`,
-  );
-}
+const fallbackSnapshot: FlagsFallbackSnapshot = {
+  version: 1,
+  savedAt: "2026-03-10T00:00:00.000Z",
+  apiBaseUrl: "https://front.reflag.com/",
+  flags: [
+    {
+      key: "huddle",
+      description: "Fallback example",
+      targeting: {
+        version: 1,
+        rules: [],
+      },
+    },
+  ],
+};
 
-export const diskFallbackProvider: FlagsFallbackProvider = {
-  async load({ secretKeyHash }) {
-    try {
-      const raw = await readFile(getSnapshotPath(secretKeyHash), "utf-8");
-      return JSON.parse(raw) as FlagsFallbackSnapshot;
-    } catch (error: any) {
-      if (error?.code === "ENOENT") {
-        return undefined;
-      }
-      throw error;
-    }
+export const staticFallbackProvider: FlagsFallbackProvider = {
+  async load() {
+    return fallbackSnapshot;
   },
 
-  async save({ secretKeyHash }, snapshot) {
-    const filePath = getSnapshotPath(secretKeyHash);
-    const tempPath = `${filePath}.tmp`;
-
-    await mkdir(path.dirname(filePath), { recursive: true });
-    await writeFile(tempPath, JSON.stringify(snapshot), "utf-8");
-    await rename(tempPath, filePath);
+  async save() {
+    // no-op
   },
 };
 ```
