@@ -3,6 +3,7 @@ import {
   getAuthToken,
   rememberAuthToken,
 } from "./feedback/promptStorage";
+import { logResponseError } from "./utils/responseError";
 import { HttpClient } from "./httpClient";
 import { Logger, loggerWithPrefix } from "./logger";
 
@@ -57,7 +58,11 @@ export class AblySSEChannel {
       }
     }
 
-    this.logger.error("server did not release a token request", res);
+    await logResponseError({
+      logger: this.logger,
+      res,
+      message: "server did not release a token request",
+    });
     return;
   }
 
@@ -99,7 +104,11 @@ export class AblySSEChannel {
       return details.token;
     }
 
-    this.logger.error("server did not release a token");
+    await logResponseError({
+      logger: this.logger,
+      res,
+      message: "server did not release a token",
+    });
 
     return;
   }

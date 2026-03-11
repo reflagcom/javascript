@@ -29,7 +29,7 @@ async function getOpenedWidgetContainer(
   await page.goto("http://localhost:8001/test/e2e/empty.html");
 
   // Mock API calls
-  await page.route(`${API_HOST}/user`, async (route) => {
+  await page.route(`${API_HOST}/bulk`, async (route) => {
     await route.fulfill({ status: 200 });
   });
 
@@ -66,7 +66,7 @@ async function getGiveFeedbackPageContainer(
   await page.goto("http://localhost:8001/test/e2e/give-feedback-button.html");
 
   // Mock API calls
-  await page.route(`${API_HOST}/user`, async (route) => {
+  await page.route(`${API_HOST}/bulk`, async (route) => {
     await route.fulfill({ status: 200 });
   });
 
