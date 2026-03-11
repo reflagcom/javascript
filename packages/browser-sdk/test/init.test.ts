@@ -1,5 +1,13 @@
 import { DefaultBodyType, http, StrictRequest } from "msw";
-import { afterEach, beforeEach, describe, expect, test, vi, vitest } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+  vi,
+  vitest,
+} from "vitest";
 
 import { ReflagClient } from "../src";
 import { HttpClient } from "../src/httpClient";

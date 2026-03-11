@@ -40,7 +40,8 @@ function extractApiError(value: unknown): { code?: string; message?: string } {
 
   return {
     code: typeof error.code === "string" ? error.code : topLevelCode,
-    message: typeof error.message === "string" ? error.message : topLevelMessage,
+    message:
+      typeof error.message === "string" ? error.message : topLevelMessage,
   };
 }
 
@@ -100,15 +101,12 @@ export async function logResponseError(args: {
   const { logger, level = "error", res, message, extra } = args;
   const { errorDetails, errorSummary } = await parseResponseError(res);
 
-  logger[level](
-    errorSummary ? `${message}: ${errorSummary}` : message,
-    {
-      status: res.status,
-      statusText: res.statusText,
-      ...errorDetails,
-      ...extra,
-    },
-  );
+  logger[level](errorSummary ? `${message}: ${errorSummary}` : message, {
+    status: res.status,
+    statusText: res.statusText,
+    ...errorDetails,
+    ...extra,
+  });
 
   return { errorDetails, errorSummary };
 }

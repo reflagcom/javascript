@@ -126,8 +126,7 @@ describe("BulkQueue", () => {
     const body = JSON.stringify({
       success: false,
       error: {
-        message:
-          'Invalid publishableKey "pub_prod_vxuMahSZOnhzvAfiOnZ9rj"',
+        message: 'Invalid publishableKey "pub_prod_vxuMahSZOnhzvAfiOnZ9rj"',
         code: "INVALID_API_KEY",
       },
     });

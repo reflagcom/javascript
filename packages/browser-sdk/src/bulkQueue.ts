@@ -152,7 +152,8 @@ export class BulkQueue {
     this.maxSize = opts.maxSize ?? BULK_QUEUE_MAX_SIZE;
     this.retryBaseDelayMs =
       opts.retryBaseDelayMs ?? BULK_QUEUE_RETRY_BASE_DELAY_MS;
-    this.retryMaxDelayMs = opts.retryMaxDelayMs ?? BULK_QUEUE_RETRY_MAX_DELAY_MS;
+    this.retryMaxDelayMs =
+      opts.retryMaxDelayMs ?? BULK_QUEUE_RETRY_MAX_DELAY_MS;
     this.storageKey = opts.storageKey ?? BULK_QUEUE_STORAGE_KEY;
     this.storage = getSessionStorage();
     this.logger = opts.logger;
@@ -385,7 +386,10 @@ export class BulkQueue {
     this.droppedSinceLastError += removed;
 
     const now = Date.now();
-    if (!this.lastDropErrorAt || now - this.lastDropErrorAt >= DROP_ERROR_THROTTLE_MS) {
+    if (
+      !this.lastDropErrorAt ||
+      now - this.lastDropErrorAt >= DROP_ERROR_THROTTLE_MS
+    ) {
       this.logger?.error("bulk queue dropped events due to max size", {
         droppedEvents: this.droppedSinceLastError,
         totalDroppedEvents: this.totalDroppedEvents,

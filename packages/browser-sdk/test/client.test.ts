@@ -201,8 +201,12 @@ describe("ReflagClient", () => {
       const bulkQueue = client["bulkQueue"];
       expect(bulkQueue).toBeDefined();
 
-      vi.spyOn(bulkQueue!, "flush").mockResolvedValueOnce().mockResolvedValueOnce();
-      vi.spyOn(bulkQueue!, "size").mockResolvedValueOnce(1).mockResolvedValueOnce(1);
+      vi.spyOn(bulkQueue!, "flush")
+        .mockResolvedValueOnce()
+        .mockResolvedValueOnce();
+      vi.spyOn(bulkQueue!, "size")
+        .mockResolvedValueOnce(1)
+        .mockResolvedValueOnce(1);
 
       await expect(client.stop()).rejects.toThrow(
         "failed to flush all queued bulk events during stop (1 remaining)",
