@@ -3,8 +3,8 @@ import { HttpClient } from "../httpClient";
 import { Logger } from "../logger";
 import { AblySSEChannel, openAblySSEChannel } from "../sse";
 import { Position } from "../ui/types";
-import { logResponseError } from "../utils/responseError";
 import { logLifecycleAwareNetworkError } from "../utils/pageLifecycle";
+import { logResponseError } from "../utils/responseError";
 
 import {
   FeedbackSubmission,

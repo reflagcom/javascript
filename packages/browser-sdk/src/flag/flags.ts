@@ -9,8 +9,8 @@ import RateLimiter from "../rateLimiter";
 import { getDefaultStorageAdapter, StorageAdapter } from "../storage";
 import { createAbortController } from "../utils/abortController";
 import { createEventTarget } from "../utils/eventTarget";
-import { logResponseError, parseResponseError } from "../utils/responseError";
 import { logLifecycleAwareNetworkError } from "../utils/pageLifecycle";
+import { logResponseError, parseResponseError } from "../utils/responseError";
 
 import { FlagCache, isObject, parseAPIFlagsResponse } from "./flagCache";
 

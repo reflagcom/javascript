@@ -200,7 +200,9 @@ describe("FlagsClient", () => {
   test("downgrades page teardown fetch failures to debug logs", async () => {
     const { newFlagsClient, httpClient } = flagsClientFactory();
 
-    vi.mocked(httpClient.get).mockRejectedValue(new TypeError("Failed to fetch"));
+    vi.mocked(httpClient.get).mockRejectedValue(
+      new TypeError("Failed to fetch"),
+    );
     window.dispatchEvent(new Event("pagehide"));
 
     const flagsClient = newFlagsClient();

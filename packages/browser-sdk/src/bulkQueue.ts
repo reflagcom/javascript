@@ -6,6 +6,7 @@ import {
   BULK_QUEUE_RETRY_MAX_DELAY_MS,
 } from "./config";
 import { Logger } from "./logger";
+import { isPageLifecycleAbortError } from "./utils/pageLifecycle";
 
 const BULK_QUEUE_STORAGE_KEY = "__reflag_bulk_queue_v1";
 const WARN_AFTER_CONSECUTIVE_FAILURES = 10;
@@ -290,11 +291,19 @@ export class BulkQueue {
       this.retryCount += 1;
       const retryInMs = this.getRetryDelay();
       nextDelayMs = retryInMs;
-      this.logger?.info("bulk retry scheduled", {
+      const logDetails = {
         retryInMs,
         queueSize: this.queue.length + this.getInFlightBatchSize(),
         consecutiveFailures: this.consecutiveFailures,
-      });
+      };
+      if (isPageLifecycleAbortError(error)) {
+        this.logger?.debug("bulk retry scheduled (aborted during page teardown)", {
+          ...logDetails,
+          error,
+        });
+      } else {
+        this.logger?.info("bulk retry scheduled", logDetails);
+      }
 
       const outageMs = now - this.firstFailureAt;
       const shouldWarn =
@@ -302,7 +311,7 @@ export class BulkQueue {
         outageMs >= WARN_AFTER_FAILURE_MS;
       const canWarnNow =
         this.lastWarnAt === null || now - this.lastWarnAt >= WARN_THROTTLE_MS;
-      if (shouldWarn && canWarnNow) {
+      if (shouldWarn && canWarnNow && !isPageLifecycleAbortError(error)) {
         this.logger?.warn("bulk delivery degraded", {
           consecutiveFailures: this.consecutiveFailures,
           outageMs,
