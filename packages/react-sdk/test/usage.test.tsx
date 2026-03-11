@@ -2,6 +2,7 @@ import React from "react";
 import { act, render, renderHook, waitFor } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
+import { renderToString } from "react-dom/server";
 import {
   afterAll,
   afterEach,
@@ -1134,6 +1135,35 @@ describe("useIsLoading", () => {
 });
 
 describe("useOnEvent", () => {
+  test("does not trigger the SSR useLayoutEffect warning when used inside a provider", () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const client = new ReflagClient({
+      publishableKey: "test-key-ssr",
+      user,
+      company,
+      other,
+    });
+
+    function EventListener() {
+      useOnEvent("flagsUpdated", vi.fn());
+      return null;
+    }
+
+    renderToString(
+      <ReflagClientProvider client={client}>
+        <EventListener />
+      </ReflagClientProvider>,
+    );
+
+    expect(
+      errorSpy.mock.calls.some(([firstArg]) =>
+        String(firstArg).includes("useLayoutEffect"),
+      ),
+    ).toBe(false);
+
+    errorSpy.mockRestore();
+  });
+
   test("subscribes to flagsUpdated event", async () => {
     const eventHandler = vi.fn();
     const client = new ReflagClient({
