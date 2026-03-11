@@ -141,6 +141,75 @@ describe("FlagsClient", () => {
     expect(timeoutMs).toEqual(5000);
   });
 
+  test("only applies flags from the latest context update", async () => {
+    const { newFlagsClient } = flagsClientFactory();
+    const flagsClient = newFlagsClient();
+
+    let resolveFirstFetch:
+      | ((flags: Record<string, RawFlag>) => void)
+      | undefined;
+    let resolveSecondFetch:
+      | ((flags: Record<string, RawFlag>) => void)
+      | undefined;
+    const firstFetch = new Promise<Record<string, RawFlag>>((resolve) => {
+      resolveFirstFetch = resolve;
+    });
+    const secondFetch = new Promise<Record<string, RawFlag>>((resolve) => {
+      resolveSecondFetch = resolve;
+    });
+
+    vi.spyOn(flagsClient as any, "maybeFetchFlags")
+      .mockImplementationOnce(async () => firstFetch)
+      .mockImplementationOnce(async () => secondFetch);
+
+    const firstUpdate = flagsClient.setContext({
+      user: { id: "user-1" },
+      company: { id: "company-1" },
+      other: { workspaceId: "workspace-1" },
+    });
+    const secondUpdate = flagsClient.setContext({
+      user: { id: "user-2" },
+      company: { id: "company-2" },
+      other: { workspaceId: "workspace-2" },
+    });
+
+    resolveSecondFetch?.({
+      latestFlag: {
+        key: "latestFlag",
+        isEnabled: true,
+        targetingVersion: 2,
+      },
+    });
+
+    await expect(secondUpdate).resolves.toBe(true);
+    expect(flagsClient.getFlags()).toEqual({
+      latestFlag: {
+        key: "latestFlag",
+        isEnabled: true,
+        targetingVersion: 2,
+        isEnabledOverride: null,
+      },
+    });
+
+    resolveFirstFetch?.({
+      staleFlag: {
+        key: "staleFlag",
+        isEnabled: false,
+        targetingVersion: 1,
+      },
+    });
+
+    await expect(firstUpdate).resolves.toBe(false);
+    expect(flagsClient.getFlags()).toEqual({
+      latestFlag: {
+        key: "latestFlag",
+        isEnabled: true,
+        targetingVersion: 2,
+        isEnabledOverride: null,
+      },
+    });
+  });
+
   test("return fallback flags on failure (string list)", async () => {
     const { newFlagsClient, httpClient } = flagsClientFactory();
 

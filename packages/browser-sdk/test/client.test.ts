@@ -57,6 +57,20 @@ describe("ReflagClient", () => {
       );
       expect(flagClientSetContext).toHaveBeenCalledWith(client["context"]);
     });
+
+    it("does not warn about a missing company when updating a user-only context", async () => {
+      client = new ReflagClient({
+        publishableKey: "test-key-user-only",
+        user: { id: "user1" },
+      });
+      const warnSpy = vi.spyOn(client.logger, "warn");
+
+      await client.updateUser({ name: "Updated User" });
+
+      expect(warnSpy).not.toHaveBeenCalledWith(
+        "No company Id provided in context, company will be ignored",
+      );
+    });
   });
 
   describe("updateCompany", () => {
@@ -193,6 +207,101 @@ describe("ReflagClient", () => {
       expect(companyHook).not.toHaveBeenCalled();
       expect(checkHook).not.toHaveBeenCalled();
       expect(flagsUpdated).not.toHaveBeenCalled();
+    });
+
+    it("sets state to initializing while refetching flags after initialization", async () => {
+      await client.initialize();
+
+      let resolveFetch: (() => void) | undefined;
+      const setContextPromise = new Promise<boolean>((resolve) => {
+        resolveFetch = () => resolve(true);
+      });
+      const setContext = vi
+        .spyOn(FlagsClient.prototype, "setContext")
+        .mockImplementation(async () => {
+          return setContextPromise;
+        });
+
+      const stateUpdated = vi.fn();
+      client.on("stateUpdated", stateUpdated);
+
+      const updatePromise = client.updateOtherContext({ workspaceId: "ws-1" });
+
+      expect(client.getState()).toBe("initializing");
+      expect(stateUpdated).toHaveBeenCalledWith("initializing");
+      expect(setContext).toHaveBeenCalledWith(client["context"]);
+
+      resolveFetch?.();
+      await updatePromise;
+
+      expect(client.getState()).toBe("initialized");
+      expect(stateUpdated).toHaveBeenLastCalledWith("initialized");
+    });
+
+    it("keeps loading tied to the latest context update", async () => {
+      await client.initialize();
+
+      let resolveFirstFetch: (() => void) | undefined;
+      let resolveSecondFetch: (() => void) | undefined;
+      const firstFetch = new Promise<boolean>((resolve) => {
+        resolveFirstFetch = () => resolve(false);
+      });
+      const secondFetch = new Promise<boolean>((resolve) => {
+        resolveSecondFetch = () => resolve(true);
+      });
+
+      vi.spyOn(FlagsClient.prototype, "setContext")
+        .mockImplementationOnce(async () => firstFetch)
+        .mockImplementationOnce(async () => secondFetch);
+
+      const firstUpdate = client.updateOtherContext({ workspaceId: "ws-1" });
+      const secondUpdate = client.updateOtherContext({ workspaceId: "ws-2" });
+
+      expect(client.getState()).toBe("initializing");
+
+      resolveSecondFetch?.();
+      await secondUpdate;
+
+      expect(client.getState()).toBe("initialized");
+
+      resolveFirstFetch?.();
+      await firstUpdate;
+
+      expect(client.getState()).toBe("initialized");
+    });
+  });
+
+  describe("setContext warnings", () => {
+    it("does not warn about missing ids when updating anonymous other context", async () => {
+      client = new ReflagClient({
+        publishableKey: "test-key-anon",
+      });
+      const warnSpy = vi.spyOn(client.logger, "warn");
+
+      await client.updateOtherContext({ workspaceId: "ws-1" });
+
+      expect(warnSpy).not.toHaveBeenCalledWith(
+        "No user Id provided in context, user will be ignored",
+      );
+      expect(warnSpy).not.toHaveBeenCalledWith(
+        "No company Id provided in context, company will be ignored",
+      );
+    });
+
+    it("still warns when setContext replaces context without user or company ids", async () => {
+      client = new ReflagClient({
+        publishableKey: "test-key-set-context",
+      });
+      const warnSpy = vi.spyOn(client.logger, "warn");
+
+      await client.setContext({ other: { workspaceId: "ws-1" } });
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        "No user Id provided in context, user will be ignored",
+      );
+      expect(warnSpy).toHaveBeenCalledWith(
+        "No company Id provided in context, company will be ignored",
+      );
     });
   });
 

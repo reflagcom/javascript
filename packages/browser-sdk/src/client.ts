@@ -676,24 +676,20 @@ export class ReflagClient {
    * @param user
    */
   async updateUser(user: { [key: string]: string | number | undefined }) {
-    const userIdChanged = user.id && user.id !== this.context.user?.id;
     const newUserContext = {
       ...this.context.user,
       ...user,
       id: user.id ?? this.context.user?.id,
     };
 
-    // Nothing has changed, skipping update
-    if (deepEqual(this.context.user, newUserContext)) return;
-    this.context.user = newUserContext;
-    void this.user();
-
-    // Update the feedback user if the user ID has changed
-    if (userIdChanged) {
-      void this.updateAutoFeedbackUser(String(user.id));
-    }
-
-    await this.flagsClient.setContext(this.context);
+    return this.applyContext(
+      {
+        user: newUserContext,
+        company: this.context.company,
+        other: this.context.other,
+      },
+      { warnOnMissingIds: false },
+    );
   }
 
   /**
@@ -710,12 +706,14 @@ export class ReflagClient {
       id: company.id ?? this.context.company?.id,
     };
 
-    // Nothing has changed, skipping update
-    if (deepEqual(this.context.company, newCompanyContext)) return;
-    this.context.company = newCompanyContext;
-    void this.company();
-
-    await this.flagsClient.setContext(this.context);
+    return this.applyContext(
+      {
+        user: this.context.user,
+        company: newCompanyContext,
+        other: this.context.other,
+      },
+      { warnOnMissingIds: false },
+    );
   }
 
   /**
@@ -733,11 +731,14 @@ export class ReflagClient {
       ...otherContext,
     };
 
-    // Nothing has changed, skipping update
-    if (deepEqual(this.context.other, newOtherContext)) return;
-    this.context.other = newOtherContext;
-
-    await this.flagsClient.setContext(this.context);
+    return this.applyContext(
+      {
+        user: this.context.user,
+        company: this.context.company,
+        other: newOtherContext,
+      },
+      { warnOnMissingIds: false },
+    );
   }
 
   /**
@@ -746,9 +747,15 @@ export class ReflagClient {
    *
    * @param context The context to update.
    */
-  async setContext({ otherContext, ...context }: ReflagDeprecatedContext) {
-    const userIdChanged =
-      context.user?.id && context.user.id !== this.context.user?.id;
+  async setContext(context: ReflagDeprecatedContext) {
+    return this.applyContext(context, { warnOnMissingIds: true });
+  }
+
+  private async applyContext(
+    { otherContext, ...context }: ReflagDeprecatedContext,
+    { warnOnMissingIds }: { warnOnMissingIds: boolean },
+  ) {
+    const previousContext = this.context;
 
     // Create a new context object making sure to clone the user and company objects
     const newContext = {
@@ -757,32 +764,49 @@ export class ReflagClient {
       other: { ...otherContext, ...context.other },
     };
 
-    if (!context.user?.id) {
+    if (warnOnMissingIds && !context.user?.id) {
       this.logger.warn("No user Id provided in context, user will be ignored");
     }
-    if (!context.company?.id) {
+    if (warnOnMissingIds && !context.company?.id) {
       this.logger.warn(
         "No company Id provided in context, company will be ignored",
       );
     }
 
     // Nothing has changed, skipping update
-    if (deepEqual(this.context, newContext)) return;
+    if (deepEqual(previousContext, newContext)) return;
+
+    const userChanged = !deepEqual(previousContext.user, newContext.user);
+    const companyChanged = !deepEqual(
+      previousContext.company,
+      newContext.company,
+    );
+    const userIdChanged =
+      !!newContext.user?.id && newContext.user.id !== previousContext.user?.id;
+
     this.context = newContext;
 
-    if (context.company) {
+    if (companyChanged) {
       void this.company();
     }
 
-    if (context.user) {
+    if (userChanged) {
       void this.user();
       // Update the automatic feedback user if the user ID has changed
       if (userIdChanged) {
-        void this.updateAutoFeedbackUser(String(context.user.id));
+        void this.updateAutoFeedbackUser(String(newContext.user!.id));
       }
     }
 
-    await this.flagsClient.setContext(this.context);
+    const shouldTrackLoading = this.state === "initialized";
+    if (shouldTrackLoading) {
+      this.setState("initializing");
+    }
+
+    const didApply = await this.flagsClient.setContext(this.context);
+    if (didApply && this.state === "initializing") {
+      this.setState("initialized");
+    }
   }
 
   /**

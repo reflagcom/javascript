@@ -5,6 +5,7 @@ import React, {
   ReactNode,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useState,
 } from "react";
@@ -26,6 +27,9 @@ import {
 } from "@reflag/browser-sdk";
 
 import { version } from "../package.json";
+
+const useIsomorphicLayoutEffect =
+  typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 export type {
   CheckEvent,
@@ -667,7 +671,7 @@ export function useOnEvent<THookType extends keyof HookArgs>(
       `ReflagProvider is missing and no client was provided. Please ensure your component is wrapped with a ReflagProvider.`,
     );
   }
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     return resolvedClient.on(event, handler);
   }, [resolvedClient, event, handler]);
 }

@@ -209,6 +209,7 @@ export class FlagsClient {
   private flagOverrides: FlagOverrides = {};
   private flags: RawFlags = {};
   private fallbackFlags: FallbackFlags = {};
+  private contextFetchVersion = 0;
   private storage: StorageAdapter;
   private refreshEvents: number[] = [];
   private enqueueBulkEvent?: (event: BulkEvent) => Promise<void>;
@@ -297,7 +298,15 @@ export class FlagsClient {
 
   async setContext(context: ReflagContext) {
     this.context = context;
-    this.setFetchedFlags((await this.maybeFetchFlags()) || {});
+    const requestVersion = ++this.contextFetchVersion;
+    const fetchedFlags = (await this.maybeFetchFlags()) || {};
+
+    if (requestVersion !== this.contextFetchVersion) {
+      return false;
+    }
+
+    this.setFetchedFlags(fetchedFlags);
+    return true;
   }
 
   updateFlags(triggerEvent = true) {
