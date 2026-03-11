@@ -1,8 +1,8 @@
 import React from "react";
+import { renderToString } from "react-dom/server";
 import { act, render, renderHook, waitFor } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
-import { renderToString } from "react-dom/server";
 import {
   afterAll,
   afterEach,
@@ -1096,7 +1096,7 @@ describe("useIsLoading", () => {
       expect(getByTestId("loading-state").textContent).toBe("false");
     });
 
-    await act(async () => {});
+    await act(async () => undefined);
 
     act(() => {
       (client as any).hooks.trigger("stateUpdated", "initializing");
@@ -1136,7 +1136,7 @@ describe("useIsLoading", () => {
 
 describe("useOnEvent", () => {
   test("does not trigger the SSR useLayoutEffect warning when used inside a provider", () => {
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const client = new ReflagClient({
       publishableKey: "test-key-ssr",
       user,
