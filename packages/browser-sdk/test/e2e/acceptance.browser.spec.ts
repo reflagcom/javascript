@@ -121,3 +121,80 @@ test("Acceptance", async ({ page }) => {
   expect(successfulRequests).toContain("EVENT");
   expect(successfulRequests).toContain("FEEDBACK");
 });
+
+test("does not log startup fetch aborts as errors during fast full navigation", async ({
+  page,
+}) => {
+  await page.goto("http://localhost:8001/test/e2e/empty.html");
+
+  const consoleErrors: string[] = [];
+  page.on("console", (msg) => {
+    if (msg.type() === "error") {
+      consoleErrors.push(msg.text());
+    }
+  });
+
+  await page.route(`${API_BASE_URL}/features/evaluated*`, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+    try {
+      await route.fulfill({
+        status: 200,
+        body: JSON.stringify({
+          success: true,
+          features: {},
+        }),
+      });
+    } catch {
+      // The original document may have been torn down before the response.
+    }
+  });
+
+  await page.route(`${API_BASE_URL}/feedback/prompting-init`, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+    try {
+      await route.fulfill({
+        status: 200,
+        body: JSON.stringify({ success: false }),
+      });
+    } catch {
+      // The original document may have been torn down before the response.
+    }
+  });
+
+  await page.route(`${API_BASE_URL}/bulk`, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+    try {
+      await route.fulfill({
+        status: 200,
+        body: JSON.stringify({ success: true }),
+      });
+    } catch {
+      // The original document may have been torn down before the response.
+    }
+  });
+
+  await page.evaluate(`
+    ;(async () => {
+      const { ReflagClient } = await import("/dist/reflag-browser-sdk.mjs");
+      const reflagClient = new ReflagClient({
+        publishableKey: "${KEY}",
+        user: { id: "foo" },
+        company: { id: "bar" },
+      });
+      void reflagClient.initialize();
+    })()
+  `);
+
+  await page.goto("http://localhost:8001/test/e2e/give-feedback-button.html");
+  await page.waitForTimeout(250);
+
+  expect(consoleErrors).not.toContainEqual(
+    expect.stringContaining("error fetching flags"),
+  );
+  expect(consoleErrors).not.toContainEqual(
+    expect.stringContaining("error initializing automatic feedback"),
+  );
+  expect(consoleErrors).not.toContainEqual(
+    expect.stringContaining("bulk delivery degraded"),
+  );
+});

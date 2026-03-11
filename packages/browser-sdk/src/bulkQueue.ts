@@ -1,3 +1,4 @@
+import { isPageLifecycleAbortError } from "./utils/pageLifecycle";
 import { logResponseError } from "./utils/responseError";
 import {
   BULK_QUEUE_FLUSH_DELAY_MS,
@@ -6,7 +7,6 @@ import {
   BULK_QUEUE_RETRY_MAX_DELAY_MS,
 } from "./config";
 import { Logger } from "./logger";
-import { isPageLifecycleAbortError } from "./utils/pageLifecycle";
 
 const BULK_QUEUE_STORAGE_KEY = "__reflag_bulk_queue_v1";
 const WARN_AFTER_CONSECUTIVE_FAILURES = 10;
