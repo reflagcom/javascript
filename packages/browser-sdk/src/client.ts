@@ -16,6 +16,7 @@ import {
   RawFlags,
 } from "./flag/flags";
 import { ToolbarPosition } from "./ui/types";
+import { logResponseError } from "./utils/responseError";
 import { BulkEvent, BulkQueue } from "./bulkQueue";
 import {
   API_BASE_URL,
@@ -29,7 +30,6 @@ import { HttpClient } from "./httpClient";
 import { Logger, loggerWithPrefix, quietConsoleLogger } from "./logger";
 import { StorageAdapter } from "./storage";
 import { showToolbarToggle } from "./toolbar";
-import { logResponseError } from "./utils/responseError";
 
 const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
 const isNode = typeof document === "undefined"; // deno supports "window" but not "document" according to https://remix.run/docs/en/main/guides/gotchas

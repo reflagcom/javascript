@@ -3,9 +3,9 @@ import {
   getAuthToken,
   rememberAuthToken,
 } from "./feedback/promptStorage";
+import { logResponseError } from "./utils/responseError";
 import { HttpClient } from "./httpClient";
 import { Logger, loggerWithPrefix } from "./logger";
-import { logResponseError } from "./utils/responseError";
 
 interface AblyTokenDetails {
   token: string;
