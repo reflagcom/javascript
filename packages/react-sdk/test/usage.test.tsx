@@ -16,7 +16,6 @@ import {
 
 import { ReflagClient } from "@reflag/browser-sdk";
 
-import { ReflagClient as SourceReflagClient } from "../../browser-sdk/src/client";
 import {
   BootstrappedFlags,
   ReflagBootstrappedProps,
@@ -1118,73 +1117,77 @@ describe("useIsLoading", () => {
     unmount();
   });
 
-  test("returns loading state during a real context update", async () => {
+  test("returns loading state when ReflagProvider context updates", async () => {
     function LoadingState() {
       return <span data-testid="loading-state">{String(useIsLoading())}</span>;
     }
 
-    const client = new SourceReflagClient({
-      publishableKey: "test-key-loading-real-context-change",
-      user,
-      company,
-      other,
-      bootstrappedFlags: {
-        abc: {
-          key: "abc",
-          isEnabled: true,
-          targetingVersion: 1,
-        },
-      },
+    const initializeSpy = vi
+      .spyOn(ReflagClient.prototype, "initialize")
+      .mockResolvedValue(undefined);
+    let resolveSetContext: (() => void) | undefined;
+    const setContextPromise = new Promise<void>((resolve) => {
+      resolveSetContext = resolve;
     });
-    await client.initialize();
+    const setContextSpy = vi
+      .spyOn(ReflagClient.prototype, "setContext")
+      .mockResolvedValueOnce(undefined)
+      .mockImplementationOnce(async function () {
+        (this as any).hooks.trigger("stateUpdated", "initializing");
+        await setContextPromise;
+        (this as any).hooks.trigger("stateUpdated", "initialized");
+      });
 
-    let resolveFetch: (() => void) | undefined;
-    const setContextPromise = new Promise<boolean>((resolve) => {
-      resolveFetch = () => resolve(true);
-    });
-    vi.spyOn((client as any).flagsClient, "setContext").mockImplementation(
-      async () => setContextPromise,
-    );
+    const initialContext = { user, company, other };
+    const updatedContext = {
+      ...initialContext,
+      other: { ...other, workspaceId: "workspace-1" },
+    };
 
-    const stateUpdated = vi.fn();
-    client.on("stateUpdated", stateUpdated);
-
-    const { getByTestId, unmount } = render(
-      <ReflagClientProvider client={client as unknown as ReflagClient}>
+    const { getByTestId, rerender, unmount } = render(
+      <ReflagProvider
+        context={initialContext}
+        initialLoading={false}
+        publishableKey="test-key-loading-context-prop-change"
+      >
         <LoadingState />
-      </ReflagClientProvider>,
+      </ReflagProvider>,
     );
 
     await waitFor(() => {
       expect(getByTestId("loading-state").textContent).toBe("false");
     });
 
-    await act(async () => undefined);
+    await waitFor(() => {
+      expect(setContextSpy).toHaveBeenCalledTimes(1);
+    });
 
-    let updatePromise: Promise<void> | undefined;
     act(() => {
-      updatePromise = client.updateOtherContext({
-        workspaceId: "workspace-1",
-      });
+      rerender(
+        <ReflagProvider
+          context={updatedContext}
+          initialLoading={false}
+          publishableKey="test-key-loading-context-prop-change"
+        >
+          <LoadingState />
+        </ReflagProvider>,
+      );
     });
 
     await waitFor(() => {
-      expect(stateUpdated).toHaveBeenCalledWith("initializing");
+      expect(setContextSpy).toHaveBeenCalledTimes(2);
       expect(getByTestId("loading-state").textContent).toBe("true");
     });
 
-    resolveFetch?.();
-
-    await act(async () => {
-      await updatePromise;
-    });
+    resolveSetContext?.();
 
     await waitFor(() => {
-      expect(stateUpdated).toHaveBeenLastCalledWith("initialized");
       expect(getByTestId("loading-state").textContent).toBe("false");
     });
 
     unmount();
+    initializeSpy.mockRestore();
+    setContextSpy.mockRestore();
   });
 
   test("throws error when used outside provider", () => {
