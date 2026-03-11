@@ -297,10 +297,13 @@ export class BulkQueue {
         consecutiveFailures: this.consecutiveFailures,
       };
       if (isPageLifecycleAbortError(error)) {
-        this.logger?.debug("bulk retry scheduled (aborted during page teardown)", {
-          ...logDetails,
-          error,
-        });
+        this.logger?.debug(
+          "bulk retry scheduled (aborted during page teardown)",
+          {
+            ...logDetails,
+            error,
+          },
+        );
       } else {
         this.logger?.info("bulk retry scheduled", logDetails);
       }
