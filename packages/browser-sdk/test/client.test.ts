@@ -152,6 +152,35 @@ describe("ReflagClient", () => {
       expect(checkHook).not.toHaveBeenCalled();
       expect(flagsUpdated).not.toHaveBeenCalled();
     });
+
+    it("sets state to initializing while refetching flags after initialization", async () => {
+      await client.initialize();
+
+      let resolveFetch: (() => void) | undefined;
+      const setContextPromise = new Promise<void>((resolve) => {
+        resolveFetch = resolve;
+      });
+      const setContext = vi
+        .spyOn(FlagsClient.prototype, "setContext")
+        .mockImplementation(async () => {
+          await setContextPromise;
+        });
+
+      const stateUpdated = vi.fn();
+      client.on("stateUpdated", stateUpdated);
+
+      const updatePromise = client.updateOtherContext({ workspaceId: "ws-1" });
+
+      expect(client.getState()).toBe("initializing");
+      expect(stateUpdated).toHaveBeenCalledWith("initializing");
+      expect(setContext).toHaveBeenCalledWith(client["context"]);
+
+      resolveFetch?.();
+      await updatePromise;
+
+      expect(client.getState()).toBe("initialized");
+      expect(stateUpdated).toHaveBeenLastCalledWith("initialized");
+    });
   });
 
   describe("offline mode", () => {

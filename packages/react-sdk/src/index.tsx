@@ -5,6 +5,7 @@ import React, {
   ReactNode,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useState,
 } from "react";
@@ -667,7 +668,7 @@ export function useOnEvent<THookType extends keyof HookArgs>(
       `ReflagProvider is missing and no client was provided. Please ensure your component is wrapped with a ReflagProvider.`,
     );
   }
-  useEffect(() => {
+  useLayoutEffect(() => {
     return resolvedClient.on(event, handler);
   }, [resolvedClient, event, handler]);
 }

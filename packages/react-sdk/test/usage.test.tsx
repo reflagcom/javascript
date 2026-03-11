@@ -1,5 +1,5 @@
 import React from "react";
-import { render, renderHook, waitFor } from "@testing-library/react";
+import { act, render, renderHook, waitFor } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
 import {
@@ -1060,6 +1060,57 @@ describe("useIsLoading", () => {
     // Wait for initialization to complete
     await waitFor(() => {
       expect(result.current).toBe(false);
+    });
+
+    unmount();
+  });
+
+  test("returns loading state while refetching flags after a context change", async () => {
+    function LoadingState() {
+      return <span data-testid="loading-state">{String(useIsLoading())}</span>;
+    }
+
+    const client = new ReflagClient({
+      publishableKey: "test-key-loading-context-change",
+      user,
+      company,
+      other,
+      bootstrappedFlags: {
+        abc: {
+          key: "abc",
+          isEnabled: true,
+          targetingVersion: 1,
+        },
+      },
+    });
+    await client.initialize();
+
+    const { getByTestId, unmount } = render(
+      <ReflagClientProvider client={client}>
+        <LoadingState />
+      </ReflagClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(getByTestId("loading-state").textContent).toBe("false");
+    });
+
+    await act(async () => {});
+
+    act(() => {
+      (client as any).hooks.trigger("stateUpdated", "initializing");
+    });
+
+    await waitFor(() => {
+      expect(getByTestId("loading-state").textContent).toBe("true");
+    });
+
+    act(() => {
+      (client as any).hooks.trigger("stateUpdated", "initialized");
+    });
+
+    await waitFor(() => {
+      expect(getByTestId("loading-state").textContent).toBe("false");
     });
 
     unmount();

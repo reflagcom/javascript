@@ -386,6 +386,7 @@ function shouldShowToolbar(opts: InitOptions) {
  */
 export class ReflagClient {
   private state: State = "idle";
+  private refetchingFlagsCount = 0;
   private readonly publishableKey: string;
   private context: ReflagContext;
   private config: Config;
@@ -623,7 +624,9 @@ export class ReflagClient {
       void this.updateAutoFeedbackUser(String(user.id));
     }
 
-    await this.flagsClient.setContext(this.context);
+    await this.withFlagsRefetchLoading(() =>
+      this.flagsClient.setContext(this.context),
+    );
   }
 
   /**
@@ -645,7 +648,9 @@ export class ReflagClient {
     this.context.company = newCompanyContext;
     void this.company();
 
-    await this.flagsClient.setContext(this.context);
+    await this.withFlagsRefetchLoading(() =>
+      this.flagsClient.setContext(this.context),
+    );
   }
 
   /**
@@ -667,7 +672,9 @@ export class ReflagClient {
     if (deepEqual(this.context.other, newOtherContext)) return;
     this.context.other = newOtherContext;
 
-    await this.flagsClient.setContext(this.context);
+    await this.withFlagsRefetchLoading(() =>
+      this.flagsClient.setContext(this.context),
+    );
   }
 
   /**
@@ -712,7 +719,9 @@ export class ReflagClient {
       }
     }
 
-    await this.flagsClient.setContext(this.context);
+    await this.withFlagsRefetchLoading(() =>
+      this.flagsClient.setContext(this.context),
+    );
   }
 
   /**
@@ -979,6 +988,30 @@ export class ReflagClient {
   private setState(state: State) {
     this.state = state;
     this.hooks.trigger("stateUpdated", state);
+  }
+
+  private async withFlagsRefetchLoading<T>(cb: () => Promise<T>) {
+    const shouldUpdateLoadingState = this.state === "initialized";
+
+    if (shouldUpdateLoadingState) {
+      this.refetchingFlagsCount += 1;
+      if (this.refetchingFlagsCount === 1) {
+        this.setState("initializing");
+      }
+    }
+
+    try {
+      return await cb();
+    } finally {
+      if (!shouldUpdateLoadingState) {
+        return;
+      }
+
+      this.refetchingFlagsCount = Math.max(this.refetchingFlagsCount - 1, 0);
+      if (this.refetchingFlagsCount === 0 && this.state !== "stopped") {
+        this.setState("initialized");
+      }
+    }
   }
 
   private sendCheckEvent(checkEvent: CheckEvent) {
