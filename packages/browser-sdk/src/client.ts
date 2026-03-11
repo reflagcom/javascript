@@ -16,7 +16,6 @@ import {
   RawFlags,
 } from "./flag/flags";
 import { ToolbarPosition } from "./ui/types";
-import { logResponseError } from "./utils/responseError";
 import { BulkEvent, BulkQueue } from "./bulkQueue";
 import {
   API_BASE_URL,
@@ -30,6 +29,8 @@ import { HttpClient } from "./httpClient";
 import { Logger, loggerWithPrefix, quietConsoleLogger } from "./logger";
 import { StorageAdapter } from "./storage";
 import { showToolbarToggle } from "./toolbar";
+import { logResponseError } from "./utils/responseError";
+import { logLifecycleAwareNetworkError } from "./utils/pageLifecycle";
 
 const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
 const isNode = typeof document === "undefined"; // deno supports "window" but not "document" according to https://remix.run/docs/en/main/guides/gotchas
@@ -571,13 +572,17 @@ export class ReflagClient {
     if (!this.config.bootstrapped) {
       if (this.context.user && this.config.enableTracking) {
         this.user().catch((e) => {
-          this.logger.error("error sending user", e);
+          logLifecycleAwareNetworkError(this.logger, "error sending user", e);
         });
       }
 
       if (this.context.company && this.config.enableTracking) {
         this.company().catch((e) => {
-          this.logger.error("error sending company", e);
+          logLifecycleAwareNetworkError(
+            this.logger,
+            "error sending company",
+            e,
+          );
         });
       }
     }

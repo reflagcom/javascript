@@ -4,6 +4,7 @@ import { Logger } from "../logger";
 import { AblySSEChannel, openAblySSEChannel } from "../sse";
 import { Position } from "../ui/types";
 import { logResponseError } from "../utils/responseError";
+import { logLifecycleAwareNetworkError } from "../utils/pageLifecycle";
 
 import {
   FeedbackSubmission,
@@ -316,7 +317,11 @@ export class AutoFeedback {
       });
       this.logger.debug(`automatic feedback connection established`);
     } catch (e) {
-      this.logger.error(`error initializing automatic feedback client`, e);
+      logLifecycleAwareNetworkError(
+        this.logger,
+        `error initializing automatic feedback client`,
+        e,
+      );
     }
   }
 
@@ -518,7 +523,11 @@ export class AutoFeedback {
         }
       }
     } catch (e) {
-      this.logger.error(`error initializing automatic feedback`, e);
+      logLifecycleAwareNetworkError(
+        this.logger,
+        `error initializing automatic feedback`,
+        e,
+      );
       return;
     }
     return;

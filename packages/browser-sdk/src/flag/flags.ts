@@ -10,6 +10,7 @@ import { getDefaultStorageAdapter, StorageAdapter } from "../storage";
 import { createAbortController } from "../utils/abortController";
 import { createEventTarget } from "../utils/eventTarget";
 import { logResponseError, parseResponseError } from "../utils/responseError";
+import { logLifecycleAwareNetworkError } from "../utils/pageLifecycle";
 
 import { FlagCache, isObject, parseAPIFlagsResponse } from "./flagCache";
 
@@ -437,7 +438,7 @@ export class FlagsClient {
 
       return typeRes.flags;
     } catch (e) {
-      this.logger.error("error fetching flags: ", e);
+      logLifecycleAwareNetworkError(this.logger, "error fetching flags:", e);
       return;
     }
   }

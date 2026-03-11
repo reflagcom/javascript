@@ -12,6 +12,7 @@ import { testLogger } from "./testLogger";
 beforeEach(() => {
   vi.useFakeTimers();
   vi.resetAllMocks();
+  window.dispatchEvent(new Event("pageshow"));
 });
 
 afterAll(() => {
@@ -194,6 +195,22 @@ describe("FlagsClient", () => {
         isEnabledOverride: null,
       },
     });
+  });
+
+  test("downgrades page teardown fetch failures to debug logs", async () => {
+    const { newFlagsClient, httpClient } = flagsClientFactory();
+
+    vi.mocked(httpClient.get).mockRejectedValue(new TypeError("Failed to fetch"));
+    window.dispatchEvent(new Event("pagehide"));
+
+    const flagsClient = newFlagsClient();
+    await flagsClient.initialize();
+
+    expect(testLogger.error).not.toHaveBeenCalled();
+    expect(testLogger.debug).toHaveBeenCalledWith(
+      "[Flags] error fetching flags: (aborted during page teardown)",
+      expect.any(TypeError),
+    );
   });
 
   test("caches response", async () => {

@@ -46,6 +46,7 @@ window.innerWidth = 1024;
 
 afterEach(() => {
   server.resetHandlers();
+  window.dispatchEvent(new Event("pageshow"));
 });
 
 beforeEach(() => {
@@ -200,6 +201,40 @@ describe("feedback prompting", () => {
     await reflagInstance.initialize();
 
     expect(openAblySSEChannel).toBeCalledTimes(0);
+  });
+
+  test("downgrades prompting init fetch failures during page teardown", async () => {
+    const logger = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+    const post = vi
+      .spyOn(HttpClient.prototype, "post")
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"));
+
+    window.dispatchEvent(new Event("pagehide"));
+
+    try {
+      const reflagInstance = new ReflagClient({
+        publishableKey: KEY,
+        user: { id: "foo" },
+        enableTracking: false,
+        logger,
+      });
+      await reflagInstance.initialize();
+
+      expect(post).toHaveBeenCalled();
+      expect(logger.error).not.toHaveBeenCalled();
+      expect(logger.debug).toHaveBeenCalledWith(
+        "error initializing automatic feedback (aborted during page teardown)",
+        expect.any(TypeError),
+      );
+      expect(openAblySSEChannel).toBeCalledTimes(0);
+    } finally {
+      post.mockRestore();
+    }
   });
 });
 
