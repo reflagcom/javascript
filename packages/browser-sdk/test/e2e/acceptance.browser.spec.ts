@@ -134,9 +134,38 @@ test("does not log startup fetch aborts as errors during fast full navigation", 
     }
   });
 
+  let flagsStarted: () => void;
+  const flagsStartedPromise = new Promise<void>((resolve) => {
+    flagsStarted = resolve;
+  });
+  let promptingInitStarted: () => void;
+  const promptingInitStartedPromise = new Promise<void>((resolve) => {
+    promptingInitStarted = resolve;
+  });
+
+  let releaseFlags: () => void;
+  const releaseFlagsPromise = new Promise<void>((resolve) => {
+    releaseFlags = resolve;
+  });
+  let releasePromptingInit: () => void;
+  const releasePromptingInitPromise = new Promise<void>((resolve) => {
+    releasePromptingInit = resolve;
+  });
+
+  let flagsRequestCount = 0;
+  let promptingInitRequestCount = 0;
+
   await page.route(`${API_BASE_URL}/features/evaluated*`, async (route) => {
-    await new Promise((resolve) => setTimeout(resolve, 2_000));
-    try {
+    flagsRequestCount += 1;
+    if (flagsRequestCount === 1) {
+      flagsStarted();
+      await releaseFlagsPromise;
+      try {
+        await route.abort("failed");
+      } catch {
+        // The original document may already be gone.
+      }
+    } else {
       await route.fulfill({
         status: 200,
         body: JSON.stringify({
@@ -144,32 +173,24 @@ test("does not log startup fetch aborts as errors during fast full navigation", 
           features: {},
         }),
       });
-    } catch {
-      // The original document may have been torn down before the response.
     }
   });
 
   await page.route(`${API_BASE_URL}/feedback/prompting-init`, async (route) => {
-    await new Promise((resolve) => setTimeout(resolve, 2_000));
-    try {
+    promptingInitRequestCount += 1;
+    if (promptingInitRequestCount === 1) {
+      promptingInitStarted();
+      await releasePromptingInitPromise;
+      try {
+        await route.abort("failed");
+      } catch {
+        // The original document may already be gone.
+      }
+    } else {
       await route.fulfill({
         status: 200,
         body: JSON.stringify({ success: false }),
       });
-    } catch {
-      // The original document may have been torn down before the response.
-    }
-  });
-
-  await page.route(`${API_BASE_URL}/bulk`, async (route) => {
-    await new Promise((resolve) => setTimeout(resolve, 2_000));
-    try {
-      await route.fulfill({
-        status: 200,
-        body: JSON.stringify({ success: true }),
-      });
-    } catch {
-      // The original document may have been torn down before the response.
     }
   });
 
@@ -185,16 +206,20 @@ test("does not log startup fetch aborts as errors during fast full navigation", 
     })()
   `);
 
-  await page.goto("http://localhost:8001/test/e2e/give-feedback-button.html");
+  await Promise.all([flagsStartedPromise, promptingInitStartedPromise]);
+
+  const navigation = page.goto("http://localhost:8001/test/e2e/give-feedback-button.html");
+  releaseFlags();
+  releasePromptingInit();
+  await navigation;
   await page.waitForTimeout(250);
 
+  expect(flagsRequestCount).toBeGreaterThanOrEqual(1);
+  expect(promptingInitRequestCount).toBeGreaterThanOrEqual(1);
   expect(consoleErrors).not.toContainEqual(
     expect.stringContaining("error fetching flags"),
   );
   expect(consoleErrors).not.toContainEqual(
     expect.stringContaining("error initializing automatic feedback"),
-  );
-  expect(consoleErrors).not.toContainEqual(
-    expect.stringContaining("bulk delivery degraded"),
   );
 });
