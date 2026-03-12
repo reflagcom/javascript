@@ -526,6 +526,8 @@ export class AutoFeedback {
         if (body.success && body.channel) {
           return body.channel;
         }
+
+        return undefined;
       });
     } catch (e) {
       this.logger.error(`error initializing automatic feedback`, e);
