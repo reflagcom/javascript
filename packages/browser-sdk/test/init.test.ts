@@ -68,6 +68,9 @@ describe("init", () => {
       user: { id: "foo" },
       apiBaseUrl: "https://example.com",
       enableTracking: false,
+      feedback: {
+        enableAutoFeedback: false,
+      },
     });
     await reflagInstance.initialize();
 
@@ -97,7 +100,6 @@ describe("init", () => {
     const reflagInstance = new ReflagClient({
       publishableKey: KEY,
       user: { id: "foo" },
-      apiBaseUrl: "https://example.com",
       enableTracking: false,
       feedback: {
         enableAutoFeedback: false,
