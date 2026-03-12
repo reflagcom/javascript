@@ -87,6 +87,89 @@ describe("sets `credentials`", () => {
     );
   });
 
+  test("does not use keepalive when in-flight keepalive bytes would exceed the budget", async () => {
+    let resolveFirstFetch: ((value: Response) => void) | undefined;
+    vi.mocked(global.fetch)
+      .mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveFirstFetch = resolve;
+          }),
+      )
+      .mockResolvedValueOnce(new Response());
+
+    const client = new HttpClient("publishableKey");
+    const body = { payload: "x".repeat(35 * 1024) };
+
+    const firstRequest = client.post({
+      path: "/test",
+      body,
+      keepalive: true,
+    });
+    await Promise.resolve();
+
+    await client.post({ path: "/test", body, keepalive: true });
+
+    expect(vi.mocked(global.fetch).mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({ keepalive: true }),
+    );
+    expect(vi.mocked(global.fetch).mock.calls[1]?.[1]).toEqual(
+      expect.objectContaining({ keepalive: false }),
+    );
+
+    resolveFirstFetch?.(new Response());
+    await firstRequest;
+  });
+
+  test("does not use keepalive when the in-flight request count is at the limit", async () => {
+    const pendingRequests: Array<{
+      resolve: (value: Response) => void;
+    }> = [];
+    let callCount = 0;
+    vi.mocked(global.fetch).mockImplementation(() => {
+      callCount += 1;
+      if (callCount > 15) {
+        return Promise.resolve(new Response());
+      }
+
+      let resolve!: (value: Response) => void;
+      const promise = new Promise<Response>((promiseResolve) => {
+        resolve = promiseResolve;
+      });
+      pendingRequests.push({ resolve });
+      return promise;
+    });
+
+    const client = new HttpClient("publishableKey");
+    const body = { payload: "ok" };
+
+    const inFlightRequests = Array.from({ length: 15 }, () =>
+      client.post({
+        path: "/test",
+        body,
+        keepalive: true,
+      }),
+    );
+    await Promise.resolve();
+
+    await client.post({ path: "/test", body, keepalive: true });
+
+    expect(
+      vi
+        .mocked(global.fetch)
+        .mock.calls.slice(0, 15)
+        .every(([, init]) => (init as RequestInit | undefined)?.keepalive),
+    ).toBe(true);
+    expect(vi.mocked(global.fetch).mock.calls[15]?.[1]).toEqual(
+      expect.objectContaining({ keepalive: false }),
+    );
+
+    for (const request of pendingRequests) {
+      request.resolve(new Response());
+    }
+    await Promise.all(inFlightRequests);
+  });
+
   test("does not require a writable `URL.search` property", async () => {
     const OriginalURL = global.URL;
 
