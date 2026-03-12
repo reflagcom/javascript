@@ -295,7 +295,8 @@ export class ReflagClient {
       : applyLogLevel(decorateLogger(REFLAG_LOG_PREFIX, console), logLevel);
 
     const baseFlagOverrides = normalizeFlagOverrides(
-      typeof config.flagOverrides === "function" || isObject(config.flagOverrides)
+      typeof config.flagOverrides === "function" ||
+        isObject(config.flagOverrides)
         ? config.flagOverrides
         : {},
     );
