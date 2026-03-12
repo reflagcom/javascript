@@ -1748,7 +1748,7 @@ describe("ReflagClient", () => {
       );
     });
 
-    it("should use flag overrides", async () => {
+    it("should use base flag overrides", async () => {
       await client.initialize();
       const context = { user, company, other: otherContext };
 
@@ -1773,9 +1773,9 @@ describe("ReflagClient", () => {
         },
       });
 
-      client.flagOverrides = {
+      client.setFlagOverrides({
         flag1: false,
-      };
+      });
       const flags = client.getFlags(context);
 
       expect(flags).toStrictEqual({
@@ -1809,7 +1809,7 @@ describe("ReflagClient", () => {
       });
     });
 
-    it("should use flag overrides from function", async () => {
+    it("should use base flag overrides from function", async () => {
       await client.initialize();
       const context = { user, company, other: otherContext };
 
@@ -1834,7 +1834,7 @@ describe("ReflagClient", () => {
         },
       });
 
-      client.flagOverrides = (_context: Context) => {
+      client.setFlagOverrides((_context: Context) => {
         expect(context).toStrictEqual(context);
         return {
           flag1: { isEnabled: false },
@@ -1847,7 +1847,7 @@ describe("ReflagClient", () => {
             },
           },
         };
-      };
+      });
       const flags = client.getFlags(context);
 
       expect(flags).toStrictEqual({
@@ -1911,9 +1911,9 @@ describe("ReflagClient", () => {
       await client.initialize();
       const context = { user, company, other: otherContext };
 
-      client.flagOverrides = () => ({
+      client.setFlagOverrides(() => ({
         flag1: false,
-      });
+      }));
 
       const restore = client.pushFlagOverrides((overrideContext: Context) => {
         expect(overrideContext).toStrictEqual({
@@ -1934,6 +1934,57 @@ describe("ReflagClient", () => {
       restore();
 
       expect(client.getFlag(context, "flag1").isEnabled).toBe(false);
+      expect(client.getFlag(context, "flag2").isEnabled).toBe(false);
+    });
+
+    it("should keep pushed overrides layered on top when replacing base overrides", async () => {
+      await client.initialize();
+      const context = { user, company, other: otherContext };
+
+      client.setFlagOverrides({
+        flag1: false,
+      });
+
+      const restore = client.pushFlagOverrides({
+        flag1: true,
+      });
+
+      expect(client.getFlag(context, "flag1").isEnabled).toBe(true);
+
+      client.setFlagOverrides({
+        flag1: false,
+        flag2: true,
+      });
+
+      expect(client.getFlag(context, "flag1").isEnabled).toBe(true);
+      expect(client.getFlag(context, "flag2").isEnabled).toBe(true);
+
+      restore();
+
+      expect(client.getFlag(context, "flag1").isEnabled).toBe(false);
+      expect(client.getFlag(context, "flag2").isEnabled).toBe(true);
+    });
+
+    it("should only clear the base overrides", async () => {
+      await client.initialize();
+      const context = { user, company, other: otherContext };
+
+      client.setFlagOverrides({
+        flag1: false,
+      });
+
+      const restore = client.pushFlagOverrides({
+        flag2: true,
+      });
+
+      client.clearFlagOverrides();
+
+      expect(client.getFlag(context, "flag1").isEnabled).toBe(true);
+      expect(client.getFlag(context, "flag2").isEnabled).toBe(true);
+
+      restore();
+
+      expect(client.getFlag(context, "flag1").isEnabled).toBe(true);
       expect(client.getFlag(context, "flag2").isEnabled).toBe(false);
     });
   });

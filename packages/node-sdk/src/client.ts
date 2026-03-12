@@ -416,26 +416,33 @@ export class ReflagClient {
   }
 
   /**
-   * Sets the flag overrides.
+   * Replaces the base flag overrides used by the client.
    *
    * @param overrides - The flag overrides.
    *
    * @remarks
-   * The flag overrides are used to override the flag definitions.
-   * This is useful for testing or development.
+   * Base overrides are always applied before any temporary layers added through
+   * `pushFlagOverrides()`.
    *
    * @example
    * ```ts
-   * client.flagOverrides = {
+   * client.setFlagOverrides({
    *   "flag-1": true,
    *   "flag-2": false,
-   * };
+   * });
    * ```
    **/
-  set flagOverrides(overrides: FlagOverridesFn | FlagOverrides) {
+  setFlagOverrides(overrides: FlagOverridesFn | FlagOverrides) {
     this.baseFlagOverrides = normalizeFlagOverrides(overrides);
-    this.flagOverrideLayers = [];
     this.syncFlagOverrides();
+  }
+
+  /**
+   * @deprecated
+   * Use `setFlagOverrides()` for replacing the base override set.
+   **/
+  set flagOverrides(overrides: FlagOverridesFn | FlagOverrides) {
+    this.setFlagOverrides(overrides);
   }
 
   /**
@@ -493,21 +500,18 @@ export class ReflagClient {
   }
 
   /**
-   * Clears the flag overrides.
+   * Clears the base flag overrides.
    *
    * @remarks
-   * This is useful for testing or development.
+   * This does not affect temporary layers added with `pushFlagOverrides()`.
    *
    * @example
    * ```ts
-   * afterAll(() => {
-   *   client.clearFlagOverrides();
-   * });
+   * client.clearFlagOverrides();
    * ```
    **/
   clearFlagOverrides() {
     this.baseFlagOverrides = () => ({});
-    this.flagOverrideLayers = [];
     this.syncFlagOverrides();
   }
 

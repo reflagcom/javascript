@@ -565,19 +565,19 @@ REFLAG_FLAGS_DISABLED=flag3,flag4
 
 1. Programmatically through the client options:
 
-You can use a simple `Record<string, boolean>` and pass it either in the constructor or by setting `client.flagOverrides`:
+You can use a simple `Record<string, boolean>` and pass it either in the constructor or by replacing the client's base overrides with `setFlagOverrides()`:
 
 ```typescript
 // pass directly in the constructor
 const client = new ReflagClient({ flagOverrides: { myFlag: true } });
-// or set on the client at a later time
-client.flagOverrides = { myFlag: false };
+// or replace the base overrides at a later time
+client.setFlagOverrides({ myFlag: false });
 
-// clear flag overrides. Same as setting to {}.
+// clear only the base overrides
 client.clearFlagOverrides();
 ```
 
-For nested or temporary test overrides, use `pushFlagOverrides()`. It layers on top of the current overrides and returns a restore function that removes only that layer. You can wrap that in a small helper:
+`pushFlagOverrides()` serves a different purpose: it adds a temporary layer on top of the base overrides and returns a restore function that removes only that layer. This is useful for nested tests:
 
 ```typescript
 export const flag = function (name: string, enabled: boolean): void {
@@ -605,6 +605,13 @@ describe("foo", () => {
   });
 });
 ```
+
+The precedence is:
+
+1. Base overrides from the constructor or `setFlagOverrides()`
+2. Temporary layers added by `pushFlagOverrides()`
+
+If the same flag is set in both places, the pushed override wins until its restore function is called.
 
 To get dynamic overrides, use a function which takes a context and returns a boolean or an object with the shape of `{isEnabled, config}`:
 
