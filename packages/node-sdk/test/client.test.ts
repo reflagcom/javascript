@@ -1882,26 +1882,26 @@ describe("ReflagClient", () => {
       expect(client.getFlag(context, "flag1").isEnabled).toBe(true);
       expect(client.getFlag(context, "flag2").isEnabled).toBe(false);
 
-      const restoreFlag1 = client.pushFlagOverrides({
+      const removeFlag1 = client.pushFlagOverrides({
         flag1: false,
       });
 
       expect(client.getFlag(context, "flag1").isEnabled).toBe(false);
       expect(client.getFlag(context, "flag2").isEnabled).toBe(false);
 
-      const restoreFlag2 = client.pushFlagOverrides({
+      const removeFlag2 = client.pushFlagOverrides({
         flag2: true,
       });
 
       expect(client.getFlag(context, "flag1").isEnabled).toBe(false);
       expect(client.getFlag(context, "flag2").isEnabled).toBe(true);
 
-      restoreFlag2();
+      removeFlag2();
 
       expect(client.getFlag(context, "flag1").isEnabled).toBe(false);
       expect(client.getFlag(context, "flag2").isEnabled).toBe(false);
 
-      restoreFlag1();
+      removeFlag1();
 
       expect(client.getFlag(context, "flag1").isEnabled).toBe(true);
       expect(client.getFlag(context, "flag2").isEnabled).toBe(false);
@@ -1915,7 +1915,7 @@ describe("ReflagClient", () => {
         flag1: false,
       }));
 
-      const restore = client.pushFlagOverrides((overrideContext: Context) => {
+      const remove = client.pushFlagOverrides((overrideContext: Context) => {
         expect(overrideContext).toStrictEqual({
           user,
           company,
@@ -1930,8 +1930,8 @@ describe("ReflagClient", () => {
       expect(client.getFlag(context, "flag1").isEnabled).toBe(false);
       expect(client.getFlag(context, "flag2").isEnabled).toBe(true);
 
-      restore();
-      restore();
+      remove();
+      remove();
 
       expect(client.getFlag(context, "flag1").isEnabled).toBe(false);
       expect(client.getFlag(context, "flag2").isEnabled).toBe(false);
@@ -1945,7 +1945,7 @@ describe("ReflagClient", () => {
         flag1: false,
       });
 
-      const restore = client.pushFlagOverrides({
+      const remove = client.pushFlagOverrides({
         flag1: true,
       });
 
@@ -1959,7 +1959,7 @@ describe("ReflagClient", () => {
       expect(client.getFlag(context, "flag1").isEnabled).toBe(true);
       expect(client.getFlag(context, "flag2").isEnabled).toBe(true);
 
-      restore();
+      remove();
 
       expect(client.getFlag(context, "flag1").isEnabled).toBe(false);
       expect(client.getFlag(context, "flag2").isEnabled).toBe(true);
@@ -1973,7 +1973,7 @@ describe("ReflagClient", () => {
         flag1: false,
       });
 
-      const restore = client.pushFlagOverrides({
+      const remove = client.pushFlagOverrides({
         flag2: true,
       });
 
@@ -1982,7 +1982,7 @@ describe("ReflagClient", () => {
       expect(client.getFlag(context, "flag1").isEnabled).toBe(true);
       expect(client.getFlag(context, "flag2").isEnabled).toBe(true);
 
-      restore();
+      remove();
 
       expect(client.getFlag(context, "flag1").isEnabled).toBe(true);
       expect(client.getFlag(context, "flag2").isEnabled).toBe(false);

@@ -577,19 +577,19 @@ client.setFlagOverrides({ myFlag: false });
 client.clearFlagOverrides();
 ```
 
-`pushFlagOverrides()` serves a different purpose: it adds a temporary layer on top of the base overrides and returns a restore function that removes only that layer. This is useful for nested tests:
+`pushFlagOverrides()` serves a different purpose: it adds a temporary layer on top of the base overrides and returns a remove function that removes only that layer. This is useful for nested tests:
 
 ```typescript
 export const flag = function (name: string, enabled: boolean): void {
-  let restore: (() => void) | undefined;
+  let remove: (() => void) | undefined;
 
   beforeEach(function () {
-    restore = reflagClient.pushFlagOverrides({ [name]: enabled });
+    remove = reflagClient.pushFlagOverrides({ [name]: enabled });
   });
 
   afterEach(function () {
-    restore?.();
-    restore = undefined;
+    remove?.();
+    remove = undefined;
   });
 };
 
@@ -611,7 +611,19 @@ The precedence is:
 1. Base overrides from the constructor or `setFlagOverrides()`
 2. Temporary layers added by `pushFlagOverrides()`
 
-If the same flag is set in both places, the pushed override wins until its restore function is called.
+If the same flag is set in both places, the pushed override wins until its remove function is called.
+
+`pushFlagOverrides()` also accepts a function if the temporary override depends on the evaluation context:
+
+```typescript
+const remove = client.pushFlagOverrides((context) => ({
+  "smart-summaries": context.user?.id === "qa-user",
+}));
+
+// ...
+
+remove();
+```
 
 To get dynamic overrides, use a function which takes a context and returns a boolean or an object with the shape of `{isEnabled, config}`:
 

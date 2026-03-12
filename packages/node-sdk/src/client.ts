@@ -450,23 +450,23 @@ export class ReflagClient {
    *
    * @param overrides - The flag overrides to apply for the scoped period.
    *
-   * @returns A restore function that removes only this override layer.
+   * @returns A remove function that removes only this override layer.
    *
    * @remarks
-   * This is intended for tests or other short-lived local overrides. The restore
+   * This is intended for tests or other short-lived local overrides. The remove
    * function is idempotent and can safely be called multiple times.
    *
    * @example
    * ```ts
-   * let restore: (() => void) | undefined;
+   * let remove: (() => void) | undefined;
    *
    * beforeEach(() => {
-   *   restore = client.pushFlagOverrides({ "flag-1": true });
+   *   remove = client.pushFlagOverrides({ "flag-1": true });
    * });
    *
    * afterEach(() => {
-   *   restore?.();
-   *   restore = undefined;
+   *   remove?.();
+   *   remove = undefined;
    * });
    * ```
    **/
