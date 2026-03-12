@@ -46,6 +46,7 @@ describe("ReflagClient", () => {
       await vi.waitFor(() =>
         expect(httpClientPost).toHaveBeenCalledWith({
           path: "/bulk",
+          keepalive: true,
           body: [
             {
               type: "user",
@@ -87,6 +88,7 @@ describe("ReflagClient", () => {
       await vi.waitFor(() =>
         expect(httpClientPost).toHaveBeenCalledWith({
           path: "/bulk",
+          keepalive: true,
           body: [
             {
               type: "company",
@@ -306,6 +308,20 @@ describe("ReflagClient", () => {
   });
 
   describe("stop", () => {
+    it("flushes the bulk queue on beforeunload and removes the listener on stop", async () => {
+      const bulkQueue = client["bulkQueue"];
+      expect(bulkQueue).toBeDefined();
+
+      const flushSpy = vi.spyOn(bulkQueue!, "flush").mockResolvedValue();
+      window.dispatchEvent(new Event("beforeunload"));
+      expect(flushSpy).toHaveBeenCalledTimes(1);
+
+      await client.stop();
+
+      window.dispatchEvent(new Event("beforeunload"));
+      expect(flushSpy).toHaveBeenCalledTimes(2);
+    });
+
     it("throws if queued bulk events remain after final flush attempt", async () => {
       const bulkQueue = client["bulkQueue"];
       expect(bulkQueue).toBeDefined();

@@ -4,6 +4,7 @@ import { Logger } from "../logger";
 import { AblySSEChannel, openAblySSEChannel } from "../sse";
 import { Position } from "../ui/types";
 import { logResponseError } from "../utils/responseError";
+import { retryOnThrow } from "../utils/retry";
 
 import {
   FeedbackSubmission,
@@ -18,6 +19,8 @@ import {
 import { getAuthToken } from "./promptStorage";
 import * as feedbackLib from "./ui";
 import { DEFAULT_POSITION } from "./ui";
+
+const INITIAL_FETCH_RETRY_DELAYS_MS = [0, 5000];
 
 export type Key = string;
 
@@ -494,7 +497,7 @@ export class AutoFeedback {
     }
 
     try {
-      if (!channel) {
+      return await retryOnThrow(INITIAL_FETCH_RETRY_DELAYS_MS, async () => {
         const res = await this.httpClient.post({
           path: `/feedback/prompting-init`,
           body: {
@@ -504,11 +507,18 @@ export class AutoFeedback {
 
         this.logger.debug(`automatic feedback status sent`, res);
         if (!res.ok) {
-          await logResponseError({
-            logger: this.logger,
-            res,
-            message: "automatic feedback init request failed",
-          });
+          try {
+            await logResponseError({
+              logger: this.logger,
+              res,
+              message: "automatic feedback init request failed",
+            });
+          } catch {
+            this.logger.error(
+              `error initializing automatic feedback`,
+              new Error(`unexpected response code: ${res.status}`),
+            );
+          }
           return;
         }
 
@@ -516,11 +526,12 @@ export class AutoFeedback {
         if (body.success && body.channel) {
           return body.channel;
         }
-      }
+
+        return undefined;
+      });
     } catch (e) {
       this.logger.error(`error initializing automatic feedback`, e);
       return;
     }
-    return;
   }
 }

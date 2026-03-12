@@ -221,7 +221,9 @@ describe("FlagsClient", () => {
       fallbackFlags: ["huddle"],
     });
 
-    await flagsClient.initialize();
+    const initializePromise = flagsClient.initialize();
+    await vi.advanceTimersByTimeAsync(5000);
+    await initializePromise;
     expect(flagsClient.getFlags()).toStrictEqual({
       huddle: {
         isEnabled: true,
@@ -248,7 +250,9 @@ describe("FlagsClient", () => {
       },
     });
 
-    await flagsClient.initialize();
+    const initializePromise = flagsClient.initialize();
+    await vi.advanceTimersByTimeAsync(5000);
+    await initializePromise;
     expect(flagsClient.getFlags()).toStrictEqual({
       huddle: {
         isEnabled: true,
@@ -263,6 +267,54 @@ describe("FlagsClient", () => {
         isEnabledOverride: null,
       },
     });
+  });
+
+  test("retries thrown flag fetch failures before succeeding", async () => {
+    const { newFlagsClient, httpClient } = flagsClientFactory();
+
+    vi.mocked(httpClient.get)
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValue(
+        new Response(JSON.stringify(flagResponse), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+
+    const flagsClient = newFlagsClient();
+    const initializePromise = flagsClient.initialize();
+    await vi.advanceTimersByTimeAsync(5000);
+    await initializePromise;
+
+    expect(httpClient.get).toHaveBeenCalledTimes(3);
+    expect(testLogger.error).not.toHaveBeenCalled();
+    expect(flagsClient.getFlags()).toEqual(flagsResult);
+  });
+
+  test("retries thrown flag body-read failures before succeeding", async () => {
+    const { newFlagsClient, httpClient } = flagsClientFactory();
+
+    vi.mocked(httpClient.get)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+      } as unknown as Response)
+      .mockResolvedValue(
+        new Response(JSON.stringify(flagResponse), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+
+    const flagsClient = newFlagsClient();
+    const initializePromise = flagsClient.initialize();
+    await vi.advanceTimersByTimeAsync(0);
+    await initializePromise;
+
+    expect(httpClient.get).toHaveBeenCalledTimes(2);
+    expect(testLogger.error).not.toHaveBeenCalled();
+    expect(flagsClient.getFlags()).toEqual(flagsResult);
   });
 
   test("caches response", async () => {
@@ -295,8 +347,10 @@ describe("FlagsClient", () => {
     vi.advanceTimersByTime(TEST_STALE_MS + 1);
 
     // fail this time
-    await flagsClient.fetchFlags();
-    expect(httpClient.get).toBeCalledTimes(2);
+    const fetchPromise = flagsClient.fetchFlags();
+    await vi.advanceTimersByTimeAsync(5000);
+    await fetchPromise;
+    expect(httpClient.get).toBeCalledTimes(4);
 
     const staleFlags = flagsClient.getFlags();
     expect(staleFlags).toEqual(flagsResult);
