@@ -681,6 +681,7 @@ export type ClientOptions = {
 
   /**
    * Optional provider used to load and save raw flag definitions for fallback startup.
+   * Ignored in offline mode.
    */
   flagsFallbackProvider?: FlagsFallbackProvider;
 
@@ -720,7 +721,8 @@ export type ClientOptions = {
   flagOverrides?: string | ((context: Context) => FlagOverrides);
 
   /**
-   * In offline mode, no data is sent or fetched from the the Reflag API.
+   * In offline mode, no data is sent or fetched from the the Reflag API,
+   * and `flagsFallbackProvider` is not used.
    * This is useful for testing or development.
    */
   offline?: boolean;
