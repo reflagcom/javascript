@@ -34,13 +34,11 @@ const lateTrackEvent: BulkEvent = {
 describe("BulkQueue", () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    sessionStorage.clear();
   });
 
   afterEach(() => {
     vi.useRealTimers();
     vi.clearAllMocks();
-    sessionStorage.clear();
   });
 
   it("batches events and flushes after the delay", async () => {
@@ -64,45 +62,18 @@ describe("BulkQueue", () => {
     expect(sendBulk).toHaveBeenCalledWith([userEvent, companyEvent]);
   });
 
-  it("retries failed bulk requests later", async () => {
+  it("drops thrown bulk request failures without retrying", async () => {
     const sendBulk = vi
       .fn<(events: BulkEvent[]) => Promise<Response>>()
-      .mockRejectedValueOnce(new Error("network"))
-      .mockResolvedValue(new Response("", { status: 200 }));
-    const queue = new BulkQueue(sendBulk, {
-      flushDelayMs: 10,
-      retryBaseDelayMs: 20,
-      retryMaxDelayMs: 20,
-    });
-
-    await queue.enqueue(trackEvent);
-
-    await vi.advanceTimersByTimeAsync(10);
-    expect(sendBulk).toHaveBeenCalledTimes(1);
-
-    await vi.advanceTimersByTimeAsync(19);
-    expect(sendBulk).toHaveBeenCalledTimes(1);
-
-    await vi.advanceTimersByTimeAsync(1);
-    expect(sendBulk).toHaveBeenCalledTimes(2);
-    expect(sendBulk).toHaveBeenNthCalledWith(2, [trackEvent]);
-  });
-
-  it("logs normal retry scheduling for thrown bulk send failures", async () => {
+      .mockRejectedValueOnce(new Error("network"));
     const logger = {
       debug: vi.fn(),
       info: vi.fn(),
       warn: vi.fn(),
       error: vi.fn(),
     };
-    const sendBulk = vi
-      .fn<(events: BulkEvent[]) => Promise<Response>>()
-      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
-      .mockResolvedValue(new Response("", { status: 200 }));
     const queue = new BulkQueue(sendBulk, {
       flushDelayMs: 10,
-      retryBaseDelayMs: 20,
-      retryMaxDelayMs: 20,
       logger,
     });
 
@@ -110,14 +81,14 @@ describe("BulkQueue", () => {
 
     await vi.advanceTimersByTimeAsync(10);
     expect(sendBulk).toHaveBeenCalledTimes(1);
-    expect(logger.debug).not.toHaveBeenCalled();
-    expect(logger.info).toHaveBeenCalledWith("bulk retry scheduled", {
-      retryInMs: 20,
-      queueSize: 2,
-      consecutiveFailures: 1,
-    });
-    await vi.advanceTimersByTimeAsync(20);
-    expect(sendBulk).toHaveBeenCalledTimes(2);
+    expect(await queue.size()).toBe(0);
+    expect(logger.error).toHaveBeenCalledWith(
+      "bulk request failed; dropping batch",
+      expect.objectContaining({
+        error: expect.any(Error),
+        batchSize: 1,
+      }),
+    );
   });
 
   it("drops 4xx responses, logs error, and does not retry", async () => {
@@ -132,8 +103,6 @@ describe("BulkQueue", () => {
     };
     const queue = new BulkQueue(sendBulk, {
       flushDelayMs: 10,
-      retryBaseDelayMs: 20,
-      retryMaxDelayMs: 20,
       logger,
     });
 
@@ -143,7 +112,7 @@ describe("BulkQueue", () => {
     expect(sendBulk).toHaveBeenCalledTimes(1);
     expect(await queue.size()).toBe(0);
     expect(logger.error).toHaveBeenCalledWith(
-      "bulk request failed with non-retriable status; dropping batch",
+      "bulk request failed; dropping batch",
       expect.objectContaining({
         status: 400,
         responseBody: "invalid payload",
@@ -191,6 +160,35 @@ describe("BulkQueue", () => {
         apiErrorCode: "INVALID_API_KEY",
         apiErrorMessage:
           'Invalid publishableKey "pub_prod_vxuMahSZOnhzvAfiOnZ9rj"',
+      }),
+    );
+  });
+
+  it("drops 5xx responses without retrying", async () => {
+    const sendBulk = vi
+      .fn<(events: BulkEvent[]) => Promise<Response>>()
+      .mockResolvedValue(new Response("server error", { status: 500 }));
+    const logger = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+    const queue = new BulkQueue(sendBulk, {
+      flushDelayMs: 10,
+      logger,
+    });
+
+    await queue.enqueue(trackEvent);
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(sendBulk).toHaveBeenCalledTimes(1);
+    expect(await queue.size()).toBe(0);
+    expect(logger.error).toHaveBeenCalledWith(
+      "bulk request failed; dropping batch",
+      expect.objectContaining({
+        status: 500,
+        responseBody: "server error",
       }),
     );
   });
@@ -253,29 +251,6 @@ describe("BulkQueue", () => {
     expect(sendBulk).toHaveBeenCalledWith([userEvent, companyEvent]);
 
     resolveSend?.(new Response("", { status: 200 }));
-  });
-
-  it("restores queue state between instances in the same tab", async () => {
-    const firstSend = vi
-      .fn<(events: BulkEvent[]) => Promise<Response>>()
-      .mockResolvedValue(new Response("", { status: 200 }));
-    const firstQueue = new BulkQueue(firstSend, {
-      flushDelayMs: 10_000,
-    });
-
-    await firstQueue.enqueue(userEvent);
-    expect(await firstQueue.size()).toBe(1);
-
-    const secondSend = vi
-      .fn<(events: BulkEvent[]) => Promise<Response>>()
-      .mockResolvedValue(new Response("", { status: 200 }));
-    const secondQueue = new BulkQueue(secondSend, {
-      flushDelayMs: 10_000,
-    });
-
-    expect(await secondQueue.size()).toBe(1);
-    await secondQueue.flush();
-    expect(secondSend).toHaveBeenCalledWith([userEvent]);
   });
 
   it("requires a second flush to send pending events after an in-flight batch", async () => {

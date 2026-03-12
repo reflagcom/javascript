@@ -310,8 +310,7 @@ export type InitOptions = ReflagDeprecatedContext & {
   /**
    * Queue settings for tracking updates sent to `/bulk`.
    * Applies to user/company updates, check events, and prompt events.
-   * Queue data is persisted in `sessionStorage` and restored on reloads
-   * within the same browser tab.
+   * Events are buffered in memory and flushed in the background.
    */
   trackingQueue?: {
     /**
@@ -329,16 +328,8 @@ export type InitOptions = ReflagDeprecatedContext & {
     maxSize?: number;
 
     /**
-     * Base retry delay in milliseconds after a failed bulk request.
-     * Defaults to 5000ms.
+     * No retries are performed; failed batches are dropped.
      */
-    retryBaseDelayMs?: number;
-
-    /**
-     * Maximum retry delay in milliseconds after repeated failures.
-     * Defaults to 60000ms.
-     */
-    retryMaxDelayMs?: number;
   };
 };
 
@@ -476,13 +467,15 @@ export class ReflagClient {
     });
     if (!this.config.offline && this.config.enableTracking) {
       this.bulkQueue = new BulkQueue(
-        (events) => this.httpClient.post({ path: "/bulk", body: events }),
+        (events) =>
+          this.httpClient.post({
+            path: "/bulk",
+            body: events,
+            keepalive: true,
+          }),
         {
           flushDelayMs: opts.trackingQueue?.flushDelayMs,
           maxSize: opts.trackingQueue?.maxSize,
-          retryBaseDelayMs: opts.trackingQueue?.retryBaseDelayMs,
-          retryMaxDelayMs: opts.trackingQueue?.retryMaxDelayMs,
-          storageKey: `__reflag_bulk_queue_v1:${this.config.apiBaseUrl}:${this.publishableKey}`,
           logger: this.logger,
         },
       );

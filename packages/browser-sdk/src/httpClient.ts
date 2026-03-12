@@ -78,14 +78,17 @@ export class HttpClient {
   async post({
     path,
     body,
+    keepalive,
   }: {
     host?: string;
     path: string;
     body: any;
+    keepalive?: boolean;
   }): ReturnType<typeof fetch> {
     return fetch(this.getUrl(path), {
       ...this.fetchOptions,
       method: "POST",
+      keepalive,
       headers: {
         "Content-Type": "application/json",
         [SDK_VERSION_HEADER_NAME]: this.sdkVersion,

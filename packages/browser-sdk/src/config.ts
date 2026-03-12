@@ -11,8 +11,6 @@ export const FLAG_EVENTS_PER_MIN = 1;
 export const FLAGS_EXPIRE_MS = 30 * 24 * 60 * 60 * 1000; // expire entirely after 30 days
 export const BULK_QUEUE_MAX_SIZE = 100;
 export const BULK_QUEUE_FLUSH_DELAY_MS = 2000;
-export const BULK_QUEUE_RETRY_BASE_DELAY_MS = 5000;
-export const BULK_QUEUE_RETRY_MAX_DELAY_MS = 60_000;
 
 export const IS_SERVER =
   typeof window === "undefined" || typeof document === "undefined";
