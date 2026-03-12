@@ -21,45 +21,21 @@ function ensureListenersRegistered() {
   }
 
   window.addEventListener("pagehide", markPageTearingDown, { capture: true });
-  window.addEventListener("beforeunload", markPageTearingDown, {
-    capture: true,
-  });
   window.addEventListener("pageshow", markPageActive, { capture: true });
   listenersRegistered = true;
 }
 
-function isAbortLikeError(error: unknown) {
-  if (
-    typeof DOMException !== "undefined" &&
-    error instanceof DOMException &&
-    error.name === "AbortError"
-  ) {
-    return true;
-  }
-
-  if (!(error instanceof Error)) {
-    return false;
-  }
-
-  return (
-    error.name === "AbortError" ||
-    error.message === "Failed to fetch" ||
-    error.message === "Load failed" ||
-    error.message === "Network request failed"
-  );
-}
-
-export function isPageLifecycleAbortError(error: unknown) {
+export function isPageTearingDown() {
   ensureListenersRegistered();
-  return pageIsTearingDown && isAbortLikeError(error);
+  return pageIsTearingDown;
 }
 
-export function logLifecycleAwareNetworkError(
+export function logLifecycleAwareFetchError(
   logger: Pick<Logger, "debug" | "error">,
   message: string,
   error: unknown,
 ) {
-  if (isPageLifecycleAbortError(error)) {
+  if (isPageTearingDown()) {
     logger.debug(`${message} (aborted during page teardown)`, error);
     return;
   }

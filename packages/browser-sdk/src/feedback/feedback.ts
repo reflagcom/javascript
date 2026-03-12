@@ -3,7 +3,7 @@ import { HttpClient } from "../httpClient";
 import { Logger } from "../logger";
 import { AblySSEChannel, openAblySSEChannel } from "../sse";
 import { Position } from "../ui/types";
-import { logLifecycleAwareNetworkError } from "../utils/pageLifecycle";
+import { logLifecycleAwareFetchError } from "../utils/pageLifecycle";
 import { logResponseError } from "../utils/responseError";
 
 import {
@@ -317,11 +317,7 @@ export class AutoFeedback {
       });
       this.logger.debug(`automatic feedback connection established`);
     } catch (e) {
-      logLifecycleAwareNetworkError(
-        this.logger,
-        `error initializing automatic feedback client`,
-        e,
-      );
+      this.logger.error(`error initializing automatic feedback client`, e);
     }
   }
 
@@ -498,32 +494,48 @@ export class AutoFeedback {
       return channel;
     }
 
+    let res: Response;
     try {
-      if (!channel) {
-        const res = await this.httpClient.post({
-          path: `/feedback/prompting-init`,
-          body: {
-            userId: this.userId,
-          },
-        });
+      res = await this.httpClient.post({
+        path: `/feedback/prompting-init`,
+        body: {
+          userId: this.userId,
+        },
+      });
+    } catch (e) {
+      logLifecycleAwareFetchError(
+        this.logger,
+        `error initializing automatic feedback`,
+        e,
+      );
+      return;
+    }
 
-        this.logger.debug(`automatic feedback status sent`, res);
-        if (!res.ok) {
+    try {
+      this.logger.debug(`automatic feedback status sent`, res);
+      if (!res.ok) {
+        try {
           await logResponseError({
             logger: this.logger,
             res,
             message: "automatic feedback init request failed",
           });
-          return;
+        } catch (e) {
+          logLifecycleAwareFetchError(
+            this.logger,
+            `error initializing automatic feedback`,
+            e,
+          );
         }
+        return;
+      }
 
-        const body: { success: boolean; channel?: string } = await res.json();
-        if (body.success && body.channel) {
-          return body.channel;
-        }
+      const body: { success: boolean; channel?: string } = await res.json();
+      if (body.success && body.channel) {
+        return body.channel;
       }
     } catch (e) {
-      logLifecycleAwareNetworkError(
+      logLifecycleAwareFetchError(
         this.logger,
         `error initializing automatic feedback`,
         e,

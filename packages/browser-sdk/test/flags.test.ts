@@ -215,6 +215,25 @@ describe("FlagsClient", () => {
     );
   });
 
+  test("downgrades page teardown body-read failures to debug logs", async () => {
+    const { newFlagsClient, httpClient } = flagsClientFactory();
+
+    vi.mocked(httpClient.get).mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    } as unknown as Response);
+    window.dispatchEvent(new Event("pagehide"));
+
+    const flagsClient = newFlagsClient();
+    await flagsClient.initialize();
+
+    expect(testLogger.error).not.toHaveBeenCalled();
+    expect(testLogger.debug).toHaveBeenCalledWith(
+      "[Flags] error fetching flags: (aborted during page teardown)",
+      expect.any(TypeError),
+    );
+  });
+
   test("caches response", async () => {
     const { newFlagsClient, httpClient } = flagsClientFactory();
 

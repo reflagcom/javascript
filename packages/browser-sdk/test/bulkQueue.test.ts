@@ -35,6 +35,7 @@ describe("BulkQueue", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     sessionStorage.clear();
+    window.dispatchEvent(new Event("pageshow"));
   });
 
   afterEach(() => {
@@ -131,6 +132,36 @@ describe("BulkQueue", () => {
     await vi.advanceTimersByTimeAsync(20);
     expect(sendBulk).toHaveBeenCalledTimes(2);
     expect(sendBulk).toHaveBeenNthCalledWith(2, [trackEvent]);
+  });
+
+  it("keeps 5xx bulk retries on the normal degraded-delivery path during teardown", async () => {
+    const logger = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+    const sendBulk = vi
+      .fn<(events: BulkEvent[]) => Promise<Response>>()
+      .mockResolvedValue(new Response("", { status: 500 }));
+    const queue = new BulkQueue(sendBulk, {
+      flushDelayMs: 10,
+      retryBaseDelayMs: 20,
+      retryMaxDelayMs: 20,
+      logger,
+    });
+
+    window.dispatchEvent(new Event("pagehide"));
+    await queue.enqueue(trackEvent);
+
+    await vi.advanceTimersByTimeAsync(10);
+    expect(sendBulk).toHaveBeenCalledTimes(1);
+    expect(logger.debug).not.toHaveBeenCalled();
+    expect(logger.info).toHaveBeenCalledWith("bulk retry scheduled", {
+      retryInMs: 20,
+      queueSize: 2,
+      consecutiveFailures: 1,
+    });
   });
 
   it("drops 4xx responses, logs error, and does not retry", async () => {

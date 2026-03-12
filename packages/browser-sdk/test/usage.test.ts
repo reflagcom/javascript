@@ -236,6 +236,41 @@ describe("feedback prompting", () => {
       post.mockRestore();
     }
   });
+
+  test("downgrades prompting init body-read failures during page teardown", async () => {
+    const logger = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+    const post = vi.spyOn(HttpClient.prototype, "post").mockResolvedValueOnce({
+      ok: true,
+      json: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    } as unknown as Response);
+
+    window.dispatchEvent(new Event("pagehide"));
+
+    try {
+      const reflagInstance = new ReflagClient({
+        publishableKey: KEY,
+        user: { id: "foo" },
+        enableTracking: false,
+        logger,
+      });
+      await reflagInstance.initialize();
+
+      expect(post).toHaveBeenCalled();
+      expect(logger.error).not.toHaveBeenCalled();
+      expect(logger.debug).toHaveBeenCalledWith(
+        "error initializing automatic feedback (aborted during page teardown)",
+        expect.any(TypeError),
+      );
+      expect(openAblySSEChannel).toBeCalledTimes(0);
+    } finally {
+      post.mockRestore();
+    }
+  });
 });
 
 describe("feedback state management", () => {

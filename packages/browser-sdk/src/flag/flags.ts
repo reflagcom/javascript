@@ -9,7 +9,7 @@ import RateLimiter from "../rateLimiter";
 import { getDefaultStorageAdapter, StorageAdapter } from "../storage";
 import { createAbortController } from "../utils/abortController";
 import { createEventTarget } from "../utils/eventTarget";
-import { logLifecycleAwareNetworkError } from "../utils/pageLifecycle";
+import { logLifecycleAwareFetchError } from "../utils/pageLifecycle";
 import { logResponseError, parseResponseError } from "../utils/responseError";
 
 import { FlagCache, isObject, parseAPIFlagsResponse } from "./flagCache";
@@ -411,34 +411,52 @@ export class FlagsClient {
 
   async fetchFlags(): Promise<RawFlags | undefined> {
     const params = this.fetchParams();
+    let res: Response;
     try {
-      const res = await this.httpClient.get({
+      res = await this.httpClient.get({
         path: "/features/evaluated",
         timeoutMs: this.config.timeoutMs,
         params,
       });
+    } catch (e) {
+      logLifecycleAwareFetchError(this.logger, "error fetching flags:", e);
+      return;
+    }
 
-      if (!res.ok) {
+    if (!res.ok) {
+      try {
         const { errorDetails, errorSummary } = await parseResponseError(res);
         const fallbackBody = errorDetails.responseBody
           ? ` - ${errorDetails.responseBody}`
           : "";
 
-        throw new Error(
-          `unexpected response code: ${res.status}${
-            errorSummary ? ` - ${errorSummary}` : fallbackBody
-          }`,
+        this.logger.error(
+          "error fetching flags:",
+          new Error(
+            `unexpected response code: ${res.status}${
+              errorSummary ? ` - ${errorSummary}` : fallbackBody
+            }`,
+          ),
         );
+      } catch (e) {
+        logLifecycleAwareFetchError(this.logger, "error fetching flags:", e);
       }
+      return;
+    }
 
+    try {
       const typeRes = validateFlagsResponse(await res.json());
       if (!typeRes || !typeRes.success) {
-        throw new Error("unable to validate response");
+        this.logger.error(
+          "error fetching flags:",
+          new Error("unable to validate response"),
+        );
+        return;
       }
 
       return typeRes.flags;
     } catch (e) {
-      logLifecycleAwareNetworkError(this.logger, "error fetching flags:", e);
+      logLifecycleAwareFetchError(this.logger, "error fetching flags:", e);
       return;
     }
   }

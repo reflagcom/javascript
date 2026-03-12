@@ -1,4 +1,4 @@
-import { isPageLifecycleAbortError } from "./utils/pageLifecycle";
+import { isPageTearingDown } from "./utils/pageLifecycle";
 import { logResponseError } from "./utils/responseError";
 import {
   BULK_QUEUE_FLUSH_DELAY_MS,
@@ -247,39 +247,9 @@ export class BulkQueue {
   private async sendBatch(batch: BulkEvent[]) {
     let nextDelayMs: number | null = null;
 
+    let res: Response;
     try {
-      const res = await this.sendBulk(batch);
-      if (!res.ok) {
-        if (res.status >= 400 && res.status < 500) {
-          this.retryCount = 0;
-          this.firstFailureAt = null;
-          this.consecutiveFailures = 0;
-          this.lastWarnAt = null;
-          if (this.logger) {
-            await logResponseError({
-              logger: this.logger,
-              res,
-              message:
-                "bulk request failed with non-retriable status; dropping batch",
-            });
-          }
-          nextDelayMs = this.flushDelayMs;
-        } else {
-          throw new Error(`unexpected status ${res.status}`);
-        }
-      } else {
-        this.retryCount = 0;
-        if (this.firstFailureAt !== null && this.consecutiveFailures > 0) {
-          this.logger?.info("bulk delivery recovered", {
-            outageMs: Date.now() - this.firstFailureAt,
-            failedAttempts: this.consecutiveFailures,
-          });
-        }
-        this.firstFailureAt = null;
-        this.consecutiveFailures = 0;
-        this.lastWarnAt = null;
-        nextDelayMs = this.flushDelayMs;
-      }
+      res = await this.sendBulk(batch);
     } catch (error) {
       this.queue = batch.concat(this.queue);
 
@@ -296,7 +266,7 @@ export class BulkQueue {
         queueSize: this.queue.length + this.getInFlightBatchSize(),
         consecutiveFailures: this.consecutiveFailures,
       };
-      if (isPageLifecycleAbortError(error)) {
+      if (isPageTearingDown()) {
         this.logger?.debug(
           "bulk retry scheduled (aborted during page teardown)",
           {
@@ -314,7 +284,7 @@ export class BulkQueue {
         outageMs >= WARN_AFTER_FAILURE_MS;
       const canWarnNow =
         this.lastWarnAt === null || now - this.lastWarnAt >= WARN_THROTTLE_MS;
-      if (shouldWarn && canWarnNow && !isPageLifecycleAbortError(error)) {
+      if (shouldWarn && canWarnNow && !isPageTearingDown()) {
         this.logger?.warn("bulk delivery degraded", {
           consecutiveFailures: this.consecutiveFailures,
           outageMs,
@@ -324,7 +294,72 @@ export class BulkQueue {
         });
         this.lastWarnAt = now;
       }
+      return nextDelayMs;
     }
+
+    if (!res.ok) {
+      if (res.status >= 400 && res.status < 500) {
+        this.retryCount = 0;
+        this.firstFailureAt = null;
+        this.consecutiveFailures = 0;
+        this.lastWarnAt = null;
+        if (this.logger) {
+          await logResponseError({
+            logger: this.logger,
+            res,
+            message:
+              "bulk request failed with non-retriable status; dropping batch",
+          });
+        }
+        return this.flushDelayMs;
+      }
+
+      this.queue = batch.concat(this.queue);
+
+      const now = Date.now();
+      if (this.firstFailureAt === null) {
+        this.firstFailureAt = now;
+      }
+      this.consecutiveFailures += 1;
+      this.retryCount += 1;
+      const retryInMs = this.getRetryDelay();
+      nextDelayMs = retryInMs;
+      this.logger?.info("bulk retry scheduled", {
+        retryInMs,
+        queueSize: this.queue.length + this.getInFlightBatchSize(),
+        consecutiveFailures: this.consecutiveFailures,
+      });
+
+      const outageMs = now - this.firstFailureAt;
+      const shouldWarn =
+        this.consecutiveFailures >= WARN_AFTER_CONSECUTIVE_FAILURES ||
+        outageMs >= WARN_AFTER_FAILURE_MS;
+      const canWarnNow =
+        this.lastWarnAt === null || now - this.lastWarnAt >= WARN_THROTTLE_MS;
+      if (shouldWarn && canWarnNow) {
+        this.logger?.warn("bulk delivery degraded", {
+          consecutiveFailures: this.consecutiveFailures,
+          outageMs,
+          queueSize: this.queue.length + this.getInFlightBatchSize(),
+          retryInMs,
+          error: new Error(`unexpected status ${res.status}`),
+        });
+        this.lastWarnAt = now;
+      }
+      return nextDelayMs;
+    }
+
+    this.retryCount = 0;
+    if (this.firstFailureAt !== null && this.consecutiveFailures > 0) {
+      this.logger?.info("bulk delivery recovered", {
+        outageMs: Date.now() - this.firstFailureAt,
+        failedAttempts: this.consecutiveFailures,
+      });
+    }
+    this.firstFailureAt = null;
+    this.consecutiveFailures = 0;
+    this.lastWarnAt = null;
+    nextDelayMs = this.flushDelayMs;
 
     return nextDelayMs;
   }
