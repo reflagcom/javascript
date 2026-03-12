@@ -15,7 +15,7 @@ import type {
 } from "./types";
 import { isObject } from "./utils";
 
-type FileFlagsFallbackProviderOptions = {
+export type FileFlagsFallbackProviderOptions = {
   /**
    * Fixed path to use for the snapshot file.
    */
@@ -29,7 +29,7 @@ type FileFlagsFallbackProviderOptions = {
   directory?: string;
 };
 
-type S3FlagsFallbackProviderOptions = {
+export type S3FlagsFallbackProviderOptions = {
   /**
    * Bucket where snapshots are stored.
    */
