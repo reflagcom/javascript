@@ -1,7 +1,6 @@
 import { createAbortController } from "./utils/abortController";
 import { API_BASE_URL, SDK_VERSION, SDK_VERSION_HEADER_NAME } from "./config";
 
-const KEEPALIVE_MAX_BODY_BYTES = 60 * 1024;
 const KEEPALIVE_MAX_IN_FLIGHT_BYTES = 60 * 1024;
 const KEEPALIVE_MAX_IN_FLIGHT_REQUESTS = 15;
 
@@ -99,7 +98,6 @@ export class HttpClient {
     const bodyBytes = getBodyByteLength(serializedBody);
     const shouldUseKeepalive =
       keepalive &&
-      bodyBytes <= KEEPALIVE_MAX_BODY_BYTES &&
       this.inFlightKeepaliveBytes + bodyBytes <=
         KEEPALIVE_MAX_IN_FLIGHT_BYTES &&
       this.inFlightKeepaliveRequests < KEEPALIVE_MAX_IN_FLIGHT_REQUESTS;
