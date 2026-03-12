@@ -577,6 +577,35 @@ client.flagOverrides = { myFlag: false };
 client.clearFlagOverrides();
 ```
 
+For nested or temporary test overrides, use `pushFlagOverrides()`. It layers on top of the current overrides and returns a restore function that removes only that layer. You can wrap that in a small helper:
+
+```typescript
+export const flag = function (name: string, enabled: boolean): void {
+  let restore: (() => void) | undefined;
+
+  beforeEach(function () {
+    restore = reflagClient.pushFlagOverrides({ [name]: enabled });
+  });
+
+  afterEach(function () {
+    restore?.();
+    restore = undefined;
+  });
+};
+
+describe("foo", () => {
+  describe("with new search ranking enabled", () => {
+    flag("search-ranking-v2", true);
+
+    describe("with summaries enabled", () => {
+      flag("smart-summaries", true);
+
+      // ...
+    });
+  });
+});
+```
+
 To get dynamic overrides, use a function which takes a context and returns a boolean or an object with the shape of `{isEnabled, config}`:
 
 ```typescript

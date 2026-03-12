@@ -63,6 +63,38 @@ import {
 const reflagConfigDefaultFile = "reflag.config.json";
 
 type PartialBy<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
+type FlagOverrideLayer = {
+  id: number;
+  overrides: FlagOverridesFn;
+};
+
+function normalizeFlagOverrides(
+  overrides: FlagOverridesFn | FlagOverrides | undefined,
+): FlagOverridesFn {
+  if (typeof overrides === "function") {
+    return overrides;
+  }
+
+  return () => overrides ?? {};
+}
+
+function composeFlagOverrides(
+  baseOverrides: FlagOverridesFn,
+  layers: FlagOverrideLayer[],
+): FlagOverridesFn {
+  if (layers.length === 0) {
+    return baseOverrides;
+  }
+
+  return (context) =>
+    layers.reduce(
+      (acc, layer) => ({
+        ...acc,
+        ...layer.overrides(context),
+      }),
+      baseOverrides(context),
+    );
+}
 
 type BulkEvent =
   | {
@@ -138,6 +170,9 @@ export class ReflagClient {
   private flagsCache: Cache<CachedFlagDefinition[]>;
   private batchBuffer: BatchBuffer<BulkEvent>;
   private rateLimiter: ReturnType<typeof newRateLimiter>;
+  private baseFlagOverrides: FlagOverridesFn = () => ({});
+  private flagOverrideLayers: FlagOverrideLayer[] = [];
+  private nextFlagOverrideLayerId = 0;
 
   /**
    * Gets the logger associated with the client.
@@ -259,6 +294,12 @@ export class ReflagClient {
       ? options.logger
       : applyLogLevel(decorateLogger(REFLAG_LOG_PREFIX, console), logLevel);
 
+    const baseFlagOverrides = normalizeFlagOverrides(
+      typeof config.flagOverrides === "function" || isObject(config.flagOverrides)
+        ? config.flagOverrides
+        : {},
+    );
+
     const fallbackFlags = Array.isArray(options.fallbackFlags)
       ? options.fallbackFlags.reduce((acc, key) => {
           acc[key as TypedFlagKey] = {
@@ -309,14 +350,12 @@ export class ReflagClient {
       refetchInterval: FLAGS_REFETCH_MS,
       staleWarningInterval: FLAGS_REFETCH_MS * 5,
       fallbackFlags: fallbackFlags,
-      flagOverrides:
-        typeof config.flagOverrides === "function"
-          ? config.flagOverrides
-          : () => config.flagOverrides,
+      flagOverrides: baseFlagOverrides,
       flagsFetchRetries: options.flagsFetchRetries ?? 3,
       fetchTimeoutMs: options.fetchTimeoutMs ?? API_TIMEOUT_MS,
       cacheStrategy: options.cacheStrategy ?? "periodically-update",
     };
+    this.baseFlagOverrides = baseFlagOverrides;
 
     if ((config.batchOptions?.flushOnExit ?? true) && !this._config.offline) {
       triggerOnExit(() => this.flush());
@@ -394,11 +433,63 @@ export class ReflagClient {
    * ```
    **/
   set flagOverrides(overrides: FlagOverridesFn | FlagOverrides) {
-    if (typeof overrides === "object") {
-      this._config.flagOverrides = () => overrides;
-    } else {
-      this._config.flagOverrides = overrides;
-    }
+    this.baseFlagOverrides = normalizeFlagOverrides(overrides);
+    this.flagOverrideLayers = [];
+    this.syncFlagOverrides();
+  }
+
+  /**
+   * Temporarily layers flag overrides on top of the current overrides.
+   *
+   * @param overrides - The flag overrides to apply for the scoped period.
+   *
+   * @returns A restore function that removes only this override layer.
+   *
+   * @remarks
+   * This is intended for tests or other short-lived local overrides. The restore
+   * function is idempotent and can safely be called multiple times.
+   *
+   * @example
+   * ```ts
+   * let restore: (() => void) | undefined;
+   *
+   * beforeEach(() => {
+   *   restore = client.pushFlagOverrides({ "flag-1": true });
+   * });
+   *
+   * afterEach(() => {
+   *   restore?.();
+   *   restore = undefined;
+   * });
+   * ```
+   **/
+  pushFlagOverrides(overrides: FlagOverridesFn | FlagOverrides): () => void {
+    const layer: FlagOverrideLayer = {
+      id: this.nextFlagOverrideLayerId++,
+      overrides: normalizeFlagOverrides(overrides),
+    };
+
+    this.flagOverrideLayers.push(layer);
+    this.syncFlagOverrides();
+
+    let restored = false;
+
+    return () => {
+      if (restored) {
+        return;
+      }
+      restored = true;
+
+      const layerIndex = this.flagOverrideLayers.findIndex(
+        ({ id }) => id === layer.id,
+      );
+      if (layerIndex === -1) {
+        return;
+      }
+
+      this.flagOverrideLayers.splice(layerIndex, 1);
+      this.syncFlagOverrides();
+    };
   }
 
   /**
@@ -415,7 +506,16 @@ export class ReflagClient {
    * ```
    **/
   clearFlagOverrides() {
-    this._config.flagOverrides = () => ({});
+    this.baseFlagOverrides = () => ({});
+    this.flagOverrideLayers = [];
+    this.syncFlagOverrides();
+  }
+
+  private syncFlagOverrides() {
+    this._config.flagOverrides = composeFlagOverrides(
+      this.baseFlagOverrides,
+      this.flagOverrideLayers,
+    );
   }
 
   /**

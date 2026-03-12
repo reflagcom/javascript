@@ -1874,6 +1874,68 @@ describe("ReflagClient", () => {
         },
       });
     });
+
+    it("should push and restore layered flag overrides", async () => {
+      await client.initialize();
+      const context = { user, company, other: otherContext };
+
+      expect(client.getFlag(context, "flag1").isEnabled).toBe(true);
+      expect(client.getFlag(context, "flag2").isEnabled).toBe(false);
+
+      const restoreFlag1 = client.pushFlagOverrides({
+        flag1: false,
+      });
+
+      expect(client.getFlag(context, "flag1").isEnabled).toBe(false);
+      expect(client.getFlag(context, "flag2").isEnabled).toBe(false);
+
+      const restoreFlag2 = client.pushFlagOverrides({
+        flag2: true,
+      });
+
+      expect(client.getFlag(context, "flag1").isEnabled).toBe(false);
+      expect(client.getFlag(context, "flag2").isEnabled).toBe(true);
+
+      restoreFlag2();
+
+      expect(client.getFlag(context, "flag1").isEnabled).toBe(false);
+      expect(client.getFlag(context, "flag2").isEnabled).toBe(false);
+
+      restoreFlag1();
+
+      expect(client.getFlag(context, "flag1").isEnabled).toBe(true);
+      expect(client.getFlag(context, "flag2").isEnabled).toBe(false);
+    });
+
+    it("should compose pushed flag overrides with existing override functions", async () => {
+      await client.initialize();
+      const context = { user, company, other: otherContext };
+
+      client.flagOverrides = () => ({
+        flag1: false,
+      });
+
+      const restore = client.pushFlagOverrides((overrideContext: Context) => {
+        expect(overrideContext).toStrictEqual({
+          user,
+          company,
+          other: otherContext,
+        });
+
+        return {
+          flag2: true,
+        };
+      });
+
+      expect(client.getFlag(context, "flag1").isEnabled).toBe(false);
+      expect(client.getFlag(context, "flag2").isEnabled).toBe(true);
+
+      restore();
+      restore();
+
+      expect(client.getFlag(context, "flag1").isEnabled).toBe(false);
+      expect(client.getFlag(context, "flag2").isEnabled).toBe(false);
+    });
   });
 
   describe("getFlagsForBootstrap", () => {
