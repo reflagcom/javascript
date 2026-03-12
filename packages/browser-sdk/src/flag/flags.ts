@@ -10,11 +10,12 @@ import { getDefaultStorageAdapter, StorageAdapter } from "../storage";
 import { createAbortController } from "../utils/abortController";
 import { createEventTarget } from "../utils/eventTarget";
 import { logResponseError, parseResponseError } from "../utils/responseError";
-import { retryOnThrow } from "../utils/retry";
+import {
+  INITIAL_FETCH_RETRY_DELAYS_MS,
+  retryOnThrow,
+} from "../utils/retry";
 
 import { FlagCache, isObject, parseAPIFlagsResponse } from "./flagCache";
-
-const INITIAL_FETCH_RETRY_DELAYS_MS = [0, 5000];
 
 /**
  * A flag fetched from the server.

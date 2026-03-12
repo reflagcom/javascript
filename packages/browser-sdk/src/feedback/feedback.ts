@@ -4,7 +4,10 @@ import { Logger } from "../logger";
 import { AblySSEChannel, openAblySSEChannel } from "../sse";
 import { Position } from "../ui/types";
 import { logResponseError } from "../utils/responseError";
-import { retryOnThrow } from "../utils/retry";
+import {
+  INITIAL_FETCH_RETRY_DELAYS_MS,
+  retryOnThrow,
+} from "../utils/retry";
 
 import {
   FeedbackSubmission,
@@ -19,8 +22,6 @@ import {
 import { getAuthToken } from "./promptStorage";
 import * as feedbackLib from "./ui";
 import { DEFAULT_POSITION } from "./ui";
-
-const INITIAL_FETCH_RETRY_DELAYS_MS = [0, 5000];
 
 export type Key = string;
 

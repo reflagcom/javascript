@@ -8,6 +8,8 @@ function delay(ms: number) {
   });
 }
 
+export const INITIAL_FETCH_RETRY_DELAYS_MS = [0, 5000];
+
 export async function retryOnThrow<T>(
   retryDelaysMs: number[],
   operation: () => Promise<T>,
