@@ -64,6 +64,29 @@ describe("sets `credentials`", () => {
     );
   });
 
+  test("uses keepalive for small request bodies when requested", async () => {
+    const client = new HttpClient("publishableKey");
+
+    await client.post({ path: "/test", body: { ok: true }, keepalive: true });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.any(URL),
+      expect.objectContaining({ keepalive: true }),
+    );
+  });
+
+  test("does not use keepalive for large request bodies", async () => {
+    const client = new HttpClient("publishableKey");
+    const largeBody = { payload: "x".repeat(70 * 1024) };
+
+    await client.post({ path: "/test", body: largeBody, keepalive: true });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.any(URL),
+      expect.objectContaining({ keepalive: false }),
+    );
+  });
+
   test("does not require a writable `URL.search` property", async () => {
     const OriginalURL = global.URL;
 

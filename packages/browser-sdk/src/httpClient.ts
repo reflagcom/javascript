@@ -1,10 +1,16 @@
 import { createAbortController } from "./utils/abortController";
 import { API_BASE_URL, SDK_VERSION, SDK_VERSION_HEADER_NAME } from "./config";
 
+const KEEPALIVE_MAX_BODY_BYTES = 60 * 1024;
+
 export interface HttpClientOptions {
   baseUrl?: string;
   sdkVersion?: string;
   credentials?: RequestCredentials;
+}
+
+function getBodyByteLength(value: string) {
+  return new TextEncoder().encode(value).length;
 }
 
 export class HttpClient {
@@ -85,16 +91,21 @@ export class HttpClient {
     body: any;
     keepalive?: boolean;
   }): ReturnType<typeof fetch> {
+    const serializedBody = JSON.stringify(body);
+    const shouldUseKeepalive =
+      keepalive &&
+      getBodyByteLength(serializedBody) <= KEEPALIVE_MAX_BODY_BYTES;
+
     return fetch(this.getUrl(path), {
       ...this.fetchOptions,
       method: "POST",
-      keepalive,
+      keepalive: shouldUseKeepalive,
       headers: {
         "Content-Type": "application/json",
         [SDK_VERSION_HEADER_NAME]: this.sdkVersion,
         Authorization: `Bearer ${this.publishableKey}`,
       },
-      body: JSON.stringify(body),
+      body: serializedBody,
     });
   }
 }

@@ -328,8 +328,14 @@ export type InitOptions = ReflagDeprecatedContext & {
     maxSize?: number;
 
     /**
-     * No retries are performed; failed batches are dropped.
+     * Deprecated: retries are no longer performed for bulk delivery.
      */
+    retryBaseDelayMs?: number;
+
+    /**
+     * Deprecated: retries are no longer performed for bulk delivery.
+     */
+    retryMaxDelayMs?: number;
   };
 };
 
@@ -423,6 +429,7 @@ export class ReflagClient {
   private autoFeedbackInit: Promise<void> | undefined;
   private readonly flagsClient: FlagsClient;
   private readonly bulkQueue: BulkQueue | undefined;
+  private readonly handleBeforeUnload?: () => void;
 
   public readonly logger: Logger;
 
@@ -479,6 +486,14 @@ export class ReflagClient {
           logger: this.logger,
         },
       );
+    }
+    if (this.bulkQueue && !IS_SERVER) {
+      this.handleBeforeUnload = () => {
+        void this.bulkQueue?.flush();
+      };
+      window.addEventListener("beforeunload", this.handleBeforeUnload, {
+        capture: true,
+      });
     }
 
     const bulkQueue = this.bulkQueue;
@@ -590,6 +605,12 @@ export class ReflagClient {
    *
    **/
   async stop() {
+    if (this.handleBeforeUnload && !IS_SERVER) {
+      window.removeEventListener("beforeunload", this.handleBeforeUnload, {
+        capture: true,
+      });
+    }
+
     if (this.bulkQueue) {
       await this.bulkQueue.flush();
       let remaining = await this.bulkQueue.size();
