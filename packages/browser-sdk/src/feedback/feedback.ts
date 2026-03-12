@@ -3,8 +3,8 @@ import { HttpClient } from "../httpClient";
 import { Logger } from "../logger";
 import { AblySSEChannel, openAblySSEChannel } from "../sse";
 import { Position } from "../ui/types";
-import { logLifecycleAwareFetchError } from "../utils/pageLifecycle";
 import { logResponseError } from "../utils/responseError";
+import { retryOnThrow } from "../utils/retry";
 
 import {
   FeedbackSubmission,
@@ -19,6 +19,8 @@ import {
 import { getAuthToken } from "./promptStorage";
 import * as feedbackLib from "./ui";
 import { DEFAULT_POSITION } from "./ui";
+
+const INITIAL_FETCH_RETRY_DELAYS_MS = [0, 5000];
 
 export type Key = string;
 
@@ -494,54 +496,40 @@ export class AutoFeedback {
       return channel;
     }
 
-    let res: Response;
     try {
-      res = await this.httpClient.post({
-        path: `/feedback/prompting-init`,
-        body: {
-          userId: this.userId,
-        },
+      return await retryOnThrow(INITIAL_FETCH_RETRY_DELAYS_MS, async () => {
+        const res = await this.httpClient.post({
+          path: `/feedback/prompting-init`,
+          body: {
+            userId: this.userId,
+          },
+        });
+
+        this.logger.debug(`automatic feedback status sent`, res);
+        if (!res.ok) {
+          try {
+            await logResponseError({
+              logger: this.logger,
+              res,
+              message: "automatic feedback init request failed",
+            });
+          } catch {
+            this.logger.error(
+              `error initializing automatic feedback`,
+              new Error(`unexpected response code: ${res.status}`),
+            );
+          }
+          return;
+        }
+
+        const body: { success: boolean; channel?: string } = await res.json();
+        if (body.success && body.channel) {
+          return body.channel;
+        }
       });
     } catch (e) {
-      logLifecycleAwareFetchError(
-        this.logger,
-        `error initializing automatic feedback`,
-        e,
-      );
+      this.logger.error(`error initializing automatic feedback`, e);
       return;
     }
-
-    try {
-      this.logger.debug(`automatic feedback status sent`, res);
-      if (!res.ok) {
-        try {
-          await logResponseError({
-            logger: this.logger,
-            res,
-            message: "automatic feedback init request failed",
-          });
-        } catch (e) {
-          logLifecycleAwareFetchError(
-            this.logger,
-            `error initializing automatic feedback`,
-            e,
-          );
-        }
-        return;
-      }
-
-      const body: { success: boolean; channel?: string } = await res.json();
-      if (body.success && body.channel) {
-        return body.channel;
-      }
-    } catch (e) {
-      logLifecycleAwareFetchError(
-        this.logger,
-        `error initializing automatic feedback`,
-        e,
-      );
-      return;
-    }
-    return;
   }
 }

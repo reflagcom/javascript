@@ -1,4 +1,3 @@
-import { isPageTearingDown } from "./utils/pageLifecycle";
 import { logResponseError } from "./utils/responseError";
 import {
   BULK_QUEUE_FLUSH_DELAY_MS,
@@ -266,17 +265,7 @@ export class BulkQueue {
         queueSize: this.queue.length + this.getInFlightBatchSize(),
         consecutiveFailures: this.consecutiveFailures,
       };
-      if (isPageTearingDown()) {
-        this.logger?.debug(
-          "bulk retry scheduled (aborted during page teardown)",
-          {
-            ...logDetails,
-            error,
-          },
-        );
-      } else {
-        this.logger?.info("bulk retry scheduled", logDetails);
-      }
+      this.logger?.info("bulk retry scheduled", logDetails);
 
       const outageMs = now - this.firstFailureAt;
       const shouldWarn =
@@ -284,7 +273,7 @@ export class BulkQueue {
         outageMs >= WARN_AFTER_FAILURE_MS;
       const canWarnNow =
         this.lastWarnAt === null || now - this.lastWarnAt >= WARN_THROTTLE_MS;
-      if (shouldWarn && canWarnNow && !isPageTearingDown()) {
+      if (shouldWarn && canWarnNow) {
         this.logger?.warn("bulk delivery degraded", {
           consecutiveFailures: this.consecutiveFailures,
           outageMs,

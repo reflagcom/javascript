@@ -35,7 +35,6 @@ describe("BulkQueue", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     sessionStorage.clear();
-    window.dispatchEvent(new Event("pageshow"));
   });
 
   afterEach(() => {
@@ -89,7 +88,7 @@ describe("BulkQueue", () => {
     expect(sendBulk).toHaveBeenNthCalledWith(2, [trackEvent]);
   });
 
-  it("requeues and downgrades page teardown aborts for bulk sends", async () => {
+  it("logs normal retry scheduling for thrown bulk send failures", async () => {
     const logger = {
       debug: vi.fn(),
       info: vi.fn(),
@@ -107,51 +106,6 @@ describe("BulkQueue", () => {
       logger,
     });
 
-    window.dispatchEvent(new Event("pagehide"));
-    await queue.enqueue(trackEvent);
-
-    await vi.advanceTimersByTimeAsync(10);
-    expect(sendBulk).toHaveBeenCalledTimes(1);
-    expect(await queue.size()).toBe(1);
-    expect(logger.debug).toHaveBeenCalledWith(
-      "bulk retry scheduled (aborted during page teardown)",
-      expect.objectContaining({
-        retryInMs: 20,
-        queueSize: 2,
-        consecutiveFailures: 1,
-        error: expect.any(TypeError),
-      }),
-    );
-    expect(logger.info).not.toHaveBeenCalledWith(
-      "bulk retry scheduled",
-      expect.anything(),
-    );
-    expect(logger.warn).not.toHaveBeenCalled();
-
-    window.dispatchEvent(new Event("pageshow"));
-    await vi.advanceTimersByTimeAsync(20);
-    expect(sendBulk).toHaveBeenCalledTimes(2);
-    expect(sendBulk).toHaveBeenNthCalledWith(2, [trackEvent]);
-  });
-
-  it("keeps 5xx bulk retries on the normal degraded-delivery path during teardown", async () => {
-    const logger = {
-      debug: vi.fn(),
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-    };
-    const sendBulk = vi
-      .fn<(events: BulkEvent[]) => Promise<Response>>()
-      .mockResolvedValue(new Response("", { status: 500 }));
-    const queue = new BulkQueue(sendBulk, {
-      flushDelayMs: 10,
-      retryBaseDelayMs: 20,
-      retryMaxDelayMs: 20,
-      logger,
-    });
-
-    window.dispatchEvent(new Event("pagehide"));
     await queue.enqueue(trackEvent);
 
     await vi.advanceTimersByTimeAsync(10);
@@ -162,6 +116,8 @@ describe("BulkQueue", () => {
       queueSize: 2,
       consecutiveFailures: 1,
     });
+    await vi.advanceTimersByTimeAsync(20);
+    expect(sendBulk).toHaveBeenCalledTimes(2);
   });
 
   it("drops 4xx responses, logs error, and does not retry", async () => {

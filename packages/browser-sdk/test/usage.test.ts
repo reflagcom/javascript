@@ -46,7 +46,6 @@ window.innerWidth = 1024;
 
 afterEach(() => {
   server.resetHandlers();
-  window.dispatchEvent(new Event("pageshow"));
 });
 
 beforeEach(() => {
@@ -203,18 +202,24 @@ describe("feedback prompting", () => {
     expect(openAblySSEChannel).toBeCalledTimes(0);
   });
 
-  test("downgrades prompting init fetch failures during page teardown", async () => {
+  test("retries prompting init fetch failures before succeeding", async () => {
+    vi.useFakeTimers();
     const logger = {
       debug: vi.fn(),
       info: vi.fn(),
       warn: vi.fn(),
       error: vi.fn(),
     };
-    const post = vi
-      .spyOn(HttpClient.prototype, "post")
-      .mockRejectedValueOnce(new TypeError("Failed to fetch"));
-
-    window.dispatchEvent(new Event("pagehide"));
+    const post = vi.spyOn(HttpClient.prototype, "post");
+    post
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ success: false }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
 
     try {
       const reflagInstance = new ReflagClient({
@@ -223,33 +228,39 @@ describe("feedback prompting", () => {
         enableTracking: false,
         logger,
       });
-      await reflagInstance.initialize();
+      const initializePromise = reflagInstance.initialize();
+      await vi.advanceTimersByTimeAsync(5000);
+      await initializePromise;
 
-      expect(post).toHaveBeenCalled();
+      expect(post).toHaveBeenCalledTimes(3);
       expect(logger.error).not.toHaveBeenCalled();
-      expect(logger.debug).toHaveBeenCalledWith(
-        "error initializing automatic feedback (aborted during page teardown)",
-        expect.any(TypeError),
-      );
       expect(openAblySSEChannel).toBeCalledTimes(0);
     } finally {
+      vi.useRealTimers();
       post.mockRestore();
     }
   });
 
-  test("downgrades prompting init body-read failures during page teardown", async () => {
+  test("retries prompting init body-read failures before succeeding", async () => {
+    vi.useFakeTimers();
     const logger = {
       debug: vi.fn(),
       info: vi.fn(),
       warn: vi.fn(),
       error: vi.fn(),
     };
-    const post = vi.spyOn(HttpClient.prototype, "post").mockResolvedValueOnce({
-      ok: true,
-      json: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
-    } as unknown as Response);
-
-    window.dispatchEvent(new Event("pagehide"));
+    const post = vi.spyOn(HttpClient.prototype, "post");
+    post
+      .mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+      } as unknown as Response)
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ success: false }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
 
     try {
       const reflagInstance = new ReflagClient({
@@ -258,16 +269,15 @@ describe("feedback prompting", () => {
         enableTracking: false,
         logger,
       });
-      await reflagInstance.initialize();
+      const initializePromise = reflagInstance.initialize();
+      await vi.advanceTimersByTimeAsync(0);
+      await initializePromise;
 
-      expect(post).toHaveBeenCalled();
+      expect(post).toHaveBeenCalledTimes(2);
       expect(logger.error).not.toHaveBeenCalled();
-      expect(logger.debug).toHaveBeenCalledWith(
-        "error initializing automatic feedback (aborted during page teardown)",
-        expect.any(TypeError),
-      );
       expect(openAblySSEChannel).toBeCalledTimes(0);
     } finally {
+      vi.useRealTimers();
       post.mockRestore();
     }
   });

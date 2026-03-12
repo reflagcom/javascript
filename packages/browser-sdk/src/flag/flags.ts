@@ -9,10 +9,12 @@ import RateLimiter from "../rateLimiter";
 import { getDefaultStorageAdapter, StorageAdapter } from "../storage";
 import { createAbortController } from "../utils/abortController";
 import { createEventTarget } from "../utils/eventTarget";
-import { logLifecycleAwareFetchError } from "../utils/pageLifecycle";
 import { logResponseError, parseResponseError } from "../utils/responseError";
+import { retryOnThrow } from "../utils/retry";
 
 import { FlagCache, isObject, parseAPIFlagsResponse } from "./flagCache";
+
+const INITIAL_FETCH_RETRY_DELAYS_MS = [0, 5000];
 
 /**
  * A flag fetched from the server.
@@ -411,52 +413,52 @@ export class FlagsClient {
 
   async fetchFlags(): Promise<RawFlags | undefined> {
     const params = this.fetchParams();
-    let res: Response;
     try {
-      res = await this.httpClient.get({
-        path: "/features/evaluated",
-        timeoutMs: this.config.timeoutMs,
-        params,
+      return await retryOnThrow(INITIAL_FETCH_RETRY_DELAYS_MS, async () => {
+        const res = await this.httpClient.get({
+          path: "/features/evaluated",
+          timeoutMs: this.config.timeoutMs,
+          params,
+        });
+
+        if (!res.ok) {
+          let errorSummary = "";
+          let fallbackBody = "";
+          try {
+            const { errorDetails, errorSummary: parsedSummary } =
+              await parseResponseError(res);
+            errorSummary = parsedSummary ?? "";
+            fallbackBody = errorDetails.responseBody
+              ? ` - ${errorDetails.responseBody}`
+              : "";
+          } catch {
+            // Best-effort response parsing only; the response itself is enough to fail.
+          }
+
+          this.logger.error(
+            "error fetching flags:",
+            new Error(
+              `unexpected response code: ${res.status}${
+                errorSummary ? ` - ${errorSummary}` : fallbackBody
+              }`,
+            ),
+          );
+          return;
+        }
+
+        const typeRes = validateFlagsResponse(await res.json());
+        if (!typeRes || !typeRes.success) {
+          this.logger.error(
+            "error fetching flags:",
+            new Error("unable to validate response"),
+          );
+          return;
+        }
+
+        return typeRes.flags;
       });
     } catch (e) {
-      logLifecycleAwareFetchError(this.logger, "error fetching flags:", e);
-      return;
-    }
-
-    if (!res.ok) {
-      try {
-        const { errorDetails, errorSummary } = await parseResponseError(res);
-        const fallbackBody = errorDetails.responseBody
-          ? ` - ${errorDetails.responseBody}`
-          : "";
-
-        this.logger.error(
-          "error fetching flags:",
-          new Error(
-            `unexpected response code: ${res.status}${
-              errorSummary ? ` - ${errorSummary}` : fallbackBody
-            }`,
-          ),
-        );
-      } catch (e) {
-        logLifecycleAwareFetchError(this.logger, "error fetching flags:", e);
-      }
-      return;
-    }
-
-    try {
-      const typeRes = validateFlagsResponse(await res.json());
-      if (!typeRes || !typeRes.success) {
-        this.logger.error(
-          "error fetching flags:",
-          new Error("unable to validate response"),
-        );
-        return;
-      }
-
-      return typeRes.flags;
-    } catch (e) {
-      logLifecycleAwareFetchError(this.logger, "error fetching flags:", e);
+      this.logger.error("error fetching flags:", e);
       return;
     }
   }
