@@ -151,7 +151,7 @@ export class BulkQueue {
     try {
       res = await this.sendBulk(batch);
     } catch (error) {
-      this.logger?.error("bulk request failed; dropping batch", {
+      this.logger?.debug("bulk request failed; dropping batch", {
         error,
         batchSize: batch.length,
       });
@@ -190,7 +190,7 @@ export class BulkQueue {
       !this.lastDropErrorAt ||
       now - this.lastDropErrorAt >= DROP_ERROR_THROTTLE_MS
     ) {
-      this.logger?.error("bulk queue dropped events due to max size", {
+      this.logger?.debug("bulk queue dropped events due to max size", {
         droppedEvents: this.droppedSinceLastError,
         totalDroppedEvents: this.totalDroppedEvents,
         queueSize: this.queue.length + this.getInFlightBatchSize(),

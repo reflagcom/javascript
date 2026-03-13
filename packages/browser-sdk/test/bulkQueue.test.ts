@@ -82,13 +82,14 @@ describe("BulkQueue", () => {
     await vi.advanceTimersByTimeAsync(10);
     expect(sendBulk).toHaveBeenCalledTimes(1);
     expect(await queue.size()).toBe(0);
-    expect(logger.error).toHaveBeenCalledWith(
+    expect(logger.debug).toHaveBeenCalledWith(
       "bulk request failed; dropping batch",
       expect.objectContaining({
         error: expect.any(Error),
         batchSize: 1,
       }),
     );
+    expect(logger.error).not.toHaveBeenCalled();
   });
 
   it("drops 4xx responses, logs error, and does not retry", async () => {
@@ -237,9 +238,16 @@ describe("BulkQueue", () => {
             resolveSend = resolve;
           }),
       );
+    const logger = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
     const queue = new BulkQueue(sendBulk, {
       flushDelayMs: 10_000,
       maxSize: 2,
+      logger,
     });
 
     await queue.enqueue(userEvent);
@@ -249,6 +257,16 @@ describe("BulkQueue", () => {
     expect(await queue.size()).toBe(2);
     expect(sendBulk).toHaveBeenCalledTimes(1);
     expect(sendBulk).toHaveBeenCalledWith([userEvent, companyEvent]);
+    expect(logger.debug).toHaveBeenCalledWith(
+      "bulk queue dropped events due to max size",
+      expect.objectContaining({
+        droppedEvents: 1,
+        totalDroppedEvents: 1,
+        queueSize: 2,
+        maxSize: 2,
+      }),
+    );
+    expect(logger.error).not.toHaveBeenCalled();
 
     resolveSend?.(new Response("", { status: 200 }));
   });
