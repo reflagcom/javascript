@@ -32,7 +32,7 @@ jobs:
         uses: changesets/action@v1
         with:
           version: yarn version-packages
-          publish: yarn build && yarn release
+          publish: yarn release-packages
           title: Version Packages
           commit: Version Packages
         env:

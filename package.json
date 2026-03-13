@@ -22,6 +22,7 @@
     "lint": "lerna run lint --stream",
     "lint:ci": "lerna run lint:ci --stream",
     "version-packages": "changeset version && yarn install",
+    "release-packages": "yarn build && yarn release",
     "release": "changeset publish",
     "docs": "./docs.sh"
   },
