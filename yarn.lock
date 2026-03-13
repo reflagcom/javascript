@@ -5935,15 +5935,15 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@reflag/browser-sdk@npm:1.4.3":
-  version: 1.4.3
-  resolution: "@reflag/browser-sdk@npm:1.4.3"
+"@reflag/browser-sdk@npm:1.4.6":
+  version: 1.4.6
+  resolution: "@reflag/browser-sdk@npm:1.4.6"
   dependencies:
     "@floating-ui/dom": "npm:^1.6.8"
     fast-equals: "npm:^5.2.2"
     js-cookie: "npm:^3.0.5"
     preact: "npm:^10.22.1"
-  checksum: 10c0/86d4799d9cf7dbdf1cd772a494e0ec153f14119bd252ff6ac60978003a528af5468804514dd365b300a44e0c1d4b8561451d9b23d090b050ee58980f08695e6b
+  checksum: 10c0/d8c689345b0f187417a9dea693b0fd35a615b17c0557f896c631792c054af6f7c66a684b7399e9e0cb36c70926d62a07912f3af23100ac2124746b3997cca1ee
   languageName: node
   linkType: hard
 
@@ -6051,16 +6051,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@reflag/node-sdk@npm:1.1.0":
-  version: 1.1.0
-  resolution: "@reflag/node-sdk@npm:1.1.0"
-  dependencies:
-    "@reflag/flag-evaluation": "npm:1.0.0"
-  checksum: 10c0/32f1ba05ac40fe7c3b8a772efd04cc577ba6d6c043873ca0253fee3db00c51c1a3489982e8f60849e86bc3c958f5eb43f6995ead02cee90dae4d2c6df44e7a2c
-  languageName: node
-  linkType: hard
-
-"@reflag/node-sdk@workspace:^, @reflag/node-sdk@workspace:packages/node-sdk":
+"@reflag/node-sdk@npm:1.2.0, @reflag/node-sdk@workspace:^, @reflag/node-sdk@workspace:packages/node-sdk":
   version: 0.0.0-use.local
   resolution: "@reflag/node-sdk@workspace:packages/node-sdk"
   dependencies:
@@ -6112,7 +6103,7 @@ __metadata:
     "@openfeature/core": "npm:^1.5.0"
     "@openfeature/server-sdk": "npm:>=1.16.1"
     "@reflag/eslint-config": "npm:~0.0.2"
-    "@reflag/node-sdk": "npm:1.1.0"
+    "@reflag/node-sdk": "npm:1.2.0"
     "@reflag/tsconfig": "npm:~0.0.2"
     "@types/node": "npm:^22.12.0"
     eslint: "npm:^9.21.0"
@@ -6134,7 +6125,7 @@ __metadata:
   dependencies:
     "@react-native-async-storage/async-storage": "npm:^2.2.0"
     "@reflag/eslint-config": "npm:^0.0.2"
-    "@reflag/react-sdk": "npm:1.4.4"
+    "@reflag/react-sdk": "npm:1.4.6"
     "@reflag/tsconfig": "npm:^0.0.2"
     "@types/react": "npm:^19.0.12"
     eslint: "npm:^9.21.0"
@@ -6146,18 +6137,18 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@reflag/react-sdk@npm:1.4.4":
-  version: 1.4.4
-  resolution: "@reflag/react-sdk@npm:1.4.4"
+"@reflag/react-sdk@npm:1.4.6":
+  version: 1.4.6
+  resolution: "@reflag/react-sdk@npm:1.4.6"
   dependencies:
-    "@reflag/browser-sdk": "npm:1.4.3"
+    "@reflag/browser-sdk": "npm:1.4.6"
   peerDependencies:
     react: "*"
     react-dom: "*"
   peerDependenciesMeta:
     react-dom:
       optional: true
-  checksum: 10c0/d87c9918444e69b872c26db34413721f8d2c7003fa201dad5c95bf0a69397f77d621c78180098a2b6031556a1ef1cfefbf37775dc0e128c5bcf92a1080e3ee6d
+  checksum: 10c0/0d557461058a359142480d00f74b42ef529885ab3bea124e903565ee0831a77c59aa7f0da18ed29930516fc3d1fc010e6aa73c67a908f0e4b2471f5c8ce09833
   languageName: node
   linkType: hard
 
