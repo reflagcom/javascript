@@ -62,9 +62,22 @@ Use the Reflag with OpenFeature on the server in Node.js through the Reflag Open
 ### Versioning
 
 1. Create a new branch locally
-2. Run `yarn run version`
-3. Push and PR
+2. Run `yarn changeset`
+3. Select the packages that changed and the correct bump type
+4. Commit the generated file in `.changeset/`
+5. Push and open a PR
 
 ### Publishing
 
-The [Github Action](.github/workflows/publish.yml) will automatically publish any versioned packages when merging to `main`
+Repository setup:
+
+1. Configure npm Trusted Publisher entries for the packages in this repo against the `reflagcom/javascript` GitHub repository and the `publish.yml` workflow
+2. Keep the workflow on GitHub-hosted runners with `id-token: write`, plus `contents: write` and `pull-requests: write` for the release PR flow
+
+When a PR with one or more changesets is merged to `main`, the release workflow will open or update a `Version Packages` PR.
+
+Merging that PR will:
+
+1. Apply the version bumps
+2. Publish the updated packages to npm
+3. Rebuild and push the generated SDK docs
