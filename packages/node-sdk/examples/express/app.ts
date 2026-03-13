@@ -1,6 +1,6 @@
 import reflag from "./reflag";
 import express from "express";
-import { BoundReflagClient } from "../src";
+import type { BoundReflagClient } from "../../src";
 
 // Augment the Express types to include the `reflagUser` property on the `res.locals` object
 // This will allow us to access the ReflagClient instance in our route handlers
