@@ -1,6 +1,6 @@
 {
   "name": "@reflag/browser-sdk",
-  "version": "1.4.6",
+  "version": "1.4.7",
   "packageManager": "yarn@4.1.1",
   "license": "MIT",
   "repository": {
