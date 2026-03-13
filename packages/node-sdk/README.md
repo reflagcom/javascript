@@ -498,14 +498,32 @@ reflagClient.initialize().then(() => {
 
 ## Testing
 
-When writing tests that cover code with flags, you can toggle flags on/off programmatically to test the different behavior.
+When writing tests that cover code with flags, you can toggle flags on/off programmatically to test different behavior. For tests, you will often want to run the client in offline mode and provide flag overrides directly through the client options.
 
 `reflag.ts`:
 
 ```typescript
 import { ReflagClient } from "@reflag/node-sdk";
 
-export const reflag = new ReflagClient();
+export const reflag = new ReflagClient({
+  offline: true,
+});
+```
+
+You can then set base overrides for a test run by passing `flagOverrides` in the constructor, replacing them later with `setFlagOverrides()`, or clearing them with `clearFlagOverrides()`:
+
+```typescript
+// pass directly in the constructor
+const client = new ReflagClient({
+  offline: true,
+  flagOverrides: { myFlag: true },
+});
+
+// or replace the base overrides at a later time
+client.setFlagOverrides({ myFlag: false });
+
+// clear only the base overrides
+client.clearFlagOverrides();
 ```
 
 `app.test.ts`:
@@ -520,61 +538,15 @@ afterEach(() => {
 
 describe("API Tests", () => {
   it("should return 200 for the root endpoint", async () => {
-    reflag.flagOverrides = {
+    reflag.setFlagOverrides({
       "show-todo": true,
-    };
+    });
 
     const response = await request(app).get("/");
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ message: "Ready to manage some TODOs!" });
   });
 });
-```
-
-See more on flag overrides in the section below.
-
-## Flag Overrides
-
-Flag overrides allow you to override flags and their configurations locally. This is particularly useful for development and testing. You can specify overrides in three ways:
-
-1. Through environment variables:
-
-```bash
-REFLAG_FLAGS_ENABLED=flag1,flag2
-REFLAG_FLAGS_DISABLED=flag3,flag4
-```
-
-1. Through `reflag.config.json`:
-
-```json
-{
-  "flagOverrides": {
-    "delete-todos": {
-      "isEnabled": true,
-      "config": {
-        "key": "dev-config",
-        "payload": {
-          "requireConfirmation": true,
-          "maxDeletionsPerDay": 5
-        }
-      }
-    }
-  }
-}
-```
-
-1. Programmatically through the client options:
-
-You can use a simple `Record<string, boolean>` and pass it either in the constructor or by replacing the client's base overrides with `setFlagOverrides()`:
-
-```typescript
-// pass directly in the constructor
-const client = new ReflagClient({ flagOverrides: { myFlag: true } });
-// or replace the base overrides at a later time
-client.setFlagOverrides({ myFlag: false });
-
-// clear only the base overrides
-client.clearFlagOverrides();
 ```
 
 `pushFlagOverrides()` serves a different purpose: it adds a temporary layer on top of the base overrides and returns a remove function that removes only that layer. This is useful for nested tests:
@@ -623,6 +595,40 @@ const remove = client.pushFlagOverrides((context) => ({
 // ...
 
 remove();
+```
+
+## Flag Overrides
+
+Flag overrides allow you to override flags and their configurations locally. This is particularly useful for development and testing.
+
+For tests, the recommended setup is to run the client in offline mode and configure overrides programmatically through the client options as shown above.
+
+When running locally, you also have these additional ways to provide overrides:
+
+1. Through environment variables:
+
+```bash
+REFLAG_FLAGS_ENABLED=flag1,flag2
+REFLAG_FLAGS_DISABLED=flag3,flag4
+```
+
+1. Through `reflag.config.json`:
+
+```json
+{
+  "flagOverrides": {
+    "delete-todos": {
+      "isEnabled": true,
+      "config": {
+        "key": "dev-config",
+        "payload": {
+          "requireConfirmation": true,
+          "maxDeletionsPerDay": 5
+        }
+      }
+    }
+  }
+}
 ```
 
 To get dynamic overrides, use a function which takes a context and returns a boolean or an object with the shape of `{isEnabled, config}`:
