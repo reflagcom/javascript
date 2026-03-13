@@ -21,7 +21,7 @@
     "prettier:fix": "lerna run prettier -- --write",
     "lint": "lerna run lint --stream",
     "lint:ci": "lerna run lint:ci --stream",
-    "version-packages": "changeset version",
+    "version-packages": "changeset version && yarn install",
     "release": "changeset publish",
     "docs": "./docs.sh"
   },
