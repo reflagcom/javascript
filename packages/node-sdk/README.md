@@ -599,11 +599,11 @@ remove();
 
 ## Flag Overrides
 
-Flag overrides allow you to override flags and their configurations locally. This is particularly useful for development and testing.
+Flag overrides allow you to override flags and their configurations locally. This is particularly useful when testing changes locally, for example when running your app and clicking around to verify behavior before deploying your changes.
 
-For tests, the recommended setup is to run the client in offline mode and configure overrides programmatically through the client options as shown above.
+For automated tests, see the [Testing](#testing) section above.
 
-When running locally, you also have these additional ways to provide overrides:
+When testing locally during development, you also have these additional ways to provide overrides:
 
 1. Through environment variables:
 
