@@ -1,10 +1,17 @@
 import { createAbortController } from "./utils/abortController";
 import { API_BASE_URL, SDK_VERSION, SDK_VERSION_HEADER_NAME } from "./config";
 
+const KEEPALIVE_MAX_IN_FLIGHT_BYTES = 60 * 1024;
+const KEEPALIVE_MAX_IN_FLIGHT_REQUESTS = 15;
+
 export interface HttpClientOptions {
   baseUrl?: string;
   sdkVersion?: string;
   credentials?: RequestCredentials;
+}
+
+function getBodyByteLength(value: string) {
+  return new TextEncoder().encode(value).length;
 }
 
 export class HttpClient {
@@ -12,6 +19,8 @@ export class HttpClient {
   private readonly sdkVersion: string;
 
   private readonly fetchOptions: RequestInit;
+  private inFlightKeepaliveBytes = 0;
+  private inFlightKeepaliveRequests = 0;
 
   constructor(
     public publishableKey: string,
@@ -78,20 +87,43 @@ export class HttpClient {
   async post({
     path,
     body,
+    keepalive,
   }: {
     host?: string;
     path: string;
     body: any;
+    keepalive?: boolean;
   }): ReturnType<typeof fetch> {
-    return fetch(this.getUrl(path), {
-      ...this.fetchOptions,
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        [SDK_VERSION_HEADER_NAME]: this.sdkVersion,
-        Authorization: `Bearer ${this.publishableKey}`,
-      },
-      body: JSON.stringify(body),
-    });
+    const serializedBody = JSON.stringify(body);
+    const bodyBytes = getBodyByteLength(serializedBody);
+    const shouldUseKeepalive =
+      keepalive &&
+      this.inFlightKeepaliveBytes + bodyBytes <=
+        KEEPALIVE_MAX_IN_FLIGHT_BYTES &&
+      this.inFlightKeepaliveRequests < KEEPALIVE_MAX_IN_FLIGHT_REQUESTS;
+
+    if (shouldUseKeepalive) {
+      this.inFlightKeepaliveBytes += bodyBytes;
+      this.inFlightKeepaliveRequests += 1;
+    }
+
+    try {
+      return await fetch(this.getUrl(path), {
+        ...this.fetchOptions,
+        method: "POST",
+        keepalive: shouldUseKeepalive,
+        headers: {
+          "Content-Type": "application/json",
+          [SDK_VERSION_HEADER_NAME]: this.sdkVersion,
+          Authorization: `Bearer ${this.publishableKey}`,
+        },
+        body: serializedBody,
+      });
+    } finally {
+      if (shouldUseKeepalive) {
+        this.inFlightKeepaliveBytes -= bodyBytes;
+        this.inFlightKeepaliveRequests -= 1;
+      }
+    }
   }
 }

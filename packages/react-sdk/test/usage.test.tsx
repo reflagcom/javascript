@@ -1,5 +1,6 @@
 import React from "react";
-import { render, renderHook, waitFor } from "@testing-library/react";
+import { renderToString } from "react-dom/server";
+import { act, render, renderHook, waitFor } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
 import {
@@ -1065,6 +1066,130 @@ describe("useIsLoading", () => {
     unmount();
   });
 
+  test("returns loading state while refetching flags after a context change", async () => {
+    function LoadingState() {
+      return <span data-testid="loading-state">{String(useIsLoading())}</span>;
+    }
+
+    const client = new ReflagClient({
+      publishableKey: "test-key-loading-context-change",
+      user,
+      company,
+      other,
+      bootstrappedFlags: {
+        abc: {
+          key: "abc",
+          isEnabled: true,
+          targetingVersion: 1,
+        },
+      },
+    });
+    await client.initialize();
+
+    const { getByTestId, unmount } = render(
+      <ReflagClientProvider client={client}>
+        <LoadingState />
+      </ReflagClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(getByTestId("loading-state").textContent).toBe("false");
+    });
+
+    await act(async () => undefined);
+
+    act(() => {
+      (client as any).hooks.trigger("stateUpdated", "initializing");
+    });
+
+    await waitFor(() => {
+      expect(getByTestId("loading-state").textContent).toBe("true");
+    });
+
+    act(() => {
+      (client as any).hooks.trigger("stateUpdated", "initialized");
+    });
+
+    await waitFor(() => {
+      expect(getByTestId("loading-state").textContent).toBe("false");
+    });
+
+    unmount();
+  });
+
+  test("returns loading state when ReflagProvider context updates", async () => {
+    function LoadingState() {
+      return <span data-testid="loading-state">{String(useIsLoading())}</span>;
+    }
+
+    const initializeSpy = vi
+      .spyOn(ReflagClient.prototype, "initialize")
+      .mockResolvedValue(undefined);
+    let resolveSetContext: (() => void) | undefined;
+    const setContextPromise = new Promise<void>((resolve) => {
+      resolveSetContext = resolve;
+    });
+    const setContextSpy = vi
+      .spyOn(ReflagClient.prototype, "setContext")
+      .mockResolvedValueOnce(undefined)
+      .mockImplementationOnce(async function () {
+        (this as any).hooks.trigger("stateUpdated", "initializing");
+        await setContextPromise;
+        (this as any).hooks.trigger("stateUpdated", "initialized");
+      });
+
+    const initialContext = { user, company, other };
+    const updatedContext = {
+      ...initialContext,
+      other: { ...other, workspaceId: "workspace-1" },
+    };
+
+    const { getByTestId, rerender, unmount } = render(
+      <ReflagProvider
+        context={initialContext}
+        initialLoading={false}
+        publishableKey="test-key-loading-context-prop-change"
+      >
+        <LoadingState />
+      </ReflagProvider>,
+    );
+
+    await waitFor(() => {
+      expect(getByTestId("loading-state").textContent).toBe("false");
+    });
+
+    await waitFor(() => {
+      expect(setContextSpy).toHaveBeenCalledTimes(1);
+    });
+
+    act(() => {
+      rerender(
+        <ReflagProvider
+          context={updatedContext}
+          initialLoading={false}
+          publishableKey="test-key-loading-context-prop-change"
+        >
+          <LoadingState />
+        </ReflagProvider>,
+      );
+    });
+
+    await waitFor(() => {
+      expect(setContextSpy).toHaveBeenCalledTimes(2);
+      expect(getByTestId("loading-state").textContent).toBe("true");
+    });
+
+    resolveSetContext?.();
+
+    await waitFor(() => {
+      expect(getByTestId("loading-state").textContent).toBe("false");
+    });
+
+    unmount();
+    initializeSpy.mockRestore();
+    setContextSpy.mockRestore();
+  });
+
   test("throws error when used outside provider", () => {
     const consoleErrorSpy = vi
       .spyOn(console, "error")
@@ -1083,6 +1208,37 @@ describe("useIsLoading", () => {
 });
 
 describe("useOnEvent", () => {
+  test("does not trigger the SSR useLayoutEffect warning when used inside a provider", () => {
+    const errorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const client = new ReflagClient({
+      publishableKey: "test-key-ssr",
+      user,
+      company,
+      other,
+    });
+
+    function EventListener() {
+      useOnEvent("flagsUpdated", vi.fn());
+      return null;
+    }
+
+    renderToString(
+      <ReflagClientProvider client={client}>
+        <EventListener />
+      </ReflagClientProvider>,
+    );
+
+    expect(
+      errorSpy.mock.calls.some(([firstArg]) =>
+        String(firstArg).includes("useLayoutEffect"),
+      ),
+    ).toBe(false);
+
+    errorSpy.mockRestore();
+  });
+
   test("subscribes to flagsUpdated event", async () => {
     const eventHandler = vi.fn();
     const client = new ReflagClient({

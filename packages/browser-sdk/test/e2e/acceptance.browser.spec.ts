@@ -9,6 +9,7 @@ test("Acceptance", async ({ page }) => {
   await page.goto("http://localhost:8001/test/e2e/empty.html");
 
   const successfulRequests: string[] = [];
+  const bulkEvents: Record<string, any>[] = [];
 
   // Mock API calls with assertions
   await page.route(`${API_BASE_URL}/features/evaluated*`, async (route) => {
@@ -22,33 +23,14 @@ test("Acceptance", async ({ page }) => {
     });
   });
 
-  await page.route(`${API_BASE_URL}/user`, async (route) => {
+  await page.route(`${API_BASE_URL}/bulk`, async (route) => {
     expect(route.request().method()).toEqual("POST");
-    expect(route.request().postDataJSON()).toMatchObject({
-      userId: "foo",
-      attributes: {
-        name: "john doe",
-      },
-    });
+    const payload = route.request().postDataJSON();
+    expect(Array.isArray(payload)).toBe(true);
 
-    successfulRequests.push("USER");
-    await route.fulfill({
-      status: 200,
-      body: JSON.stringify({ success: true }),
-    });
-  });
+    bulkEvents.push(...payload);
 
-  await page.route(`${API_BASE_URL}/company`, async (route) => {
-    expect(route.request().method()).toEqual("POST");
-    expect(route.request().postDataJSON()).toMatchObject({
-      userId: "foo",
-      companyId: "bar",
-      attributes: {
-        name: "bar corp",
-      },
-    });
-
-    successfulRequests.push("COMPANY");
+    successfulRequests.push("BULK");
     await route.fulfill({
       status: 200,
       body: JSON.stringify({ success: true }),
@@ -61,9 +43,7 @@ test("Acceptance", async ({ page }) => {
       userId: "foo",
       companyId: "bar",
       event: "baz",
-      attributes: {
-        baz: true,
-      },
+      attributes: { baz: true },
     });
 
     successfulRequests.push("EVENT");
@@ -119,12 +99,25 @@ test("Acceptance", async ({ page }) => {
     })()
   `);
 
-  // Assert all API requests were made
-  expect(successfulRequests).toEqual([
-    "FLAGS",
-    "USER",
-    "COMPANY",
-    "EVENT",
-    "FEEDBACK",
-  ]);
+  await expect.poll(() => bulkEvents.length).toBeGreaterThanOrEqual(2);
+  expect(bulkEvents).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        type: "user",
+        userId: "foo",
+        attributes: { name: "john doe" },
+      }),
+      expect.objectContaining({
+        type: "company",
+        userId: "foo",
+        companyId: "bar",
+        attributes: { name: "bar corp" },
+      }),
+    ]),
+  );
+
+  expect(successfulRequests).toContain("FLAGS");
+  expect(successfulRequests).toContain("BULK");
+  expect(successfulRequests).toContain("EVENT");
+  expect(successfulRequests).toContain("FEEDBACK");
 });

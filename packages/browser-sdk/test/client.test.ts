@@ -14,16 +14,24 @@ describe("ReflagClient", () => {
   const flagClientSetContext = vi.spyOn(FlagsClient.prototype, "setContext");
 
   beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
     client = new ReflagClient({
       publishableKey: "test-key",
       user: { id: "user1" },
       company: { id: "company1" },
+      trackingQueue: {
+        flushDelayMs: 0,
+      },
     });
 
     vi.clearAllMocks();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await client.stop();
+    localStorage.clear();
+    sessionStorage.clear();
     vi.unstubAllGlobals();
   });
 
@@ -35,14 +43,34 @@ describe("ReflagClient", () => {
       await client.updateUser(updatedUser);
 
       expect(client["context"].user).toEqual({ id: "user1", ...updatedUser });
-      expect(httpClientPost).toHaveBeenCalledWith({
-        path: "/user",
-        body: {
-          userId: "user1",
-          attributes: { name: updatedUser.name },
-        },
-      });
+      await vi.waitFor(() =>
+        expect(httpClientPost).toHaveBeenCalledWith({
+          path: "/bulk",
+          keepalive: true,
+          body: [
+            {
+              type: "user",
+              userId: "user1",
+              attributes: { name: updatedUser.name },
+            },
+          ],
+        }),
+      );
       expect(flagClientSetContext).toHaveBeenCalledWith(client["context"]);
+    });
+
+    it("does not warn about a missing company when updating a user-only context", async () => {
+      client = new ReflagClient({
+        publishableKey: "test-key-user-only",
+        user: { id: "user1" },
+      });
+      const warnSpy = vi.spyOn(client.logger, "warn");
+
+      await client.updateUser({ name: "Updated User" });
+
+      expect(warnSpy).not.toHaveBeenCalledWith(
+        "No company Id provided in context, company will be ignored",
+      );
     });
   });
 
@@ -57,14 +85,20 @@ describe("ReflagClient", () => {
         id: "company1",
         ...updatedCompany,
       });
-      expect(httpClientPost).toHaveBeenCalledWith({
-        path: "/company",
-        body: {
-          userId: "user1",
-          companyId: "company1",
-          attributes: { name: updatedCompany.name },
-        },
-      });
+      await vi.waitFor(() =>
+        expect(httpClientPost).toHaveBeenCalledWith({
+          path: "/bulk",
+          keepalive: true,
+          body: [
+            {
+              type: "company",
+              userId: "user1",
+              companyId: "company1",
+              attributes: { name: updatedCompany.name },
+            },
+          ],
+        }),
+      );
       expect(flagClientSetContext).toHaveBeenCalledWith(client["context"]);
     });
   });
@@ -76,6 +110,30 @@ describe("ReflagClient", () => {
       expect(client.getFlag("flagA").isEnabled).toBe(true);
       client.getFlag("flagA").setIsEnabledOverride(false);
       expect(client.getFlag("flagA").isEnabled).toBe(false);
+    });
+  });
+
+  describe("track", () => {
+    it("sends events directly and returns the delivery response", async () => {
+      const response = await client.track("test-event", { a: 1 });
+
+      expect(response?.ok).toBe(true);
+      expect(httpClientPost).toHaveBeenCalledWith({
+        path: "/event",
+        body: {
+          userId: "user1",
+          companyId: "company1",
+          event: "test-event",
+          attributes: { a: 1 },
+        },
+      });
+
+      const bulkCalls = vi
+        .mocked(httpClientPost)
+        .mock.calls.filter(
+          ([request]) => (request as { path?: string }).path === "/bulk",
+        );
+      expect(bulkCalls).toHaveLength(0);
     });
   });
 
@@ -151,6 +209,133 @@ describe("ReflagClient", () => {
       expect(companyHook).not.toHaveBeenCalled();
       expect(checkHook).not.toHaveBeenCalled();
       expect(flagsUpdated).not.toHaveBeenCalled();
+    });
+
+    it("sets state to initializing while refetching flags after initialization", async () => {
+      await client.initialize();
+
+      let resolveFetch: (() => void) | undefined;
+      const setContextPromise = new Promise<boolean>((resolve) => {
+        resolveFetch = () => resolve(true);
+      });
+      const setContext = vi
+        .spyOn(FlagsClient.prototype, "setContext")
+        .mockImplementation(async () => {
+          return setContextPromise;
+        });
+
+      const stateUpdated = vi.fn();
+      client.on("stateUpdated", stateUpdated);
+
+      const updatePromise = client.updateOtherContext({ workspaceId: "ws-1" });
+
+      expect(client.getState()).toBe("initializing");
+      expect(stateUpdated).toHaveBeenCalledWith("initializing");
+      expect(setContext).toHaveBeenCalledWith(client["context"]);
+
+      resolveFetch?.();
+      await updatePromise;
+
+      expect(client.getState()).toBe("initialized");
+      expect(stateUpdated).toHaveBeenLastCalledWith("initialized");
+    });
+
+    it("keeps loading tied to the latest context update", async () => {
+      await client.initialize();
+
+      let resolveFirstFetch: (() => void) | undefined;
+      let resolveSecondFetch: (() => void) | undefined;
+      const firstFetch = new Promise<boolean>((resolve) => {
+        resolveFirstFetch = () => resolve(false);
+      });
+      const secondFetch = new Promise<boolean>((resolve) => {
+        resolveSecondFetch = () => resolve(true);
+      });
+
+      vi.spyOn(FlagsClient.prototype, "setContext")
+        .mockImplementationOnce(async () => firstFetch)
+        .mockImplementationOnce(async () => secondFetch);
+
+      const firstUpdate = client.updateOtherContext({ workspaceId: "ws-1" });
+      const secondUpdate = client.updateOtherContext({ workspaceId: "ws-2" });
+
+      expect(client.getState()).toBe("initializing");
+
+      resolveSecondFetch?.();
+      await secondUpdate;
+
+      expect(client.getState()).toBe("initialized");
+
+      resolveFirstFetch?.();
+      await firstUpdate;
+
+      expect(client.getState()).toBe("initialized");
+    });
+  });
+
+  describe("setContext warnings", () => {
+    it("does not warn about missing ids when updating anonymous other context", async () => {
+      client = new ReflagClient({
+        publishableKey: "test-key-anon",
+      });
+      const warnSpy = vi.spyOn(client.logger, "warn");
+
+      await client.updateOtherContext({ workspaceId: "ws-1" });
+
+      expect(warnSpy).not.toHaveBeenCalledWith(
+        "No user Id provided in context, user will be ignored",
+      );
+      expect(warnSpy).not.toHaveBeenCalledWith(
+        "No company Id provided in context, company will be ignored",
+      );
+    });
+
+    it("still warns when setContext replaces context without user or company ids", async () => {
+      client = new ReflagClient({
+        publishableKey: "test-key-set-context",
+      });
+      const warnSpy = vi.spyOn(client.logger, "warn");
+
+      await client.setContext({ other: { workspaceId: "ws-1" } });
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        "No user Id provided in context, user will be ignored",
+      );
+      expect(warnSpy).toHaveBeenCalledWith(
+        "No company Id provided in context, company will be ignored",
+      );
+    });
+  });
+
+  describe("stop", () => {
+    it("flushes the bulk queue on beforeunload and removes the listener on stop", async () => {
+      const bulkQueue = client["bulkQueue"];
+      expect(bulkQueue).toBeDefined();
+
+      const flushSpy = vi.spyOn(bulkQueue!, "flush").mockResolvedValue();
+      window.dispatchEvent(new Event("beforeunload"));
+      expect(flushSpy).toHaveBeenCalledTimes(1);
+
+      await client.stop();
+
+      window.dispatchEvent(new Event("beforeunload"));
+      expect(flushSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it("throws if queued bulk events remain after final flush attempt", async () => {
+      const bulkQueue = client["bulkQueue"];
+      expect(bulkQueue).toBeDefined();
+
+      vi.spyOn(bulkQueue!, "flush")
+        .mockResolvedValueOnce()
+        .mockResolvedValueOnce();
+      vi.spyOn(bulkQueue!, "size")
+        .mockResolvedValueOnce(1)
+        .mockResolvedValueOnce(1);
+
+      await expect(client.stop()).rejects.toThrow(
+        "failed to flush all queued bulk events during stop (1 remaining)",
+      );
     });
   });
 

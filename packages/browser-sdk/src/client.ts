@@ -16,6 +16,8 @@ import {
   RawFlags,
 } from "./flag/flags";
 import { ToolbarPosition } from "./ui/types";
+import { logResponseError } from "./utils/responseError";
+import { BulkEvent, BulkQueue } from "./bulkQueue";
 import {
   API_BASE_URL,
   APP_BASE_URL,
@@ -304,6 +306,37 @@ export type InitOptions = ReflagDeprecatedContext & {
    * Useful for React Native (AsyncStorage).
    */
   storage?: StorageAdapter;
+
+  /**
+   * Queue settings for tracking updates sent to `/bulk`.
+   * Applies to user/company updates, check events, and prompt events.
+   * Events are buffered in memory and flushed in the background.
+   */
+  trackingQueue?: {
+    /**
+     * Delay in milliseconds before flushing queued events.
+     * Lower values send sooner; slightly higher values batch better.
+     * Defaults to 200ms.
+     */
+    flushDelayMs?: number;
+
+    /**
+     * Maximum number of queued events retained locally.
+     * Oldest events are dropped when the cap is exceeded.
+     * Defaults to 100.
+     */
+    maxSize?: number;
+
+    /**
+     * Deprecated: retries are no longer performed for bulk delivery.
+     */
+    retryBaseDelayMs?: number;
+
+    /**
+     * Deprecated: retries are no longer performed for bulk delivery.
+     */
+    retryMaxDelayMs?: number;
+  };
 };
 
 const defaultConfig: Config = {
@@ -395,6 +428,8 @@ export class ReflagClient {
   private readonly autoFeedback: AutoFeedback | undefined;
   private autoFeedbackInit: Promise<void> | undefined;
   private readonly flagsClient: FlagsClient;
+  private readonly bulkQueue: BulkQueue | undefined;
+  private readonly handleBeforeUnload?: () => void;
 
   public readonly logger: Logger;
 
@@ -437,6 +472,31 @@ export class ReflagClient {
       sdkVersion: opts?.sdkVersion,
       credentials: opts?.credentials,
     });
+    if (!this.config.offline && this.config.enableTracking) {
+      this.bulkQueue = new BulkQueue(
+        (events) =>
+          this.httpClient.post({
+            path: "/bulk",
+            body: events,
+            keepalive: true,
+          }),
+        {
+          flushDelayMs: opts.trackingQueue?.flushDelayMs,
+          maxSize: opts.trackingQueue?.maxSize,
+          logger: this.logger,
+        },
+      );
+    }
+    if (this.bulkQueue && !IS_SERVER) {
+      this.handleBeforeUnload = () => {
+        void this.bulkQueue?.flush();
+      };
+      window.addEventListener("beforeunload", this.handleBeforeUnload, {
+        capture: true,
+      });
+    }
+
+    const bulkQueue = this.bulkQueue;
 
     this.flagsClient = new FlagsClient(
       this.httpClient,
@@ -451,6 +511,9 @@ export class ReflagClient {
         fallbackFlags: opts.fallbackFlags,
         offline: this.config.offline,
         storage: opts.storage,
+        enqueueBulkEvent: bulkQueue
+          ? (event) => bulkQueue.enqueue(event)
+          : undefined,
       },
     );
 
@@ -473,6 +536,7 @@ export class ReflagClient {
           String(this.context.user?.id),
           opts?.feedback?.ui?.position,
           opts?.feedback?.ui?.translations,
+          bulkQueue ? (event) => bulkQueue.enqueue(event) : undefined,
         );
       }
     }
@@ -541,6 +605,26 @@ export class ReflagClient {
    *
    **/
   async stop() {
+    if (this.handleBeforeUnload && !IS_SERVER) {
+      window.removeEventListener("beforeunload", this.handleBeforeUnload, {
+        capture: true,
+      });
+    }
+
+    if (this.bulkQueue) {
+      await this.bulkQueue.flush();
+      let remaining = await this.bulkQueue.size();
+      if (remaining > 0) {
+        await this.bulkQueue.flush();
+        remaining = await this.bulkQueue.size();
+      }
+      if (remaining > 0) {
+        throw new Error(
+          `failed to flush all queued bulk events during stop (${remaining} remaining)`,
+        );
+      }
+    }
+
     if (this.autoFeedback) {
       // ensure fully initialized before stopping
       await this.autoFeedbackInit;
@@ -606,24 +690,20 @@ export class ReflagClient {
    * @param user
    */
   async updateUser(user: { [key: string]: string | number | undefined }) {
-    const userIdChanged = user.id && user.id !== this.context.user?.id;
     const newUserContext = {
       ...this.context.user,
       ...user,
       id: user.id ?? this.context.user?.id,
     };
 
-    // Nothing has changed, skipping update
-    if (deepEqual(this.context.user, newUserContext)) return;
-    this.context.user = newUserContext;
-    void this.user();
-
-    // Update the feedback user if the user ID has changed
-    if (userIdChanged) {
-      void this.updateAutoFeedbackUser(String(user.id));
-    }
-
-    await this.flagsClient.setContext(this.context);
+    return this.applyContext(
+      {
+        user: newUserContext,
+        company: this.context.company,
+        other: this.context.other,
+      },
+      { warnOnMissingIds: false },
+    );
   }
 
   /**
@@ -640,12 +720,14 @@ export class ReflagClient {
       id: company.id ?? this.context.company?.id,
     };
 
-    // Nothing has changed, skipping update
-    if (deepEqual(this.context.company, newCompanyContext)) return;
-    this.context.company = newCompanyContext;
-    void this.company();
-
-    await this.flagsClient.setContext(this.context);
+    return this.applyContext(
+      {
+        user: this.context.user,
+        company: newCompanyContext,
+        other: this.context.other,
+      },
+      { warnOnMissingIds: false },
+    );
   }
 
   /**
@@ -663,11 +745,14 @@ export class ReflagClient {
       ...otherContext,
     };
 
-    // Nothing has changed, skipping update
-    if (deepEqual(this.context.other, newOtherContext)) return;
-    this.context.other = newOtherContext;
-
-    await this.flagsClient.setContext(this.context);
+    return this.applyContext(
+      {
+        user: this.context.user,
+        company: this.context.company,
+        other: newOtherContext,
+      },
+      { warnOnMissingIds: false },
+    );
   }
 
   /**
@@ -676,9 +761,15 @@ export class ReflagClient {
    *
    * @param context The context to update.
    */
-  async setContext({ otherContext, ...context }: ReflagDeprecatedContext) {
-    const userIdChanged =
-      context.user?.id && context.user.id !== this.context.user?.id;
+  async setContext(context: ReflagDeprecatedContext) {
+    return this.applyContext(context, { warnOnMissingIds: true });
+  }
+
+  private async applyContext(
+    { otherContext, ...context }: ReflagDeprecatedContext,
+    { warnOnMissingIds }: { warnOnMissingIds: boolean },
+  ) {
+    const previousContext = this.context;
 
     // Create a new context object making sure to clone the user and company objects
     const newContext = {
@@ -687,32 +778,49 @@ export class ReflagClient {
       other: { ...otherContext, ...context.other },
     };
 
-    if (!context.user?.id) {
+    if (warnOnMissingIds && !context.user?.id) {
       this.logger.warn("No user Id provided in context, user will be ignored");
     }
-    if (!context.company?.id) {
+    if (warnOnMissingIds && !context.company?.id) {
       this.logger.warn(
         "No company Id provided in context, company will be ignored",
       );
     }
 
     // Nothing has changed, skipping update
-    if (deepEqual(this.context, newContext)) return;
+    if (deepEqual(previousContext, newContext)) return;
+
+    const userChanged = !deepEqual(previousContext.user, newContext.user);
+    const companyChanged = !deepEqual(
+      previousContext.company,
+      newContext.company,
+    );
+    const userIdChanged =
+      !!newContext.user?.id && newContext.user.id !== previousContext.user?.id;
+
     this.context = newContext;
 
-    if (context.company) {
+    if (companyChanged) {
       void this.company();
     }
 
-    if (context.user) {
+    if (userChanged) {
       void this.user();
       // Update the automatic feedback user if the user ID has changed
       if (userIdChanged) {
-        void this.updateAutoFeedbackUser(String(context.user.id));
+        void this.updateAutoFeedbackUser(String(newContext.user!.id));
       }
     }
 
-    await this.flagsClient.setContext(this.context);
+    const shouldTrackLoading = this.state === "initialized";
+    if (shouldTrackLoading) {
+      this.setState("initializing");
+    }
+
+    const didApply = await this.flagsClient.setContext(this.context);
+    if (didApply && this.state === "initializing") {
+      this.setState("initialized");
+    }
   }
 
   /**
@@ -731,7 +839,10 @@ export class ReflagClient {
    * @param eventName The name of the event.
    * @param attributes Any attributes you want to attach to the event.
    */
-  async track(eventName: string, attributes?: Record<string, any> | null) {
+  async track(
+    eventName: string,
+    attributes?: Record<string, any> | null,
+  ): Promise<Response | undefined> {
     if (!this.context.user) {
       this.logger.warn("'track' call ignored. No user context provided");
       return;
@@ -753,8 +864,16 @@ export class ReflagClient {
     if (this.context.company?.id)
       payload.companyId = String(this.context.company?.id);
 
-    const res = await this.httpClient.post({ path: `/event`, body: payload });
-    this.logger.debug(`sent event`, res);
+    const res = await this.httpClient.post({ path: "/event", body: payload });
+    if (!res.ok) {
+      await logResponseError({
+        logger: this.logger,
+        res,
+        message: "track request failed",
+        extra: { event: eventName },
+      });
+    }
+    this.logger.debug(`sent event`, payload);
 
     this.hooks.trigger("track", {
       eventName,
@@ -1001,17 +1120,24 @@ export class ReflagClient {
     if (this.config.offline) {
       return;
     }
+    if (!this.config.enableTracking) {
+      return;
+    }
+    if (!this.bulkQueue) {
+      return;
+    }
 
     const { id, ...attributes } = this.context.user;
-    const payload: User = {
+    const payload: BulkEvent = {
+      type: "user",
       userId: String(id),
       attributes,
     };
-    const res = await this.httpClient.post({ path: `/user`, body: payload });
-    this.logger.debug(`sent user`, res);
+    await this.bulkQueue.enqueue(payload);
+    this.logger.debug(`queued user`, payload);
 
     this.hooks.trigger("user", this.context.user);
-    return res;
+    return;
   }
 
   /**
@@ -1035,18 +1161,24 @@ export class ReflagClient {
     if (this.config.offline) {
       return;
     }
+    if (!this.config.enableTracking) {
+      return;
+    }
+    if (!this.bulkQueue) {
+      return;
+    }
 
     const { id, ...attributes } = this.context.company;
-    const payload: Company = {
+    const payload: BulkEvent = {
+      type: "company",
       userId: String(this.context.user.id),
       companyId: String(id),
       attributes,
     };
-
-    const res = await this.httpClient.post({ path: `/company`, body: payload });
-    this.logger.debug(`sent company`, res);
+    await this.bulkQueue.enqueue(payload);
+    this.logger.debug(`queued company`, payload);
     this.hooks.trigger("company", this.context.company);
-    return res;
+    return;
   }
 
   private async updateAutoFeedbackUser(userId: string) {
