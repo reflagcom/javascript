@@ -208,7 +208,23 @@ const flagDefs = await client.getFlagDefinitions();
 
 ### Fallback provider
 
-The SDK treats Reflag as the primary source of truth. On `initialize()` it first fetches a live copy of the flag definitions, and it continues refreshing those definitions from the Reflag servers over time. If Reflag becomes unavailable after startup, the SDK keeps using the last successfully fetched definitions it already has in memory. The purpose of `flagsFallbackProvider` is to keep an up-to-date copy of those flag definitions in alternative storage, such as a file, Redis, S3, or a custom backend, so new processes can still start in case the Reflag servers are down. The provider is only used in normal mode when that initial live fetch fails: in that case the SDK calls `flagsFallbackProvider.load()`, and after any later successful live fetch or refresh it calls `flagsFallbackProvider.save()` to keep the stored copy up to date.
+`flagsFallbackProvider` is a reliability feature that lets the SDK persist the latest successfully fetched raw flag definitions to fallback storage such as a local file, Redis, S3, or a custom backend.
+
+Reflag servers remain the primary source of truth. On `initialize()`, the SDK always tries to fetch a live copy of the flag definitions first, and it continues refreshing those definitions from the Reflag servers over time.
+
+If that initial live fetch fails, the SDK can call `flagsFallbackProvider.load()` and start with the last saved snapshot instead. This is mainly useful for cold starts in the exceedingly rare case that Reflag has an outage.
+
+If Reflag becomes unavailable after the SDK has already initialized successfully, the SDK keeps using the last successfully fetched definitions it already has in memory. In other words, the fallback provider is mainly what helps future processes start, not what keeps an already running process alive.
+
+After successfully fetching updated flag definitions, the SDK calls `flagsFallbackProvider.save()` to keep the stored snapshot up to date.
+
+Typical reliability flow:
+
+1. The SDK starts and tries to fetch live flag definitions from Reflag.
+2. If that succeeds, those definitions are used immediately and the SDK continues operating normally.
+3. After successfully fetching updated flag definitions, the SDK saves the latest snapshot through the fallback provider so a recent copy is available if needed later.
+4. If a future process starts while Reflag is unavailable, it can load the last saved snapshot from the fallback provider and still initialize.
+5. Once Reflag becomes available again, the SDK resumes using live data and refreshes the fallback snapshot.
 
 Most deployments run multiple SDK processes, so more than one process may save identical flag definitions to the fallback storage at roughly the same time. This is expected and generally harmless for backends like a local file, Redis, or S3 because the operation is cheap. In practice, this only becomes worth thinking about once you have many thousands of SDK processes writing to the same fallback storage.
 
