@@ -306,7 +306,8 @@ const { isEnabled } = reflagClient.getFlag("voiceHuddle");
 await reflagClient.updateUser({ voiceHuddleOptIn: (!isEnabled).toString() });
 ```
 
-> [!NOTE] > `user`/`company` attributes are also stored remotely on the Reflag servers and will automatically be used to evaluate flag targeting if the page is refreshed.
+> [!NOTE]
+> `user`/`company` attributes are also stored remotely on the Reflag servers and will automatically be used to evaluate flag targeting if the page is refreshed.
 
 ### setContext()
 

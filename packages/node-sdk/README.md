@@ -228,6 +228,13 @@ Typical reliability flow:
 
 Most deployments run multiple SDK processes, so more than one process may save identical flag definitions to the fallback storage at roughly the same time. This is expected and generally harmless for backends like a local file, Redis, or S3 because the operation is cheap. In practice, this only becomes worth thinking about once you have many thousands of SDK processes writing to the same fallback storage.
 
+> [!TIP]
+> If you are building a web or client-side application and want the most resilient setup, combine `flagsFallbackProvider` on the server with bootstrapped flags on the client.
+>
+> `flagsFallbackProvider` helps new server processes start if they cannot reach Reflag during initialization. Bootstrapping helps clients render from server-provided flags instead of depending on an initial client-side fetch from the Reflag servers.
+>
+> This applies to React (`getFlagsForBootstrap()` + `ReflagBootstrappedProvider`), the Browser SDK (`bootstrappedFlags`), and the Vue SDK (bootstrapped flags via the provider).
+
 #### Built-in file provider
 
 ```typescript
@@ -548,7 +555,8 @@ current working directory.
 | `flagsFallbackProvider` | `FlagsFallbackProvider` | Optional provider used to load and save raw flag definitions for fallback startup when the initial live fetch fails. Available only through the constructor. Ignored in offline mode.                                                              | -                                           |
 | `configFile`    | string                  | Load this config file from disk. Default: `reflag.config.json`                                                                                                                                                                                      | REFLAG_CONFIG_FILE                          |
 
-> [!NOTE] > `REFLAG_FLAGS_ENABLED` and `REFLAG_FLAGS_DISABLED` are comma separated lists of flags which will be enabled or disabled respectively.
+> [!NOTE]
+> `REFLAG_FLAGS_ENABLED` and `REFLAG_FLAGS_DISABLED` are comma separated lists of flags which will be enabled or disabled respectively.
 
 `reflag.config.json` example:
 

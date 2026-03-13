@@ -225,9 +225,13 @@ You can pass a simple boolean to force the toolbar to appear/disappear:
 
 For server-side rendered applications, you can eliminate the initial network request by bootstrapping the client with pre-fetched flag data using the `ReflagBootstrappedProvider`.
 
+Bootstrapping is also the recommended setup if you want the most resilient feature flag architecture in React. Instead of depending on an initial client-side request to Reflag, the client can render immediately from flags provided by your server.
+
+If you want "bullet proof feature flags" in a React application, use React bootstrapping together with `flagsFallbackProvider` in the Node SDK. The fallback provider helps your server start with the latest saved snapshot if it cannot reach Reflag during initialization, and bootstrapping lets the React client use those server-provided flags without needing its own live fetch on first render.
+
 ### Using `ReflagBootstrappedProvider`
 
-The `<ReflagBootstrappedProvider>` component is a specialized version of `ReflagProvider` designed for server-side rendering and preloaded flag scenarios. Instead of fetching flags on initialization, it uses pre-fetched flags, resulting in faster initial page loads and better SSR compatibility.
+The `<ReflagBootstrappedProvider>` component is a specialized version of `ReflagProvider` designed for server-side rendering, preloaded flag scenarios, and high-reliability setups. Instead of fetching flags on initialization, it uses pre-fetched flags, resulting in faster initial page loads, better SSR compatibility, and a more resilient startup path for React applications.
 
 ```tsx
 import { useState, useEffect } from "react";
