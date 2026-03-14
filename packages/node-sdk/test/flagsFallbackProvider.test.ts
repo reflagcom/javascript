@@ -3,13 +3,8 @@ import os from "os";
 import path from "path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { fallbackProviders } from "../src";
 import type { FlagsFallbackProviderContext } from "../src";
-import {
-  createFileFlagsFallbackProvider,
-  createGCSFlagsFallbackProvider,
-  createRedisFlagsFallbackProvider,
-  createS3FlagsFallbackProvider,
-} from "../src";
 
 const context: FlagsFallbackProviderContext = {
   secretKeyHash: "abc123def456ghi789",
@@ -43,14 +38,14 @@ describe("flagsFallbackProvider", () => {
 
   it("loads undefined when a file snapshot does not exist", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "reflag-node-sdk-"));
-    const provider = createFileFlagsFallbackProvider({ directory: tempDir });
+    const provider = fallbackProviders.file({ directory: tempDir });
 
     await expect(provider.load(context)).resolves.toBeUndefined();
   });
 
   it("saves and loads file snapshots", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "reflag-node-sdk-"));
-    const provider = createFileFlagsFallbackProvider({ directory: tempDir });
+    const provider = fallbackProviders.file({ directory: tempDir });
 
     await provider.save(context, snapshot);
 
@@ -73,7 +68,7 @@ describe("flagsFallbackProvider", () => {
       },
     });
 
-    const provider = createS3FlagsFallbackProvider({
+    const provider = fallbackProviders.s3({
       bucket: "bucket-name",
       client: { send },
     });
@@ -91,7 +86,7 @@ describe("flagsFallbackProvider", () => {
 
   it("trims trailing slashes from generated S3 keys without regex backtracking", async () => {
     const send = vi.fn().mockResolvedValue({});
-    const provider = createS3FlagsFallbackProvider({
+    const provider = fallbackProviders.s3({
       bucket: "bucket-name",
       client: { send },
       keyPrefix: "reflag/flags-fallback///",
@@ -111,7 +106,7 @@ describe("flagsFallbackProvider", () => {
 
   it("returns undefined for missing S3 snapshots", async () => {
     const send = vi.fn().mockRejectedValue({ name: "NoSuchKey" });
-    const provider = createS3FlagsFallbackProvider({
+    const provider = fallbackProviders.s3({
       bucket: "bucket-name",
       client: { send },
     });
@@ -121,7 +116,7 @@ describe("flagsFallbackProvider", () => {
 
   it("saves S3 snapshots", async () => {
     const send = vi.fn().mockResolvedValue({});
-    const provider = createS3FlagsFallbackProvider({
+    const provider = fallbackProviders.s3({
       bucket: "bucket-name",
       client: { send },
     });
@@ -149,7 +144,7 @@ describe("flagsFallbackProvider", () => {
     const file = vi.fn().mockReturnValue({ exists, download, save });
     const bucket = vi.fn().mockReturnValue({ file });
 
-    const provider = createGCSFlagsFallbackProvider({
+    const provider = fallbackProviders.gcs({
       bucket: "bucket-name",
       client: { bucket },
     });
@@ -168,7 +163,7 @@ describe("flagsFallbackProvider", () => {
     const file = vi.fn().mockReturnValue({ exists, download, save });
     const bucket = vi.fn().mockReturnValue({ file });
 
-    const provider = createGCSFlagsFallbackProvider({
+    const provider = fallbackProviders.gcs({
       bucket: "bucket-name",
       client: { bucket },
     });
@@ -184,7 +179,7 @@ describe("flagsFallbackProvider", () => {
     const file = vi.fn().mockReturnValue({ exists, download, save });
     const bucket = vi.fn().mockReturnValue({ file });
 
-    const provider = createGCSFlagsFallbackProvider({
+    const provider = fallbackProviders.gcs({
       bucket: "bucket-name",
       client: { bucket },
       keyPrefix: "reflag/flags-fallback///",
@@ -203,7 +198,7 @@ describe("flagsFallbackProvider", () => {
   it("loads Redis snapshots", async () => {
     const get = vi.fn().mockResolvedValue(JSON.stringify(snapshot));
     const set = vi.fn();
-    const provider = createRedisFlagsFallbackProvider({
+    const provider = fallbackProviders.redis({
       client: { get, set },
     });
 
@@ -216,7 +211,7 @@ describe("flagsFallbackProvider", () => {
   it("returns undefined for missing Redis snapshots", async () => {
     const get = vi.fn().mockResolvedValue(null);
     const set = vi.fn();
-    const provider = createRedisFlagsFallbackProvider({
+    const provider = fallbackProviders.redis({
       client: { get, set },
     });
 
@@ -226,7 +221,7 @@ describe("flagsFallbackProvider", () => {
   it("saves Redis snapshots", async () => {
     const get = vi.fn();
     const set = vi.fn().mockResolvedValue("OK");
-    const provider = createRedisFlagsFallbackProvider({
+    const provider = fallbackProviders.redis({
       client: { get, set },
       keyPrefix: "reflag:flags-fallback:::",
     });

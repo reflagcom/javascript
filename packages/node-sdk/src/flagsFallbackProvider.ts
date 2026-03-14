@@ -17,7 +17,7 @@ import type {
 } from "./types";
 import { isObject } from "./utils";
 
-export type FileFlagsFallbackProviderOptions = {
+export type FileFallbackProviderOptions = {
   /**
    * Directory where per-environment snapshots are stored.
    *
@@ -26,7 +26,7 @@ export type FileFlagsFallbackProviderOptions = {
   directory?: string;
 };
 
-export type S3FlagsFallbackProviderOptions = {
+export type S3FallbackProviderOptions = {
   /**
    * Bucket where snapshots are stored.
    */
@@ -45,7 +45,7 @@ export type S3FlagsFallbackProviderOptions = {
   keyPrefix?: string;
 };
 
-export type GCSFlagsFallbackProviderOptions = {
+export type GCSFallbackProviderOptions = {
   /**
    * Bucket where snapshots are stored.
    */
@@ -64,7 +64,7 @@ export type GCSFlagsFallbackProviderOptions = {
   keyPrefix?: string;
 };
 
-export type RedisFlagsFallbackProviderOptions = {
+export type RedisFallbackProviderOptions = {
   /**
    * Optional Redis client. When omitted, a client is created using `REDIS_URL`.
    */
@@ -160,9 +160,9 @@ function parseSnapshot(raw: string) {
   return isFlagsFallbackSnapshot(parsed) ? parsed : undefined;
 }
 
-export function createFileFlagsFallbackProvider({
+export function createFileFallbackProvider({
   directory,
-}: FileFlagsFallbackProviderOptions = {}): FlagsFallbackProvider {
+}: FileFallbackProviderOptions = {}): FlagsFallbackProvider {
   return {
     async load(context) {
       const resolvedPath = snapshotFilePath(context, directory);
@@ -187,11 +187,11 @@ export function createFileFlagsFallbackProvider({
   };
 }
 
-export function createS3FlagsFallbackProvider({
+export function createS3FallbackProvider({
   bucket,
   client = new S3Client({}),
   keyPrefix,
-}: S3FlagsFallbackProviderOptions): FlagsFallbackProvider {
+}: S3FallbackProviderOptions): FlagsFallbackProvider {
   return {
     async load(context) {
       try {
@@ -231,11 +231,11 @@ export function createS3FlagsFallbackProvider({
   };
 }
 
-export function createGCSFlagsFallbackProvider({
+export function createGCSFallbackProvider({
   bucket,
   client = new Storage(),
   keyPrefix,
-}: GCSFlagsFallbackProviderOptions): FlagsFallbackProvider {
+}: GCSFallbackProviderOptions): FlagsFallbackProvider {
   return {
     async load(context) {
       const file = client
@@ -261,10 +261,10 @@ export function createGCSFlagsFallbackProvider({
   };
 }
 
-export function createRedisFlagsFallbackProvider({
+export function createRedisFallbackProvider({
   client,
   keyPrefix,
-}: RedisFlagsFallbackProviderOptions = {}): FlagsFallbackProvider {
+}: RedisFallbackProviderOptions = {}): FlagsFallbackProvider {
   let defaultClient:
     | {
         get(key: string): Promise<string | null | undefined>;

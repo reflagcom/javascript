@@ -1,23 +1,23 @@
 export { BoundReflagClient, ReflagClient } from "./client";
 export { EdgeClient, EdgeClientOptions } from "./edgeClient";
 export type {
-  FileFlagsFallbackProviderOptions,
-  GCSFlagsFallbackProviderOptions,
-  RedisFlagsFallbackProviderOptions,
-  S3FlagsFallbackProviderOptions,
+  FileFallbackProviderOptions,
+  GCSFallbackProviderOptions,
+  RedisFallbackProviderOptions,
+  S3FallbackProviderOptions,
 } from "./flagsFallbackProvider";
 import {
-  createFileFlagsFallbackProvider,
-  createGCSFlagsFallbackProvider,
-  createRedisFlagsFallbackProvider,
-  createS3FlagsFallbackProvider,
+  createFileFallbackProvider,
+  createGCSFallbackProvider,
+  createRedisFallbackProvider,
+  createS3FallbackProvider,
 } from "./flagsFallbackProvider";
 
 export const fallbackProviders = {
-  file: createFileFlagsFallbackProvider,
-  redis: createRedisFlagsFallbackProvider,
-  s3: createS3FlagsFallbackProvider,
-  gcs: createGCSFlagsFallbackProvider,
+  file: createFileFallbackProvider,
+  redis: createRedisFallbackProvider,
+  s3: createS3FallbackProvider,
+  gcs: createGCSFallbackProvider,
 };
 export type {
   Attributes,
