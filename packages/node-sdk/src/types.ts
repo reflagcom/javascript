@@ -709,16 +709,12 @@ export type ClientOptions = {
   batchOptions?: Omit<BatchBufferOptions<any>, "flushHandler" | "logger">;
 
   /**
-   * If a filename is specified, feature targeting results be overridden with
-   * the values from this file. The file should be a JSON object with flag
-   * keys as keys, and boolean or object as values.
+   * Local flag overrides for testing or development.
    *
    * If a function is specified, the function will be called with the context
    * and should return a record of flag keys and boolean or object values.
-   *
-   * Defaults to "reflagFlags.json".
    **/
-  flagOverrides?: string | ((context: Context) => FlagOverrides);
+  flagOverrides?: FlagOverrides | ((context: Context) => FlagOverrides);
 
   /**
    * In offline mode, no data is sent or fetched from the the Reflag API,

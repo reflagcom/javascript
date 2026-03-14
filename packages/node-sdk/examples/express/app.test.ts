@@ -1,14 +1,32 @@
 import request from "supertest";
 import app, { todos } from "./app";
-import { beforeEach, describe, it, expect, beforeAll } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import reflag from "./reflag";
 
+function flag(name: string, enabled: boolean): void {
+  let remove: (() => void) | undefined;
+
+  beforeEach(() => {
+    remove = reflag.pushFlagOverrides({ [name]: enabled });
+  });
+
+  afterEach(() => {
+    remove?.();
+    remove = undefined;
+  });
+}
+
 beforeAll(async () => await reflag.initialize());
+
 beforeEach(() => {
-  reflag.featureOverrides = {
+  reflag.setFlagOverrides({
     "show-todos": true,
-  };
+  });
+});
+
+afterEach(() => {
+  reflag.clearFlagOverrides();
 });
 
 describe("API Tests", () => {
@@ -24,12 +42,13 @@ describe("API Tests", () => {
     expect(response.body).toEqual({ todos });
   });
 
-  it("should return no todos when list is disabled", async () => {
-    reflag.featureOverrides = () => ({
-      "show-todos": false,
+  describe("with show-todos temporarily disabled", () => {
+    flag("show-todos", false);
+
+    it("should return no todos", async () => {
+      const response = await request(app).get("/todos");
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({ todos: [] });
     });
-    const response = await request(app).get("/todos");
-    expect(response.status).toBe(200);
-    expect(response.body).toEqual({ todos: [] });
   });
 });

@@ -1,11 +1,11 @@
-import { ReflagClient, Context, FlagOverrides } from "../../";
+import { ReflagClient, Context, FlagOverrides } from "../../src";
 
 type CreateConfigPayload = {
   minimumLength: number;
 };
 
 // Extending the Flags interface to define the available features
-declare module "../../types" {
+declare module "../../src/types" {
   interface Flags {
     "show-todos": boolean;
     "create-todos": {
@@ -18,7 +18,7 @@ declare module "../../types" {
   }
 }
 
-let featureOverrides = (_: Context): FlagOverrides => {
+const flagOverrides = (_: Context): FlagOverrides => {
   return {
     "create-todos": {
       isEnabled: true,
@@ -39,5 +39,5 @@ let featureOverrides = (_: Context): FlagOverrides => {
 export default new ReflagClient({
   // Optional: Set a logger to log debug information, errors, etc.
   logger: console,
-  featureOverrides, // Optional: Set feature overrides
+  flagOverrides, // Optional: Set flag overrides
 });
