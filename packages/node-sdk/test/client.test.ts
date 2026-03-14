@@ -239,7 +239,6 @@ describe("ReflagClient", () => {
       expect(client).toBeInstanceOf(ReflagClient);
       expect(client["_config"].apiBaseUrl).toBe("https://api.example.com/");
       expect(client["_config"].refetchInterval).toBe(FLAGS_REFETCH_MS);
-      expect(client["_config"].staleWarningInterval).toBe(FLAGS_REFETCH_MS * 5);
       expect(client.logger).toBeDefined();
       expect(client.httpClient).toBe(validOptions.httpClient);
       expect(client["_config"].headers).toEqual(expectedHeaders);
@@ -287,7 +286,6 @@ describe("ReflagClient", () => {
 
       expect(client["_config"].apiBaseUrl).toBe(API_BASE_URL);
       expect(client["_config"].refetchInterval).toBe(FLAGS_REFETCH_MS);
-      expect(client["_config"].staleWarningInterval).toBe(FLAGS_REFETCH_MS * 5);
       expect(client.httpClient).toBe(fetchClient);
       expect(client["_config"].headers).toEqual(expectedHeaders);
       expect(client["_config"].fallbackFlags).toBeUndefined();

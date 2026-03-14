@@ -198,7 +198,6 @@ export class ReflagClient {
   private _config: {
     apiBaseUrl: string;
     refetchInterval: number;
-    staleWarningInterval: number;
     headers: Record<string, string>;
     fallbackFlags?: RawFlags;
     flagsFallbackProvider?: FlagsFallbackProvider;
@@ -402,7 +401,6 @@ export class ReflagClient {
         ["Authorization"]: `Bearer ${config.secretKey}`,
       },
       refetchInterval: FLAGS_REFETCH_MS,
-      staleWarningInterval: FLAGS_REFETCH_MS * 5,
       fallbackFlags: fallbackFlags,
       flagsFallbackProvider: options.flagsFallbackProvider,
       flagsFallbackProviderContext: {
@@ -441,7 +439,6 @@ export class ReflagClient {
     if (this._config.cacheStrategy === "periodically-update") {
       this.flagsCache = periodicallyUpdatingCache<CachedFlagDefinition[]>(
         this._config.refetchInterval,
-        this._config.staleWarningInterval,
         this.logger,
         fetchFlags,
       );

@@ -4,18 +4,15 @@ import { Cache, Logger } from "./types";
  * Create a cached function that updates the value asynchronously.
  *
  * The value is updated every `ttl` milliseconds.
- * If the value is older than `staleTtl` milliseconds, a warning is logged.
  *
  * @typeParam T - The type of the value.
  * @param ttl - The time-to-live in milliseconds.
- * @param staleTtl - The time-to-live after which a warning is logged.
  * @param logger - The logger to use.
  * @param fn - The function to call to get the value.
  * @returns The cache object.
  **/
 export default function periodicallyUpdatingCache<T>(
   ttl: number,
-  staleTtl: number,
   logger: Logger | undefined,
   fn: () => Promise<T | undefined>,
 ): Cache<T> {
@@ -50,13 +47,6 @@ export default function periodicallyUpdatingCache<T>(
   };
 
   const get = () => {
-    if (lastUpdate !== undefined) {
-      const age = Date.now() - lastUpdate!;
-      if (age > staleTtl) {
-        logger?.warn("cached value is stale", { age, cachedValue });
-      }
-    }
-
     return cachedValue;
   };
 
