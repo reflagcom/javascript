@@ -88,6 +88,26 @@ describe("flagsFallbackProvider", () => {
     );
   });
 
+  it("trims trailing slashes from generated S3 keys without regex backtracking", async () => {
+    const send = vi.fn().mockResolvedValue({});
+    const provider = createS3FlagsFallbackProvider({
+      bucket: "bucket-name",
+      client: { send },
+      keyPrefix: "reflag/flags-fallback///",
+    });
+
+    await provider.save(context, snapshot);
+
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: expect.objectContaining({
+          Bucket: "bucket-name",
+          Key: `reflag/flags-fallback/flags-fallback-${context.secretKeyHash.slice(0, 16)}.json`,
+        }),
+      }),
+    );
+  });
+
   it("returns undefined for missing S3 snapshots", async () => {
     const send = vi.fn().mockRejectedValue({ name: "NoSuchKey" });
     const provider = createS3FlagsFallbackProvider({

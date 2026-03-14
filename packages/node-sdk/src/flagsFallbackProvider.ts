@@ -64,11 +64,19 @@ function defaultFilePath(
   return path.join(directory, defaultSnapshotName(context.secretKeyHash));
 }
 
+function trimTrailingSlashes(value: string) {
+  let endIndex = value.length;
+  while (endIndex > 0 && value[endIndex - 1] === "/") {
+    endIndex -= 1;
+  }
+  return value.slice(0, endIndex);
+}
+
 function defaultS3Key(
   context: FlagsFallbackProviderContext,
   keyPrefix = "reflag/flags-fallback",
 ) {
-  return `${keyPrefix.replace(/\/+$/g, "")}/${defaultSnapshotName(context.secretKeyHash)}`;
+  return `${trimTrailingSlashes(keyPrefix)}/${defaultSnapshotName(context.secretKeyHash)}`;
 }
 
 export function isFlagsFallbackSnapshot(
