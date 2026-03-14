@@ -2,10 +2,14 @@ export { BoundReflagClient, ReflagClient } from "./client";
 export { EdgeClient, EdgeClientOptions } from "./edgeClient";
 export type {
   FileFlagsFallbackProviderOptions,
+  GCSFlagsFallbackProviderOptions,
+  RedisFlagsFallbackProviderOptions,
   S3FlagsFallbackProviderOptions,
 } from "./flagsFallbackProvider";
 export {
   createFileFlagsFallbackProvider,
+  createGCSFlagsFallbackProvider,
+  createRedisFlagsFallbackProvider,
   createS3FlagsFallbackProvider,
 } from "./flagsFallbackProvider";
 export type {

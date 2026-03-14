@@ -6,6 +6,8 @@ import {
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
+import { Storage } from "@google-cloud/storage";
+import { createClient as createRedisClient } from "@redis/client";
 
 import type {
   FlagAPIResponse,
@@ -36,9 +38,23 @@ export type S3FlagsFallbackProviderOptions = {
   client?: Pick<S3Client, "send">;
 
   /**
-   * Fixed key to use for the snapshot object.
+   * Prefix for generated per-environment keys.
+   *
+   * @defaultValue `reflag/flags-fallback`
    */
-  key?: string;
+  keyPrefix?: string;
+};
+
+export type GCSFlagsFallbackProviderOptions = {
+  /**
+   * Bucket where snapshots are stored.
+   */
+  bucket: string;
+
+  /**
+   * Optional GCS client. A default client is created when omitted.
+   */
+  client?: Pick<Storage, "bucket">;
 
   /**
    * Prefix for generated per-environment keys.
@@ -48,30 +64,54 @@ export type S3FlagsFallbackProviderOptions = {
   keyPrefix?: string;
 };
 
+export type RedisFlagsFallbackProviderOptions = {
+  /**
+   * Optional Redis client. When omitted, a client is created using `REDIS_URL`.
+   */
+  client?: {
+    get(key: string): Promise<string | null | undefined>;
+    set(key: string, value: string): Promise<unknown>;
+  };
+
+  /**
+   * Prefix for generated per-environment keys.
+   *
+   * @defaultValue `reflag:flags-fallback`
+   */
+  keyPrefix?: string;
+};
+
 function defaultSnapshotName(secretKeyHash: string) {
   return `flags-fallback-${secretKeyHash.slice(0, 16)}.json`;
 }
 
-function defaultFilePath(
+function snapshotFilePath(
   context: FlagsFallbackProviderContext,
   directory = path.join(process.cwd(), ".reflag"),
 ) {
   return path.join(directory, defaultSnapshotName(context.secretKeyHash));
 }
 
-function trimTrailingSlashes(value: string) {
+function trimTrailingCharacter(value: string, character: string) {
   let endIndex = value.length;
-  while (endIndex > 0 && value[endIndex - 1] === "/") {
+  while (endIndex > 0 && value[endIndex - 1] === character) {
     endIndex -= 1;
   }
   return value.slice(0, endIndex);
 }
 
-function defaultS3Key(
+function snapshotObjectKey(
   context: FlagsFallbackProviderContext,
   keyPrefix = "reflag/flags-fallback",
 ) {
-  return `${trimTrailingSlashes(keyPrefix)}/${defaultSnapshotName(context.secretKeyHash)}`;
+  return `${trimTrailingCharacter(keyPrefix, "/")}/${defaultSnapshotName(context.secretKeyHash)}`;
+}
+
+function snapshotRedisKey(
+  context: FlagsFallbackProviderContext,
+  keyPrefix = "reflag:flags-fallback",
+) {
+  return `${trimTrailingCharacter(keyPrefix, ":")}:${defaultSnapshotName(context.secretKeyHash)}`;
 }
 
 export function isFlagsFallbackSnapshot(
@@ -125,7 +165,7 @@ export function createFileFlagsFallbackProvider({
 }: FileFlagsFallbackProviderOptions = {}): FlagsFallbackProvider {
   return {
     async load(context) {
-      const resolvedPath = defaultFilePath(context, directory);
+      const resolvedPath = snapshotFilePath(context, directory);
       try {
         const fileContents = await fs.readFile(resolvedPath, "utf-8");
         return parseSnapshot(fileContents);
@@ -138,7 +178,7 @@ export function createFileFlagsFallbackProvider({
     },
 
     async save(context, snapshot) {
-      const resolvedPath = defaultFilePath(context, directory);
+      const resolvedPath = snapshotFilePath(context, directory);
       await fs.mkdir(path.dirname(resolvedPath), { recursive: true });
       const tempPath = `${resolvedPath}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
       await fs.writeFile(tempPath, JSON.stringify(snapshot), "utf-8");
@@ -150,7 +190,6 @@ export function createFileFlagsFallbackProvider({
 export function createS3FlagsFallbackProvider({
   bucket,
   client = new S3Client({}),
-  key,
   keyPrefix,
 }: S3FlagsFallbackProviderOptions): FlagsFallbackProvider {
   return {
@@ -159,7 +198,7 @@ export function createS3FlagsFallbackProvider({
         const response = await client.send(
           new GetObjectCommand({
             Bucket: bucket,
-            Key: key ?? defaultS3Key(context, keyPrefix),
+            Key: snapshotObjectKey(context, keyPrefix),
           }),
         );
 
@@ -183,10 +222,92 @@ export function createS3FlagsFallbackProvider({
       await client.send(
         new PutObjectCommand({
           Bucket: bucket,
-          Key: key ?? defaultS3Key(context, keyPrefix),
+          Key: snapshotObjectKey(context, keyPrefix),
           Body: JSON.stringify(snapshot),
           ContentType: "application/json",
         }),
+      );
+    },
+  };
+}
+
+export function createGCSFlagsFallbackProvider({
+  bucket,
+  client = new Storage(),
+  keyPrefix,
+}: GCSFlagsFallbackProviderOptions): FlagsFallbackProvider {
+  return {
+    async load(context) {
+      const file = client
+        .bucket(bucket)
+        .file(snapshotObjectKey(context, keyPrefix));
+      const [exists] = await file.exists();
+      if (!exists) {
+        return undefined;
+      }
+
+      const [contents] = await file.download();
+      return parseSnapshot(contents.toString("utf-8"));
+    },
+
+    async save(context, snapshot) {
+      await client
+        .bucket(bucket)
+        .file(snapshotObjectKey(context, keyPrefix))
+        .save(JSON.stringify(snapshot), {
+          contentType: "application/json",
+        });
+    },
+  };
+}
+
+export function createRedisFlagsFallbackProvider({
+  client,
+  keyPrefix,
+}: RedisFlagsFallbackProviderOptions = {}): FlagsFallbackProvider {
+  let defaultClient:
+    | {
+        get(key: string): Promise<string | null | undefined>;
+        set(key: string, value: string): Promise<unknown>;
+        connect(): Promise<unknown>;
+        isOpen: boolean;
+      }
+    | undefined;
+  let connectPromise: Promise<unknown> | undefined;
+
+  const getClient = async () => {
+    if (client) {
+      return client;
+    }
+
+    defaultClient ??= createRedisClient(
+      process.env.REDIS_URL ? { url: process.env.REDIS_URL } : undefined,
+    );
+
+    if (!defaultClient.isOpen) {
+      connectPromise ??= defaultClient.connect();
+      await connectPromise;
+    }
+
+    return defaultClient;
+  };
+
+  return {
+    async load(context) {
+      const redis = await getClient();
+      const raw = await redis.get(snapshotRedisKey(context, keyPrefix));
+      if (!raw) {
+        return undefined;
+      }
+
+      return parseSnapshot(raw);
+    },
+
+    async save(context, snapshot) {
+      const redis = await getClient();
+      await redis.set(
+        snapshotRedisKey(context, keyPrefix),
+        JSON.stringify(snapshot),
       );
     },
   };
