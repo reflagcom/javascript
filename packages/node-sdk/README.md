@@ -238,14 +238,11 @@ Most deployments run multiple SDK processes, so more than one process may save i
 #### Built-in file provider
 
 ```typescript
-import {
-  ReflagClient,
-  createFileFlagsFallbackProvider,
-} from "@reflag/node-sdk";
+import { ReflagClient, fallbackProviders } from "@reflag/node-sdk";
 
 const client = new ReflagClient({
   secretKey: process.env.REFLAG_SECRET_KEY,
-  flagsFallbackProvider: createFileFlagsFallbackProvider({
+  flagsFallbackProvider: fallbackProviders.file({
     directory: ".reflag",
   }),
 });
@@ -256,19 +253,24 @@ await client.initialize();
 The file provider stores one snapshot file per environment in the configured
 `directory`.
 
+You can also access the built-in providers through the `fallbackProviders`
+namespace:
+
+- `fallbackProviders.file(...)`
+- `fallbackProviders.redis(...)`
+- `fallbackProviders.s3(...)`
+- `fallbackProviders.gcs(...)`
+
 #### Built-in Redis provider
 
 The built-in Redis provider creates a Redis client automatically when omitted and uses `REDIS_URL` from the environment.
 
 ```typescript
-import {
-  ReflagClient,
-  createRedisFlagsFallbackProvider,
-} from "@reflag/node-sdk";
+import { ReflagClient, fallbackProviders } from "@reflag/node-sdk";
 
 const client = new ReflagClient({
   secretKey: process.env.REFLAG_SECRET_KEY,
-  flagsFallbackProvider: createRedisFlagsFallbackProvider(),
+  flagsFallbackProvider: fallbackProviders.redis(),
 });
 
 await client.initialize();
@@ -279,11 +281,11 @@ await client.initialize();
 The built-in S3 provider works out of the box using the AWS SDK's default credential chain and region resolution. It stores the snapshot object under the configured `keyPrefix` and uses a hash of the secret key in the object name.
 
 ```typescript
-import { ReflagClient, createS3FlagsFallbackProvider } from "@reflag/node-sdk";
+import { ReflagClient, fallbackProviders } from "@reflag/node-sdk";
 
 const client = new ReflagClient({
   secretKey: process.env.REFLAG_SECRET_KEY,
-  flagsFallbackProvider: createS3FlagsFallbackProvider({
+  flagsFallbackProvider: fallbackProviders.s3({
     bucket: process.env.REFLAG_SNAPSHOT_BUCKET!,
   }),
 });
@@ -296,17 +298,19 @@ await client.initialize();
 The built-in GCS provider works out of the box using Google Cloud's default application credentials. It stores the snapshot object under the configured `keyPrefix` and uses a hash of the secret key in the object name.
 
 ```typescript
-import { ReflagClient, createGCSFlagsFallbackProvider } from "@reflag/node-sdk";
+import { ReflagClient, fallbackProviders } from "@reflag/node-sdk";
 
 const client = new ReflagClient({
   secretKey: process.env.REFLAG_SECRET_KEY,
-  flagsFallbackProvider: createGCSFlagsFallbackProvider({
+  flagsFallbackProvider: fallbackProviders.gcs({
     bucket: process.env.REFLAG_SNAPSHOT_BUCKET!,
   }),
 });
 
 await client.initialize();
 ```
+
+To test fallback startup in your own app, first run it once with a working Reflag connection so a snapshot is saved. Then restart it with the same secret key and fallback provider configuration, but set `apiBaseUrl` to `http://127.0.0.1:65535`. That forces the live fetch to fail and lets you verify that the SDK initializes from the saved snapshot instead.
 
 #### Simple custom provider
 

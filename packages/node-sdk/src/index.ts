@@ -6,12 +6,19 @@ export type {
   RedisFlagsFallbackProviderOptions,
   S3FlagsFallbackProviderOptions,
 } from "./flagsFallbackProvider";
-export {
+import {
   createFileFlagsFallbackProvider,
   createGCSFlagsFallbackProvider,
   createRedisFlagsFallbackProvider,
   createS3FlagsFallbackProvider,
 } from "./flagsFallbackProvider";
+
+export const fallbackProviders = {
+  file: createFileFlagsFallbackProvider,
+  redis: createRedisFlagsFallbackProvider,
+  s3: createS3FlagsFallbackProvider,
+  gcs: createGCSFlagsFallbackProvider,
+};
 export type {
   Attributes,
   BatchBufferOptions,
