@@ -294,10 +294,7 @@ await client.initialize();
 The built-in S3 provider works out of the box using the AWS SDK's default credential chain and region resolution.
 
 ```typescript
-import {
-  ReflagClient,
-  createS3FlagsFallbackProvider,
-} from "@reflag/node-sdk";
+import { ReflagClient, createS3FlagsFallbackProvider } from "@reflag/node-sdk";
 
 const client = new ReflagClient({
   secretKey: process.env.REFLAG_SECRET_KEY,
@@ -346,8 +343,7 @@ export const staticFallbackProvider: FlagsFallbackProvider = {
 };
 ```
 
-> [!NOTE]
-> `fallbackFlags` is deprecated. Prefer `flagsFallbackProvider` for startup fallback and outage recovery.
+> [!NOTE] > `fallbackFlags` is deprecated. Prefer `flagsFallbackProvider` for startup fallback and outage recovery.
 > `flagsFallbackProvider` is not used in offline mode.
 
 ## Bootstrapping client-side applications
@@ -545,18 +541,17 @@ a configuration file on disk or by passing options to the `ReflagClient`
 constructor. By default, the SDK searches for `reflag.config.json` in the
 current working directory.
 
-| Option          | Type                    | Description                                                                                                                                                                                                                                         | Env Var                                     |
-| --------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| `secretKey`     | string                  | The secret key used for authentication with Reflag's servers.                                                                                                                                                                                       | REFLAG_SECRET_KEY                           |
-| `logLevel`      | string                  | The log level for the SDK (e.g., `"DEBUG"`, `"INFO"`, `"WARN"`, `"ERROR"`). Default: `INFO`                                                                                                                                                         | REFLAG_LOG_LEVEL                            |
-| `offline`       | boolean                 | Operate in offline mode. Default: `false`, except in tests it will default to `true` based off of the `TEST` env. var. In offline mode the SDK does not fetch from Reflag and does not use `flagsFallbackProvider`.                               | REFLAG_OFFLINE                              |
-| `apiBaseUrl`    | string                  | The base API URL for the Reflag servers.                                                                                                                                                                                                            | REFLAG_API_BASE_URL                         |
-| `flagOverrides` | Record<string, boolean> | An object specifying flag overrides for testing or local development. See [examples/express/app.test.ts](https://github.com/reflagcom/javascript/tree/main/packages/node-sdk/examples/express/app.test.ts) for how to use `flagOverrides` in tests. | REFLAG_FLAGS_ENABLED, REFLAG_FLAGS_DISABLED |
-| `flagsFallbackProvider` | `FlagsFallbackProvider` | Optional provider used to load and save raw flag definitions for fallback startup when the initial live fetch fails. Available only through the constructor. Ignored in offline mode.                                                              | -                                           |
-| `configFile`    | string                  | Load this config file from disk. Default: `reflag.config.json`                                                                                                                                                                                      | REFLAG_CONFIG_FILE                          |
+| Option                  | Type                    | Description                                                                                                                                                                                                                                         | Env Var                                     |
+| ----------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| `secretKey`             | string                  | The secret key used for authentication with Reflag's servers.                                                                                                                                                                                       | REFLAG_SECRET_KEY                           |
+| `logLevel`              | string                  | The log level for the SDK (e.g., `"DEBUG"`, `"INFO"`, `"WARN"`, `"ERROR"`). Default: `INFO`                                                                                                                                                         | REFLAG_LOG_LEVEL                            |
+| `offline`               | boolean                 | Operate in offline mode. Default: `false`, except in tests it will default to `true` based off of the `TEST` env. var. In offline mode the SDK does not fetch from Reflag and does not use `flagsFallbackProvider`.                                 | REFLAG_OFFLINE                              |
+| `apiBaseUrl`            | string                  | The base API URL for the Reflag servers.                                                                                                                                                                                                            | REFLAG_API_BASE_URL                         |
+| `flagOverrides`         | Record<string, boolean> | An object specifying flag overrides for testing or local development. See [examples/express/app.test.ts](https://github.com/reflagcom/javascript/tree/main/packages/node-sdk/examples/express/app.test.ts) for how to use `flagOverrides` in tests. | REFLAG_FLAGS_ENABLED, REFLAG_FLAGS_DISABLED |
+| `flagsFallbackProvider` | `FlagsFallbackProvider` | Optional provider used to load and save raw flag definitions for fallback startup when the initial live fetch fails. Available only through the constructor. Ignored in offline mode.                                                               | -                                           |
+| `configFile`            | string                  | Load this config file from disk. Default: `reflag.config.json`                                                                                                                                                                                      | REFLAG_CONFIG_FILE                          |
 
-> [!NOTE]
-> `REFLAG_FLAGS_ENABLED` and `REFLAG_FLAGS_DISABLED` are comma separated lists of flags which will be enabled or disabled respectively.
+> [!NOTE] > `REFLAG_FLAGS_ENABLED` and `REFLAG_FLAGS_DISABLED` are comma separated lists of flags which will be enabled or disabled respectively.
 
 `reflag.config.json` example:
 
