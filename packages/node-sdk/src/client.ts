@@ -166,13 +166,11 @@ function compileFlagDefinitions(
 }
 
 function createFlagsFallbackSnapshot(
-  apiBaseUrl: string,
   flags: FlagAPIResponse[],
 ): FlagsFallbackSnapshot {
   return {
     version: 1,
     savedAt: new Date().toISOString(),
-    apiBaseUrl,
     flags,
   };
 }
@@ -504,7 +502,7 @@ export class ReflagClient {
     try {
       await provider.save(
         this._config.flagsFallbackProviderContext,
-        createFlagsFallbackSnapshot(this._config.apiBaseUrl, flags),
+        createFlagsFallbackSnapshot(flags),
       );
     } catch (error) {
       this.logger.error(

@@ -393,11 +393,6 @@ export type FlagsFallbackSnapshot = {
   savedAt: string;
 
   /**
-   * Base URL used by the client when this snapshot was created.
-   */
-  apiBaseUrl: string;
-
-  /**
    * Raw flag definitions as returned by the API.
    */
   flags: FlagAPIResponse[];

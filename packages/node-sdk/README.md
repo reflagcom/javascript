@@ -245,11 +245,16 @@ import {
 
 const client = new ReflagClient({
   secretKey: process.env.REFLAG_SECRET_KEY,
-  flagsFallbackProvider: createFileFlagsFallbackProvider(),
+  flagsFallbackProvider: createFileFlagsFallbackProvider({
+    directory: ".reflag",
+  }),
 });
 
 await client.initialize();
 ```
+
+The file provider stores one snapshot file per environment in the configured
+`directory`.
 
 #### Custom Redis provider
 
@@ -319,7 +324,6 @@ import type {
 const fallbackSnapshot: FlagsFallbackSnapshot = {
   version: 1,
   savedAt: "2026-03-10T00:00:00.000Z",
-  apiBaseUrl: "https://front.reflag.com/",
   flags: [
     {
       key: "huddle",

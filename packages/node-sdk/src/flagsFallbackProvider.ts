@@ -17,11 +17,6 @@ import { isObject } from "./utils";
 
 export type FileFlagsFallbackProviderOptions = {
   /**
-   * Fixed path to use for the snapshot file.
-   */
-  path?: string;
-
-  /**
    * Directory where per-environment snapshots are stored.
    *
    * @defaultValue `path.join(process.cwd(), ".reflag")`
@@ -86,7 +81,6 @@ export function isFlagsFallbackSnapshot(
     isObject(value) &&
     value.version === 1 &&
     typeof value.savedAt === "string" &&
-    typeof value.apiBaseUrl === "string" &&
     Array.isArray(value.flags) &&
     value.flags.every(isFlagApiResponse)
   );
@@ -127,12 +121,11 @@ function parseSnapshot(raw: string) {
 }
 
 export function createFileFlagsFallbackProvider({
-  path: filePath,
   directory,
 }: FileFlagsFallbackProviderOptions = {}): FlagsFallbackProvider {
   return {
     async load(context) {
-      const resolvedPath = filePath ?? defaultFilePath(context, directory);
+      const resolvedPath = defaultFilePath(context, directory);
       try {
         const fileContents = await fs.readFile(resolvedPath, "utf-8");
         return parseSnapshot(fileContents);
@@ -145,9 +138,9 @@ export function createFileFlagsFallbackProvider({
     },
 
     async save(context, snapshot) {
-      const resolvedPath = filePath ?? defaultFilePath(context, directory);
+      const resolvedPath = defaultFilePath(context, directory);
       await fs.mkdir(path.dirname(resolvedPath), { recursive: true });
-      const tempPath = `${resolvedPath}.tmp-${process.pid}`;
+      const tempPath = `${resolvedPath}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
       await fs.writeFile(tempPath, JSON.stringify(snapshot), "utf-8");
       await fs.rename(tempPath, resolvedPath);
     },

@@ -16,7 +16,6 @@ const context: FlagsFallbackProviderContext = {
 const snapshot = {
   version: 1 as const,
   savedAt: "2026-03-09T00:00:00.000Z",
-  apiBaseUrl: "https://api.example.com/",
   flags: [
     {
       key: "flag-1",

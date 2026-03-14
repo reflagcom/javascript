@@ -963,7 +963,6 @@ describe("ReflagClient", () => {
         load: vi.fn().mockResolvedValue({
           version: 1,
           savedAt: "2026-03-09T00:00:00.000Z",
-          apiBaseUrl: validOptions.apiBaseUrl!,
           flags: flagDefinitions.features,
         }),
         save: vi.fn(),
@@ -1026,7 +1025,6 @@ describe("ReflagClient", () => {
         }),
         expect.objectContaining({
           version: 1,
-          apiBaseUrl: validOptions.apiBaseUrl,
           flags: flagDefinitions.features,
           savedAt: expect.any(String),
         }),
