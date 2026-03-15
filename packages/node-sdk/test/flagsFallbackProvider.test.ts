@@ -3,8 +3,8 @@ import os from "os";
 import path from "path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { fallbackProviders } from "../src";
 import type { FlagsFallbackProviderContext } from "../src";
+import { fallbackProviders } from "../src";
 
 const context: FlagsFallbackProviderContext = {
   secretKeyHash: "abc123def456ghi789",

@@ -1,3 +1,10 @@
+import {
+  createFileFallbackProvider,
+  createGCSFallbackProvider,
+  createRedisFallbackProvider,
+  createS3FallbackProvider,
+} from "./flagsFallbackProvider";
+
 export { BoundReflagClient, ReflagClient } from "./client";
 export { EdgeClient, EdgeClientOptions } from "./edgeClient";
 export type {
@@ -5,12 +12,6 @@ export type {
   GCSFallbackProviderOptions,
   RedisFallbackProviderOptions,
   S3FallbackProviderOptions,
-} from "./flagsFallbackProvider";
-import {
-  createFileFallbackProvider,
-  createGCSFallbackProvider,
-  createRedisFallbackProvider,
-  createS3FallbackProvider,
 } from "./flagsFallbackProvider";
 
 export const fallbackProviders = {
