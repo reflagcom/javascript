@@ -1,13 +1,5 @@
 import { promises as fs } from "fs";
 import path from "path";
-import {
-  GetObjectCommand,
-  NoSuchKey,
-  PutObjectCommand,
-  S3Client,
-} from "@aws-sdk/client-s3";
-import { Storage } from "@google-cloud/storage";
-import { createClient as createRedisClient } from "@redis/client";
 
 import type {
   FlagAPIResponse,
@@ -35,7 +27,9 @@ export type S3FallbackProviderOptions = {
   /**
    * Optional S3 client. A default client is created when omitted.
    */
-  client?: Pick<S3Client, "send">;
+  client?: {
+    send(command: unknown): Promise<any>;
+  };
 
   /**
    * Prefix for generated per-environment keys.
@@ -54,7 +48,18 @@ export type GCSFallbackProviderOptions = {
   /**
    * Optional GCS client. A default client is created when omitted.
    */
-  client?: Pick<Storage, "bucket">;
+  client?: {
+    bucket(name: string): {
+      file(path: string): {
+        exists(): Promise<[boolean]>;
+        download(): Promise<[Uint8Array]>;
+        save(
+          body: string,
+          options: { contentType: string },
+        ): Promise<unknown>;
+      };
+    };
+  };
 
   /**
    * Prefix for generated per-environment keys.
@@ -160,6 +165,16 @@ function parseSnapshot(raw: string) {
   return isFlagsFallbackSnapshot(parsed) ? parsed : undefined;
 }
 
+async function createDefaultS3Client() {
+  const { S3Client } = await import("@aws-sdk/client-s3");
+  return new S3Client({});
+}
+
+async function createDefaultGCSClient() {
+  const { Storage } = await import("@google-cloud/storage");
+  return new Storage();
+}
+
 export function createFileFallbackProvider({
   directory,
 }: FileFallbackProviderOptions = {}): FlagsFallbackProvider {
@@ -189,13 +204,27 @@ export function createFileFallbackProvider({
 
 export function createS3FallbackProvider({
   bucket,
-  client = new S3Client({}),
+  client,
   keyPrefix,
 }: S3FallbackProviderOptions): FlagsFallbackProvider {
+  let defaultClient:
+    | {
+        send(command: unknown): Promise<any>;
+      }
+    | undefined;
+
+  const getClient = async () => {
+    defaultClient ??= client ?? (await createDefaultS3Client());
+    return defaultClient;
+  };
+
   return {
     async load(context) {
+      const s3 = await getClient();
+      const { GetObjectCommand } = await import("@aws-sdk/client-s3");
+
       try {
-        const response = await client.send(
+        const response = await s3.send(
           new GetObjectCommand({
             Bucket: bucket,
             Key: snapshotObjectKey(context, keyPrefix),
@@ -208,7 +237,6 @@ export function createS3FallbackProvider({
         return parseSnapshot(body);
       } catch (error: any) {
         if (
-          error instanceof NoSuchKey ||
           error?.name === "NoSuchKey" ||
           error?.$metadata?.httpStatusCode === 404
         ) {
@@ -219,7 +247,10 @@ export function createS3FallbackProvider({
     },
 
     async save(context, snapshot) {
-      await client.send(
+      const s3 = await getClient();
+      const { PutObjectCommand } = await import("@aws-sdk/client-s3");
+
+      await s3.send(
         new PutObjectCommand({
           Bucket: bucket,
           Key: snapshotObjectKey(context, keyPrefix),
@@ -233,12 +264,20 @@ export function createS3FallbackProvider({
 
 export function createGCSFallbackProvider({
   bucket,
-  client = new Storage(),
+  client,
   keyPrefix,
 }: GCSFallbackProviderOptions): FlagsFallbackProvider {
+  let defaultClient: GCSFallbackProviderOptions["client"] | undefined;
+
+  const getClient = async () => {
+    defaultClient ??= client ?? (await createDefaultGCSClient());
+    return defaultClient;
+  };
+
   return {
     async load(context) {
-      const file = client
+      const storage = await getClient();
+      const file = storage
         .bucket(bucket)
         .file(snapshotObjectKey(context, keyPrefix));
       const [exists] = await file.exists();
@@ -247,11 +286,12 @@ export function createGCSFallbackProvider({
       }
 
       const [contents] = await file.download();
-      return parseSnapshot(contents.toString("utf-8"));
+      return parseSnapshot(Buffer.from(contents).toString("utf-8"));
     },
 
     async save(context, snapshot) {
-      await client
+      const storage = await getClient();
+      await storage
         .bucket(bucket)
         .file(snapshotObjectKey(context, keyPrefix))
         .save(JSON.stringify(snapshot), {
@@ -280,9 +320,16 @@ export function createRedisFallbackProvider({
       return client;
     }
 
-    defaultClient ??= createRedisClient(
-      process.env.REDIS_URL ? { url: process.env.REDIS_URL } : undefined,
-    );
+    if (!process.env.REDIS_URL) {
+      throw new Error(
+        "fallbackProviders.redis() requires REDIS_URL to be set when no client is provided",
+      );
+    }
+
+    if (!defaultClient) {
+      const { createClient } = await import("@redis/client");
+      defaultClient = createClient({ url: process.env.REDIS_URL });
+    }
 
     if (!defaultClient.isOpen) {
       connectPromise ??= defaultClient.connect();

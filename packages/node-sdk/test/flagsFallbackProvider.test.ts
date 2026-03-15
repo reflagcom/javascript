@@ -233,4 +233,23 @@ describe("flagsFallbackProvider", () => {
       JSON.stringify(snapshot),
     );
   });
+
+  it("requires REDIS_URL when no Redis client is provided", async () => {
+    const previousRedisUrl = process.env.REDIS_URL;
+    delete process.env.REDIS_URL;
+
+    try {
+      const provider = fallbackProviders.redis();
+
+      await expect(provider.load(context)).rejects.toThrow(
+        "fallbackProviders.redis() requires REDIS_URL to be set when no client is provided",
+      );
+    } finally {
+      if (previousRedisUrl === undefined) {
+        delete process.env.REDIS_URL;
+      } else {
+        process.env.REDIS_URL = previousRedisUrl;
+      }
+    }
+  });
 });
