@@ -17,7 +17,6 @@ export default function periodicallyUpdatingCache<T>(
   fn: () => Promise<T | undefined>,
 ): Cache<T> {
   let cachedValue: T | undefined;
-  let lastUpdate: number | undefined;
   let timeoutId: NodeJS.Timeout | undefined;
   let refreshPromise: Promise<void> | undefined;
 
@@ -34,8 +33,6 @@ export default function periodicallyUpdatingCache<T>(
       logger?.info("refreshed flag definitions");
 
       cachedValue = newValue;
-
-      lastUpdate = Date.now();
 
       logger?.debug("updated cached value", cachedValue);
     } catch (e) {
