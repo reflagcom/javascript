@@ -53,10 +53,7 @@ export type GCSFallbackProviderOptions = {
       file(path: string): {
         exists(): Promise<[boolean]>;
         download(): Promise<[Uint8Array]>;
-        save(
-          body: string,
-          options: { contentType: string },
-        ): Promise<unknown>;
+        save(body: string, options: { contentType: string }): Promise<unknown>;
       };
     };
   };
