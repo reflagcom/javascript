@@ -256,10 +256,31 @@ The file provider stores one snapshot file per environment in the configured
 You can also access the built-in providers through the `fallbackProviders`
 namespace:
 
+- `fallbackProviders.static(...)`
 - `fallbackProviders.file(...)`
 - `fallbackProviders.redis(...)`
 - `fallbackProviders.s3(...)`
 - `fallbackProviders.gcs(...)`
+
+#### Built-in static provider
+
+If you just want a fixed fallback copy of simple enabled/disabled flags, you can provide a static map:
+
+```typescript
+import { ReflagClient, fallbackProviders } from "@reflag/node-sdk";
+
+const client = new ReflagClient({
+  secretKey: process.env.REFLAG_SECRET_KEY,
+  flagsFallbackProvider: fallbackProviders.static({
+    flags: {
+      huddle: true,
+      "smart-summaries": false,
+    },
+  }),
+});
+
+await client.initialize();
+```
 
 #### Built-in Redis provider
 
@@ -348,12 +369,14 @@ export const staticFallbackProvider: FlagsFallbackProvider = {
 };
 ```
 
-> [!NOTE] > `fallbackFlags` is deprecated. Prefer `flagsFallbackProvider` for startup fallback and outage recovery.
+> [!NOTE]
+>
+> `fallbackFlags` is deprecated. Prefer `flagsFallbackProvider` for startup fallback and outage recovery.
 > `flagsFallbackProvider` is not used in offline mode.
 
 ## Bootstrapping client-side applications
 
-The `getFlagsForBootstrap()` method is designed for server-side rendering (SSR) scenarios where you need to pass flag data to client-side applications. This method returns raw flag data without wrapper functions, making it suitable for serialization and client-side hydration.
+The `getFlagsForBootstrap()` method is useful whenever you need to pass flag data to another runtime or serialize it without wrapper functions. Server-side rendering (SSR) is a common example, but it is also useful for other bootstrapping and hydration flows.
 
 ```typescript
 const client = new ReflagClient();
@@ -556,7 +579,9 @@ current working directory.
 | `flagsFallbackProvider` | `FlagsFallbackProvider` | Optional provider used to load and save raw flag definitions for fallback startup when the initial live fetch fails. Available only through the constructor. Ignored in offline mode.                                                               | -                                           |
 | `configFile`            | string                  | Load this config file from disk. Default: `reflag.config.json`                                                                                                                                                                                      | REFLAG_CONFIG_FILE                          |
 
-> [!NOTE] > `REFLAG_FLAGS_ENABLED` and `REFLAG_FLAGS_DISABLED` are comma separated lists of flags which will be enabled or disabled respectively.
+> [!NOTE]
+>
+> `REFLAG_FLAGS_ENABLED` and `REFLAG_FLAGS_DISABLED` are comma separated lists of flags which will be enabled or disabled respectively.
 
 `reflag.config.json` example:
 

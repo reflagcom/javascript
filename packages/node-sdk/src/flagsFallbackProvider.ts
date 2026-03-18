@@ -83,6 +83,13 @@ export type RedisFallbackProviderOptions = {
   keyPrefix?: string;
 };
 
+export type StaticFallbackProviderOptions = {
+  /**
+   * Static fallback flags keyed by flag key.
+   */
+  flags: Record<string, boolean>;
+};
+
 function defaultSnapshotName(secretKeyHash: string) {
   return `flags-fallback-${secretKeyHash.slice(0, 16)}.json`;
 }
@@ -162,6 +169,24 @@ function parseSnapshot(raw: string) {
   return isFlagsFallbackSnapshot(parsed) ? parsed : undefined;
 }
 
+function staticFlagApiResponse(key: string, isEnabled: boolean): FlagAPIResponse {
+  return {
+    key,
+    description: null,
+    targeting: {
+      version: 1,
+      rules: [
+        {
+          filter: {
+            type: "constant",
+            value: isEnabled,
+          },
+        },
+      ],
+    },
+  };
+}
+
 async function createDefaultS3Client() {
   const { S3Client } = await import("@aws-sdk/client-s3");
   return new S3Client({});
@@ -170,6 +195,26 @@ async function createDefaultS3Client() {
 async function createDefaultGCSClient() {
   const { Storage } = await import("@google-cloud/storage");
   return new Storage();
+}
+
+export function createStaticFallbackProvider({
+  flags,
+}: StaticFallbackProviderOptions): FlagsFallbackProvider {
+  return {
+    async load() {
+      return {
+        version: 1,
+        savedAt: new Date().toISOString(),
+        flags: Object.entries(flags).map(([key, isEnabled]) =>
+          staticFlagApiResponse(key, isEnabled),
+        ),
+      };
+    },
+
+    async save() {
+      // no-op
+    },
+  };
 }
 
 export function createFileFallbackProvider({

@@ -36,6 +36,52 @@ describe("flagsFallbackProvider", () => {
     }
   });
 
+  it("loads static snapshots from a flag map", async () => {
+    const provider = fallbackProviders.static({
+      flags: {
+        "flag-1": true,
+        "flag-2": false,
+      },
+    });
+
+    await expect(provider.load(context)).resolves.toEqual({
+      version: 1,
+      savedAt: expect.any(String),
+      flags: [
+        {
+          key: "flag-1",
+          description: null,
+          targeting: {
+            version: 1,
+            rules: [
+              {
+                filter: {
+                  type: "constant",
+                  value: true,
+                },
+              },
+            ],
+          },
+        },
+        {
+          key: "flag-2",
+          description: null,
+          targeting: {
+            version: 1,
+            rules: [
+              {
+                filter: {
+                  type: "constant",
+                  value: false,
+                },
+              },
+            ],
+          },
+        },
+      ],
+    });
+  });
+
   it("loads undefined when a file snapshot does not exist", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "reflag-node-sdk-"));
     const provider = fallbackProviders.file({ directory: tempDir });

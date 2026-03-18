@@ -3,6 +3,7 @@ import {
   createGCSFallbackProvider,
   createRedisFallbackProvider,
   createS3FallbackProvider,
+  createStaticFallbackProvider,
 } from "./flagsFallbackProvider";
 
 export { BoundReflagClient, ReflagClient } from "./client";
@@ -12,9 +13,11 @@ export type {
   GCSFallbackProviderOptions,
   RedisFallbackProviderOptions,
   S3FallbackProviderOptions,
+  StaticFallbackProviderOptions,
 } from "./flagsFallbackProvider";
 
 export const fallbackProviders = {
+  static: createStaticFallbackProvider,
   file: createFileFallbackProvider,
   redis: createRedisFallbackProvider,
   s3: createS3FallbackProvider,
