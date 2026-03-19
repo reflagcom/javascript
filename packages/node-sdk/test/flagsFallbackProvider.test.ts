@@ -250,7 +250,7 @@ describe("flagsFallbackProvider", () => {
 
     await expect(provider.load(context)).resolves.toEqual(snapshot);
     expect(get).toHaveBeenCalledWith(
-      `reflag:flags-fallback:flags-fallback-${context.secretKeyHash.slice(0, 16)}.json`,
+      `reflag:flags-fallback:${context.secretKeyHash.slice(0, 16)}`,
     );
   });
 
@@ -275,7 +275,7 @@ describe("flagsFallbackProvider", () => {
     await provider.save(context, snapshot);
 
     expect(set).toHaveBeenCalledWith(
-      `reflag:flags-fallback:flags-fallback-${context.secretKeyHash.slice(0, 16)}.json`,
+      `reflag:flags-fallback:${context.secretKeyHash.slice(0, 16)}`,
       JSON.stringify(snapshot),
     );
   });

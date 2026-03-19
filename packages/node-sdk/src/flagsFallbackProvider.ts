@@ -120,7 +120,7 @@ function snapshotRedisKey(
   context: FlagsFallbackProviderContext,
   keyPrefix = "reflag:flags-fallback",
 ) {
-  return `${trimTrailingCharacter(keyPrefix, ":")}:${defaultSnapshotName(context.secretKeyHash)}`;
+  return `${trimTrailingCharacter(keyPrefix, ":")}:${context.secretKeyHash.slice(0, 16)}`;
 }
 
 export function isFlagsFallbackSnapshot(

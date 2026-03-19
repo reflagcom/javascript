@@ -280,7 +280,7 @@ await client.initialize();
 
 ##### Redis provider
 
-The built-in Redis provider creates a Redis client automatically when omitted and uses `REDIS_URL` from the environment.
+The built-in Redis provider creates a Redis client automatically when omitted and uses `REDIS_URL` from the environment. It stores snapshots under the configured `keyPrefix` and uses the first 16 characters of the secret key hash in the Redis key.
 
 ```typescript
 import { ReflagClient, fallbackProviders } from "@reflag/node-sdk";
