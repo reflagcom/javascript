@@ -175,15 +175,8 @@ await client.flush();
 ### Rate Limiting
 
 The SDK includes automatic rate limiting for flag events to prevent overwhelming the API.
-Rate limiting is applied per unique combination of flag key and context. The rate limiter window size is configurable:
-
-```typescript
-const client = new ReflagClient({
-  rateLimiterOptions: {
-    windowSizeMs: 60000, // Rate limiting window size in milliseconds
-  },
-});
-```
+Rate limiting is applied per unique combination of flag key and evaluation context.
+This behavior is built in and does not currently require configuration.
 
 ### Flag definitions
 
@@ -208,7 +201,9 @@ const flagDefs = await client.getFlagDefinitions();
 
 ### Fallback provider
 
-`flagsFallbackProvider` is a reliability feature that lets the SDK persist the latest successfully fetched raw flag definitions to fallback storage such as a local file, Redis, S3, or a custom backend.
+`flagsFallbackProvider` is a reliability feature that lets the SDK persist the latest successfully fetched raw flag definitions to fallback storage such as a local file, Redis, S3, GCS, or a custom backend.
+
+#### How it works
 
 Reflag servers remain the primary source of truth. On `initialize()`, the SDK always tries to fetch a live copy of the flag definitions first, and it continues refreshing those definitions from the Reflag servers over time.
 
@@ -226,7 +221,7 @@ Typical reliability flow:
 4. If a future process starts while Reflag is unavailable, it can load the last saved snapshot from the fallback provider and still initialize.
 5. Once Reflag becomes available again, the SDK resumes using live data and refreshes the fallback snapshot.
 
-Most deployments run multiple SDK processes, so more than one process may save identical flag definitions to the fallback storage at roughly the same time. This is expected and generally harmless for backends like a local file, Redis, or S3 because the operation is cheap. In practice, this only becomes worth thinking about once you have many thousands of SDK processes writing to the same fallback storage.
+Most deployments run multiple SDK processes, so more than one process may save identical flag definitions to the fallback storage at roughly the same time. This is expected and generally harmless for backends like a local file, Redis, S3, or GCS because the operation is cheap. In practice, this only becomes worth thinking about once you have many thousands of SDK processes writing to the same fallback storage.
 
 > [!TIP]
 > If you are building a web or client-side application and want the most resilient setup, combine `flagsFallbackProvider` on the server with bootstrapped flags on the client.
@@ -235,7 +230,17 @@ Most deployments run multiple SDK processes, so more than one process may save i
 >
 > This applies to React (`getFlagsForBootstrap()` + `ReflagBootstrappedProvider`), the Browser SDK (`bootstrappedFlags`), and the Vue SDK (bootstrapped flags via the provider).
 
-#### Built-in file provider
+#### Built-in providers
+
+You can access the built-in providers through the `fallbackProviders` namespace:
+
+- `fallbackProviders.static(...)`
+- `fallbackProviders.file(...)`
+- `fallbackProviders.redis(...)`
+- `fallbackProviders.s3(...)`
+- `fallbackProviders.gcs(...)`
+
+##### File provider
 
 ```typescript
 import { ReflagClient, fallbackProviders } from "@reflag/node-sdk";
@@ -253,16 +258,7 @@ await client.initialize();
 The file provider stores one snapshot file per environment in the configured
 `directory`.
 
-You can also access the built-in providers through the `fallbackProviders`
-namespace:
-
-- `fallbackProviders.static(...)`
-- `fallbackProviders.file(...)`
-- `fallbackProviders.redis(...)`
-- `fallbackProviders.s3(...)`
-- `fallbackProviders.gcs(...)`
-
-#### Built-in static provider
+##### Static provider
 
 If you just want a fixed fallback copy of simple enabled/disabled flags, you can provide a static map:
 
@@ -282,7 +278,7 @@ const client = new ReflagClient({
 await client.initialize();
 ```
 
-#### Built-in Redis provider
+##### Redis provider
 
 The built-in Redis provider creates a Redis client automatically when omitted and uses `REDIS_URL` from the environment.
 
@@ -297,7 +293,7 @@ const client = new ReflagClient({
 await client.initialize();
 ```
 
-#### Built-in S3 provider
+##### S3 provider
 
 The built-in S3 provider works out of the box using the AWS SDK's default credential chain and region resolution. It stores the snapshot object under the configured `keyPrefix` and uses a hash of the secret key in the object name.
 
@@ -314,7 +310,7 @@ const client = new ReflagClient({
 await client.initialize();
 ```
 
-#### Built-in GCS provider
+##### GCS provider
 
 The built-in GCS provider works out of the box using Google Cloud's default application credentials. It stores the snapshot object under the configured `keyPrefix` and uses a hash of the secret key in the object name.
 
@@ -331,9 +327,11 @@ const client = new ReflagClient({
 await client.initialize();
 ```
 
+#### Testing fallback startup locally
+
 To test fallback startup in your own app, first run it once with a working Reflag connection so a snapshot is saved. Then restart it with the same secret key and fallback provider configuration, but set `apiBaseUrl` to `http://127.0.0.1:65535`. That forces the live fetch to fail and lets you verify that the SDK initializes from the saved snapshot instead.
 
-#### Simple custom provider
+#### Writing a custom provider
 
 If you just want a fixed fallback copy of the flag definitions, a custom provider can be very small:
 
