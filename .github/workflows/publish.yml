@@ -36,7 +36,7 @@ jobs:
           title: Version Packages
           commit: Version Packages
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.CHANGESETS_BOT_TOKEN }}
       - name: Build docs
         if: steps.changesets.outputs.published == 'true'
         run: yarn docs
