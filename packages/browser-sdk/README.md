@@ -363,7 +363,7 @@ The returned context object contains:
 
 The Reflag Toolbar is great for toggling flags on/off for yourself to ensure that everything works both when a flag is on and when it's off.
 
-<img width="352" alt="Toolbar screenshot" src="https://github.com/user-attachments/assets/c223df5a-4bd8-49a1-8b4a-ad7001357693" />
+<img width="310" height="265" alt="Toolbar" src="https://github.com/user-attachments/assets/cf871502-8759-40c4-bf24-5b8471c267f1" />
 
 The toolbar will automatically appear on `localhost`. However, it can also be incredibly useful in production.
 You have full control over when it appears through the `toolbar` configuration option passed to the `ReflagClient`.
