@@ -163,6 +163,17 @@ export function hashObject(obj: Record<string, any>): string {
   return hash.digest("base64");
 }
 
+/**
+ * Hash a string using SHA256 and return a hex digest.
+ *
+ * @param value - The string to hash.
+ * @returns The SHA256 hash.
+ */
+export function hashString(value: string): string {
+  ok(typeof value === "string", "value must be a string");
+  return createHash("sha256").update(value).digest("hex");
+}
+
 export function once<T extends () => ReturnType<T>>(
   fn: T,
 ): () => ReturnType<T> {

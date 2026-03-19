@@ -175,15 +175,8 @@ await client.flush();
 ### Rate Limiting
 
 The SDK includes automatic rate limiting for flag events to prevent overwhelming the API.
-Rate limiting is applied per unique combination of flag key and context. The rate limiter window size is configurable:
-
-```typescript
-const client = new ReflagClient({
-  rateLimiterOptions: {
-    windowSizeMs: 60000, // Rate limiting window size in milliseconds
-  },
-});
-```
+Rate limiting is applied per unique combination of flag key and evaluation context.
+This behavior is built in and does not currently require configuration.
 
 ### Flag definitions
 
@@ -206,9 +199,182 @@ const flagDefs = await client.getFlagDefinitions();
 // }]
 ```
 
+### Fallback provider
+
+`flagsFallbackProvider` is a reliability feature that lets the SDK persist the latest successfully fetched raw flag definitions to fallback storage such as a local file, Redis, S3, GCS, or a custom backend.
+
+#### How it works
+
+Reflag servers remain the primary source of truth. On `initialize()`, the SDK always tries to fetch a live copy of the flag definitions first, and it continues refreshing those definitions from the Reflag servers over time.
+
+If that initial live fetch fails, the SDK can call `flagsFallbackProvider.load()` and start with the last saved snapshot instead. This is mainly useful for cold starts in the exceedingly rare case that Reflag has an outage.
+
+If Reflag becomes unavailable after the SDK has already initialized successfully, the SDK keeps using the last successfully fetched definitions it already has in memory. In other words, the fallback provider is mainly what helps future processes start, not what keeps an already running process alive.
+
+After successfully fetching updated flag definitions, the SDK calls `flagsFallbackProvider.save()` to keep the stored snapshot up to date.
+
+Typical reliability flow:
+
+1. The SDK starts and tries to fetch live flag definitions from Reflag.
+2. If that succeeds, those definitions are used immediately and the SDK continues operating normally.
+3. After successfully fetching updated flag definitions, the SDK saves the latest snapshot through the fallback provider so a recent copy is available if needed later.
+4. If a future process starts while Reflag is unavailable, it can load the last saved snapshot from the fallback provider and still initialize.
+5. Once Reflag becomes available again, the SDK resumes using live data and refreshes the fallback snapshot.
+
+Most deployments run multiple SDK processes, so more than one process may save identical flag definitions to the fallback storage at roughly the same time. This is expected and generally harmless for backends like a local file, Redis, S3, or GCS because the operation is cheap. In practice, this only becomes worth thinking about once you have many thousands of SDK processes writing to the same fallback storage.
+
+> [!TIP]
+> If you are building a web or client-side application and want the most resilient setup, combine `flagsFallbackProvider` on the server with bootstrapped flags on the client.
+>
+> `flagsFallbackProvider` helps new server processes start if they cannot reach Reflag during initialization. Bootstrapping helps clients render from server-provided flags instead of depending on an initial client-side fetch from the Reflag servers.
+>
+> This applies to React (`getFlagsForBootstrap()` + `ReflagBootstrappedProvider`), the Browser SDK (`bootstrappedFlags`), and the Vue SDK (bootstrapped flags via the provider).
+
+#### Built-in providers
+
+You can access the built-in providers through the `fallbackProviders` namespace:
+
+- `fallbackProviders.static(...)`
+- `fallbackProviders.file(...)`
+- `fallbackProviders.redis(...)`
+- `fallbackProviders.s3(...)`
+- `fallbackProviders.gcs(...)`
+
+##### File provider
+
+```typescript
+import { ReflagClient, fallbackProviders } from "@reflag/node-sdk";
+
+const client = new ReflagClient({
+  secretKey: process.env.REFLAG_SECRET_KEY,
+  flagsFallbackProvider: fallbackProviders.file({
+    directory: ".reflag",
+  }),
+});
+
+await client.initialize();
+```
+
+The file provider stores one snapshot file per environment in the configured
+`directory`.
+
+##### Static provider
+
+If you just want a fixed fallback copy of simple enabled/disabled flags, you can provide a static map:
+
+```typescript
+import { ReflagClient, fallbackProviders } from "@reflag/node-sdk";
+
+const client = new ReflagClient({
+  secretKey: process.env.REFLAG_SECRET_KEY,
+  flagsFallbackProvider: fallbackProviders.static({
+    flags: {
+      huddle: true,
+      "smart-summaries": false,
+    },
+  }),
+});
+
+await client.initialize();
+```
+
+##### Redis provider
+
+The built-in Redis provider creates a Redis client automatically when omitted and uses `REDIS_URL` from the environment. It stores snapshots under the configured `keyPrefix` and uses the first 16 characters of the secret key hash in the Redis key.
+
+```typescript
+import { ReflagClient, fallbackProviders } from "@reflag/node-sdk";
+
+const client = new ReflagClient({
+  secretKey: process.env.REFLAG_SECRET_KEY,
+  flagsFallbackProvider: fallbackProviders.redis(),
+});
+
+await client.initialize();
+```
+
+##### S3 provider
+
+The built-in S3 provider works out of the box using the AWS SDK's default credential chain and region resolution. It stores the snapshot object under the configured `keyPrefix` and uses a hash of the secret key in the object name.
+
+```typescript
+import { ReflagClient, fallbackProviders } from "@reflag/node-sdk";
+
+const client = new ReflagClient({
+  secretKey: process.env.REFLAG_SECRET_KEY,
+  flagsFallbackProvider: fallbackProviders.s3({
+    bucket: process.env.REFLAG_SNAPSHOT_BUCKET!,
+  }),
+});
+
+await client.initialize();
+```
+
+##### GCS provider
+
+The built-in GCS provider works out of the box using Google Cloud's default application credentials. It stores the snapshot object under the configured `keyPrefix` and uses a hash of the secret key in the object name.
+
+```typescript
+import { ReflagClient, fallbackProviders } from "@reflag/node-sdk";
+
+const client = new ReflagClient({
+  secretKey: process.env.REFLAG_SECRET_KEY,
+  flagsFallbackProvider: fallbackProviders.gcs({
+    bucket: process.env.REFLAG_SNAPSHOT_BUCKET!,
+  }),
+});
+
+await client.initialize();
+```
+
+#### Testing fallback startup locally
+
+To test fallback startup in your own app, first run it once with a working Reflag connection so a snapshot is saved. Then restart it with the same secret key and fallback provider configuration, but set `apiBaseUrl` to `http://127.0.0.1:65535`. That forces the live fetch to fail and lets you verify that the SDK initializes from the saved snapshot instead.
+
+#### Writing a custom provider
+
+If you just want a fixed fallback copy of the flag definitions, a custom provider can be very small:
+
+```typescript
+import type {
+  FlagsFallbackProvider,
+  FlagsFallbackSnapshot,
+} from "@reflag/node-sdk";
+
+const fallbackSnapshot: FlagsFallbackSnapshot = {
+  version: 1,
+  savedAt: "2026-03-10T00:00:00.000Z",
+  flags: [
+    {
+      key: "huddle",
+      description: "Fallback example",
+      targeting: {
+        version: 1,
+        rules: [],
+      },
+    },
+  ],
+};
+
+export const staticFallbackProvider: FlagsFallbackProvider = {
+  async load() {
+    return fallbackSnapshot;
+  },
+
+  async save() {
+    // no-op
+  },
+};
+```
+
+> [!NOTE]
+>
+> `fallbackFlags` is deprecated. Prefer `flagsFallbackProvider` for startup fallback and outage recovery.
+> `flagsFallbackProvider` is not used in offline mode.
+
 ## Bootstrapping client-side applications
 
-The `getFlagsForBootstrap()` method is designed for server-side rendering (SSR) scenarios where you need to pass flag data to client-side applications. This method returns raw flag data without wrapper functions, making it suitable for serialization and client-side hydration.
+The `getFlagsForBootstrap()` method is useful whenever you need to pass flag data to another runtime or serialize it without wrapper functions. Server-side rendering (SSR) is a common example, but it is also useful for other bootstrapping and hydration flows.
 
 ```typescript
 const client = new ReflagClient();
@@ -340,7 +506,8 @@ fallback behavior:
 4. **Offline Mode**:
 
    ```typescript
-   // In offline mode, the SDK uses flag overrides
+   // In offline mode, the SDK uses explicit local configuration only.
+   // It does not fetch from Reflag or use flagsFallbackProvider.
    const client = new ReflagClient({
      offline: true,
      flagOverrides: () => ({
@@ -400,16 +567,19 @@ a configuration file on disk or by passing options to the `ReflagClient`
 constructor. By default, the SDK searches for `reflag.config.json` in the
 current working directory.
 
-| Option          | Type                    | Description                                                                                                                                                                                                                                         | Env Var                                     |
-| --------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| `secretKey`     | string                  | The secret key used for authentication with Reflag's servers.                                                                                                                                                                                       | REFLAG_SECRET_KEY                           |
-| `logLevel`      | string                  | The log level for the SDK (e.g., `"DEBUG"`, `"INFO"`, `"WARN"`, `"ERROR"`). Default: `INFO`                                                                                                                                                         | REFLAG_LOG_LEVEL                            |
-| `offline`       | boolean                 | Operate in offline mode. Default: `false`, except in tests it will default to `true` based off of the `TEST` env. var.                                                                                                                              | REFLAG_OFFLINE                              |
-| `apiBaseUrl`    | string                  | The base API URL for the Reflag servers.                                                                                                                                                                                                            | REFLAG_API_BASE_URL                         |
-| `flagOverrides` | Record<string, boolean> | An object specifying flag overrides for testing or local development. See [examples/express/app.test.ts](https://github.com/reflagcom/javascript/tree/main/packages/node-sdk/examples/express/app.test.ts) for how to use `flagOverrides` in tests. | REFLAG_FLAGS_ENABLED, REFLAG_FLAGS_DISABLED |
-| `configFile`    | string                  | Load this config file from disk. Default: `reflag.config.json`                                                                                                                                                                                      | REFLAG_CONFIG_FILE                          |
+| Option                  | Type                    | Description                                                                                                                                                                                                                                         | Env Var                                     |
+| ----------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| `secretKey`             | string                  | The secret key used for authentication with Reflag's servers.                                                                                                                                                                                       | REFLAG_SECRET_KEY                           |
+| `logLevel`              | string                  | The log level for the SDK (e.g., `"DEBUG"`, `"INFO"`, `"WARN"`, `"ERROR"`). Default: `INFO`                                                                                                                                                         | REFLAG_LOG_LEVEL                            |
+| `offline`               | boolean                 | Operate in offline mode. Default: `false`, except in tests it will default to `true` based off of the `TEST` env. var. In offline mode the SDK does not fetch from Reflag and does not use `flagsFallbackProvider`.                                 | REFLAG_OFFLINE                              |
+| `apiBaseUrl`            | string                  | The base API URL for the Reflag servers.                                                                                                                                                                                                            | REFLAG_API_BASE_URL                         |
+| `flagOverrides`         | Record<string, boolean> | An object specifying flag overrides for testing or local development. See [examples/express/app.test.ts](https://github.com/reflagcom/javascript/tree/main/packages/node-sdk/examples/express/app.test.ts) for how to use `flagOverrides` in tests. | REFLAG_FLAGS_ENABLED, REFLAG_FLAGS_DISABLED |
+| `flagsFallbackProvider` | `FlagsFallbackProvider` | Optional provider used to load and save raw flag definitions for fallback startup when the initial live fetch fails. Available only through the constructor. Ignored in offline mode.                                                               | -                                           |
+| `configFile`            | string                  | Load this config file from disk. Default: `reflag.config.json`                                                                                                                                                                                      | REFLAG_CONFIG_FILE                          |
 
-> [!NOTE] > `REFLAG_FLAGS_ENABLED` and `REFLAG_FLAGS_DISABLED` are comma separated lists of flags which will be enabled or disabled respectively.
+> [!NOTE]
+>
+> `REFLAG_FLAGS_ENABLED` and `REFLAG_FLAGS_DISABLED` are comma separated lists of flags which will be enabled or disabled respectively.
 
 `reflag.config.json` example:
 

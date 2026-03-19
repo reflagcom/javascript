@@ -18,6 +18,7 @@ import {
   SDK_VERSION_HEADER_NAME,
 } from "./config";
 import fetchClient, { withRetry } from "./fetch-http-client";
+import { isFlagsFallbackSnapshot } from "./flagsFallbackProvider";
 import { subscribe as triggerOnExit } from "./flusher";
 import inRequestCache from "./inRequestCache";
 import periodicallyUpdatingCache from "./periodicallyUpdatingCache";
@@ -27,9 +28,13 @@ import type {
   CachedFlagDefinition,
   CacheStrategy,
   EvaluatedFlagsAPIResponse,
+  FlagAPIResponse,
   FlagDefinition,
   FlagOverrides,
   FlagOverridesFn,
+  FlagsFallbackProvider,
+  FlagsFallbackProviderContext,
+  FlagsFallbackSnapshot,
   IdType,
   RawFlag,
   RawFlags,
@@ -53,6 +58,7 @@ import {
   applyLogLevel,
   decorateLogger,
   hashObject,
+  hashString,
   idOk,
   isObject,
   mergeSkipUndefined,
@@ -132,6 +138,43 @@ type BulkEvent =
       context?: TrackingMeta;
     };
 
+function compileFlagDefinitions(
+  flags: FlagAPIResponse[],
+): CachedFlagDefinition[] {
+  return flags.map((flagDef) => {
+    return {
+      ...flagDef,
+      enabledEvaluator: newEvaluator(
+        flagDef.targeting.rules.map((rule) => ({
+          filter: rule.filter,
+          value: true,
+        })),
+      ),
+      configEvaluator: flagDef.config
+        ? newEvaluator(
+            flagDef.config.variants.map((variant) => ({
+              filter: variant.filter,
+              value: {
+                key: variant.key,
+                payload: variant.payload,
+              },
+            })),
+          )
+        : undefined,
+    } satisfies CachedFlagDefinition;
+  });
+}
+
+function createFlagsFallbackSnapshot(
+  flags: FlagAPIResponse[],
+): FlagsFallbackSnapshot {
+  return {
+    version: 1,
+    savedAt: new Date().toISOString(),
+    flags,
+  };
+}
+
 /**
  * The SDK client.
  *
@@ -155,9 +198,10 @@ export class ReflagClient {
   private _config: {
     apiBaseUrl: string;
     refetchInterval: number;
-    staleWarningInterval: number;
     headers: Record<string, string>;
     fallbackFlags?: RawFlags;
+    flagsFallbackProvider?: FlagsFallbackProvider;
+    flagsFallbackProviderContext: FlagsFallbackProviderContext;
     flagOverrides: FlagOverridesFn;
     offline: boolean;
     configFile?: string;
@@ -180,6 +224,7 @@ export class ReflagClient {
   public readonly logger: Logger;
 
   private initializationFinished = false;
+  private canLoadFlagsFallbackProvider = true;
   private _initialize = once(async () => {
     const start = Date.now();
     if (!this._config.offline) {
@@ -236,6 +281,13 @@ export class ReflagClient {
     ok(
       options.httpClient === undefined || isObject(options.httpClient),
       "httpClient must be an object",
+    );
+    ok(
+      options.flagsFallbackProvider === undefined ||
+        (isObject(options.flagsFallbackProvider) &&
+          typeof options.flagsFallbackProvider.load === "function" &&
+          typeof options.flagsFallbackProvider.save === "function"),
+      "flagsFallbackProvider must be an object with load/save functions",
     );
     ok(
       options.fallbackFlags === undefined ||
@@ -349,8 +401,11 @@ export class ReflagClient {
         ["Authorization"]: `Bearer ${config.secretKey}`,
       },
       refetchInterval: FLAGS_REFETCH_MS,
-      staleWarningInterval: FLAGS_REFETCH_MS * 5,
       fallbackFlags: fallbackFlags,
+      flagsFallbackProvider: options.flagsFallbackProvider,
+      flagsFallbackProviderContext: {
+        secretKeyHash: config.secretKey ? hashString(config.secretKey) : "",
+      },
       flagOverrides: baseFlagOverrides,
       flagsFetchRetries: options.flagsFetchRetries ?? 3,
       fetchTimeoutMs: options.fetchTimeoutMs ?? API_TIMEOUT_MS,
@@ -373,37 +428,17 @@ export class ReflagClient {
       );
       if (!isObject(res) || !Array.isArray(res?.features)) {
         this.logger.warn("flags cache: invalid response", res);
-        return undefined;
+        return await this.loadFlagsFallbackDefinitions();
       }
 
-      return res.features.map((flagDef) => {
-        return {
-          ...flagDef,
-          enabledEvaluator: newEvaluator(
-            flagDef.targeting.rules.map((rule) => ({
-              filter: rule.filter,
-              value: true,
-            })),
-          ),
-          configEvaluator: flagDef.config
-            ? newEvaluator(
-                flagDef.config?.variants.map((variant) => ({
-                  filter: variant.filter,
-                  value: {
-                    key: variant.key,
-                    payload: variant.payload,
-                  },
-                })),
-              )
-            : undefined,
-        } satisfies CachedFlagDefinition;
-      });
+      void this.saveFlagsFallbackDefinitions(res.features);
+      this.canLoadFlagsFallbackProvider = false;
+      return compileFlagDefinitions(res.features);
     };
 
     if (this._config.cacheStrategy === "periodically-update") {
       this.flagsCache = periodicallyUpdatingCache<CachedFlagDefinition[]>(
         this._config.refetchInterval,
-        this._config.staleWarningInterval,
         this.logger,
         fetchFlags,
       );
@@ -412,6 +447,64 @@ export class ReflagClient {
         this._config.refetchInterval,
         this.logger,
         fetchFlags,
+      );
+    }
+  }
+
+  private async loadFlagsFallbackDefinitions() {
+    if (!this.canLoadFlagsFallbackProvider) {
+      return undefined;
+    }
+
+    this.canLoadFlagsFallbackProvider = false;
+    const provider = this._config.flagsFallbackProvider;
+    if (!provider) {
+      return undefined;
+    }
+
+    try {
+      const snapshot = await provider.load(
+        this._config.flagsFallbackProviderContext,
+      );
+
+      if (!snapshot) {
+        return undefined;
+      }
+
+      if (!isFlagsFallbackSnapshot(snapshot)) {
+        this.logger.warn("flagsFallbackProvider: invalid snapshot returned");
+        return undefined;
+      }
+
+      this.logger.warn("using flag definitions from flagsFallbackProvider", {
+        savedAt: snapshot.savedAt,
+      });
+
+      return compileFlagDefinitions(snapshot.flags);
+    } catch (error) {
+      this.logger.error(
+        "flagsFallbackProvider: failed to load flag definitions",
+        error,
+      );
+      return undefined;
+    }
+  }
+
+  private async saveFlagsFallbackDefinitions(flags: FlagAPIResponse[]) {
+    const provider = this._config.flagsFallbackProvider;
+    if (!provider) {
+      return;
+    }
+
+    try {
+      await provider.save(
+        this._config.flagsFallbackProviderContext,
+        createFlagsFallbackSnapshot(flags),
+      );
+    } catch (error) {
+      this.logger.error(
+        "flagsFallbackProvider: failed to save flag definitions",
+        error,
       );
     }
   }

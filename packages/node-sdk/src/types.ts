@@ -379,6 +379,57 @@ export type FlagsAPIResponse = {
 };
 
 /**
+ * Snapshot of flag definitions used for fallback initialization.
+ */
+export type FlagsFallbackSnapshot = {
+  /**
+   * Snapshot schema version.
+   */
+  version: 1;
+
+  /**
+   * ISO timestamp indicating when the snapshot was saved.
+   */
+  savedAt: string;
+
+  /**
+   * Raw flag definitions as returned by the API.
+   */
+  flags: FlagAPIResponse[];
+};
+
+/**
+ * Non-secret context passed to fallback providers so they can derive
+ * storage keys without access to the raw secret key.
+ */
+export type FlagsFallbackProviderContext = {
+  /**
+   * Deterministic hash of the configured secret key.
+   */
+  secretKeyHash: string;
+};
+
+/**
+ * Provider used to load and save raw flag definition snapshots.
+ */
+export interface FlagsFallbackProvider {
+  /**
+   * Load a previously saved snapshot.
+   */
+  load(
+    context: FlagsFallbackProviderContext,
+  ): Promise<FlagsFallbackSnapshot | undefined>;
+
+  /**
+   * Persist a snapshot after a successful live fetch.
+   */
+  save(
+    context: FlagsFallbackProviderContext,
+    snapshot: FlagsFallbackSnapshot,
+  ): Promise<void>;
+}
+
+/**
  * (Internal) Flag definitions with the addition of a pre-prepared
  * evaluators functions for the rules.
  *
@@ -616,10 +667,18 @@ export type ClientOptions = {
    *
    * If a record is supplied instead of array, the values of each key are either the
    * configuration values or the boolean value `true`.
+   *
+   * @deprecated Use `flagsFallbackProvider` instead.
    **/
   fallbackFlags?:
     | TypedFlagKey[]
     | Record<TypedFlagKey, Exclude<FlagOverride, false>>;
+
+  /**
+   * Optional provider used to load and save raw flag definitions for fallback startup.
+   * Ignored in offline mode.
+   */
+  flagsFallbackProvider?: FlagsFallbackProvider;
 
   /**
    * The HTTP client to use for sending requests (optional). Default is the built-in fetch client.
@@ -653,7 +712,8 @@ export type ClientOptions = {
   flagOverrides?: FlagOverrides | ((context: Context) => FlagOverrides);
 
   /**
-   * In offline mode, no data is sent or fetched from the the Reflag API.
+   * In offline mode, no data is sent or fetched from the the Reflag API,
+   * and `flagsFallbackProvider` is not used.
    * This is useful for testing or development.
    */
   offline?: boolean;

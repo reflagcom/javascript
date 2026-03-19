@@ -35,7 +35,7 @@ describe("cache", () => {
   });
 
   it("should update the cached value when refreshing", async () => {
-    const cached = cache(1000, 2000, logger, fn);
+    const cached = cache(1000, logger, fn);
 
     const result = await cached.refresh();
 
@@ -47,7 +47,7 @@ describe("cache", () => {
   });
 
   it("should not allow multiple refreses at the same time", async () => {
-    const cached = cache(1000, 2000, logger, fn);
+    const cached = cache(1000, logger, fn);
 
     void cached.refresh();
     void cached.refresh();
@@ -72,30 +72,11 @@ describe("cache", () => {
     );
   });
 
-  it("should warn if the cached value is stale", async () => {
-    const cached = cache(1000, 2000, logger, fn);
-
-    await cached.refresh();
-
-    vi.advanceTimersByTime(2500);
-
-    const result = cached.get();
-
-    expect(result).toBe(42);
-    expect(logger.warn).toHaveBeenCalledWith(
-      expect.stringMatching("cached value is stale"),
-      {
-        age: expect.any(Number),
-        cachedValue: 42,
-      },
-    );
-  });
-
   it("should update the cached value after ttl", async () => {
     const newValue = 84;
     fn = vi.fn().mockResolvedValueOnce(42).mockResolvedValueOnce(newValue);
 
-    const cached = cache(1000, 2000, logger, fn);
+    const cached = cache(1000, logger, fn);
 
     const first = await cached.refresh();
 
@@ -119,7 +100,7 @@ describe("cache", () => {
     const error = new Error("update failed");
     fn = vi.fn().mockRejectedValueOnce(error).mockResolvedValueOnce(42);
 
-    const cached = cache(1000, 2000, logger, fn);
+    const cached = cache(1000, logger, fn);
 
     const first = await cached.refresh();
 
@@ -142,33 +123,8 @@ describe("cache", () => {
     expect(second).toBe(42);
   });
 
-  it("should retain the cached value if the new value is undefined", async () => {
-    fn = vi.fn().mockResolvedValueOnce(42).mockResolvedValueOnce(undefined);
-    const cached = cache(1000, 2000, logger, fn);
-
-    await cached.refresh();
-
-    await vi.advanceTimersToNextTimerAsync();
-
-    const second = cached.get();
-    expect(second).toBe(42);
-
-    vi.advanceTimersByTime(2500);
-
-    const result = cached.get();
-
-    expect(result).toBe(42);
-    expect(logger.warn).toHaveBeenCalledWith(
-      expect.stringMatching("cached value is stale"),
-      {
-        age: expect.any(Number),
-        cachedValue: 42,
-      },
-    );
-  });
-
   it("should not update if cached value is still valid", async () => {
-    const cached = cache(1000, 2000, logger, fn);
+    const cached = cache(1000, logger, fn);
 
     const first = await cached.refresh();
 

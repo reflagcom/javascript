@@ -1,5 +1,28 @@
+import {
+  createFileFallbackProvider,
+  createGCSFallbackProvider,
+  createRedisFallbackProvider,
+  createS3FallbackProvider,
+  createStaticFallbackProvider,
+} from "./flagsFallbackProvider";
+
 export { BoundReflagClient, ReflagClient } from "./client";
 export { EdgeClient, EdgeClientOptions } from "./edgeClient";
+export type {
+  FileFallbackProviderOptions,
+  GCSFallbackProviderOptions,
+  RedisFallbackProviderOptions,
+  S3FallbackProviderOptions,
+  StaticFallbackProviderOptions,
+} from "./flagsFallbackProvider";
+
+export const fallbackProviders = {
+  static: createStaticFallbackProvider,
+  file: createFileFallbackProvider,
+  redis: createRedisFallbackProvider,
+  s3: createS3FallbackProvider,
+  gcs: createGCSFallbackProvider,
+};
 export type {
   Attributes,
   BatchBufferOptions,
@@ -10,6 +33,7 @@ export type {
   ContextWithTracking,
   EmptyFlagRemoteConfig,
   Flag,
+  FlagAPIResponse,
   FlagConfigVariant,
   FlagDefinition,
   FlagOverride,
@@ -17,6 +41,10 @@ export type {
   FlagOverridesFn,
   FlagRemoteConfig,
   Flags,
+  FlagsAPIResponse,
+  FlagsFallbackProvider,
+  FlagsFallbackProviderContext,
+  FlagsFallbackSnapshot,
   FlagType,
   HttpClient,
   HttpClientResponse,
