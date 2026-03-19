@@ -169,7 +169,10 @@ function parseSnapshot(raw: string) {
   return isFlagsFallbackSnapshot(parsed) ? parsed : undefined;
 }
 
-function staticFlagApiResponse(key: string, isEnabled: boolean): FlagAPIResponse {
+function staticFlagApiResponse(
+  key: string,
+  isEnabled: boolean,
+): FlagAPIResponse {
   return {
     key,
     description: null,
