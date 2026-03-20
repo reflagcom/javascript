@@ -15,7 +15,6 @@
 
 /**
  * Sort order applied to the sorting column
- * @export
  */
 export const SortOrder = {
     Asc: 'asc',

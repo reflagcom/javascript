@@ -23,32 +23,27 @@ import {
 
 /**
  * Response containing flags for an entity
- * @export
  * @interface EntityFlagsResponse
  */
 export interface EntityFlagsResponse {
     /**
      * List of flags with their enabled status
      * @type {Array<EntityFlag>}
-     * @memberof EntityFlagsResponse
      */
     data: Array<EntityFlag>;
     /**
      * Total number of flags
      * @type {number}
-     * @memberof EntityFlagsResponse
      */
     totalCount: number;
     /**
      * Page size
      * @type {number}
-     * @memberof EntityFlagsResponse
      */
     pageSize: number;
     /**
      * Page index
      * @type {number}
-     * @memberof EntityFlagsResponse
      */
     pageIndex: number;
 }

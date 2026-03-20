@@ -30,92 +30,77 @@ import {
 
 /**
  * 
- * @export
  * @interface CreateFlag200ResponseFlag
  */
 export interface CreateFlag200ResponseFlag {
     /**
      * Flag ID
      * @type {string}
-     * @memberof CreateFlag200ResponseFlag
      */
     id: string;
     /**
      * Unique flag key
      * @type {string}
-     * @memberof CreateFlag200ResponseFlag
      */
     key: string;
     /**
      * Flag name
      * @type {string}
-     * @memberof CreateFlag200ResponseFlag
      */
     name: string;
     /**
      * Flag description
      * @type {string}
-     * @memberof CreateFlag200ResponseFlag
      */
     description?: string;
     /**
      * 
      * @type {StageHeader}
-     * @memberof CreateFlag200ResponseFlag
      */
     stage?: StageHeader;
     /**
      * 
      * @type {ReflagUserHeader}
-     * @memberof CreateFlag200ResponseFlag
      */
     owner?: ReflagUserHeader;
     /**
      * Whether the flag is archived
      * @type {boolean}
-     * @memberof CreateFlag200ResponseFlag
      */
     archived: boolean;
     /**
      * Whether the flag is stale
      * @type {boolean}
-     * @memberof CreateFlag200ResponseFlag
      */
     stale: boolean;
     /**
      * Whether the flag is permanent
      * @type {boolean}
-     * @memberof CreateFlag200ResponseFlag
      */
     permanent: boolean;
     /**
      * Timestamp when the flag was created
      * @type {string}
-     * @memberof CreateFlag200ResponseFlag
      */
     createdAt?: string;
     /**
      * Timestamp when the flag was last checked
      * @type {string}
-     * @memberof CreateFlag200ResponseFlag
      */
     lastCheckAt?: string;
     /**
      * Timestamp when the flag was last tracked
      * @type {string}
-     * @memberof CreateFlag200ResponseFlag
      */
     lastTrackAt?: string;
     /**
      * Timestamp when the flag was rolled out to everyone
      * @type {string}
-     * @memberof CreateFlag200ResponseFlag
      */
     rolledOutToEveryoneAt?: string;
     /**
      * Parent flag ID
      * @type {string}
-     * @memberof CreateFlag200ResponseFlag
      */
     parentFlagId?: string;
 }

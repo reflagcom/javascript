@@ -15,32 +15,27 @@
 import { mapValues } from '../runtime';
 /**
  * Reflag user's basic information
- * @export
  * @interface ReflagUserHeader
  */
 export interface ReflagUserHeader {
     /**
      * Reflag user identifier
      * @type {string}
-     * @memberof ReflagUserHeader
      */
     id: string;
     /**
      * User's name
      * @type {string}
-     * @memberof ReflagUserHeader
      */
     name: string;
     /**
      * User's email
      * @type {string}
-     * @memberof ReflagUserHeader
      */
     email: string;
     /**
      * User's avatar URL
      * @type {string}
-     * @memberof ReflagUserHeader
      */
     avatarUrl?: string;
 }

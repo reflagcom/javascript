@@ -15,20 +15,17 @@
 import { mapValues } from '../runtime';
 /**
  * Flag targeting value and its audience
- * @export
  * @interface FlagValueTargeting
  */
 export interface FlagValueTargeting {
     /**
      * Companies that were explicitly given the value
      * @type {Array<string>}
-     * @memberof FlagValueTargeting
      */
     companyIds: Array<string>;
     /**
      * Users that were explicitly given the value
      * @type {Array<string>}
-     * @memberof FlagValueTargeting
      */
     userIds: Array<string>;
 }

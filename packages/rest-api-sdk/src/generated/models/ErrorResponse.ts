@@ -23,20 +23,17 @@ import {
 
 /**
  * The error response, including individual issues, if applicable
- * @export
  * @interface ErrorResponse
  */
 export interface ErrorResponse {
     /**
      * 
      * @type {ErrorResponseError}
-     * @memberof ErrorResponse
      */
     error: ErrorResponseError;
     /**
      * Individual validation issues, if applicable
      * @type {{ [key: string]: Array<string>; }}
-     * @memberof ErrorResponse
      */
     issues?: { [key: string]: Array<string>; };
 }

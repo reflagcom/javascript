@@ -49,22 +49,11 @@ export interface {{classname}}Interface {
      {{#summary}}
      * @summary {{&summary}}
      {{/summary}}
-     {{#allParams}}
-     {{#isBodyParam}}
-     {{#vars}}
-     * @param {{=<% %>=}}{<%&dataType%>}<%={{ }}=%> {{^required}}[{{/required}}{{name}}{{^required}}]{{/required}} {{description}}
-     {{/vars}}
-     {{/isBodyParam}}
-     {{^isBodyParam}}
-     * @param {{=<% %>=}}{<%&dataType%>}<%={{ }}=%> {{^required}}[{{/required}}{{paramName}}{{^required}}]{{/required}} {{description}}
-     {{/isBodyParam}}
-     {{/allParams}}
-     * @param {*} [options] Override http request option.
+     * @param requestParameters Request parameters for this operation.
     {{#isDeprecated}}
      * @deprecated
     {{/isDeprecated}}
      * @throws {RequiredError}
-     * @memberof {{classname}}Interface
      */
     {{nickname}}Raw({{#allParams.0}}requestParameters: {{#prefixParameterInterfaces}}{{classname}}{{/prefixParameterInterfaces}}{{operationIdCamelCase}}Request, {{/allParams.0}}initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<{{{returnType}}}{{^returnType}}void{{/returnType}}>>;
 

@@ -37,26 +37,22 @@ import {
 
 /**
  * Collection of Basic environment information
- * @export
  * @interface EnvironmentHeaderCollection
  */
 export interface EnvironmentHeaderCollection {
     /**
      * The individual items in the collection
      * @type {Array<EnvironmentHeader>}
-     * @memberof EnvironmentHeaderCollection
      */
     data: Array<EnvironmentHeader>;
     /**
      * 
      * @type {SortOrder}
-     * @memberof EnvironmentHeaderCollection
      */
     sortOrder: SortOrder;
     /**
      * 
      * @type {EnvironmentHeaderSortByColumn}
-     * @memberof EnvironmentHeaderCollection
      */
     sortBy: EnvironmentHeaderSortByColumn;
 }

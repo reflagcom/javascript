@@ -23,26 +23,22 @@ import {
 
 /**
  * Segment's basic information
- * @export
  * @interface SegmentHeader
  */
 export interface SegmentHeader {
     /**
      * Segment identifier
      * @type {string}
-     * @memberof SegmentHeader
      */
     id: string;
     /**
      * Segment name
      * @type {string}
-     * @memberof SegmentHeader
      */
     name: string;
     /**
      * 
      * @type {SegmentType}
-     * @memberof SegmentHeader
      */
     type: SegmentType;
 }

@@ -51,56 +51,47 @@ import {
 
 /**
  * App information with related collections
- * @export
  * @interface App
  */
 export interface App {
     /**
      * 
      * @type {OrgHeader}
-     * @memberof App
      */
     org: OrgHeader;
     /**
      * App identifier
      * @type {string}
-     * @memberof App
      */
     id: string;
     /**
      * App name
      * @type {string}
-     * @memberof App
      */
     name: string;
     /**
      * Whether the app is a demo app
      * @type {boolean}
-     * @memberof App
      */
     demo: boolean;
     /**
      * 
      * @type {FlagKeyFormat}
-     * @memberof App
      */
     flagKeyFormat: FlagKeyFormat;
     /**
      * Environments within the app
      * @type {Array<Environment>}
-     * @memberof App
      */
     environments: Array<Environment>;
     /**
      * Stages within the app
      * @type {Array<StageHeader>}
-     * @memberof App
      */
     stages: Array<StageHeader>;
     /**
      * Segments within the app
      * @type {Array<SegmentHeader>}
-     * @memberof App
      */
     segments: Array<SegmentHeader>;
 }

@@ -15,86 +15,72 @@
 import { mapValues } from '../runtime';
 /**
  * Flag information with enabled status for an entity
- * @export
  * @interface EntityFlag
  */
 export interface EntityFlag {
     /**
      * Flag ID
      * @type {string}
-     * @memberof EntityFlag
      */
     id: string;
     /**
      * Unique flag key
      * @type {string}
-     * @memberof EntityFlag
      */
     key: string;
     /**
      * Flag name
      * @type {string}
-     * @memberof EntityFlag
      */
     name: string;
     /**
      * Timestamp when the flag was created
      * @type {string}
-     * @memberof EntityFlag
      */
     createdAt: string;
     /**
      * Whether the flag is enabled for this entity
      * @type {boolean}
-     * @memberof EntityFlag
      */
     value: boolean;
     /**
      * 
      * @type {boolean}
-     * @memberof EntityFlag
      */
     specificTargetValue: boolean | null;
     /**
      * 
      * @type {string}
-     * @memberof EntityFlag
      */
     firstExposureAt: string | null;
     /**
      * 
      * @type {string}
-     * @memberof EntityFlag
      */
     lastExposureAt: string | null;
     /**
      * 
      * @type {string}
-     * @memberof EntityFlag
      */
     lastCheckAt: string | null;
     /**
      * Number of times the entity was exposed to this flag
      * @type {number}
-     * @memberof EntityFlag
      */
     exposureCount: number;
     /**
      * 
      * @type {string}
-     * @memberof EntityFlag
      */
     firstTrackAt: string | null;
     /**
      * 
      * @type {string}
-     * @memberof EntityFlag
      */
     lastTrackAt: string | null;
     /**
      * Number of track events for this flag
      * @type {number}
-     * @memberof EntityFlag
      */
     trackCount: number;
 }

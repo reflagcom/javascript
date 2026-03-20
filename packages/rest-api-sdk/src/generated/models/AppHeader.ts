@@ -37,44 +37,37 @@ import {
 
 /**
  * Basic app information
- * @export
  * @interface AppHeader
  */
 export interface AppHeader {
     /**
      * 
      * @type {OrgHeader}
-     * @memberof AppHeader
      */
     org: OrgHeader;
     /**
      * App identifier
      * @type {string}
-     * @memberof AppHeader
      */
     id: string;
     /**
      * App name
      * @type {string}
-     * @memberof AppHeader
      */
     name: string;
     /**
      * Whether the app is a demo app
      * @type {boolean}
-     * @memberof AppHeader
      */
     demo: boolean;
     /**
      * 
      * @type {FlagKeyFormat}
-     * @memberof AppHeader
      */
     flagKeyFormat: FlagKeyFormat;
     /**
      * Environments within the app
      * @type {Array<EnvironmentHeader>}
-     * @memberof AppHeader
      */
     environments: Array<EnvironmentHeader>;
 }

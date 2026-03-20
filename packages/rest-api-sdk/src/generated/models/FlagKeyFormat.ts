@@ -15,7 +15,6 @@
 
 /**
  * The enforced key format when creating flags
- * @export
  */
 export const FlagKeyFormat = {
     Custom: 'custom',

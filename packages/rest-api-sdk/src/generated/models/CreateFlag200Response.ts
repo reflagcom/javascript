@@ -23,14 +23,12 @@ import {
 
 /**
  * 
- * @export
  * @interface CreateFlag200Response
  */
 export interface CreateFlag200Response {
     /**
      * 
      * @type {CreateFlag200ResponseFlag}
-     * @memberof CreateFlag200Response
      */
     flag: CreateFlag200ResponseFlag;
 }

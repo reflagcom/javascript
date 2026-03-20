@@ -15,7 +15,6 @@
 
 /**
  * The column to sort by
- * @export
  */
 export const EnvironmentHeaderSortByColumn = {
     Name: 'name',

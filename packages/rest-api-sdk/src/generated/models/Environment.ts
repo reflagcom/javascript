@@ -23,38 +23,32 @@ import {
 
 /**
  * Environment details
- * @export
  * @interface Environment
  */
 export interface Environment {
     /**
      * Environment identifier
      * @type {string}
-     * @memberof Environment
      */
     id: string;
     /**
      * Environment name
      * @type {string}
-     * @memberof Environment
      */
     name: string;
     /**
      * Whether the environment is a production environment
      * @type {boolean}
-     * @memberof Environment
      */
     isProduction: boolean;
     /**
      * Environment order in the app (zero-indexed)
      * @type {number}
-     * @memberof Environment
      */
     order: number;
     /**
      * 
      * @type {EnvironmentSdkAccess}
-     * @memberof Environment
      */
     sdkAccess: EnvironmentSdkAccess;
 }

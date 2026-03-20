@@ -6,7 +6,7 @@ import type {
 import { ResponseError } from "./generated/runtime";
 import { Configuration, DefaultApi } from "./generated";
 
-type OmitAppIdParam<F> = F extends (
+export type OmitAppIdParam<F> = F extends (
   arg1: infer A,
   ...rest: infer R
 ) => infer Ret

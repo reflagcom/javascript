@@ -15,32 +15,27 @@
 import { mapValues } from '../runtime';
 /**
  * Basic environment information
- * @export
  * @interface EnvironmentHeader
  */
 export interface EnvironmentHeader {
     /**
      * Environment identifier
      * @type {string}
-     * @memberof EnvironmentHeader
      */
     id: string;
     /**
      * Environment name
      * @type {string}
-     * @memberof EnvironmentHeader
      */
     name: string;
     /**
      * Whether the environment is a production environment
      * @type {boolean}
-     * @memberof EnvironmentHeader
      */
     isProduction: boolean;
     /**
      * Environment order in the app (zero-indexed)
      * @type {number}
-     * @memberof EnvironmentHeader
      */
     order: number;
 }

@@ -23,32 +23,27 @@ import {
 
 /**
  * Flag targeting information and its audience
- * @export
  * @interface FlagTargeting
  */
 export interface FlagTargeting {
     /**
      * Unique flag key
      * @type {string}
-     * @memberof FlagTargeting
      */
     flagKey: string;
     /**
      * Flag targeting version
      * @type {number}
-     * @memberof FlagTargeting
      */
     version: number;
     /**
      * Last time the targeting was updated
      * @type {Date}
-     * @memberof FlagTargeting
      */
     updatedAt: Date;
     /**
      * The flag targeting for each value
      * @type {{ [key: string]: FlagValueTargeting; }}
-     * @memberof FlagTargeting
      */
     specificTargets: { [key: string]: FlagValueTargeting; };
 }

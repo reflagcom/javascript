@@ -23,14 +23,12 @@ import {
 
 /**
  * Collection of Basic app information
- * @export
  * @interface AppHeaderCollection
  */
 export interface AppHeaderCollection {
     /**
      * The individual items in the collection
      * @type {Array<AppHeader>}
-     * @memberof AppHeaderCollection
      */
     data: Array<AppHeader>;
 }

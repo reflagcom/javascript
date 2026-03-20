@@ -15,7 +15,6 @@
 
 /**
  * Segment type
- * @export
  */
 export const SegmentType = {
     All: 'all',

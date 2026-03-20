@@ -126,24 +126,14 @@ export interface UpdateUserFlagsRequest extends UpdateEntityFlagsBody {
 /**
  * DefaultApi - interface
  * 
- * @export
  * @interface DefaultApiInterface
  */
 export interface DefaultApiInterface {
     /**
      * Create a new flag in the application. Returns the created flag details.
      * @summary Create a flag
-     * @param {string} appId App identifier
-     * @param {string} key Key of the flag
-     * @param {string} name Name of the flag
-     * @param {string} [description] 
-     * @param {string} [stageId] Stage ID of the flag
-     * @param {string} [ownerUserId] 
-     * @param {boolean} [permanent] 
-     * @param {boolean} [secret] Whether the flag is secret
-     * @param {*} [options] Override http request option.
+     * @param requestParameters Request parameters for this operation.
      * @throws {RequiredError}
-     * @memberof DefaultApiInterface
      */
     createFlagRaw(requestParameters: CreateFlagOperationRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<CreateFlag200Response>>;
 
@@ -156,10 +146,8 @@ export interface DefaultApiInterface {
     /**
      * Retrieve a specific application by its identifier
      * @summary Get details of an application
-     * @param {string} appId App identifier
-     * @param {*} [options] Override http request option.
+     * @param requestParameters Request parameters for this operation.
      * @throws {RequiredError}
-     * @memberof DefaultApiInterface
      */
     getAppRaw(requestParameters: GetAppRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<App>>;
 
@@ -172,12 +160,8 @@ export interface DefaultApiInterface {
     /**
      * Retrieve all flags with their targeting status for a specific company
      * @summary Get flags for a company
-     * @param {string} appId App identifier
-     * @param {string} envId Environment identifier
-     * @param {string} companyId Company ID within your application
-     * @param {*} [options] Override http request option.
+     * @param requestParameters Request parameters for this operation.
      * @throws {RequiredError}
-     * @memberof DefaultApiInterface
      */
     getCompanyFlagsRaw(requestParameters: GetCompanyFlagsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<EntityFlagsResponse>>;
 
@@ -190,11 +174,8 @@ export interface DefaultApiInterface {
     /**
      * Retrieve details for a specific environment
      * @summary Get environment details
-     * @param {string} appId App identifier
-     * @param {string} envId Environment identifier
-     * @param {*} [options] Override http request option.
+     * @param requestParameters Request parameters for this operation.
      * @throws {RequiredError}
-     * @memberof DefaultApiInterface
      */
     getEnvironmentRaw(requestParameters: GetEnvironmentRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Environment>>;
 
@@ -207,12 +188,8 @@ export interface DefaultApiInterface {
     /**
      * Retrieve targeting for a flag in an environment
      * @summary Get flag targeting for an environment
-     * @param {string} appId App identifier
-     * @param {string} flagKey Unique flag key
-     * @param {string} envId Environment identifier
-     * @param {*} [options] Override http request option.
+     * @param requestParameters Request parameters for this operation.
      * @throws {RequiredError}
-     * @memberof DefaultApiInterface
      */
     getFlagTargetingRaw(requestParameters: GetFlagTargetingRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<FlagTargeting>>;
 
@@ -225,12 +202,8 @@ export interface DefaultApiInterface {
     /**
      * Retrieve all flags with their targeting status for a specific user
      * @summary Get flags for a user
-     * @param {string} appId App identifier
-     * @param {string} envId Environment identifier
-     * @param {string} userId User ID within your application
-     * @param {*} [options] Override http request option.
+     * @param requestParameters Request parameters for this operation.
      * @throws {RequiredError}
-     * @memberof DefaultApiInterface
      */
     getUserFlagsRaw(requestParameters: GetUserFlagsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<EntityFlagsResponse>>;
 
@@ -243,10 +216,8 @@ export interface DefaultApiInterface {
     /**
      * Retrieve all accessible applications
      * @summary List of applications
-     * @param {string} [orgId] 
-     * @param {*} [options] Override http request option.
+     * @param requestParameters Request parameters for this operation.
      * @throws {RequiredError}
-     * @memberof DefaultApiInterface
      */
     listAppsRaw(requestParameters: ListAppsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<AppHeaderCollection>>;
 
@@ -259,12 +230,8 @@ export interface DefaultApiInterface {
     /**
      * Retrieve all environments for a specific application
      * @summary List environments for application
-     * @param {string} appId App identifier
-     * @param {SortOrder} [sortOrder] Sort order applied to the sorting column
-     * @param {EnvironmentHeaderSortByColumn} [sortBy] The column to sort by
-     * @param {*} [options] Override http request option.
+     * @param requestParameters Request parameters for this operation.
      * @throws {RequiredError}
-     * @memberof DefaultApiInterface
      */
     listEnvironmentsRaw(requestParameters: ListEnvironmentsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<EnvironmentHeaderCollection>>;
 
@@ -277,10 +244,8 @@ export interface DefaultApiInterface {
     /**
      * Retrieve all flags for a specific application
      * @summary List flags for application
-     * @param {string} appId App identifier
-     * @param {*} [options] Override http request option.
+     * @param requestParameters Request parameters for this operation.
      * @throws {RequiredError}
-     * @memberof DefaultApiInterface
      */
     listFlagsRaw(requestParameters: ListFlagsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<FlagHeaderCollection>>;
 
@@ -293,15 +258,8 @@ export interface DefaultApiInterface {
     /**
      * Update specific targeting for flags for a company in an environment
      * @summary Update flag targeting for a company
-     * @param {string} appId App identifier
-     * @param {string} envId Environment identifier
-     * @param {string} companyId Company ID within your application
-     * @param {Array<EntityFlagUpdate>} updates List of flag updates to apply
-     * @param {string} [changeDescription] Description of the change for audit history
-     * @param {Array<string>} [notifications] Destination list for notifications about the change. Use [] to disable notifications. Omit to use configured defaults.
-     * @param {*} [options] Override http request option.
+     * @param requestParameters Request parameters for this operation.
      * @throws {RequiredError}
-     * @memberof DefaultApiInterface
      */
     updateCompanyFlagsRaw(requestParameters: UpdateCompanyFlagsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<EntityFlagsResponse>>;
 
@@ -314,18 +272,8 @@ export interface DefaultApiInterface {
     /**
      * Update an existing flag
      * @summary Update a flag
-     * @param {string} appId App identifier
-     * @param {string} flagId Flag ID
-     * @param {string} [name] Name of the flag
-     * @param {string} [description] 
-     * @param {string} [ownerUserId] 
-     * @param {boolean} [permanent] 
-     * @param {boolean} [secret] Whether the flag is secret
-     * @param {boolean} [isArchived] 
-     * @param {string} [stageId] Stage ID of the flag
-     * @param {*} [options] Override http request option.
+     * @param requestParameters Request parameters for this operation.
      * @throws {RequiredError}
-     * @memberof DefaultApiInterface
      */
     updateFlagRaw(requestParameters: UpdateFlagOperationRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<CreateFlag200Response>>;
 
@@ -338,15 +286,8 @@ export interface DefaultApiInterface {
     /**
      * Update specific targeting for flags for a user in an environment
      * @summary Update flag targeting for a user
-     * @param {string} appId App identifier
-     * @param {string} envId Environment identifier
-     * @param {string} userId User ID within your application
-     * @param {Array<EntityFlagUpdate>} updates List of flag updates to apply
-     * @param {string} [changeDescription] Description of the change for audit history
-     * @param {Array<string>} [notifications] Destination list for notifications about the change. Use [] to disable notifications. Omit to use configured defaults.
-     * @param {*} [options] Override http request option.
+     * @param requestParameters Request parameters for this operation.
      * @throws {RequiredError}
-     * @memberof DefaultApiInterface
      */
     updateUserFlagsRaw(requestParameters: UpdateUserFlagsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<EntityFlagsResponse>>;
 

@@ -15,27 +15,23 @@
 import { mapValues } from '../runtime';
 /**
  * The error
- * @export
  * @interface ErrorResponseError
  */
 export interface ErrorResponseError {
     /**
      * Error code
      * @type {string}
-     * @memberof ErrorResponseError
      */
     code: ErrorResponseErrorCodeEnum;
     /**
      * Human readable error message
      * @type {string}
-     * @memberof ErrorResponseError
      */
     message: string;
 }
 
 
 /**
- * @export
  */
 export const ErrorResponseErrorCodeEnum = {
     InvalidRequest: 'invalid_request',

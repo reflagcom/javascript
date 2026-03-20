@@ -30,51 +30,43 @@ import {
 
 /**
  * Collection response containing flags
- * @export
  * @interface FlagHeaderCollection
  */
 export interface FlagHeaderCollection {
     /**
      * Page of the collection of flags
      * @type {Array<FlagHeader>}
-     * @memberof FlagHeaderCollection
      */
     data: Array<FlagHeader>;
     /**
      * Total number of flags in collection
      * @type {number}
-     * @memberof FlagHeaderCollection
      */
     totalCount: number;
     /**
      * Page size
      * @type {number}
-     * @memberof FlagHeaderCollection
      */
     pageSize: number;
     /**
      * Page index
      * @type {number}
-     * @memberof FlagHeaderCollection
      */
     pageIndex: number;
     /**
      * Sort by
      * @type {string}
-     * @memberof FlagHeaderCollection
      */
     sortBy: FlagHeaderCollectionSortByEnum;
     /**
      * Sort order
      * @type {SortOrder}
-     * @memberof FlagHeaderCollection
      */
     sortOrder: SortOrder;
 }
 
 
 /**
- * @export
  */
 export const FlagHeaderCollectionSortByEnum = {
     Name: 'name',

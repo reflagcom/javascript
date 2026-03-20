@@ -15,32 +15,27 @@
 import { mapValues } from '../runtime';
 /**
  * Stage's basic information
- * @export
  * @interface StageHeader
  */
 export interface StageHeader {
     /**
      * Stage identifier
      * @type {string}
-     * @memberof StageHeader
      */
     id: string;
     /**
      * Stage name
      * @type {string}
-     * @memberof StageHeader
      */
     name: string;
     /**
      * Stage color (HTML color name or hex code)
      * @type {string}
-     * @memberof StageHeader
      */
     color: string;
     /**
      * Stage order
      * @type {number}
-     * @memberof StageHeader
      */
     order: number;
 }

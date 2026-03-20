@@ -23,33 +23,28 @@ import {
 
 /**
  * Request body for updating flags for an entity
- * @export
  * @interface UpdateEntityFlagsBody
  */
 export interface UpdateEntityFlagsBody {
     /**
      * List of flag updates to apply
      * @type {Array<EntityFlagUpdate>}
-     * @memberof UpdateEntityFlagsBody
      */
     updates: Array<EntityFlagUpdate>;
     /**
      * Description of the change for audit history
      * @type {string}
-     * @memberof UpdateEntityFlagsBody
      */
     changeDescription?: string;
     /**
      * Destination list for notifications about the change. Use [] to disable notifications. Omit to use configured defaults.
      * @type {Array<string>}
-     * @memberof UpdateEntityFlagsBody
      */
     notifications?: Array<UpdateEntityFlagsBodyNotificationsEnum>;
 }
 
 
 /**
- * @export
  */
 export const UpdateEntityFlagsBodyNotificationsEnum = {
     LinearComment: 'linearComment',

@@ -15,27 +15,23 @@
 import { mapValues } from '../runtime';
 /**
  * Update for a single flag's explicit targeting override
- * @export
  * @interface EntityFlagUpdate
  */
 export interface EntityFlagUpdate {
     /**
      * Unique flag key
      * @type {string}
-     * @memberof EntityFlagUpdate
      */
     flagKey: string;
     /**
      * 
      * @type {boolean}
-     * @memberof EntityFlagUpdate
      */
     specificTargetValue: EntityFlagUpdateSpecificTargetValueEnum | null;
 }
 
 
 /**
- * @export
  */
 export const EntityFlagUpdateSpecificTargetValueEnum = {
     True: true

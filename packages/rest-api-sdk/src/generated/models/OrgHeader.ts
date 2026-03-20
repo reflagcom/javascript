@@ -15,20 +15,17 @@
 import { mapValues } from '../runtime';
 /**
  * Organization's basic information
- * @export
  * @interface OrgHeader
  */
 export interface OrgHeader {
     /**
      * Organization identifier
      * @type {string}
-     * @memberof OrgHeader
      */
     id: string;
     /**
      * Organization name
      * @type {string}
-     * @memberof OrgHeader
      */
     name: string;
 }

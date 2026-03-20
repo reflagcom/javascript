@@ -15,20 +15,17 @@
 import { mapValues } from '../runtime';
 /**
  * SDK access details
- * @export
  * @interface EnvironmentSdkAccess
  */
 export interface EnvironmentSdkAccess {
     /**
      * Publishable key
      * @type {string}
-     * @memberof EnvironmentSdkAccess
      */
     publishableKey: string;
     /**
      * Secret key
      * @type {string}
-     * @memberof EnvironmentSdkAccess
      */
     secretKey: string;
 }

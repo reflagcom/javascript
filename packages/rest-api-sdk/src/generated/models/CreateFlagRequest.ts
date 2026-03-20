@@ -15,50 +15,42 @@
 import { mapValues } from '../runtime';
 /**
  * 
- * @export
  * @interface CreateFlagRequest
  */
 export interface CreateFlagRequest {
     /**
      * Key of the flag
      * @type {string}
-     * @memberof CreateFlagRequest
      */
     key: string;
     /**
      * Name of the flag
      * @type {string}
-     * @memberof CreateFlagRequest
      */
     name: string;
     /**
      * 
      * @type {string}
-     * @memberof CreateFlagRequest
      */
     description?: string | null;
     /**
      * Stage ID of the flag
      * @type {string}
-     * @memberof CreateFlagRequest
      */
     stageId?: string;
     /**
      * 
      * @type {string}
-     * @memberof CreateFlagRequest
      */
     ownerUserId?: string | null;
     /**
      * 
      * @type {boolean}
-     * @memberof CreateFlagRequest
      */
     permanent?: boolean;
     /**
      * Whether the flag is secret
      * @type {boolean}
-     * @memberof CreateFlagRequest
      */
     secret?: boolean;
 }

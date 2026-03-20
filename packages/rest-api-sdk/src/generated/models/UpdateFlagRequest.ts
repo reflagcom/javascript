@@ -15,50 +15,42 @@
 import { mapValues } from '../runtime';
 /**
  * 
- * @export
  * @interface UpdateFlagRequest
  */
 export interface UpdateFlagRequest {
     /**
      * Name of the flag
      * @type {string}
-     * @memberof UpdateFlagRequest
      */
     name?: string;
     /**
      * 
      * @type {string}
-     * @memberof UpdateFlagRequest
      */
     description?: string | null;
     /**
      * 
      * @type {string}
-     * @memberof UpdateFlagRequest
      */
     ownerUserId?: string | null;
     /**
      * 
      * @type {boolean}
-     * @memberof UpdateFlagRequest
      */
     permanent?: boolean;
     /**
      * Whether the flag is secret
      * @type {boolean}
-     * @memberof UpdateFlagRequest
      */
     secret?: boolean;
     /**
      * 
      * @type {boolean}
-     * @memberof UpdateFlagRequest
      */
     isArchived?: boolean;
     /**
      * Stage ID of the flag
      * @type {string}
-     * @memberof UpdateFlagRequest
      */
     stageId?: string;
 }

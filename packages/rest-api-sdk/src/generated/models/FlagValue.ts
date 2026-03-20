@@ -15,7 +15,6 @@
 
 /**
  * The value of the flag served to the audience.
- * @export
  */
 export const FlagValue = {
     True: 'true'

@@ -30,80 +30,67 @@ import {
 
 /**
  * Basic flag information
- * @export
  * @interface FlagHeader
  */
 export interface FlagHeader {
     /**
      * Flag ID
      * @type {string}
-     * @memberof FlagHeader
      */
     id: string;
     /**
      * Unique flag key
      * @type {string}
-     * @memberof FlagHeader
      */
     key: string;
     /**
      * Flag name
      * @type {string}
-     * @memberof FlagHeader
      */
     name: string;
     /**
      * Flag description
      * @type {string}
-     * @memberof FlagHeader
      */
     description?: string;
     /**
      * 
      * @type {StageHeader}
-     * @memberof FlagHeader
      */
     stage?: StageHeader;
     /**
      * 
      * @type {ReflagUserHeader}
-     * @memberof FlagHeader
      */
     owner?: ReflagUserHeader;
     /**
      * Whether the flag is archived
      * @type {boolean}
-     * @memberof FlagHeader
      */
     archived: boolean;
     /**
      * Whether the flag is stale
      * @type {boolean}
-     * @memberof FlagHeader
      */
     stale: boolean;
     /**
      * Whether the flag is permanent
      * @type {boolean}
-     * @memberof FlagHeader
      */
     permanent: boolean;
     /**
      * Timestamp when the flag was created
      * @type {string}
-     * @memberof FlagHeader
      */
     createdAt?: string;
     /**
      * Timestamp when the flag was last checked
      * @type {string}
-     * @memberof FlagHeader
      */
     lastCheckAt?: string;
     /**
      * Timestamp when the flag was last tracked
      * @type {string}
-     * @memberof FlagHeader
      */
     lastTrackAt?: string;
 }
