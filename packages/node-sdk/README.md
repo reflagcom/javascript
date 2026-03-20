@@ -59,10 +59,6 @@ You can also [use the HTTP API directly](https://docs.reflag.com/api/http-api)
 To get started you need to obtain your secret key from the [environment settings](https://app.reflag.com/env-current/settings/app-environments)
 in Reflag.
 
-> [!CAUTION]
-> Secret keys are meant for use in server side SDKs only. Secret keys offer the users the ability to obtain
-> information that is often sensitive and thus should not be used in client-side applications.
-
 Reflag will load settings through the various environment variables automatically (see [Configuring](#configuring) below).
 
 1. Find the Reflag secret key for your development environment under [environment settings](https://app.reflag.com/env-current/settings/app-environments) in Reflag.
@@ -91,7 +87,7 @@ Once the client is initialized, you can obtain flags along with the `isEnabled`
 status to indicate whether the flag is targeted for this user/company:
 
 > [!IMPORTANT]
-> If `user.id` or `company.id` is not given, the whole `user` or `company` object is ignored.
+> If `user.id` is not given, the whole `user` object is ignore. Similarly, without `company.id` the `company` object is ignored.
 
 ```typescript
 // configure the client
@@ -203,6 +199,11 @@ const flagDefs = await client.getFlagDefinitions();
 
 `flagsFallbackProvider` is a reliability feature that lets the SDK persist the latest successfully fetched raw flag definitions to fallback storage such as a local file, Redis, S3, GCS, or a custom backend.
 
+> [!NOTE]
+>
+> `fallbackFlags` is deprecated. Prefer `flagsFallbackProvider` for startup fallback and outage recovery.
+> `flagsFallbackProvider` is not used in offline mode.
+
 #### How it works
 
 Reflag servers remain the primary source of truth. On `initialize()`, the SDK always tries to fetch a live copy of the flag definitions first, and it continues refreshing those definitions from the Reflag servers over time.
@@ -240,24 +241,6 @@ You can access the built-in providers through the `fallbackProviders` namespace:
 - `fallbackProviders.s3(...)`
 - `fallbackProviders.gcs(...)`
 
-##### File provider
-
-```typescript
-import { ReflagClient, fallbackProviders } from "@reflag/node-sdk";
-
-const client = new ReflagClient({
-  secretKey: process.env.REFLAG_SECRET_KEY,
-  flagsFallbackProvider: fallbackProviders.file({
-    directory: ".reflag",
-  }),
-});
-
-await client.initialize();
-```
-
-The file provider stores one snapshot file per environment in the configured
-`directory`.
-
 ##### Static provider
 
 If you just want a fixed fallback copy of simple enabled/disabled flags, you can provide a static map:
@@ -278,9 +261,29 @@ const client = new ReflagClient({
 await client.initialize();
 ```
 
+##### File provider
+
+```typescript
+import { ReflagClient, fallbackProviders } from "@reflag/node-sdk";
+
+const client = new ReflagClient({
+  secretKey: process.env.REFLAG_SECRET_KEY,
+  flagsFallbackProvider: fallbackProviders.file({
+    directory: ".reflag",
+  }),
+});
+
+await client.initialize();
+```
+
+The file provider stores one snapshot file per environment in the configured
+`directory`.
+
 ##### Redis provider
 
 The built-in Redis provider creates a Redis client automatically when omitted and uses `REDIS_URL` from the environment. It stores snapshots under the configured `keyPrefix` and uses the first 16 characters of the secret key hash in the Redis key.
+
+Without a `keyPrefix` set, it will default to to the key `reflag:flags-fallback:${secretKeyHash}`.
 
 ```typescript
 import { ReflagClient, fallbackProviders } from "@reflag/node-sdk";
@@ -297,13 +300,15 @@ await client.initialize();
 
 The built-in S3 provider works out of the box using the AWS SDK's default credential chain and region resolution. It stores the snapshot object under the configured `keyPrefix` and uses a hash of the secret key in the object name.
 
+Without a `keyPrefix` set, it will default to path `reflag/flags-fallback/${secretKeyHash}`.
+
 ```typescript
 import { ReflagClient, fallbackProviders } from "@reflag/node-sdk";
 
 const client = new ReflagClient({
   secretKey: process.env.REFLAG_SECRET_KEY,
   flagsFallbackProvider: fallbackProviders.s3({
-    bucket: process.env.REFLAG_SNAPSHOT_BUCKET!,
+    bucket: "reflag-fallback-bucket",
   }),
 });
 
@@ -314,13 +319,15 @@ await client.initialize();
 
 The built-in GCS provider works out of the box using Google Cloud's default application credentials. It stores the snapshot object under the configured `keyPrefix` and uses a hash of the secret key in the object name.
 
+Without a `keyPrefix` set, it will default to path `reflag/flags-fallback/${secretKeyHash}`.
+
 ```typescript
 import { ReflagClient, fallbackProviders } from "@reflag/node-sdk";
 
 const client = new ReflagClient({
   secretKey: process.env.REFLAG_SECRET_KEY,
   flagsFallbackProvider: fallbackProviders.gcs({
-    bucket: process.env.REFLAG_SNAPSHOT_BUCKET!,
+    bucket: "reflag-fallback-bucket",
   }),
 });
 
@@ -329,11 +336,11 @@ await client.initialize();
 
 #### Testing fallback startup locally
 
-To test fallback startup in your own app, first run it once with a working Reflag connection so a snapshot is saved. Then restart it with the same secret key and fallback provider configuration, but set `apiBaseUrl` to `http://127.0.0.1:65535`. That forces the live fetch to fail and lets you verify that the SDK initializes from the saved snapshot instead.
+To test fallback startup in your own app, first run it once with a working Reflag connection so a snapshot is saved. Then restart it with the same secret key and fallback provider configuration, but set `apiBaseUrl` (or set the `REFLAG_API_BASE_URL` environment variable) to `http://127.0.0.1:65535`. That forces the live fetch to fail and lets you verify that the SDK initializes from the saved snapshot instead.
 
 #### Writing a custom provider
 
-If you just want a fixed fallback copy of the flag definitions, a custom provider can be very small:
+If you just store definitions in your database or similar, a custom provider can be very small:
 
 ```typescript
 import type {
@@ -341,36 +348,19 @@ import type {
   FlagsFallbackSnapshot,
 } from "@reflag/node-sdk";
 
-const fallbackSnapshot: FlagsFallbackSnapshot = {
-  version: 1,
-  savedAt: "2026-03-10T00:00:00.000Z",
-  flags: [
-    {
-      key: "huddle",
-      description: "Fallback example",
-      targeting: {
-        version: 1,
-        rules: [],
-      },
-    },
-  ],
-};
-
-export const staticFallbackProvider: FlagsFallbackProvider = {
-  async load() {
-    return fallbackSnapshot;
+export const customFallbackProvider: FlagsFallbackProvider = {
+  async load(context) {
+    // load snapshot from database
+    // optionally, look up the snapshot using the context.secretKeyHash as a key
+    return snapshot;
   },
 
-  async save() {
-    // no-op
+  async save(context, snapshot) {
+    const serialized = JSON.stringify(snapshot);
+    // write serialized snapshot to database, optionally using context.secretKeyHash as a key
   },
 };
 ```
-
-> [!NOTE]
->
-> `fallbackFlags` is deprecated. Prefer `flagsFallbackProvider` for startup fallback and outage recovery.
-> `flagsFallbackProvider` is not used in offline mode.
 
 ## Bootstrapping client-side applications
 
@@ -666,9 +656,9 @@ reflagClient.initialize().then(() => {
 
 ![Config type check failed](docs/type-check-payload-failed.png "Remote config type check failed")
 
-## Testing
+## Testing with flag overrides
 
-When writing tests that cover code with flags, you can toggle flags on/off programmatically to test different behavior. For tests, you will often want to run the client in offline mode and provide flag overrides directly through the client options.
+When writing tests that cover code with flags, you can toggle flags on/off programmatically to test different behavior. For tests, you will often want to run the client in offline mode:
 
 `reflag.ts`:
 
@@ -680,7 +670,11 @@ export const reflag = new ReflagClient({
 });
 ```
 
-You can then set base overrides for a test run by passing `flagOverrides` in the constructor, replacing them later with `setFlagOverrides()`, or clearing them with `clearFlagOverrides()`:
+There are a few ways to programmatically manipulate the overrides which are appropriate when testing:
+
+### Base overrides
+
+You can set base overrides for a test run by passing `flagOverrides` in the constructor, replacing them later with `setFlagOverrides()` and clearing them with `clearFlagOverrides()`:
 
 ```typescript
 // pass directly in the constructor
@@ -719,6 +713,8 @@ describe("API Tests", () => {
 });
 ```
 
+### Layering overrides
+
 `pushFlagOverrides()` serves a different purpose: it adds a temporary layer on top of the base overrides and returns a remove function that removes only that layer. This is useful for nested tests:
 
 ```typescript
@@ -755,7 +751,9 @@ The precedence is:
 
 If the same flag is set in both places, the pushed override wins until its remove function is called.
 
-`pushFlagOverrides()` also accepts a function if the temporary override depends on the evaluation context:
+### Context dependent overrides
+
+`setFlagOverrides()` and `pushFlagOverrides()` also accept a function if the override depends on the evaluation context:
 
 ```typescript
 const remove = client.pushFlagOverrides((context) => ({
@@ -767,13 +765,9 @@ const remove = client.pushFlagOverrides((context) => ({
 remove();
 ```
 
-## Flag Overrides
+### Additional ways to provide flag overrides
 
-Flag overrides allow you to override flags and their configurations locally. This is particularly useful when testing changes locally, for example when running your app and clicking around to verify behavior before deploying your changes.
-
-For automated tests, see the [Testing](#testing) section above.
-
-When testing locally during development, you also have these additional ways to provide overrides:
+You also have these additional ways to provide overrides, which can be helpful when testing out locally:
 
 1. Through environment variables:
 
@@ -799,29 +793,6 @@ REFLAG_FLAGS_DISABLED=flag3,flag4
     }
   }
 }
-```
-
-To get dynamic overrides, use a function which takes a context and returns a boolean or an object with the shape of `{isEnabled, config}`:
-
-```typescript
-import { ReflagClient, Context } from "@reflag/node-sdk";
-
-const flagOverrides = (context: Context) => ({
-  "delete-todos": {
-    isEnabled: true,
-    config: {
-      key: "dev-config",
-      payload: {
-        requireConfirmation: true,
-        maxDeletionsPerDay: 5,
-      },
-    },
-  },
-});
-
-const client = new ReflagClient({
-  flagOverrides,
-});
 ```
 
 ## Remote Flag Evaluation

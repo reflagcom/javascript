@@ -385,7 +385,7 @@ export type FlagsFallbackSnapshot = {
   /**
    * Snapshot schema version.
    */
-  version: 1;
+  version: number;
 
   /**
    * ISO timestamp indicating when the snapshot was saved.
