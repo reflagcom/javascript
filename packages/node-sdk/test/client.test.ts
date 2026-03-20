@@ -1077,6 +1077,31 @@ describe("ReflagClient", () => {
       }
     });
 
+    it("should include the cause when warning that flag fetch will retry", async () => {
+      const error = new Error("fetch failed");
+      httpClient.get.mockRejectedValue(error);
+
+      const client = new ReflagClient({
+        ...validOptions,
+        cacheStrategy: "in-request",
+        flagsFetchRetries: 1,
+      });
+
+      vi.useFakeTimers();
+      try {
+        const initializePromise = client.initialize();
+        await vi.runAllTimersAsync();
+        await initializePromise;
+
+        expect(logger.warn).toHaveBeenCalledWith(
+          "failed to fetch flags, will retry",
+          error,
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it("should warn when live fetch fails and flagsFallbackProvider has no saved snapshot", async () => {
       const flagsFallbackProvider: FlagsFallbackProvider = {
         load: vi.fn().mockResolvedValue(undefined),

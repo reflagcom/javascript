@@ -1078,8 +1078,8 @@ export class ReflagClient {
           const { success: _, ...result } = response.body;
           return result as TResponse;
         },
-        () => {
-          this.logger.warn("failed to fetch flags, will retry");
+        (error) => {
+          this.logger.warn("failed to fetch flags, will retry", error);
         },
         retries,
         1000,
