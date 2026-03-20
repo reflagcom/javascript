@@ -59,10 +59,6 @@ You can also [use the HTTP API directly](https://docs.reflag.com/api/http-api)
 To get started you need to obtain your secret key from the [environment settings](https://app.reflag.com/env-current/settings/app-environments)
 in Reflag.
 
-> [!CAUTION]
-> Secret keys are meant for use in server side SDKs only. Secret keys offer the users the ability to obtain
-> information that is often sensitive and thus should not be used in client-side applications.
-
 Reflag will load settings through the various environment variables automatically (see [Configuring](#configuring) below).
 
 1. Find the Reflag secret key for your development environment under [environment settings](https://app.reflag.com/env-current/settings/app-environments) in Reflag.
@@ -91,7 +87,7 @@ Once the client is initialized, you can obtain flags along with the `isEnabled`
 status to indicate whether the flag is targeted for this user/company:
 
 > [!IMPORTANT]
-> If `user.id` or `company.id` is not given, the whole `user` or `company` object is ignored.
+> If `user.id` is not given, the whole `user` object is ignore. Similarly, without `company.id` the `company` object is ignored.
 
 ```typescript
 // configure the client
@@ -203,6 +199,11 @@ const flagDefs = await client.getFlagDefinitions();
 
 `flagsFallbackProvider` is a reliability feature that lets the SDK persist the latest successfully fetched raw flag definitions to fallback storage such as a local file, Redis, S3, GCS, or a custom backend.
 
+> [!NOTE]
+>
+> `fallbackFlags` is deprecated. Prefer `flagsFallbackProvider` for startup fallback and outage recovery.
+> `flagsFallbackProvider` is not used in offline mode.
+
 #### How it works
 
 Reflag servers remain the primary source of truth. On `initialize()`, the SDK always tries to fetch a live copy of the flag definitions first, and it continues refreshing those definitions from the Reflag servers over time.
@@ -240,24 +241,6 @@ You can access the built-in providers through the `fallbackProviders` namespace:
 - `fallbackProviders.s3(...)`
 - `fallbackProviders.gcs(...)`
 
-##### File provider
-
-```typescript
-import { ReflagClient, fallbackProviders } from "@reflag/node-sdk";
-
-const client = new ReflagClient({
-  secretKey: process.env.REFLAG_SECRET_KEY,
-  flagsFallbackProvider: fallbackProviders.file({
-    directory: ".reflag",
-  }),
-});
-
-await client.initialize();
-```
-
-The file provider stores one snapshot file per environment in the configured
-`directory`.
-
 ##### Static provider
 
 If you just want a fixed fallback copy of simple enabled/disabled flags, you can provide a static map:
@@ -278,9 +261,29 @@ const client = new ReflagClient({
 await client.initialize();
 ```
 
+##### File provider
+
+```typescript
+import { ReflagClient, fallbackProviders } from "@reflag/node-sdk";
+
+const client = new ReflagClient({
+  secretKey: process.env.REFLAG_SECRET_KEY,
+  flagsFallbackProvider: fallbackProviders.file({
+    directory: ".reflag",
+  }),
+});
+
+await client.initialize();
+```
+
+The file provider stores one snapshot file per environment in the configured
+`directory`.
+
 ##### Redis provider
 
 The built-in Redis provider creates a Redis client automatically when omitted and uses `REDIS_URL` from the environment. It stores snapshots under the configured `keyPrefix` and uses the first 16 characters of the secret key hash in the Redis key.
+
+Without a `keyPrefix` set, it will default to to the key `reflag:flags-fallback:${secretKeyHash}`.
 
 ```typescript
 import { ReflagClient, fallbackProviders } from "@reflag/node-sdk";
@@ -297,13 +300,15 @@ await client.initialize();
 
 The built-in S3 provider works out of the box using the AWS SDK's default credential chain and region resolution. It stores the snapshot object under the configured `keyPrefix` and uses a hash of the secret key in the object name.
 
+Without a `keyPrefix` set, it will default to path `reflag/flags-fallback/${secretKeyHash}`.
+
 ```typescript
 import { ReflagClient, fallbackProviders } from "@reflag/node-sdk";
 
 const client = new ReflagClient({
   secretKey: process.env.REFLAG_SECRET_KEY,
   flagsFallbackProvider: fallbackProviders.s3({
-    bucket: process.env.REFLAG_SNAPSHOT_BUCKET!,
+    bucket: "reflag-fallback-bucket",
   }),
 });
 
@@ -314,13 +319,15 @@ await client.initialize();
 
 The built-in GCS provider works out of the box using Google Cloud's default application credentials. It stores the snapshot object under the configured `keyPrefix` and uses a hash of the secret key in the object name.
 
+Without a `keyPrefix` set, it will default to path `reflag/flags-fallback/${secretKeyHash}`.
+
 ```typescript
 import { ReflagClient, fallbackProviders } from "@reflag/node-sdk";
 
 const client = new ReflagClient({
   secretKey: process.env.REFLAG_SECRET_KEY,
   flagsFallbackProvider: fallbackProviders.gcs({
-    bucket: process.env.REFLAG_SNAPSHOT_BUCKET!,
+    bucket: "reflag-fallback-bucket",
   }),
 });
 
@@ -329,11 +336,11 @@ await client.initialize();
 
 #### Testing fallback startup locally
 
-To test fallback startup in your own app, first run it once with a working Reflag connection so a snapshot is saved. Then restart it with the same secret key and fallback provider configuration, but set `apiBaseUrl` to `http://127.0.0.1:65535`. That forces the live fetch to fail and lets you verify that the SDK initializes from the saved snapshot instead.
+To test fallback startup in your own app, first run it once with a working Reflag connection so a snapshot is saved. Then restart it with the same secret key and fallback provider configuration, but set `apiBaseUrl` (or set the `REFLAG_API_BASE_URL` environment variable) to `http://127.0.0.1:65535`. That forces the live fetch to fail and lets you verify that the SDK initializes from the saved snapshot instead.
 
 #### Writing a custom provider
 
-If you just want a fixed fallback copy of the flag definitions, a custom provider can be very small:
+If you just store definitions in your database or similar, a custom provider can be very small:
 
 ```typescript
 import type {
@@ -341,36 +348,19 @@ import type {
   FlagsFallbackSnapshot,
 } from "@reflag/node-sdk";
 
-const fallbackSnapshot: FlagsFallbackSnapshot = {
-  version: 1,
-  savedAt: "2026-03-10T00:00:00.000Z",
-  flags: [
-    {
-      key: "huddle",
-      description: "Fallback example",
-      targeting: {
-        version: 1,
-        rules: [],
-      },
-    },
-  ],
-};
-
-export const staticFallbackProvider: FlagsFallbackProvider = {
-  async load() {
-    return fallbackSnapshot;
+export const customFallbackProvider: FlagsFallbackProvider = {
+  async load(context) {
+    // load snapshot from database
+    // optionally, look up the snapshot using the context.secretKeyHash as a key
+    return snapshot;
   },
 
-  async save() {
-    // no-op
+  async save(context, snapshot) {
+    const serialized = JSON.stringify(snapshot);
+    // write serialized snapshot to database, optionally using context.secretKeyHash as a key
   },
 };
 ```
-
-> [!NOTE]
->
-> `fallbackFlags` is deprecated. Prefer `flagsFallbackProvider` for startup fallback and outage recovery.
-> `flagsFallbackProvider` is not used in offline mode.
 
 ## Bootstrapping client-side applications
 
