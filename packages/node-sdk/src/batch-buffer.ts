@@ -79,7 +79,7 @@ export default class BatchBuffer<T> {
         count: flushingBuffer.length,
       });
     } catch (error) {
-      this.logger?.error("flush of buffered items failed; discarding items", {
+      this.logger?.warn("flush of buffered items failed; discarding items", {
         error,
         count: flushingBuffer.length,
       });

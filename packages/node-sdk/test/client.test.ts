@@ -593,9 +593,14 @@ describe("ReflagClient", () => {
       await client.updateUser(user.id);
       await client.flush();
 
-      expect(logger.error).toHaveBeenCalledWith(
-        expect.stringMatching("post request to .* failed with error"),
-        error,
+      expect(logger.warn).toHaveBeenCalledWith(
+        "flush of buffered items failed; discarding items",
+        expect.objectContaining({
+          count: 1,
+          error: expect.objectContaining({
+            message: "failed to send bulk events",
+          }),
+        }),
       );
     });
 
@@ -608,9 +613,15 @@ describe("ReflagClient", () => {
       await client.flush();
 
       expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringMatching("invalid response received from server for"),
-        JSON.stringify(response),
+        "flush of buffered items failed; discarding items",
+        expect.objectContaining({
+          count: 1,
+          error: expect.objectContaining({
+            message: "failed to send bulk events",
+          }),
+        }),
       );
+      expect(logger.error).not.toHaveBeenCalled();
     });
 
     it("should throw an error if opts are not valid or the user is not set", async () => {
@@ -682,9 +693,14 @@ describe("ReflagClient", () => {
       await client.updateCompany(company.id, {});
       await client.flush();
 
-      expect(logger.error).toHaveBeenCalledWith(
-        expect.stringMatching("post request to .* failed with error"),
-        error,
+      expect(logger.warn).toHaveBeenCalledWith(
+        "flush of buffered items failed; discarding items",
+        expect.objectContaining({
+          count: 1,
+          error: expect.objectContaining({
+            message: "failed to send bulk events",
+          }),
+        }),
       );
     });
 
@@ -700,9 +716,15 @@ describe("ReflagClient", () => {
       await client.flush();
 
       expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringMatching("invalid response received from server for"),
-        JSON.stringify(response),
+        "flush of buffered items failed; discarding items",
+        expect.objectContaining({
+          count: 1,
+          error: expect.objectContaining({
+            message: "failed to send bulk events",
+          }),
+        }),
       );
+      expect(logger.error).not.toHaveBeenCalled();
     });
 
     it("should throw an error if company is not valid", async () => {
@@ -819,9 +841,14 @@ describe("ReflagClient", () => {
       await client.bindClient({ user }).track(event.event);
       await client.flush();
 
-      expect(logger.error).toHaveBeenCalledWith(
-        expect.stringMatching("post request to .* failed with error"),
-        error,
+      expect(logger.warn).toHaveBeenCalledWith(
+        "flush of buffered items failed; discarding items",
+        expect.objectContaining({
+          count: 2,
+          error: expect.objectContaining({
+            message: "failed to send bulk events",
+          }),
+        }),
       );
     });
 
@@ -837,9 +864,15 @@ describe("ReflagClient", () => {
       await client.flush();
 
       expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringMatching("invalid response received from server for "),
-        JSON.stringify(response),
+        "flush of buffered items failed; discarding items",
+        expect.objectContaining({
+          count: 2,
+          error: expect.objectContaining({
+            message: "failed to send bulk events",
+          }),
+        }),
       );
+      expect(logger.error).not.toHaveBeenCalled();
     });
 
     it("should log if user is not set", async () => {
@@ -957,10 +990,11 @@ describe("ReflagClient", () => {
     });
 
     it("should load flag definitions from flagsFallbackProvider when live fetch fails", async () => {
+      const savedAt = "2026-03-09T00:00:00.000Z";
       const flagsFallbackProvider: FlagsFallbackProvider = {
         load: vi.fn().mockResolvedValue({
           version: 1,
-          savedAt: "2026-03-09T00:00:00.000Z",
+          savedAt,
           flags: flagDefinitions.features,
         }),
         save: vi.fn(),
@@ -971,6 +1005,115 @@ describe("ReflagClient", () => {
       const client = new ReflagClient({
         ...validOptions,
         flagsFallbackProvider,
+        flagsFetchRetries: 0,
+      });
+
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-03-09T00:20:00.000Z"));
+      try {
+        await client.initialize();
+
+        expect(flagsFallbackProvider.load).toHaveBeenCalledWith(
+          expect.objectContaining({
+            secretKeyHash: expect.any(String),
+          }),
+        );
+        expect(logger.warn).toHaveBeenCalledTimes(1);
+        expect(logger.warn).toHaveBeenCalledWith(
+          `remote flags unavailable, using fallback flags fetched 20m ago (${savedAt})`,
+        );
+
+        expect(
+          client.getFlag({ company, user, other: otherContext }, "flag1"),
+        ).toStrictEqual({
+          key: "flag1",
+          isEnabled: true,
+          config: {
+            key: "config-1",
+            payload: { something: "else" },
+          },
+          track: expect.any(Function),
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("should log remote flag fetch failures at debug level when using fallback definitions", async () => {
+      const error = new Error("fetch failed");
+      const savedAt = "2026-03-09T00:00:00.000Z";
+      const flagsFallbackProvider: FlagsFallbackProvider = {
+        load: vi.fn().mockResolvedValue({
+          version: 1,
+          savedAt,
+          flags: flagDefinitions.features,
+        }),
+        save: vi.fn(),
+      };
+
+      httpClient.get.mockRejectedValue(error);
+
+      const client = new ReflagClient({
+        ...validOptions,
+        flagsFallbackProvider,
+        flagsFetchRetries: 0,
+      });
+
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-03-09T00:20:00.000Z"));
+      try {
+        await client.initialize();
+
+        expect(logger.debug).toHaveBeenCalledWith(
+          'get request to "features" failed with error after 0 retries',
+          error,
+        );
+        expect(logger.warn).toHaveBeenCalledWith(
+          `remote flags unavailable, using fallback flags fetched 20m ago (${savedAt})`,
+        );
+        expect(logger.error).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("should include the cause when warning that flag fetch will retry", async () => {
+      const error = new Error("fetch failed");
+      httpClient.get.mockRejectedValue(error);
+
+      const client = new ReflagClient({
+        ...validOptions,
+        cacheStrategy: "in-request",
+        flagsFetchRetries: 1,
+      });
+
+      vi.useFakeTimers();
+      try {
+        const initializePromise = client.initialize();
+        await vi.runAllTimersAsync();
+        await initializePromise;
+
+        expect(logger.warn).toHaveBeenCalledWith(
+          "failed to fetch flags, will retry",
+          error,
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("should warn when live fetch fails and flagsFallbackProvider has no saved snapshot", async () => {
+      const flagsFallbackProvider: FlagsFallbackProvider = {
+        load: vi.fn().mockResolvedValue(undefined),
+        save: vi.fn(),
+      };
+
+      httpClient.get.mockResolvedValue({ success: false });
+
+      const client = new ReflagClient({
+        ...validOptions,
+        flagsFallbackProvider,
+        flagsFetchRetries: 0,
       });
 
       await client.initialize();
@@ -980,18 +1123,9 @@ describe("ReflagClient", () => {
           secretKeyHash: expect.any(String),
         }),
       );
-
-      expect(
-        client.getFlag({ company, user, other: otherContext }, "flag1"),
-      ).toStrictEqual({
-        key: "flag1",
-        isEnabled: true,
-        config: {
-          key: "config-1",
-          payload: { something: "else" },
-        },
-        track: expect.any(Function),
-      });
+      expect(logger.warn).toHaveBeenCalledWith(
+        "remote flags unavailable, no fallback flags found in flagsFallbackProvider",
+      );
     });
 
     it("should save fetched flag definitions to flagsFallbackProvider", async () => {
@@ -1856,9 +1990,14 @@ describe("ReflagClient", () => {
 
       await client.flush();
 
-      expect(logger.error).toHaveBeenCalledWith(
-        expect.stringMatching("post request .* failed with error"),
-        expect.any(Error),
+      expect(logger.warn).toHaveBeenCalledWith(
+        "flush of buffered items failed; discarding items",
+        expect.objectContaining({
+          count: 2,
+          error: expect.objectContaining({
+            message: "failed to send bulk events",
+          }),
+        }),
       );
     });
 

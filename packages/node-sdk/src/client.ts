@@ -175,6 +175,38 @@ function createFlagsFallbackSnapshot(
   };
 }
 
+function formatFlagsFallbackAge(savedAt: string): string | undefined {
+  const savedAtMs = Date.parse(savedAt);
+  if (!Number.isFinite(savedAtMs)) {
+    return undefined;
+  }
+
+  const ageMs = Math.max(0, Date.now() - savedAtMs);
+  const minuteMs = 60_000;
+  const hourMs = 60 * minuteMs;
+  const dayMs = 24 * hourMs;
+
+  if (ageMs < minuteMs) {
+    return "<1m";
+  }
+
+  if (ageMs < hourMs) {
+    return `${Math.floor(ageMs / minuteMs)}m`;
+  }
+
+  if (ageMs < dayMs) {
+    return `${Math.floor(ageMs / hourMs)}h`;
+  }
+
+  return `${Math.floor(ageMs / dayMs)}d`;
+}
+
+function createErrorWithCause(message: string, cause: unknown): Error {
+  const error = new Error(message) as Error & { cause?: unknown };
+  error.cause = cause;
+  return error;
+}
+
 /**
  * The SDK client.
  *
@@ -427,7 +459,6 @@ export class ReflagClient {
         this._config.flagsFetchRetries,
       );
       if (!isObject(res) || !Array.isArray(res?.features)) {
-        this.logger.warn("flags cache: invalid response", res);
         return await this.loadFlagsFallbackDefinitions();
       }
 
@@ -468,6 +499,9 @@ export class ReflagClient {
       );
 
       if (!snapshot) {
+        this.logger.warn(
+          "remote flags unavailable, no fallback flags found in flagsFallbackProvider",
+        );
         return undefined;
       }
 
@@ -476,9 +510,12 @@ export class ReflagClient {
         return undefined;
       }
 
-      this.logger.warn("using flag definitions from flagsFallbackProvider", {
-        savedAt: snapshot.savedAt,
-      });
+      const fallbackAge = formatFlagsFallbackAge(snapshot.savedAt);
+      this.logger.warn(
+        fallbackAge
+          ? `remote flags unavailable, using fallback flags fetched ${fallbackAge} ago (${snapshot.savedAt})`
+          : `remote flags unavailable, using fallback flags (${snapshot.savedAt})`,
+      );
 
       return compileFlagDefinitions(snapshot.flags);
     } catch (error) {
@@ -977,8 +1014,6 @@ export class ReflagClient {
    * @param path - The path to send the request to.
    * @param body - The body of the request.
    *
-   * @returns A boolean indicating if the request was successful.
-   *
    * @throws An error if the path or body is invalid.
    **/
   private async post<TBody>(path: string, body: TBody) {
@@ -996,16 +1031,16 @@ export class ReflagClient {
       this.logger.debug(`post request to "${url}"`, response);
 
       if (!response.ok || !isObject(response.body) || !response.body.success) {
-        this.logger.warn(
+        throw createErrorWithCause(
           `invalid response received from server for "${url}"`,
           JSON.stringify(response),
         );
-        return false;
       }
-      return true;
     } catch (error) {
-      this.logger.error(`post request to "${url}" failed with error`, error);
-      return false;
+      throw createErrorWithCause(
+        `post request to "${url}" failed with error`,
+        error,
+      );
     }
   }
 
@@ -1043,15 +1078,15 @@ export class ReflagClient {
           const { success: _, ...result } = response.body;
           return result as TResponse;
         },
-        () => {
-          this.logger.warn("failed to fetch flags, will retry");
+        (error) => {
+          this.logger.warn("failed to fetch flags, will retry", error);
         },
         retries,
         1000,
         10000,
       );
     } catch (error) {
-      this.logger.error(
+      this.logger.debug(
         `get request to "${path}" failed with error after ${retries} retries`,
         error,
       );
@@ -1072,9 +1107,10 @@ export class ReflagClient {
       "events must be a non-empty array",
     );
 
-    const sent = await this.post("bulk", events);
-    if (!sent) {
-      throw new Error("Failed to send bulk events");
+    try {
+      await this.post("bulk", events);
+    } catch (error) {
+      throw createErrorWithCause("failed to send bulk events", error);
     }
   }
 
