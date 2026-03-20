@@ -6732,7 +6732,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@reflag/node-sdk@npm:1.4.0, @reflag/node-sdk@workspace:^, @reflag/node-sdk@workspace:packages/node-sdk":
+"@reflag/node-sdk@npm:1.4.1, @reflag/node-sdk@workspace:^, @reflag/node-sdk@workspace:packages/node-sdk":
   version: 0.0.0-use.local
   resolution: "@reflag/node-sdk@workspace:packages/node-sdk"
   dependencies:
@@ -6787,7 +6787,7 @@ __metadata:
     "@openfeature/core": "npm:^1.5.0"
     "@openfeature/server-sdk": "npm:>=1.16.1"
     "@reflag/eslint-config": "npm:~0.0.2"
-    "@reflag/node-sdk": "npm:1.4.0"
+    "@reflag/node-sdk": "npm:1.4.1"
     "@reflag/tsconfig": "npm:~0.0.2"
     "@types/node": "npm:^22.12.0"
     eslint: "npm:^9.21.0"
@@ -6809,7 +6809,7 @@ __metadata:
   dependencies:
     "@react-native-async-storage/async-storage": "npm:^2.2.0"
     "@reflag/eslint-config": "npm:^0.0.2"
-    "@reflag/react-sdk": "npm:1.4.7"
+    "@reflag/react-sdk": "npm:1.4.8"
     "@reflag/tsconfig": "npm:^0.0.2"
     "@types/react": "npm:^19.0.12"
     eslint: "npm:^9.21.0"
@@ -6821,7 +6821,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@reflag/react-sdk@npm:1.4.7, @reflag/react-sdk@workspace:^, @reflag/react-sdk@workspace:packages/react-sdk":
+"@reflag/react-sdk@npm:1.4.8, @reflag/react-sdk@workspace:^, @reflag/react-sdk@workspace:packages/react-sdk":
   version: 0.0.0-use.local
   resolution: "@reflag/react-sdk@workspace:packages/react-sdk"
   dependencies:
@@ -15164,9 +15164,9 @@ __metadata:
   linkType: hard
 
 "flatted@npm:^3.2.9":
-  version: 3.4.1
-  resolution: "flatted@npm:3.4.1"
-  checksum: 10c0/3987a7f1e39bc7215cece001354313b462cdb4fb2dde0df4f7acd9e5016fbae56ee6fb3f0870b2150145033be8bda4f01af6f87a00946049651131bbfca7dfa6
+  version: 3.4.2
+  resolution: "flatted@npm:3.4.2"
+  checksum: 10c0/a65b67aae7172d6cdf63691be7de6c5cd5adbdfdfe2e9da1a09b617c9512ed794037741ee53d93114276bff3f93cd3b0d97d54f9b316e1e4885dde6e9ffdf7ed
   languageName: node
   linkType: hard
 
