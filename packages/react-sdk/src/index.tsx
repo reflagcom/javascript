@@ -17,6 +17,7 @@ import {
   InitOptions,
   Logger,
   RawFlag,
+  RawFlags as BrowserRawFlags,
   ReflagClient,
   ReflagContext,
   RequestFeedbackData,
@@ -132,7 +133,7 @@ export type RawFlags = Record<FlagKey, RawFlag>;
 
 export type BootstrappedFlags = {
   context: ReflagContext;
-  flags: Record<string, RawFlag>;
+  flags: BrowserRawFlags;
 };
 
 const SDK_VERSION = `react-sdk/${version}`;
