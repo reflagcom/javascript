@@ -130,10 +130,16 @@ export type FlagKey = keyof TypedFlags;
  */
 export type RawFlags = Record<FlagKey, RawFlag>;
 
-export type BootstrappedFlags = {
+/**
+ * Serialized bootstrapped flags that can cross the server/client boundary
+ * without depending on the local generated flag-key union.
+ */
+export type SerializedBootstrappedFlags = {
   context: ReflagContext;
-  flags: RawFlags;
+  flags: Record<string, RawFlag>;
 };
+
+export type BootstrappedFlags = SerializedBootstrappedFlags;
 
 const SDK_VERSION = `react-sdk/${version}`;
 
@@ -352,7 +358,7 @@ export type ReflagBootstrappedProps = ReflagPropsBase &
     /**
      * Pre-fetched flags to be used instead of fetching them from the server.
      */
-    flags: BootstrappedFlags;
+    flags: SerializedBootstrappedFlags;
   };
 
 /**
