@@ -1,5 +1,11 @@
 # @reflag/node-sdk
 
+## 1.4.1
+
+### Patch Changes
+
+- 32d0ecf: docs: improve override docs
+
 ## 1.4.0
 
 ### Minor Changes
