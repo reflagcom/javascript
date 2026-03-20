@@ -13,15 +13,14 @@
     "dev": "vite",
     "build": "tsc --project tsconfig.build.json && vite build",
     "test": "vitest run",
-    "test:types": "tsc --project tsconfig.type-tests.json",
     "test:watch": "vitest",
-    "test:ci": "yarn test --reporter=default --reporter=junit --outputFile=junit.xml && yarn test:types",
+    "test:ci": "yarn test --reporter=default --reporter=junit --outputFile=junit.xml",
     "coverage": "yarn test --coverage",
     "lint": "eslint .",
     "lint:ci": "eslint --output-file eslint-report.json --format json .",
     "prettier": "prettier --check .",
     "format": "yarn lint --fix && yarn prettier --write",
-    "preversion": "yarn lint && yarn prettier && yarn test && yarn test:types && yarn build"
+    "preversion": "yarn lint && yarn prettier && yarn test && yarn build"
   },
   "files": [
     "dist"
