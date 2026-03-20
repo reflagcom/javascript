@@ -16,6 +16,9 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Use the PAT for git operations so the release PR update can trigger CI.
+          token: ${{ secrets.CHANGESETS_BOT_TOKEN }}
       - name: Enable corepack
         run: corepack enable
       - uses: actions/setup-node@v6
