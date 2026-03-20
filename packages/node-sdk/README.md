@@ -666,9 +666,9 @@ reflagClient.initialize().then(() => {
 
 ![Config type check failed](docs/type-check-payload-failed.png "Remote config type check failed")
 
-## Testing
+## Testing with flag overrides
 
-When writing tests that cover code with flags, you can toggle flags on/off programmatically to test different behavior. For tests, you will often want to run the client in offline mode and provide flag overrides directly through the client options.
+When writing tests that cover code with flags, you can toggle flags on/off programmatically to test different behavior. For tests, you will often want to run the client in offline mode:
 
 `reflag.ts`:
 
@@ -680,7 +680,10 @@ export const reflag = new ReflagClient({
 });
 ```
 
-You can then set base overrides for a test run by passing `flagOverrides` in the constructor, replacing them later with `setFlagOverrides()`, or clearing them with `clearFlagOverrides()`:
+There are a few ways to programmatically manipulate the overrides which are appropriate when testing:
+
+### Base overrides
+You can set base overrides for a test run by passing `flagOverrides` in the constructor, replacing them later with `setFlagOverrides()` and clearing them with `clearFlagOverrides()`:
 
 ```typescript
 // pass directly in the constructor
@@ -719,6 +722,8 @@ describe("API Tests", () => {
 });
 ```
 
+### Layering overrides
+
 `pushFlagOverrides()` serves a different purpose: it adds a temporary layer on top of the base overrides and returns a remove function that removes only that layer. This is useful for nested tests:
 
 ```typescript
@@ -755,7 +760,8 @@ The precedence is:
 
 If the same flag is set in both places, the pushed override wins until its remove function is called.
 
-`pushFlagOverrides()` also accepts a function if the temporary override depends on the evaluation context:
+### Context dependent overrides
+`setFlagOverrides()` and `pushFlagOverrides()` also accept a function if the override depends on the evaluation context:
 
 ```typescript
 const remove = client.pushFlagOverrides((context) => ({
@@ -767,13 +773,9 @@ const remove = client.pushFlagOverrides((context) => ({
 remove();
 ```
 
-## Flag Overrides
+### Additional ways to provide flag overrides
 
-Flag overrides allow you to override flags and their configurations locally. This is particularly useful when testing changes locally, for example when running your app and clicking around to verify behavior before deploying your changes.
-
-For automated tests, see the [Testing](#testing) section above.
-
-When testing locally during development, you also have these additional ways to provide overrides:
+You also have these additional ways to provide overrides, which can be helpful when testing out locally:
 
 1. Through environment variables:
 
@@ -799,29 +801,6 @@ REFLAG_FLAGS_DISABLED=flag3,flag4
     }
   }
 }
-```
-
-To get dynamic overrides, use a function which takes a context and returns a boolean or an object with the shape of `{isEnabled, config}`:
-
-```typescript
-import { ReflagClient, Context } from "@reflag/node-sdk";
-
-const flagOverrides = (context: Context) => ({
-  "delete-todos": {
-    isEnabled: true,
-    config: {
-      key: "dev-config",
-      payload: {
-        requireConfirmation: true,
-        maxDeletionsPerDay: 5,
-      },
-    },
-  },
-});
-
-const client = new ReflagClient({
-  flagOverrides,
-});
 ```
 
 ## Remote Flag Evaluation
