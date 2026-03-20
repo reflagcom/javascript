@@ -683,6 +683,7 @@ export const reflag = new ReflagClient({
 There are a few ways to programmatically manipulate the overrides which are appropriate when testing:
 
 ### Base overrides
+
 You can set base overrides for a test run by passing `flagOverrides` in the constructor, replacing them later with `setFlagOverrides()` and clearing them with `clearFlagOverrides()`:
 
 ```typescript
@@ -761,6 +762,7 @@ The precedence is:
 If the same flag is set in both places, the pushed override wins until its remove function is called.
 
 ### Context dependent overrides
+
 `setFlagOverrides()` and `pushFlagOverrides()` also accept a function if the override depends on the evaluation context:
 
 ```typescript
