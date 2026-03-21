@@ -17,7 +17,11 @@ async function walk(dir) {
     const original = await readFile(fullPath, "utf8");
     const updated = original
       .split("\n")
-      .filter((line) => !/^\s*\*\s*@export\s*$/.test(line) && !/^\s*\*\s*@memberof\b/.test(line))
+      .filter(
+        (line) =>
+          !/^\s*\*\s*@export\s*$/.test(line) &&
+          !/^\s*\*\s*@memberof\b/.test(line),
+      )
       .join("\n");
 
     if (updated !== original) {
