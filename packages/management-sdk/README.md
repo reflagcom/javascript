@@ -1,6 +1,6 @@
 # @reflag/management-sdk (beta)
 
-Typed SDK for Reflag's REST API.
+Typed SDK for Reflag's Management API.
 
 ## Installation
 
@@ -12,7 +12,7 @@ yarn add @reflag/management-sdk
 
 ## Create a client
 
-Initialize the SDK with a [Reflag REST API Key](https://app.reflag.com/env-current/settings/org-api-access).
+Initialize the SDK with a [Reflag Management API Key](https://app.reflag.com/env-current/settings/org-api-access).
 
 ```typescript
 import { Api } from "@reflag/management-sdk";
