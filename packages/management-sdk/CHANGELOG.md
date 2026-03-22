@@ -1,5 +1,11 @@
 # @reflag/rest-api-sdk
 
+## 0.0.4
+
+### Patch Changes
+
+- 5194d99: renamed to Management SDK from REST API SDK
+
 ## 0.0.3
 
 ### Patch Changes
