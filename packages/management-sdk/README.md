@@ -1,6 +1,10 @@
 # @reflag/management-sdk (beta)
 
-Typed SDK for Reflag's Management API.
+Typed SDK for interacting with Reflag’s Management API.
+
+Use `@reflag/management-sdk` to programmatically manage feature flags such as listing flags, and enabling or disabling them for specific users or companies.
+
+For a practical example of what you can build, see the [Customer Admin Panel](https://github.com/reflagcom/javascript/blob/main/packages/rest-api-sdk/examples/customer-admin-panel/README.md) example app.
 
 ## Installation
 
