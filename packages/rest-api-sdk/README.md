@@ -3,6 +3,8 @@
 Typed SDK for Reflag's REST API.
 The REST API SDK is a management API which lets you list flags and toggle flags for users and companies amongst other things.
 
+See [Customer Admin Panel](https://github.com/reflagcom/javascript/blob/roncohen-patch-1/packages/rest-api-sdk/examples/customer-admin-panel/README.md) for an example of what's possible with the REST API SDK.
+
 ## Installation
 
 ```bash
