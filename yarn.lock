@@ -6732,6 +6732,22 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@reflag/management-sdk@workspace:*, @reflag/management-sdk@workspace:packages/management-sdk":
+  version: 0.0.0-use.local
+  resolution: "@reflag/management-sdk@workspace:packages/management-sdk"
+  dependencies:
+    "@openapitools/openapi-generator-cli": "npm:^2.13.5"
+    "@reflag/eslint-config": "npm:~0.0.2"
+    "@reflag/tsconfig": "npm:~0.0.2"
+    "@types/node": "npm:^22.12.0"
+    "@vitest/coverage-v8": "npm:~1.6.0"
+    eslint: "npm:^9.21.0"
+    prettier: "npm:^3.5.2"
+    typescript: "npm:^5.7.3"
+    vitest: "npm:~1.6.0"
+  languageName: unknown
+  linkType: soft
+
 "@reflag/node-sdk@npm:1.4.1, @reflag/node-sdk@workspace:^, @reflag/node-sdk@workspace:packages/node-sdk":
   version: 0.0.0-use.local
   resolution: "@reflag/node-sdk@workspace:packages/node-sdk"
@@ -6856,22 +6872,6 @@ __metadata:
   peerDependenciesMeta:
     react-dom:
       optional: true
-  languageName: unknown
-  linkType: soft
-
-"@reflag/rest-api-sdk@workspace:*, @reflag/rest-api-sdk@workspace:packages/rest-api-sdk":
-  version: 0.0.0-use.local
-  resolution: "@reflag/rest-api-sdk@workspace:packages/rest-api-sdk"
-  dependencies:
-    "@openapitools/openapi-generator-cli": "npm:^2.13.5"
-    "@reflag/eslint-config": "npm:~0.0.2"
-    "@reflag/tsconfig": "npm:~0.0.2"
-    "@types/node": "npm:^22.12.0"
-    "@vitest/coverage-v8": "npm:~1.6.0"
-    eslint: "npm:^9.21.0"
-    prettier: "npm:^3.5.2"
-    typescript: "npm:^5.7.3"
-    vitest: "npm:~1.6.0"
   languageName: unknown
   linkType: soft
 
@@ -12370,11 +12370,11 @@ __metadata:
   languageName: node
   linkType: hard
 
-"customer-admin-panel@workspace:packages/rest-api-sdk/examples/customer-admin-panel":
+"customer-admin-panel@workspace:packages/management-sdk/examples/customer-admin-panel":
   version: 0.0.0-use.local
-  resolution: "customer-admin-panel@workspace:packages/rest-api-sdk/examples/customer-admin-panel"
+  resolution: "customer-admin-panel@workspace:packages/management-sdk/examples/customer-admin-panel"
   dependencies:
-    "@reflag/rest-api-sdk": "workspace:*"
+    "@reflag/management-sdk": "workspace:*"
     next: "npm:14.2.5"
     react: "npm:18.3.1"
     react-dom: "npm:18.3.1"

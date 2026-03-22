@@ -1,13 +1,13 @@
-# @reflag/rest-api-sdk (beta)
+# @reflag/management-sdk (beta)
 
 Typed SDK for Reflag's REST API.
 
 ## Installation
 
 ```bash
-npm install @reflag/rest-api-sdk
+npm install @reflag/management-sdk
 # or
-yarn add @reflag/rest-api-sdk
+yarn add @reflag/management-sdk
 ```
 
 ## Create a client
@@ -15,7 +15,7 @@ yarn add @reflag/rest-api-sdk
 Initialize the SDK with a [Reflag REST API Key](https://app.reflag.com/env-current/settings/org-api-access).
 
 ```typescript
-import { Api } from "@reflag/rest-api-sdk";
+import { Api } from "@reflag/management-sdk";
 
 const api = new Api({
   accessToken: process.env.REFLAG_API_KEY,
@@ -29,7 +29,7 @@ Main exports:
 - `Api`: base client
 - `createAppClient(appId, config)`: app-scoped client
 - `ReflagApiError`: normalized API error type
-- Generated request/response types and models from `@reflag/rest-api-sdk`
+- Generated request/response types and models from `@reflag/management-sdk`
 
 Core method groups:
 
@@ -79,7 +79,7 @@ if (appId) {
 If most calls are for one app, use `createAppClient` to avoid repeating `appId`.
 
 ```typescript
-import { createAppClient } from "@reflag/rest-api-sdk";
+import { createAppClient } from "@reflag/management-sdk";
 
 const appApi = createAppClient("app-123", {
   accessToken: process.env.REFLAG_API_KEY,
@@ -294,7 +294,7 @@ console.log(updatedCompanyFlags.data);
 The SDK throws `ReflagApiError` for non-2xx API responses.
 
 ```typescript
-import { ReflagApiError } from "@reflag/rest-api-sdk";
+import { ReflagApiError } from "@reflag/management-sdk";
 
 try {
   await api.listApps();
@@ -308,7 +308,7 @@ try {
 
 ## Example app
 
-See `packages/rest-api-sdk/examples/customer-admin-panel/README.md` for a small Next.js app using this SDK in server actions.
+See `packages/management-sdk/examples/customer-admin-panel/README.md` for a small Next.js app using this SDK in server actions.
 
 ## License
 

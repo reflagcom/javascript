@@ -1,5 +1,5 @@
 ---
-"@reflag/rest-api-sdk": patch
+"@reflag/management-sdk": patch
 ---
 
 fix: update to the 3.0.1 API
