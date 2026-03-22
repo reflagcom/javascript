@@ -9,7 +9,7 @@ For a practical example of what you can build, see the [Customer Admin Panel](ht
 ## Installation
 
 ```bash
-npm install @reflag/management-sdk
+npm i @reflag/management-sdk
 # or
 yarn add @reflag/management-sdk
 ```
