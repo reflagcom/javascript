@@ -5,8 +5,8 @@ import type {
   EnvironmentHeaderCollection,
   EntityFlagsResponse,
   FlagHeaderCollection,
-} from "@reflag/rest-api-sdk";
-import { Api, createAppClient } from "@reflag/rest-api-sdk";
+} from "@reflag/management-sdk";
+import { Api, createAppClient } from "@reflag/management-sdk";
 
 const apiKey = process.env.REFLAG_API_KEY;
 const basePath = process.env.REFLAG_BASE_URL ?? "https://app.reflag.com/api";

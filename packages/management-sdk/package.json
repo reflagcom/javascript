@@ -1,7 +1,7 @@
 {
-  "name": "@reflag/rest-api-sdk",
+  "name": "@reflag/management-sdk",
   "version": "0.0.3",
-  "description": "Reflag REST API SDK",
+  "description": "Reflag Management SDK",
   "license": "MIT",
   "repository": {
     "type": "git",

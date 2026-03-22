@@ -11,7 +11,7 @@
   "entryPoints": [
     "packages/browser-sdk/",
     "packages/node-sdk/",
-    "packages/rest-api-sdk/",
+    "packages/management-sdk/",
     "packages/react-sdk/",
     "packages/react-native-sdk/",
     "packages/vue-sdk/"
@@ -22,7 +22,7 @@
   "projectDocuments": [
     "packages/browser-sdk/FEEDBACK.md",
     "packages/cli/README.md",
-    "packages/rest-api-sdk/README.md",
+    "packages/management-sdk/README.md",
     "packages/react-sdk/README.md",
     "packages/react-native-sdk/README.md"
   ],

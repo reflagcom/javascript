@@ -1,24 +1,25 @@
-# @reflag/rest-api-sdk (beta)
+# @reflag/management-sdk (beta)
 
-Typed SDK for Reflag's REST API.
-The REST API SDK is a management API which lets you list flags and toggle flags for users and companies amongst other things.
+Typed SDK for interacting with Reflag’s Management API.
 
-See [Customer Admin Panel](https://github.com/reflagcom/javascript/blob/roncohen-patch-1/packages/rest-api-sdk/examples/customer-admin-panel/README.md) for an example of what's possible with the REST API SDK.
+Use `@reflag/management-sdk` to programmatically manage feature flags such as listing flags, and enabling or disabling them for specific users or companies.
+
+For a practical example of what you can build, see the [Customer Admin Panel](https://github.com/reflagcom/javascript/blob/main/packages/rest-api-sdk/examples/customer-admin-panel/README.md) example app.
 
 ## Installation
 
 ```bash
-npm i @reflag/rest-api-sdk
+npm i @reflag/management-sdk
 # or
-yarn add @reflag/rest-api-sdk
+yarn add @reflag/management-sdk
 ```
 
 ## Create a client
 
-Initialize the SDK with a [Reflag REST API Key](https://app.reflag.com/env-current/settings/org-api-access).
+Initialize the SDK with a [Reflag Management API Key](https://app.reflag.com/env-current/settings/org-api-access).
 
 ```typescript
-import { Api } from "@reflag/rest-api-sdk";
+import { Api } from "@reflag/management-sdk";
 
 const api = new Api({
   accessToken: process.env.REFLAG_API_KEY,
@@ -32,7 +33,7 @@ Main exports:
 - `Api`: base client
 - `createAppClient(appId, config)`: app-scoped client
 - `ReflagApiError`: normalized API error type
-- Generated request/response types and models from `@reflag/rest-api-sdk`
+- Generated request/response types and models from `@reflag/management-sdk`
 
 Core method groups:
 
@@ -82,7 +83,7 @@ if (appId) {
 If most calls are for one app, use `createAppClient` to avoid repeating `appId`.
 
 ```typescript
-import { createAppClient } from "@reflag/rest-api-sdk";
+import { createAppClient } from "@reflag/management-sdk";
 
 const appApi = createAppClient("app-123", {
   accessToken: process.env.REFLAG_API_KEY,
@@ -297,7 +298,7 @@ console.log(updatedCompanyFlags.data);
 The SDK throws `ReflagApiError` for non-2xx API responses.
 
 ```typescript
-import { ReflagApiError } from "@reflag/rest-api-sdk";
+import { ReflagApiError } from "@reflag/management-sdk";
 
 try {
   await api.listApps();
@@ -311,7 +312,7 @@ try {
 
 ## Example app
 
-See `packages/rest-api-sdk/examples/customer-admin-panel/README.md` for a small Next.js app using this SDK in server actions.
+See `packages/management-sdk/examples/customer-admin-panel/README.md` for a small Next.js app using this SDK in server actions.
 
 ## License
 
