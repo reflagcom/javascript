@@ -1,11 +1,14 @@
 # @reflag/rest-api-sdk (beta)
 
 Typed SDK for Reflag's REST API.
+The REST API SDK is a management API which lets you list flags and toggle flags for users and companies amongst other things.
+
+See [Customer Admin Panel](https://github.com/reflagcom/javascript/blob/roncohen-patch-1/packages/rest-api-sdk/examples/customer-admin-panel/README.md) for an example of what's possible with the REST API SDK.
 
 ## Installation
 
 ```bash
-npm install @reflag/rest-api-sdk
+npm i @reflag/rest-api-sdk
 # or
 yarn add @reflag/rest-api-sdk
 ```
