@@ -1,0 +1,23 @@
+{
+  "name": "@reflag/rest-api-sdk",
+  "version": "0.0.4",
+  "description": "Deprecated alias package for @reflag/management-sdk",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/reflagcom/javascript.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "README.md",
+    "index.js",
+    "index.d.ts"
+  ],
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "dependencies": {
+    "@reflag/management-sdk": "workspace:*"
+  }
+}

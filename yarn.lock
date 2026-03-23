@@ -6875,6 +6875,14 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@reflag/rest-api-sdk@workspace:packages/rest-api-sdk":
+  version: 0.0.0-use.local
+  resolution: "@reflag/rest-api-sdk@workspace:packages/rest-api-sdk"
+  dependencies:
+    "@reflag/management-sdk": "workspace:*"
+  languageName: unknown
+  linkType: soft
+
 "@reflag/tsconfig@npm:0.0.2, @reflag/tsconfig@npm:^0.0.2, @reflag/tsconfig@npm:~0.0.2, @reflag/tsconfig@workspace:packages/tsconfig":
   version: 0.0.0-use.local
   resolution: "@reflag/tsconfig@workspace:packages/tsconfig"
