@@ -13,10 +13,19 @@
   "files": [
     "README.md",
     "index.js",
+    "index.mjs",
     "index.d.ts"
   ],
   "main": "./index.js",
   "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.mjs",
+      "require": "./index.js",
+      "default": "./index.js"
+    }
+  },
   "dependencies": {
     "@reflag/management-sdk": "0.0.4"
   }
