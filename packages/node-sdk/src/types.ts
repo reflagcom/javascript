@@ -630,6 +630,8 @@ export type BatchBufferOptions<T> = {
 
 export type CacheStrategy = "periodically-update" | "in-request";
 
+export type FlagsSyncMode = "polling" | "in-request" | "push";
+
 /**
  * Defines the options for the SDK client.
  *
@@ -731,7 +733,23 @@ export type ClientOptions = {
   configFile?: string;
 
   /**
-   * The cache strategy to use for the client (optional, defaults to "periodically-update").
+   * How flag definitions are synchronized.
+   *
+   * - `polling` (default): periodic background refresh.
+   * - `in-request`: stale refresh is triggered during request handling.
+   * - `push`: live updates over SSE trigger refresh with `waitForVersion`.
+   */
+  flagsSyncMode?: FlagsSyncMode;
+
+  /**
+   * Push endpoint used when `flagsSyncMode` is `"push"`.
+   *
+   * @defaultValue `"https://pubsub.reflag.com/sse"`
+   */
+  flagsPushUrl?: string;
+
+  /**
+   * @deprecated Use `flagsSyncMode`.
    **/
   cacheStrategy?: CacheStrategy;
 };

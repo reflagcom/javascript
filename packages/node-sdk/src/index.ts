@@ -42,6 +42,7 @@ export type {
   FlagRemoteConfig,
   Flags,
   FlagsAPIResponse,
+  FlagsSyncMode,
   FlagsFallbackProvider,
   FlagsFallbackProviderContext,
   FlagsFallbackSnapshot,

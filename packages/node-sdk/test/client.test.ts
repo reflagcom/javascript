@@ -100,6 +100,17 @@ const expectedHeaders = {
   Authorization: `Bearer ${validOptions.secretKey}`,
 };
 
+function createSSEMessageStream(data: object) {
+  const encoder = new TextEncoder();
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(
+        encoder.encode(`event: message\ndata: ${JSON.stringify(data)}\n\n`),
+      );
+    },
+  });
+}
+
 const flagDefinitions: FlagsAPIResponse = {
   features: [
     {
@@ -989,6 +1000,72 @@ describe("ReflagClient", () => {
       );
     });
 
+    it("should refresh features with waitForVersion when receiving push updates", async () => {
+      const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue(
+        new Response(
+          createSSEMessageStream({
+            id: "flag-state:test:0",
+            timestamp: 1774605839478,
+            name: "flag_state_updated",
+            clientId: "reflag-backend",
+            channel: "flag-state:test",
+            action: 0,
+            encoding: "json",
+            data: JSON.stringify({
+              envId: "endbMeqfmcgLyZ",
+              flagStateVersion: 22,
+            }),
+          }),
+          {
+            status: 200,
+            headers: {
+              "Content-Type": "text/event-stream",
+            },
+          },
+        ),
+      );
+
+      try {
+        httpClient.get.mockResolvedValue({
+          ok: true,
+          status: 200,
+          body: {
+            success: true,
+            ...flagDefinitions,
+          },
+        });
+
+        const client = new ReflagClient({
+          ...validOptions,
+          flagsSyncMode: "push",
+        });
+
+        await client.initialize();
+
+        await vi.waitFor(() => {
+          expect(httpClient.get).toHaveBeenCalledWith(
+            "https://api.example.com/features?waitForVersion=22",
+            expectedHeaders,
+            API_TIMEOUT_MS,
+          );
+        });
+
+        expect(fetchMock).toHaveBeenCalledWith("https://pubsub.reflag.com/sse", {
+          method: "GET",
+          headers: {
+            ...expectedHeaders,
+            Accept: "text/event-stream",
+            "Cache-Control": "no-cache",
+          },
+          signal: expect.any(AbortSignal),
+        });
+
+        client.destroy();
+      } finally {
+        fetchMock.mockRestore();
+      }
+    });
+
     it("should load flag definitions from flagsFallbackProvider when live fetch fails", async () => {
       const savedAt = "2026-03-09T00:00:00.000Z";
       const flagsFallbackProvider: FlagsFallbackProvider = {
@@ -1083,7 +1160,7 @@ describe("ReflagClient", () => {
 
       const client = new ReflagClient({
         ...validOptions,
-        cacheStrategy: "in-request",
+        flagsSyncMode: "in-request",
         flagsFetchRetries: 1,
       });
 
