@@ -1228,6 +1228,7 @@ export class ReflagClient {
       const { id: _, ...attributes } = options.company;
       promises.push(
         this.updateCompany(options.company.id, {
+          userId: options.user?.id,
           attributes,
           meta: options.meta,
         }),

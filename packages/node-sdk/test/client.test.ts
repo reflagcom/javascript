@@ -1348,7 +1348,7 @@ describe("ReflagClient", () => {
               active: true,
             },
             type: "company",
-            userId: undefined,
+            userId: user.id,
           },
           {
             attributes: {
@@ -1546,7 +1546,7 @@ describe("ReflagClient", () => {
             employees: 100,
             name: "Acme Inc.",
           },
-          userId: undefined, // this is a bug, will fix in separate PR
+          userId: user.id,
           context: undefined,
         },
         {
@@ -1635,7 +1635,14 @@ describe("ReflagClient", () => {
       await client.initialize();
       client.getFlags({ user, company, other: otherContext });
 
-      expect(isAllowedSpy).toHaveBeenCalledWith("1GHpP+QfYperQ0AtD8bWPiRE4H0=");
+      expect(isAllowedSpy).toHaveBeenNthCalledWith(
+        1,
+        "5Zt35h50IPRNU8yXAj/YbPME/qE=",
+      );
+      expect(isAllowedSpy).toHaveBeenNthCalledWith(
+        2,
+        "J3G4oF56f2t+T6xYzES6inc78+c=",
+      );
     });
 
     it("should return evaluated flags when only user is defined", async () => {
@@ -1901,7 +1908,7 @@ describe("ReflagClient", () => {
             employees: 100,
             name: "Acme Inc.",
           },
-          userId: undefined, // this is a bug, will fix in separate PR
+          userId: user.id,
           context: undefined,
         },
         {
@@ -2559,7 +2566,14 @@ describe("ReflagClient", () => {
       await client.initialize();
       client.getFlagsForBootstrap({ user, company, other: otherContext });
 
-      expect(isAllowedSpy).toHaveBeenCalledWith("1GHpP+QfYperQ0AtD8bWPiRE4H0=");
+      expect(isAllowedSpy).toHaveBeenNthCalledWith(
+        1,
+        "5Zt35h50IPRNU8yXAj/YbPME/qE=",
+      );
+      expect(isAllowedSpy).toHaveBeenNthCalledWith(
+        2,
+        "J3G4oF56f2t+T6xYzES6inc78+c=",
+      );
     });
 
     it("should work in offline mode", async () => {
