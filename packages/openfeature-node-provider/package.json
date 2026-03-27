@@ -1,6 +1,6 @@
 {
   "name": "@reflag/openfeature-node-provider",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -50,7 +50,7 @@
     "vitest": "~1.6.0"
   },
   "dependencies": {
-    "@reflag/node-sdk": "1.4.1"
+    "@reflag/node-sdk": "1.4.2"
   },
   "peerDependencies": {
     "@openfeature/server-sdk": ">=1.16.1"
