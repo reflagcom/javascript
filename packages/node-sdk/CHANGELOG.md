@@ -1,5 +1,11 @@
 # @reflag/node-sdk
 
+## 1.4.2
+
+### Patch Changes
+
+- 7f89a47: fix: correctly associate users with companies
+
 ## 1.4.1
 
 ### Patch Changes
