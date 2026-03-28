@@ -12,12 +12,17 @@ import {
   API_TIMEOUT_MS,
   FLAG_EVENT_RATE_LIMITER_WINDOW_SIZE_MS,
   FLAGS_REFETCH_MS,
+  PUBSUB_SSE_URL,
   loadConfig,
   REFLAG_LOG_PREFIX,
   SDK_VERSION,
   SDK_VERSION_HEADER_NAME,
 } from "./config";
 import fetchClient, { withRetry } from "./fetch-http-client";
+import {
+  FlagUpdatesSSESubscription,
+  openFlagUpdatesSSE,
+} from "./flag-updates-sse";
 import { isFlagsFallbackSnapshot } from "./flagsFallbackProvider";
 import { subscribe as triggerOnExit } from "./flusher";
 import inRequestCache from "./inRequestCache";
@@ -26,7 +31,7 @@ import { newRateLimiter } from "./rate-limiter";
 import type {
   BootstrappedFlags,
   CachedFlagDefinition,
-  CacheStrategy,
+  FlagsSyncMode,
   EvaluatedFlagsAPIResponse,
   FlagAPIResponse,
   FlagDefinition,
@@ -239,7 +244,8 @@ export class ReflagClient {
     configFile?: string;
     flagsFetchRetries: number;
     fetchTimeoutMs: number;
-    cacheStrategy: CacheStrategy;
+    flagsSyncMode: FlagsSyncMode;
+    flagsPushUrl: string;
   };
   httpClient: HttpClient;
 
@@ -257,10 +263,14 @@ export class ReflagClient {
 
   private initializationFinished = false;
   private canLoadFlagsFallbackProvider = true;
+  private pendingWaitForVersion: number | undefined;
+  private pushRefreshPromise: Promise<void> | undefined;
+  private flagsUpdatesSSESubscription: FlagUpdatesSSESubscription | undefined;
   private _initialize = once(async () => {
     const start = Date.now();
     if (!this._config.offline) {
       await this.flagsCache.refresh();
+      this.startFlagsUpdatesSSE();
     }
     this.logger.info(
       "Reflag initialized in " +
@@ -288,7 +298,7 @@ export class ReflagClient {
    * @param options.configFile - The path to the config file (optional).
    * @param options.flagsFetchRetries - Number of retries for fetching flags (optional, defaults to 3).
    * @param options.fetchTimeoutMs - Timeout for fetching flags (optional, defaults to 10000ms).
-   * @param options.cacheStrategy - The cache strategy to use for the client (optional, defaults to "periodically-update").
+   * @param options.flagsSyncMode - How flag definitions are synchronized (optional, defaults to "polling").
    *
    * @throws An error if the options are invalid.
    **/
@@ -349,6 +359,21 @@ export class ReflagClient {
         (Number.isInteger(options.fetchTimeoutMs) &&
           options.fetchTimeoutMs >= 0),
       "fetchTimeoutMs must be a non-negative integer",
+    );
+
+    ok(
+      options.flagsSyncMode === undefined ||
+        options.flagsSyncMode === "polling" ||
+        options.flagsSyncMode === "in-request" ||
+        options.flagsSyncMode === "push",
+      'flagsSyncMode must be one of "polling", "in-request", or "push"',
+    );
+
+    ok(
+      options.flagsPushUrl === undefined ||
+        (typeof options.flagsPushUrl === "string" &&
+          options.flagsPushUrl.length > 0),
+      "flagsPushUrl must be a non-empty string",
     );
 
     if (!options.configFile) {
@@ -424,6 +449,10 @@ export class ReflagClient {
       logger: this.logger,
     });
 
+    const flagsSyncMode: FlagsSyncMode =
+      options.flagsSyncMode ??
+      (options.cacheStrategy === "in-request" ? "in-request" : "polling");
+
     this._config = {
       offline,
       apiBaseUrl: (config.apiBaseUrl ?? config.host) || API_BASE_URL,
@@ -441,7 +470,8 @@ export class ReflagClient {
       flagOverrides: baseFlagOverrides,
       flagsFetchRetries: options.flagsFetchRetries ?? 3,
       fetchTimeoutMs: options.fetchTimeoutMs ?? API_TIMEOUT_MS,
-      cacheStrategy: options.cacheStrategy ?? "periodically-update",
+      flagsSyncMode,
+      flagsPushUrl: options.flagsPushUrl ?? PUBSUB_SSE_URL,
     };
     this.baseFlagOverrides = baseFlagOverrides;
 
@@ -454,8 +484,16 @@ export class ReflagClient {
     }
 
     const fetchFlags = async () => {
+      const waitForVersion = this.pendingWaitForVersion;
+      this.pendingWaitForVersion = undefined;
+
+      const path =
+        waitForVersion === undefined
+          ? "features"
+          : `features?waitForVersion=${encodeURIComponent(String(waitForVersion))}`;
+
       const res = await this.get<FlagsAPIResponse>(
-        "features",
+        path,
         this._config.flagsFetchRetries,
       );
       if (!isObject(res) || !Array.isArray(res?.features)) {
@@ -467,19 +505,79 @@ export class ReflagClient {
       return compileFlagDefinitions(res.features);
     };
 
-    if (this._config.cacheStrategy === "periodically-update") {
-      this.flagsCache = periodicallyUpdatingCache<CachedFlagDefinition[]>(
-        this._config.refetchInterval,
+    if (this._config.flagsSyncMode === "push") {
+      this.flagsCache = inRequestCache<CachedFlagDefinition[]>(
+        Number.MAX_SAFE_INTEGER,
         this.logger,
         fetchFlags,
       );
-    } else {
+    } else if (this._config.flagsSyncMode === "in-request") {
       this.flagsCache = inRequestCache<CachedFlagDefinition[]>(
         this._config.refetchInterval,
         this.logger,
         fetchFlags,
       );
+    } else {
+      this.flagsCache = periodicallyUpdatingCache<CachedFlagDefinition[]>(
+        this._config.refetchInterval,
+        this.logger,
+        fetchFlags,
+      );
     }
+  }
+
+  private startFlagsUpdatesSSE() {
+    if (
+      this._config.offline ||
+      this._config.flagsSyncMode !== "push" ||
+      this.flagsUpdatesSSESubscription
+    ) {
+      return;
+    }
+
+    this.flagsUpdatesSSESubscription = openFlagUpdatesSSE({
+      url: this._config.flagsPushUrl,
+      headers: this._config.headers,
+      logger: this.logger,
+      onFlagStateVersion: (version) => {
+        this.pendingWaitForVersion =
+          this.pendingWaitForVersion === undefined
+            ? version
+            : Math.max(this.pendingWaitForVersion, version);
+        this.refreshFlagsToPendingVersion();
+      },
+    });
+  }
+
+  private refreshFlagsToPendingVersion() {
+    if (this.pushRefreshPromise) {
+      return;
+    }
+
+    this.pushRefreshPromise = (async () => {
+      while (true) {
+        const pendingAtStart = this.pendingWaitForVersion;
+        if (pendingAtStart === undefined) {
+          break;
+        }
+
+        await this.flagsCache.refresh();
+
+        const pendingNow = this.pendingWaitForVersion;
+        if (pendingNow === undefined || pendingNow <= pendingAtStart) {
+          break;
+        }
+      }
+    })()
+      .catch((error) => {
+        this.logger.warn("failed to refresh flags from push update", error);
+      })
+      .finally(() => {
+        this.pushRefreshPromise = undefined;
+        if (this.pendingWaitForVersion !== undefined) {
+          this.refreshFlagsToPendingVersion();
+        }
+      });
   }
 
   private async loadFlagsFallbackDefinitions() {
@@ -831,6 +929,7 @@ export class ReflagClient {
 
     await this.batchBuffer.flush();
     await this.flagsCache.waitRefresh();
+    await this.pushRefreshPromise;
   }
 
   /**
@@ -857,6 +956,9 @@ export class ReflagClient {
    * multiple background processes from running simultaneously.
    */
   public destroy() {
+    this.flagsUpdatesSSESubscription?.close();
+    this.flagsUpdatesSSESubscription = undefined;
+
     this.flagsCache.destroy();
     this.batchBuffer.destroy();
   }

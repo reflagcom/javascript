@@ -3,7 +3,7 @@ import { ClientOptions } from "./types";
 
 export type EdgeClientOptions = Omit<
   ClientOptions,
-  "cacheStrategy" | "flushIntervalMs" | "batchOptions"
+  "flagsSyncMode" | "cacheStrategy" | "flushIntervalMs" | "batchOptions"
 >;
 
 /**
@@ -28,7 +28,7 @@ export class EdgeClient extends ReflagClient {
   constructor(options: EdgeClientOptions = {}) {
     const opts = {
       ...options,
-      cacheStrategy: "in-request" as const,
+      flagsSyncMode: "in-request" as const,
       batchOptions: {
         intervalMs: 0,
       },
