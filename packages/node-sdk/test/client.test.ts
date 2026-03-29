@@ -1050,15 +1050,18 @@ describe("ReflagClient", () => {
           );
         });
 
-        expect(fetchMock).toHaveBeenCalledWith("https://pubsub.reflag.com/sse", {
-          method: "GET",
-          headers: {
-            ...expectedHeaders,
-            Accept: "text/event-stream",
-            "Cache-Control": "no-cache",
+        expect(fetchMock).toHaveBeenCalledWith(
+          "https://pubsub.reflag.com/sse",
+          {
+            method: "GET",
+            headers: {
+              ...expectedHeaders,
+              Accept: "text/event-stream",
+              "Cache-Control": "no-cache",
+            },
+            signal: expect.any(AbortSignal),
           },
-          signal: expect.any(AbortSignal),
-        });
+        );
 
         client.destroy();
       } finally {
