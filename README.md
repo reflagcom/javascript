@@ -81,3 +81,8 @@ Merging that PR will:
 1. Apply the version bumps
 2. Publish the updated packages to npm
 3. Rebuild and push the generated SDK docs
+
+## Hosted deployment
+
+A hosted deployment is available on [Fronteir AI](https://fronteir.ai/mcp/reflagcom-mcp).
+
