@@ -180,6 +180,10 @@ function createFlagsFallbackSnapshot(
   };
 }
 
+function createEnvFlagStateChannelName(envIdHash: string): string {
+  return `flag-state:${envIdHash}`;
+}
+
 function formatFlagsFallbackAge(savedAt: string): string | undefined {
   const savedAtMs = Date.parse(savedAt);
   if (!Number.isFinite(savedAtMs)) {
@@ -246,6 +250,7 @@ export class ReflagClient {
     fetchTimeoutMs: number;
     flagsSyncMode: FlagsSyncMode;
     flagsPushUrl: string;
+    flagsPushChannel: string;
   };
   httpClient: HttpClient;
 
@@ -453,6 +458,8 @@ export class ReflagClient {
       options.flagsSyncMode ??
       (options.cacheStrategy === "in-request" ? "in-request" : "polling");
 
+    const secretKeyHash = config.secretKey ? hashString(config.secretKey) : "";
+
     this._config = {
       offline,
       apiBaseUrl: (config.apiBaseUrl ?? config.host) || API_BASE_URL,
@@ -465,13 +472,16 @@ export class ReflagClient {
       fallbackFlags: fallbackFlags,
       flagsFallbackProvider: options.flagsFallbackProvider,
       flagsFallbackProviderContext: {
-        secretKeyHash: config.secretKey ? hashString(config.secretKey) : "",
+        secretKeyHash,
       },
       flagOverrides: baseFlagOverrides,
       flagsFetchRetries: options.flagsFetchRetries ?? 3,
       fetchTimeoutMs: options.fetchTimeoutMs ?? API_TIMEOUT_MS,
       flagsSyncMode,
       flagsPushUrl: options.flagsPushUrl ?? PUBSUB_SSE_URL,
+      flagsPushChannel: secretKeyHash
+        ? createEnvFlagStateChannelName(secretKeyHash.slice(0, 16))
+        : "flag-state:*",
     };
     this.baseFlagOverrides = baseFlagOverrides;
 
@@ -535,8 +545,13 @@ export class ReflagClient {
       return;
     }
 
+    const pushUrl = new URL(this._config.flagsPushUrl);
+    if (!pushUrl.searchParams.has("channels")) {
+      pushUrl.searchParams.set("channels", this._config.flagsPushChannel);
+    }
+
     this.flagsUpdatesSSESubscription = openFlagUpdatesSSE({
-      url: this._config.flagsPushUrl,
+      url: pushUrl.toString(),
       headers: this._config.headers,
       logger: this.logger,
       onFlagStateVersion: (version) => {

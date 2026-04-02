@@ -98,7 +98,12 @@ export function openFlagUpdatesSSE({
 
     let response: Response;
     try {
-      response = await fetch(url, {
+      const requestUrl = new URL(url);
+      if (!requestUrl.searchParams.has("channels")) {
+        requestUrl.searchParams.set("channels", "flag-state:*");
+      }
+
+      response = await fetch(requestUrl, {
         method: "GET",
         headers: {
           ...headers,
@@ -116,9 +121,26 @@ export function openFlagUpdatesSSE({
     }
 
     if (!response.ok || !response.body) {
+      let responseBody: string | undefined;
+      try {
+        const rawBody = await response.text();
+        if (rawBody) {
+          responseBody =
+            rawBody.length > 1000
+              ? `${rawBody.slice(0, 1000)}...`
+              : rawBody;
+        }
+      } catch {
+        // ignore body read errors
+      }
+
       logger?.warn(
         "flag updates SSE endpoint returned an invalid response",
-        new Error(`${response.status} ${response.statusText}`),
+        new Error(
+          `${response.status} ${response.statusText}${
+            responseBody ? ` - ${responseBody}` : ""
+          }`,
+        ),
       );
       scheduleReconnect();
       return;

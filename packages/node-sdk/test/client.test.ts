@@ -1050,18 +1050,19 @@ describe("ReflagClient", () => {
           );
         });
 
-        expect(fetchMock).toHaveBeenCalledWith(
-          "https://pubsub.reflag.com/sse",
-          {
-            method: "GET",
-            headers: {
-              ...expectedHeaders,
-              Accept: "text/event-stream",
-              "Cache-Control": "no-cache",
-            },
-            signal: expect.any(AbortSignal),
-          },
+        const [calledUrl, calledInit] = fetchMock.mock.calls[0] ?? [];
+        expect(String(calledUrl)).toBe(
+          "https://pubsub.reflag.com/sse?channels=flag-state%3A165d2650f1975f7f",
         );
+        expect(calledInit).toMatchObject({
+          method: "GET",
+          headers: {
+            ...expectedHeaders,
+            Accept: "text/event-stream",
+            "Cache-Control": "no-cache",
+          },
+        });
+        expect(calledInit?.signal).toBeDefined();
 
         client.destroy();
       } finally {

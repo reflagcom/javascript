@@ -1,11 +1,11 @@
-import { ReflagClient, Context, FlagOverrides } from "../../src";
+import { ReflagClient, Context, FlagOverrides } from "@reflag/node-sdk";
 
 type CreateConfigPayload = {
   minimumLength: number;
 };
 
 // Extending the Flags interface to define the available features
-declare module "../../src/types" {
+declare module "@reflag/node-sdk" {
   interface Flags {
     "show-todos": boolean;
     "create-todos": {
