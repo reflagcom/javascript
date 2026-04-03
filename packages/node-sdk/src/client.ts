@@ -175,8 +175,8 @@ function createFlagsFallbackSnapshot(
   };
 }
 
-function createEnvFlagsStateChannelName(envIdHash: string): string {
-  return `flags-state:${envIdHash}`;
+function createFlagsStateChannelName(secretKeyHashPrefix: string): string {
+  return `flags-state:${secretKeyHashPrefix}`;
 }
 
 function formatFlagsFallbackAge(savedAt: string): string | undefined {
@@ -451,6 +451,7 @@ export class ReflagClient {
       (options.cacheStrategy === "in-request" ? "in-request" : "polling");
 
     const secretKeyHash = config.secretKey ? hashString(config.secretKey) : "";
+    const secretKeyHashPrefix = secretKeyHash.slice(0, 16);
 
     ok(
       offline || flagsSyncMode !== "push" || secretKeyHash.length > 0,
@@ -465,7 +466,7 @@ export class ReflagClient {
     ) {
       pushUrl.searchParams.set(
         "channels",
-        createEnvFlagsStateChannelName(secretKeyHash.slice(0, 16)),
+        createFlagsStateChannelName(secretKeyHashPrefix),
       );
     }
 
