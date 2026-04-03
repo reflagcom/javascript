@@ -180,8 +180,8 @@ function createFlagsFallbackSnapshot(
   };
 }
 
-function createEnvFlagStateChannelName(envIdHash: string): string {
-  return `flag-state:${envIdHash}`;
+function createEnvFlagsUpdatedChannelName(envIdHash: string): string {
+  return `flags_updated:${envIdHash}`;
 }
 
 function formatFlagsFallbackAge(savedAt: string): string | undefined {
@@ -460,6 +460,11 @@ export class ReflagClient {
 
     const secretKeyHash = config.secretKey ? hashString(config.secretKey) : "";
 
+    ok(
+      flagsSyncMode !== "push" || secretKeyHash.length > 0,
+      "flagsSyncMode=\"push\" requires a valid secretKey",
+    );
+
     this._config = {
       offline,
       apiBaseUrl: (config.apiBaseUrl ?? config.host) || API_BASE_URL,
@@ -479,9 +484,9 @@ export class ReflagClient {
       fetchTimeoutMs: options.fetchTimeoutMs ?? API_TIMEOUT_MS,
       flagsSyncMode,
       flagsPushUrl: options.flagsPushUrl ?? PUBSUB_SSE_URL,
-      flagsPushChannel: secretKeyHash
-        ? createEnvFlagStateChannelName(secretKeyHash.slice(0, 16))
-        : "flag-state:*",
+      flagsPushChannel: createEnvFlagsUpdatedChannelName(
+        secretKeyHash.slice(0, 16),
+      ),
     };
     this.baseFlagOverrides = baseFlagOverrides;
 

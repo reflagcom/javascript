@@ -1004,11 +1004,11 @@ describe("ReflagClient", () => {
       const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue(
         new Response(
           createSSEMessageStream({
-            id: "flag-state:test:0",
+            id: "flags_updated:test:0",
             timestamp: 1774605839478,
             name: "flag_state_updated",
             clientId: "reflag-backend",
-            channel: "flag-state:test",
+            channel: "flags_updated:test",
             action: 0,
             encoding: "json",
             data: JSON.stringify({
@@ -1052,7 +1052,7 @@ describe("ReflagClient", () => {
 
         const [calledUrl, calledInit] = fetchMock.mock.calls[0] ?? [];
         expect(String(calledUrl)).toBe(
-          "https://pubsub.reflag.com/sse?channels=flag-state%3A165d2650f1975f7f",
+          "https://pubsub.reflag.com/sse?channels=flags_updated%3A165d2650f1975f7f",
         );
         expect(calledInit).toMatchObject({
           method: "GET",

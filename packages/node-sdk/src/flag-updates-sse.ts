@@ -99,9 +99,6 @@ export function openFlagUpdatesSSE({
     let response: Response;
     try {
       const requestUrl = new URL(url);
-      if (!requestUrl.searchParams.has("channels")) {
-        requestUrl.searchParams.set("channels", "flag-state:*");
-      }
 
       response = await fetch(requestUrl, {
         method: "GET",
