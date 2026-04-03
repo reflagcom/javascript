@@ -558,38 +558,6 @@ export interface Logger {
 }
 
 /**
- * A cache for storing values.
- *
- * @typeParam T - The type of the value.
- **/
-export type Cache<T> = {
-  /**
-   * Get the value.
-   * @returns The value or `undefined` if the value is not available.
-   **/
-  get: () => T | undefined;
-
-  /**
-   * Refresh the value immediately and return it, or `undefined` if the value is not available.
-   *
-   * @returns The value or `undefined` if the value is not available.
-   **/
-  refresh: () => Promise<T | undefined>;
-
-  /**
-   * If a refresh is in progress, wait for it to complete.
-   *
-   * @returns A promise that resolves when the refresh is complete.
-   **/
-  waitRefresh: () => Promise<void> | undefined;
-
-  /**
-   * Cleanup and destroy the cache, stopping any background processes.
-   **/
-  destroy: () => void;
-};
-
-/**
  * Options for configuring the BatchBuffer.
  *
  * @template T - The type of items in the buffer.

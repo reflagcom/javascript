@@ -5,12 +5,14 @@ type SSEOptions = {
   headers: Record<string, string>;
   logger?: Logger;
   onFlagStateVersion: (version: number) => void;
+  onReconnect?: () => void;
 };
 
 const INITIAL_RECONNECT_DELAY_MS = 1000;
 const MAX_RECONNECT_DELAY_MS = 30000;
 
 export type FlagUpdatesSSESubscription = {
+  ready: Promise<void>;
   close: () => void;
 };
 
@@ -19,15 +21,27 @@ export function openFlagUpdatesSSE({
   headers,
   logger,
   onFlagStateVersion,
+  onReconnect,
 }: SSEOptions): FlagUpdatesSSESubscription {
   let stopped = false;
   let reconnectDelayMs = INITIAL_RECONNECT_DELAY_MS;
   let reconnectTimer: NodeJS.Timeout | undefined;
   let abortController: AbortController | undefined;
+  let shouldNotifyReconnect = false;
+  let resolveReady: (() => void) | undefined;
+  const ready = new Promise<void>((resolve) => {
+    resolveReady = resolve;
+  });
+
+  const settleReady = () => {
+    resolveReady?.();
+    resolveReady = undefined;
+  };
 
   const scheduleReconnect = () => {
     if (stopped || reconnectTimer) return;
 
+    shouldNotifyReconnect = true;
     reconnectTimer = setTimeout(() => {
       reconnectTimer = undefined;
       void connect();
@@ -40,7 +54,7 @@ export function openFlagUpdatesSSE({
   const onSSEPayload = (payload: string) => {
     try {
       const message = JSON.parse(payload);
-      if (message?.name !== "flag_state_updated") {
+      if (message?.name !== "flags-updated") {
         return;
       }
 
@@ -89,17 +103,16 @@ export function openFlagUpdatesSSE({
     onSSEPayload(dataLines.join("\n"));
   };
 
-  const connect = async () => {
+  const connect = async (): Promise<void> => {
     if (stopped) {
       return;
     }
 
     abortController = new AbortController();
+    const requestUrl = new URL(url);
 
     let response: Response;
     try {
-      const requestUrl = new URL(url);
-
       response = await fetch(requestUrl, {
         method: "GET",
         headers: {
@@ -114,6 +127,7 @@ export function openFlagUpdatesSSE({
         logger?.warn("failed to connect to flag updates SSE endpoint", error);
         scheduleReconnect();
       }
+      settleReady();
       return;
     }
 
@@ -123,9 +137,7 @@ export function openFlagUpdatesSSE({
         const rawBody = await response.text();
         if (rawBody) {
           responseBody =
-            rawBody.length > 1000
-              ? `${rawBody.slice(0, 1000)}...`
-              : rawBody;
+            rawBody.length > 1000 ? `${rawBody.slice(0, 1000)}...` : rawBody;
         }
       } catch {
         // ignore body read errors
@@ -140,10 +152,24 @@ export function openFlagUpdatesSSE({
         ),
       );
       scheduleReconnect();
+      settleReady();
       return;
     }
 
     reconnectDelayMs = INITIAL_RECONNECT_DELAY_MS;
+    logger?.debug(
+      `flag updates SSE connection established (channels=${requestUrl.searchParams.get("channels") ?? ""})`,
+    );
+    settleReady();
+
+    if (shouldNotifyReconnect) {
+      shouldNotifyReconnect = false;
+      try {
+        onReconnect?.();
+      } catch (error) {
+        logger?.warn("failed to handle flag updates SSE reconnect", error);
+      }
+    }
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
@@ -174,7 +200,7 @@ export function openFlagUpdatesSSE({
       }
     } catch (error) {
       if (!stopped) {
-        logger?.warn("flag updates SSE stream failed", error);
+        logger?.debug("flag updates SSE stream failed; reconnecting", error);
       }
     } finally {
       try {
@@ -192,6 +218,7 @@ export function openFlagUpdatesSSE({
   void connect();
 
   return {
+    ready,
     close: () => {
       stopped = true;
 

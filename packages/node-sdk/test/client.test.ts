@@ -111,6 +111,22 @@ function createSSEMessageStream(data: object) {
   });
 }
 
+function createFailingSSEStream(error = new Error("stream failed")) {
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.error(error);
+    },
+  });
+}
+
+function createIdleSSEStream() {
+  return new ReadableStream<Uint8Array>({
+    start() {
+      // keep the stream open without sending messages
+    },
+  });
+}
+
 const flagDefinitions: FlagsAPIResponse = {
   features: [
     {
@@ -1004,11 +1020,11 @@ describe("ReflagClient", () => {
       const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue(
         new Response(
           createSSEMessageStream({
-            id: "flags_updated:test:0",
+            id: "flags-state:test:0",
             timestamp: 1774605839478,
-            name: "flag_state_updated",
+            name: "flags-updated",
             clientId: "reflag-backend",
-            channel: "flags_updated:test",
+            channel: "flags-state:test",
             action: 0,
             encoding: "json",
             data: JSON.stringify({
@@ -1052,7 +1068,7 @@ describe("ReflagClient", () => {
 
         const [calledUrl, calledInit] = fetchMock.mock.calls[0] ?? [];
         expect(String(calledUrl)).toBe(
-          "https://pubsub.reflag.com/sse?channels=flags_updated%3A165d2650f1975f7f",
+          "https://pubsub.reflag.com/sse?channels=flags-state%3A165d2650f1975f7f",
         );
         expect(calledInit).toMatchObject({
           method: "GET",
@@ -1066,6 +1082,63 @@ describe("ReflagClient", () => {
 
         client.destroy();
       } finally {
+        fetchMock.mockRestore();
+      }
+    });
+
+    it("should refresh features after push reconnects", async () => {
+      const fetchMock = vi
+        .spyOn(global, "fetch")
+        .mockResolvedValueOnce(
+          new Response(createFailingSSEStream(), {
+            status: 200,
+            headers: {
+              "Content-Type": "text/event-stream",
+            },
+          }),
+        )
+        .mockResolvedValueOnce(
+          new Response(createIdleSSEStream(), {
+            status: 200,
+            headers: {
+              "Content-Type": "text/event-stream",
+            },
+          }),
+        );
+
+      vi.useFakeTimers();
+      try {
+        httpClient.get.mockResolvedValue({
+          ok: true,
+          status: 200,
+          body: {
+            success: true,
+            ...flagDefinitions,
+          },
+        });
+
+        const client = new ReflagClient({
+          ...validOptions,
+          flagsSyncMode: "push",
+        });
+
+        await client.initialize();
+        await vi.runOnlyPendingTimersAsync();
+
+        await vi.waitFor(() => {
+          expect(httpClient.get).toHaveBeenCalledTimes(2);
+        });
+
+        expect(httpClient.get).toHaveBeenNthCalledWith(
+          2,
+          "https://api.example.com/features",
+          expectedHeaders,
+          API_TIMEOUT_MS,
+        );
+
+        client.destroy();
+      } finally {
+        vi.useRealTimers();
         fetchMock.mockRestore();
       }
     });

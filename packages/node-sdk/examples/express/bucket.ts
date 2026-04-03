@@ -38,6 +38,7 @@ const flagOverrides = (_: Context): FlagOverrides => {
 // like REFLAG_SECRET_KEY, REFLAG_FLAGS_ENABLED, REFLAG_FLAGS_DISABLED, etc.
 export default new ReflagClient({
   // Optional: Set a logger to log debug information, errors, etc.
-  logger: console,
+  // logger: console,
   flagOverrides, // Optional: Set flag overrides
+  flagsSyncMode: "push",
 });
