@@ -20,7 +20,10 @@ import {
 } from "./config";
 import fetchClient, { withRetry } from "./fetch-http-client";
 import { FlagsCache } from "./flags-cache";
-import { createFlagsRefresher, FlagsRefresher } from "./flags-refresher";
+import {
+  createFlagsSyncController,
+  FlagsSyncController,
+} from "./flags-refresher";
 import { isFlagsFallbackSnapshot } from "./flagsFallbackProvider";
 import { subscribe as triggerOnExit } from "./flusher";
 import { newRateLimiter } from "./rate-limiter";
@@ -260,13 +263,13 @@ export class ReflagClient {
    */
   public readonly logger: Logger;
 
-  private flagsRefresher: FlagsRefresher;
+  private flagsSyncController: FlagsSyncController;
   private initializationFinished = false;
   private canLoadFlagsFallbackProvider = true;
   private _initialize = once(async () => {
     const start = Date.now();
     if (!this._config.offline) {
-      await this.flagsRefresher.start();
+      await this.flagsSyncController.start();
       await this.flagsCache.refresh();
     }
     this.logger.info(
@@ -519,7 +522,7 @@ export class ReflagClient {
       return compileFlagDefinitions(res.features);
     }, this.logger);
 
-    this.flagsRefresher = createFlagsRefresher({
+    this.flagsSyncController = createFlagsSyncController({
       mode: this._config.flagsSyncMode,
       cache: this.flagsCache,
       intervalMs: this._config.refetchInterval,
@@ -910,7 +913,7 @@ export class ReflagClient {
    * multiple background processes from running simultaneously.
    */
   public destroy() {
-    this.flagsRefresher.destroy();
+    this.flagsSyncController.destroy();
     this.flagsCache.destroy();
     this.batchBuffer.destroy();
   }
@@ -923,7 +926,7 @@ export class ReflagClient {
    */
   public getFlagDefinitions(): FlagDefinition[] {
     if (!this._config.offline) {
-      this.flagsRefresher.onAccess?.();
+      this.flagsSyncController.onAccess?.();
     }
     const flags = this.flagsCache.get() || [];
     return flags.map((f) => ({
@@ -1381,7 +1384,7 @@ export class ReflagClient {
     let flagDefinitions: CachedFlagDefinition[] = [];
 
     if (!this._config.offline) {
-      this.flagsRefresher.onAccess?.();
+      this.flagsSyncController.onAccess?.();
       const flagDefs = this.flagsCache.get();
       if (!flagDefs) {
         this.logger.warn(

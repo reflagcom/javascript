@@ -1,5 +1,12 @@
 import type { CachedFlagDefinition, Logger } from "./types";
 
+/**
+ * Stores the latest compiled flag definitions and coordinates refresh work.
+ *
+ * A single instance is shared across all sync modes. Refresh requests are
+ * coalesced so concurrent callers reuse the same in-flight fetch, and newer
+ * version-targeted refreshes can replace older queued ones.
+ */
 export class FlagsCache {
   private value: CachedFlagDefinition[] | undefined;
   private refreshPromise: Promise<void> | undefined;
@@ -44,6 +51,11 @@ export class FlagsCache {
     return this.lastRefreshAt;
   }
 
+  // Queue the next refresh request.
+  //
+  // `refresh(123)` means "fetch at least version 123" and takes precedence over
+  // a plain refresh because it is more specific. Plain refreshes are only queued
+  // when there isn't already queued or in-flight versioned work.
   private queueRefresh(waitForVersion?: number) {
     if (waitForVersion !== undefined) {
       this.queuedWaitForVersion =
@@ -65,6 +77,10 @@ export class FlagsCache {
     this.queuedFullRefresh = true;
   }
 
+  // Drain queued refresh work until nothing remains.
+  //
+  // New refresh requests may arrive while `fetchFlags()` is running. By looping,
+  // we can pick up any queued follow-up work before clearing `refreshPromise`.
   private async runRefreshLoop() {
     while (!this.destroyed) {
       let waitForVersion: number | undefined;
@@ -91,6 +107,8 @@ export class FlagsCache {
     }
   }
 
+  // Start the refresh loop at most once and let concurrent callers await the
+  // same shared promise.
   private async ensureRefreshRunning() {
     if (!this.refreshPromise) {
       this.refreshPromise = this.runRefreshLoop().finally(() => {

@@ -2,19 +2,35 @@ import { openFlagUpdatesSSE } from "./flag-updates-sse";
 import type { FlagsCache } from "./flags-cache";
 import type { FlagsSyncMode, Logger } from "./types";
 
-export type FlagsRefresher = {
+export type FlagsSyncController = {
   start: () => Promise<void>;
   onAccess?: () => void;
   destroy: () => void;
 };
 
-function createPollingFlagsRefresher({
+function triggerRefresh({
+  cache,
+  logger,
+  waitForVersion,
+}: {
+  cache: FlagsCache;
+  logger?: Logger;
+  waitForVersion?: number;
+}) {
+  void cache.refresh(waitForVersion).catch((error) => {
+    logger?.warn("background flag refresh failed", error);
+  });
+}
+
+function createPollingSyncController({
   cache,
   intervalMs,
+  logger,
 }: {
   cache: FlagsCache;
   intervalMs: number;
-}): FlagsRefresher {
+  logger?: Logger;
+}): FlagsSyncController {
   let timer: NodeJS.Timeout | undefined;
 
   return {
@@ -24,7 +40,7 @@ function createPollingFlagsRefresher({
       }
 
       timer = setInterval(() => {
-        void cache.refresh();
+        triggerRefresh({ cache, logger });
       }, intervalMs);
       timer.unref();
     },
@@ -37,13 +53,15 @@ function createPollingFlagsRefresher({
   };
 }
 
-function createInRequestFlagsRefresher({
+function createInRequestSyncController({
   cache,
   ttlMs,
+  logger,
 }: {
   cache: FlagsCache;
   ttlMs: number;
-}): FlagsRefresher {
+  logger?: Logger;
+}): FlagsSyncController {
   return {
     start: async () => {
       // noop
@@ -54,7 +72,7 @@ function createInRequestFlagsRefresher({
         return;
       }
 
-      void cache.refresh();
+      triggerRefresh({ cache, logger });
     },
     destroy: () => {
       // noop
@@ -62,7 +80,7 @@ function createInRequestFlagsRefresher({
   };
 }
 
-function createPushFlagsRefresher({
+function createPushSyncController({
   cache,
   pushUrl,
   headers,
@@ -72,7 +90,7 @@ function createPushFlagsRefresher({
   pushUrl: string;
   headers: Record<string, string>;
   logger?: Logger;
-}): FlagsRefresher {
+}): FlagsSyncController {
   let subscription: ReturnType<typeof openFlagUpdatesSSE> | undefined;
 
   return {
@@ -87,10 +105,10 @@ function createPushFlagsRefresher({
         headers,
         logger,
         onFlagStateVersion: (version) => {
-          void cache.refresh(version);
+          triggerRefresh({ cache, logger, waitForVersion: version });
         },
         onReconnect: () => {
-          void cache.refresh();
+          triggerRefresh({ cache, logger });
         },
       });
 
@@ -103,7 +121,7 @@ function createPushFlagsRefresher({
   };
 }
 
-export function createFlagsRefresher({
+export function createFlagsSyncController({
   mode,
   cache,
   intervalMs,
@@ -117,25 +135,27 @@ export function createFlagsRefresher({
   pushUrl: string;
   headers: Record<string, string>;
   logger?: Logger;
-}): FlagsRefresher {
+}): FlagsSyncController {
   switch (mode) {
     case "push":
-      return createPushFlagsRefresher({
+      return createPushSyncController({
         cache,
         pushUrl,
         headers,
         logger,
       });
     case "in-request":
-      return createInRequestFlagsRefresher({
+      return createInRequestSyncController({
         cache,
         ttlMs: intervalMs,
+        logger,
       });
     case "polling":
     default:
-      return createPollingFlagsRefresher({
+      return createPollingSyncController({
         cache,
         intervalMs,
+        logger,
       });
   }
 }
