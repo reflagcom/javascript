@@ -142,8 +142,10 @@ and downloads the flags with their targeting rules.
 These rules are then matched against the user/company information you provide
 to `getFlags()` (or through `bindClient(..).getFlags()`). That means the
 `getFlags()` call does not need to contact the Reflag servers once
-`initialize()` has completed. `ReflagClient` will continue to periodically
-download the targeting rules from the Reflag servers in the background.
+`initialize()` has completed. By default, `ReflagClient` will continue to
+refresh the targeting rules from the Reflag servers in the background. You can
+change this behavior with `flagsSyncMode` to use request-driven refreshes or
+push-based updates instead.
 
 ### Batch Operations
 
@@ -565,7 +567,7 @@ current working directory.
 | `apiBaseUrl`            | string                                | The base API URL for the Reflag servers.                                                                                                                                                                                                            | REFLAG_API_BASE_URL                         |
 | `flagOverrides`         | Record<string, boolean>               | An object specifying flag overrides for testing or local development. See [examples/express/app.test.ts](https://github.com/reflagcom/javascript/tree/main/packages/node-sdk/examples/express/app.test.ts) for how to use `flagOverrides` in tests. | REFLAG_FLAGS_ENABLED, REFLAG_FLAGS_DISABLED |
 | `flagsFallbackProvider` | `FlagsFallbackProvider`               | Optional provider used to load and save raw flag definitions for fallback startup when the initial live fetch fails. Available only through the constructor. Ignored in offline mode.                                                               | -                                           |
-| `flagsSyncMode`         | `"polling" \| "in-request" \| "push"` | Flag-definition sync mode. `polling` uses periodic background refresh, `in-request` refreshes stale flags during request handling, and `push` subscribes to live updates and refreshes with `waitForVersion`. Default: `"polling"`.                 | -                                           |
+| `flagsSyncMode`         | `"polling" \| "in-request" \| "push"` | Flag-definition sync mode. `polling` uses periodic background refresh, `in-request` refreshes stale flags during request handling, and `push` subscribes to live updates. Default: `"polling"`.                                                    | -                                           |
 | `flagsPushUrl`          | string                                | Push endpoint used when `flagsSyncMode: "push"`. Default: `https://pubsub.reflag.com/sse`.                                                                                                                                                          | -                                           |
 | `configFile`            | string                                | Load this config file from disk. Default: `reflag.config.json`                                                                                                                                                                                      | REFLAG_CONFIG_FILE                          |
 

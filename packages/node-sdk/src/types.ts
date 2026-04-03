@@ -705,7 +705,7 @@ export type ClientOptions = {
    *
    * - `polling` (default): periodic background refresh.
    * - `in-request`: stale refresh is triggered during request handling.
-   * - `push`: live updates over SSE trigger refresh with `waitForVersion`.
+   * - `push`: live updates over SSE keep flag definitions up to date.
    */
   flagsSyncMode?: FlagsSyncMode;
 
