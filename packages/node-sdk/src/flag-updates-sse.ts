@@ -8,7 +8,7 @@ type SSEOptions = {
   onReconnect?: () => void;
 };
 
-const INITIAL_RECONNECT_DELAY_MS = 1000;
+const INITIAL_RECONNECT_DELAY_MS = 10000;
 const MAX_RECONNECT_DELAY_MS = 30000;
 
 export type FlagUpdatesSSESubscription = {
