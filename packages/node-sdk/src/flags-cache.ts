@@ -7,8 +7,12 @@ type FlagsCacheRefreshResult = {
   flagStateVersion?: number;
 };
 
-type FlagsCacheScheduledRefresh = {
-  cancel: () => void;
+type CancelScheduledRefresh = () => void;
+
+type ScheduledRefresh = {
+  cancel: CancelScheduledRefresh;
+  promise: Promise<void>;
+  resolve: () => void;
 };
 
 type FlagsCacheOptions = {
@@ -17,7 +21,7 @@ type FlagsCacheOptions = {
   scheduleTrailingRefresh?: (
     delayMs: number,
     callback: () => void,
-  ) => FlagsCacheScheduledRefresh;
+  ) => CancelScheduledRefresh;
 };
 
 /**
@@ -35,9 +39,7 @@ export class FlagsCache {
   private value: CachedFlagDefinition[] | undefined;
   private flagStateVersion: number | undefined;
   private refreshPromise: Promise<void> | undefined;
-  private scheduledRefresh: FlagsCacheScheduledRefresh | undefined;
-  private scheduledRefreshPromise: Promise<void> | undefined;
-  private resolveScheduledRefreshPromise: (() => void) | undefined;
+  private scheduledRefresh: ScheduledRefresh | undefined;
   private lastRefreshAt: number | undefined;
   private lastRefreshStartedAt: number | undefined;
   private destroyed = false;
@@ -183,15 +185,16 @@ export class FlagsCache {
   }
 
   private settleScheduledRefresh() {
+    const scheduledRefresh = this.scheduledRefresh;
     this.scheduledRefresh = undefined;
-    this.scheduledRefreshPromise = undefined;
-    this.resolveScheduledRefreshPromise?.();
-    this.resolveScheduledRefreshPromise = undefined;
+    scheduledRefresh?.resolve();
   }
 
   private cancelScheduledRefresh() {
-    this.scheduledRefresh?.cancel();
-    this.settleScheduledRefresh();
+    const scheduledRefresh = this.scheduledRefresh;
+    this.scheduledRefresh = undefined;
+    scheduledRefresh?.cancel();
+    scheduledRefresh?.resolve();
   }
 
   private ensureScheduledRefresh(delayMs: number) {
@@ -199,14 +202,21 @@ export class FlagsCache {
       return;
     }
 
-    this.scheduledRefreshPromise = new Promise<void>((resolve) => {
-      this.resolveScheduledRefreshPromise = resolve;
+    let resolve!: () => void;
+    const promise = new Promise<void>((innerResolve) => {
+      resolve = innerResolve;
     });
 
-    this.scheduledRefresh = this.scheduleTrailingRefresh(delayMs, () => {
+    const cancel = this.scheduleTrailingRefresh(delayMs, () => {
       this.settleScheduledRefresh();
       this.ensureRefreshStartedOrScheduled();
     });
+
+    this.scheduledRefresh = {
+      cancel,
+      promise,
+      resolve,
+    };
   }
 
   private ensureRefreshStartedOrScheduled() {
@@ -259,7 +269,7 @@ export class FlagsCache {
 
   private async waitForQueuedWork() {
     while (!this.destroyed) {
-      const workPromise = this.refreshPromise ?? this.scheduledRefreshPromise;
+      const workPromise = this.refreshPromise ?? this.scheduledRefresh?.promise;
       if (!workPromise) {
         return;
       }

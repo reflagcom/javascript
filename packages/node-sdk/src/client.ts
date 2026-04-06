@@ -77,6 +77,17 @@ type FlagOverrideLayer = {
   overrides: FlagOverridesFn;
 };
 
+function scheduleTrailingRefreshWithTimeout(
+  delayMs: number,
+  callback: () => void,
+) {
+  const timer = setTimeout(callback, delayMs);
+  timer.unref?.();
+  return () => {
+    clearTimeout(timer);
+  };
+}
+
 function normalizeFlagOverrides(
   overrides: FlagOverridesFn | FlagOverrides | undefined,
 ): FlagOverridesFn {
@@ -540,15 +551,7 @@ export class ReflagClient {
         scheduleTrailingRefresh:
           flagsSyncMode === "in-request"
             ? undefined
-            : (delayMs, callback) => {
-                const timer = setTimeout(callback, delayMs);
-                timer.unref?.();
-                return {
-                  cancel: () => {
-                    clearTimeout(timer);
-                  },
-                };
-              },
+            : scheduleTrailingRefreshWithTimeout,
       },
     );
 

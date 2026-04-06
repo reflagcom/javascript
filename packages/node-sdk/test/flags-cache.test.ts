@@ -19,10 +19,8 @@ function createDeferred<T>() {
 
 function scheduleTrailingRefresh(delayMs: number, callback: () => void) {
   const timer = setTimeout(callback, delayMs);
-  return {
-    cancel: () => {
-      clearTimeout(timer);
-    },
+  return () => {
+    clearTimeout(timer);
   };
 }
 
