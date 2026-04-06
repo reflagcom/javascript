@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { FlagsCache } from "../src/flags-cache";
 
@@ -17,7 +17,20 @@ function createDeferred<T>() {
   return { promise, resolve, reject };
 }
 
+function scheduleTrailingRefresh(delayMs: number, callback: () => void) {
+  const timer = setTimeout(callback, delayMs);
+  return {
+    cancel: () => {
+      clearTimeout(timer);
+    },
+  };
+}
+
 describe("FlagsCache", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("runs one follow-up refresh with the highest pending version", async () => {
     const firstRefresh = createDeferred<any>();
     const fetchFlags = vi
@@ -28,7 +41,7 @@ describe("FlagsCache", () => {
         flagStateVersion: 22,
       });
 
-    const cache = new FlagsCache(fetchFlags);
+    const cache = new FlagsCache(fetchFlags, { minRefreshIntervalMs: 0 });
     const refreshPromise = cache.refresh();
 
     await vi.waitFor(() => {
@@ -59,7 +72,7 @@ describe("FlagsCache", () => {
       .fn()
       .mockImplementationOnce(() => firstRefresh.promise);
 
-    const cache = new FlagsCache(fetchFlags);
+    const cache = new FlagsCache(fetchFlags, { minRefreshIntervalMs: 0 });
     const refreshPromise = cache.refresh();
 
     await vi.waitFor(() => {
@@ -90,11 +103,76 @@ describe("FlagsCache", () => {
         flagStateVersion: 20,
       });
 
-    const cache = new FlagsCache(fetchFlags);
+    const cache = new FlagsCache(fetchFlags, { minRefreshIntervalMs: 0 });
 
     await cache.refresh();
     await cache.refresh();
 
     expect(cache.get()).toEqual(createDefinitions("newer"));
+  });
+
+  it("throttles refreshes and runs one trailing refresh when scheduling is supported", async () => {
+    vi.useFakeTimers();
+
+    const fetchFlags = vi
+      .fn()
+      .mockResolvedValueOnce({
+        definitions: createDefinitions("first"),
+        flagStateVersion: 10,
+      })
+      .mockResolvedValueOnce({
+        definitions: createDefinitions("second"),
+        flagStateVersion: 20,
+      });
+
+    const cache = new FlagsCache(fetchFlags, {
+      scheduleTrailingRefresh,
+    });
+
+    await cache.refresh();
+    const refreshPromise = cache.refresh(20);
+
+    expect(fetchFlags).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(999);
+    expect(fetchFlags).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await refreshPromise;
+
+    expect(fetchFlags).toHaveBeenCalledTimes(2);
+    expect(fetchFlags).toHaveBeenNthCalledWith(2, 20);
+    expect(cache.get()).toEqual(createDefinitions("second"));
+  });
+
+  it("uses a simple throttle when trailing scheduling is unavailable", async () => {
+    vi.useFakeTimers();
+
+    const fetchFlags = vi
+      .fn()
+      .mockResolvedValueOnce({
+        definitions: createDefinitions("first"),
+        flagStateVersion: 10,
+      })
+      .mockResolvedValueOnce({
+        definitions: createDefinitions("second"),
+        flagStateVersion: 20,
+      });
+
+    const cache = new FlagsCache(fetchFlags);
+
+    await cache.refresh();
+    await cache.refresh(20);
+
+    expect(fetchFlags).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(fetchFlags).toHaveBeenCalledTimes(1);
+
+    await cache.refresh(20);
+
+    expect(fetchFlags).toHaveBeenCalledTimes(2);
+    expect(fetchFlags).toHaveBeenNthCalledWith(2, 20);
+    expect(cache.get()).toEqual(createDefinitions("second"));
   });
 });

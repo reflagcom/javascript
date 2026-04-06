@@ -503,35 +503,54 @@ export class ReflagClient {
       this._config.apiBaseUrl += "/";
     }
 
-    this.flagsCache = new FlagsCache(async (waitForVersion?: number) => {
-      const path =
-        waitForVersion === undefined
-          ? "features"
-          : `features?waitForVersion=${encodeURIComponent(String(waitForVersion))}`;
+    this.flagsCache = new FlagsCache(
+      async (waitForVersion?: number) => {
+        const path =
+          waitForVersion === undefined
+            ? "features"
+            : `features?waitForVersion=${encodeURIComponent(String(waitForVersion))}`;
 
-      const res = await this.get<FlagsAPIResponse>(
-        path,
-        this._config.flagsFetchRetries,
-      );
-      if (
-        !isObject(res) ||
-        !Array.isArray(res?.features) ||
-        !Number.isInteger(res?.flagStateVersion) ||
-        res.flagStateVersion < 0
-      ) {
-        const fallbackDefinitions = await this.loadFlagsFallbackDefinitions();
-        return fallbackDefinitions
-          ? { definitions: fallbackDefinitions }
-          : undefined;
-      }
+        const res = await this.get<FlagsAPIResponse>(
+          path,
+          this._config.flagsFetchRetries,
+        );
+        if (
+          !isObject(res) ||
+          !Array.isArray(res?.features) ||
+          !Number.isInteger(res?.flagStateVersion) ||
+          res.flagStateVersion < 0
+        ) {
+          const fallbackDefinitions = await this.loadFlagsFallbackDefinitions();
+          return fallbackDefinitions
+            ? { definitions: fallbackDefinitions }
+            : undefined;
+        }
 
-      void this.saveFlagsFallbackDefinitions(res.features);
-      this.canLoadFlagsFallbackProvider = false;
-      return {
-        definitions: compileFlagDefinitions(res.features),
-        flagStateVersion: res.flagStateVersion,
-      };
-    }, this.logger);
+        void this.saveFlagsFallbackDefinitions(res.features);
+        this.canLoadFlagsFallbackProvider = false;
+        return {
+          definitions: compileFlagDefinitions(res.features),
+          flagStateVersion: res.flagStateVersion,
+        };
+      },
+      {
+        logger: this.logger,
+        // Edge runtimes use `in-request` mode and cannot rely on delayed timer
+        // callbacks to perform trailing refresh work after the current request.
+        scheduleTrailingRefresh:
+          flagsSyncMode === "in-request"
+            ? undefined
+            : (delayMs, callback) => {
+                const timer = setTimeout(callback, delayMs);
+                timer.unref?.();
+                return {
+                  cancel: () => {
+                    clearTimeout(timer);
+                  },
+                };
+              },
+      },
+    );
 
     this.flagsSyncController = createFlagsSyncController({
       mode: this._config.flagsSyncMode,
@@ -903,7 +922,18 @@ export class ReflagClient {
    *
    * Note: updated flag rules take a few seconds to propagate to all servers.
    *
-   * Concurrent calls are deduplicated — multiple calls share the same in-flight request.
+   * Fetch starts are throttled to at most once per second.
+   * Outside `in-request` mode, throttling only delays when the next fetch
+   * begins: `refreshFlags(99)` still waits until the cache has applied flag
+   * definitions from version `99` or newer before the promise resolves.
+   * Concurrent callers are deduplicated and may share the same in-flight or
+   * scheduled follow-up refresh.
+   *
+   * In `in-request` mode, delayed follow-up refreshes are not scheduled. On edge
+   * runtimes like Cloudflare Workers, a call during the throttle window only
+   * records pending refresh work, and the promise may resolve before that fetch
+   * runs. The pending refresh is executed on the next request/access or
+   * `refreshFlags()` call after the throttle window expires.
    *
    * @param waitForVersion - Optional flag state version to wait for before returning updated definitions.
    */
@@ -1816,6 +1846,14 @@ export class BoundReflagClient {
 
   /**
    * Refreshes the flag definitions from the server.
+   *
+   * Fetch starts are throttled to at most once per second. Outside
+   * `in-request` mode, a call to `refreshFlags(waitForVersion)` still waits
+   * until the cache has applied that version or newer.
+   *
+   * In `in-request` mode, a throttled call only records pending refresh work.
+   * The fetch then runs on the next request/access or `refreshFlags()` call
+   * after the throttle window expires.
    *
    * @param waitForVersion - Optional flag state version to wait for before returning updated definitions.
    */

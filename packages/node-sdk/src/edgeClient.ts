@@ -10,6 +10,12 @@ export type EdgeClientOptions = Omit<
  * The EdgeClient is ReflagClient pre-configured to be used in edge runtimes, like
  * Cloudflare Workers.
  *
+ * It always uses `flagsSyncMode: "in-request"`. Refresh fetch starts are
+ * throttled to at most once per second. A `refreshFlags()` call made during
+ * that throttle window only records pending refresh work, so the call may
+ * resolve before the fetch runs. That pending refresh is executed on the next
+ * request/access or `refreshFlags()` call after the window expires.
+ *
  * @example
  * ```ts
  * // set the REFLAG_SECRET_KEY environment variable or pass the secret key in the constructor
