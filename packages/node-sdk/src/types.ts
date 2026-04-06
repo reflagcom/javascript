@@ -373,6 +373,11 @@ export type FlagAPIResponse = {
  */
 export type FlagsAPIResponse = {
   /**
+   * Monotonic version of the flag state snapshot returned by the backend.
+   */
+  flagStateVersion: number;
+
+  /**
    * The feature definitions.
    */
   features: FlagAPIResponse[];

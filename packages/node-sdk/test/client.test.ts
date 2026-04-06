@@ -128,6 +128,7 @@ function createIdleSSEStream() {
 }
 
 const flagDefinitions: FlagsAPIResponse = {
+  flagStateVersion: 1,
   features: [
     {
       key: "flag1",
@@ -2665,6 +2666,7 @@ describe("ReflagClient", () => {
         status: 200,
         body: {
           success: true,
+          flagStateVersion: 1,
           features: [], // No flag definitions
         },
       });

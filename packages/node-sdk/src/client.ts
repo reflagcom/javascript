@@ -513,13 +513,24 @@ export class ReflagClient {
         path,
         this._config.flagsFetchRetries,
       );
-      if (!isObject(res) || !Array.isArray(res?.features)) {
-        return await this.loadFlagsFallbackDefinitions();
+      if (
+        !isObject(res) ||
+        !Array.isArray(res?.features) ||
+        !Number.isInteger(res?.flagStateVersion) ||
+        res.flagStateVersion < 0
+      ) {
+        const fallbackDefinitions = await this.loadFlagsFallbackDefinitions();
+        return fallbackDefinitions
+          ? { definitions: fallbackDefinitions }
+          : undefined;
       }
 
       void this.saveFlagsFallbackDefinitions(res.features);
       this.canLoadFlagsFallbackProvider = false;
-      return compileFlagDefinitions(res.features);
+      return {
+        definitions: compileFlagDefinitions(res.features),
+        flagStateVersion: res.flagStateVersion,
+      };
     }, this.logger);
 
     this.flagsSyncController = createFlagsSyncController({
