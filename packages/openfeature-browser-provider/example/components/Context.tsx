@@ -17,7 +17,7 @@ export const Context = () => {
   let validJson = true;
   try {
     validJson = JSON.parse(context);
-  } catch (e) {
+  } catch {
     validJson = false;
   }
 

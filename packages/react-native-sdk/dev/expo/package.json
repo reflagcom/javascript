@@ -1,7 +1,7 @@
 {
   "name": "reflag-react-sdk-expo",
-  "private": true,
   "version": "0.0.0",
+  "private": true,
   "main": "index.js",
   "scripts": {
     "build:deps": "rm -rf ../../browser-sdk/dist ../../react-sdk/dist ../../react-native-sdk/dist && yarn workspace @reflag/browser-sdk build && yarn workspace @reflag/react-sdk build && yarn workspace @reflag/react-native-sdk build",

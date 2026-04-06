@@ -1,11 +1,11 @@
 import crypto from "crypto";
 import http from "http";
+
 import chalk from "chalk";
 import open from "open";
 
 import { authStore } from "../stores/auth.js";
 import { configStore } from "../stores/config.js";
-
 import {
   CLIENT_VERSION_HEADER_NAME,
   CLIENT_VERSION_HEADER_VALUE,

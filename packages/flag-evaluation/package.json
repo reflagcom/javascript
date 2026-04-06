@@ -6,6 +6,11 @@
     "type": "git",
     "url": "https://github.com/reflagcom/javascript.git"
   },
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "publishConfig": {
     "access": "public"
   },
@@ -13,28 +18,22 @@
     "build": "tsc --project tsconfig.build.json",
     "test": "vitest",
     "test:ci": "vitest --reporter=default --reporter=junit --outputFile=junit.xml",
-    "lint": "eslint .",
-    "lint:ci": "eslint --output-file eslint-report.json --format json .",
-    "prettier": "prettier --check .",
-    "format": "yarn lint --fix && yarn prettier --write",
-    "preversion": "yarn lint && yarn prettier && yarn vitest run -c vite.config.js && yarn build"
-  },
-  "files": [
-    "dist"
-  ],
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "devDependencies": {
-    "@reflag/eslint-config": "^0.0.2",
-    "@reflag/tsconfig": "^0.0.2",
-    "@types/node": "^22.12.0",
-    "eslint": "^9.21.0",
-    "prettier": "^3.5.2",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.7.3",
-    "vitest": "^2.0.5"
+    "lint": "oxlint .",
+    "lint:ci": "oxlint .",
+    "format": "yarn fmt:fix && yarn lint:fix",
+    "preversion": "yarn lint && yarn fmt && yarn vitest run -c vite.config.js && yarn build",
+    "lint:fix": "oxlint --fix .",
+    "fmt": "oxfmt --check .",
+    "fmt:fix": "oxfmt --write ."
   },
   "dependencies": {
     "js-sha256": "0.11.0"
+  },
+  "devDependencies": {
+    "@reflag/tsconfig": "^0.0.2",
+    "@types/node": "^22.12.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.3",
+    "vitest": "^2.0.5"
   }
 }

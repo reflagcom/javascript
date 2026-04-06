@@ -1,9 +1,10 @@
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join, relative } from "node:path";
+
 import { select } from "@inquirer/prompts";
 import chalk from "chalk";
 import { Command } from "commander";
 import { parse as parseJSON, stringify as stringifyJSON } from "comment-json";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join, relative } from "node:path";
 import ora, { type Ora } from "ora";
 
 import {

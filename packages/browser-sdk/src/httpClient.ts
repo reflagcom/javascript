@@ -1,5 +1,5 @@
-import { createAbortController } from "./utils/abortController";
 import { API_BASE_URL, SDK_VERSION, SDK_VERSION_HEADER_NAME } from "./config";
+import { createAbortController } from "./utils/abortController";
 
 const KEEPALIVE_MAX_IN_FLIGHT_BYTES = 60 * 1024;
 const KEEPALIVE_MAX_IN_FLIGHT_REQUESTS = 15;

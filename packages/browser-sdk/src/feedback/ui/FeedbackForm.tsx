@@ -3,7 +3,6 @@ import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 
 import { Check } from "../../ui/icons/Check";
 import { CheckCircle } from "../../ui/icons/CheckCircle";
-
 import { Button } from "./Button";
 import { Plug } from "./Plug";
 import { StarRating } from "./StarRating";

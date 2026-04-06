@@ -26,7 +26,7 @@ function FlagCard() {
 
   const [logs, setLogs] = useState<string[]>([]);
   useEffect(() => {
-    client.on("flagsUpdated", () => {
+    return client.on("flagsUpdated", () => {
       const flags = client.getFlags();
       console.log("flagsUpdated", flags);
       const enabledFlags = Object.values(flags).filter(
@@ -34,12 +34,15 @@ function FlagCard() {
       );
       const enabledFlagsKeys = enabledFlags.map((flag) => flag.key);
       if (enabledFlagsKeys.length > 0) {
-        setLogs([...logs, `flagsUpdated: ${enabledFlagsKeys.join(", ")}`]);
+        setLogs((prevLogs) => [
+          ...prevLogs,
+          `flagsUpdated: ${enabledFlagsKeys.join(", ")}`,
+        ]);
       } else {
-        setLogs([...logs, "flagsUpdated: no flags enabled"]);
+        setLogs((prevLogs) => [...prevLogs, "flagsUpdated: no flags enabled"]);
       }
     });
-  }, [isEnabled]);
+  }, [client]);
 
   return (
     <View style={styles.container}>

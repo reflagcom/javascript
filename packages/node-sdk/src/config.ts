@@ -1,7 +1,6 @@
 import { readFileSync } from "fs";
 
 import { version } from "../package.json";
-
 import { LOG_LEVELS } from "./types";
 import { isObject, ok } from "./utils";
 

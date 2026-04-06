@@ -41,5 +41,4 @@ playwright/.cache/
 junit.xml
 
 .next
-eslint-report.json
 reflag.config.json

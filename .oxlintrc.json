@@ -1,0 +1,24 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "react", "import"],
+  "rules": {
+    "no-unused-vars": "warn",
+    "unicorn/no-thenable": "off",
+    "react/exhaustive-deps": "warn",
+    "import/no-duplicates": "warn",
+    "sort-imports": "off",
+    "typescript/no-floating-promises": "error"
+  },
+  "ignorePatterns": [
+    "build/",
+    "**/build/**",
+    "**/dist/**",
+    "**/gen/**",
+    "node_modules/",
+    "coverage/",
+    "playwright-report/",
+    "test-results/",
+    "packages/management-sdk/src/generated/**",
+    "packages/node-sdk/examples/cloudflare-worker/worker-configuration.d.ts"
+  ]
+}

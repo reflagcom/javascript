@@ -4,10 +4,9 @@ import { useCallback, useState } from "preact/hooks";
 import { feedbackContainerId } from "../../ui/constants";
 import { Dialog, useDialog } from "../../ui/Dialog";
 import { Close } from "../../ui/icons/Close";
-
 import { DEFAULT_TRANSLATIONS } from "./config/defaultTranslations";
-import { useTimer } from "./hooks/useTimer";
 import { FeedbackForm } from "./FeedbackForm";
+import { useTimer } from "./hooks/useTimer";
 import styles from "./index.css?inline";
 import { RadialProgress } from "./RadialProgress";
 import {
@@ -76,7 +75,7 @@ export const FeedbackDialog: FunctionComponent<FeedbackDialogProps> = ({
   }, [autoClose, close, onDismiss]);
 
   return (
-    <>
+    <Fragment>
       <style dangerouslySetInnerHTML={{ __html: styles }} />
       <Dialog
         key={key}
@@ -86,7 +85,7 @@ export const FeedbackDialog: FunctionComponent<FeedbackDialogProps> = ({
         position={position}
         onDismiss={onDismiss}
       >
-        <>
+        <Fragment>
           <FeedbackForm
             key={key}
             openWithCommentVisible={openWithCommentVisible}
@@ -107,8 +106,8 @@ export const FeedbackDialog: FunctionComponent<FeedbackDialogProps> = ({
             )}
             <Close />
           </button>
-        </>
+        </Fragment>
       </Dialog>
-    </>
+    </Fragment>
   );
 };

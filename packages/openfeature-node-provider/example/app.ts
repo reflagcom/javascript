@@ -1,7 +1,11 @@
-import express from "express";
-import "./reflag";
 import { EvaluationContext, OpenFeature } from "@openfeature/server-sdk";
-import { CreateTodosConfig } from "./reflag";
+import express from "express";
+
+import reflagProvider, { type CreateTodosConfig } from "./reflag";
+
+if (!reflagProvider) {
+  throw new Error("Failed to initialize Reflag provider");
+}
 
 // In the following, we assume that targetingKey is a unique identifier for the user.
 type Context = EvaluationContext & {

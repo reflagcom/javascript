@@ -1,8 +1,9 @@
 "use client";
 
-import { initOpenFeature } from "@/app/featureManagement";
 import { OpenFeatureProvider as OFProvider } from "@openfeature/react-sdk";
 import { useEffect } from "react";
+
+import { initOpenFeature } from "@/app/featureManagement";
 
 export const OpenFeatureProvider = ({
   children,

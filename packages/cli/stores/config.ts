@@ -1,3 +1,6 @@
+import { readFile, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+
 import { Ajv, ValidateFunction } from "ajv";
 import {
   assign as assignJSON,
@@ -6,8 +9,6 @@ import {
 } from "comment-json";
 import equal from "fast-deep-equal";
 import { findUp } from "find-up";
-import { readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
 
 import {
   CONFIG_FILE_NAME,

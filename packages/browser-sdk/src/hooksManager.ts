@@ -1,5 +1,5 @@
-import { CheckEvent, RawFlags } from "./flag/flags";
 import { CompanyContext, UserContext } from "./context";
+import { CheckEvent, RawFlags } from "./flag/flags";
 
 /**
  * State of the client.

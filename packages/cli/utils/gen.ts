@@ -1,9 +1,9 @@
-import { camelCase, kebabCase, pascalCase, snakeCase } from "change-case";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 
-import { Flag, RemoteConfig } from "../services/flags.js";
+import { camelCase, kebabCase, pascalCase, snakeCase } from "change-case";
 
+import { Flag, RemoteConfig } from "../services/flags.js";
 import { JSONToType, quoteKey } from "./json.js";
 
 export type GenFormat = "react" | "node";

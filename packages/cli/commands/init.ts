@@ -1,7 +1,8 @@
+import { relative } from "node:path";
+
 import { input, select } from "@inquirer/prompts";
 import chalk from "chalk";
 import { Command } from "commander";
-import { relative } from "node:path";
 import ora, { Ora } from "ora";
 
 import { App, listApps } from "../services/bootstrap.js";

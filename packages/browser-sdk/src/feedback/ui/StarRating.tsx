@@ -11,7 +11,6 @@ import {
   offset,
   useFloating,
 } from "../../ui/packages/floating-ui-preact-dom";
-
 import { FeedbackTranslations } from "./types";
 
 const scores = [
@@ -133,7 +132,7 @@ const Score = ({
   });
 
   return (
-    <>
+    <Fragment>
       <input
         defaultChecked={isSelected}
         id={`reflag-feedback-score-${score.value}`}
@@ -181,6 +180,6 @@ const Score = ({
           }}
         />
       </div>
-    </>
+    </Fragment>
   );
 };
