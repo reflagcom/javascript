@@ -46,7 +46,7 @@ export function openFlagUpdatesSSE({
       reconnectTimer = undefined;
       void connect();
     }, reconnectDelayMs);
-    reconnectTimer.unref();
+    reconnectTimer.unref?.();
 
     reconnectDelayMs = Math.min(reconnectDelayMs * 2, MAX_RECONNECT_DELAY_MS);
   };
