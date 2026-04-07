@@ -8,6 +8,7 @@
     "test": "vitest"
   },
   "dependencies": {
+    "@reflag/node-sdk": "workspace:*",
     "express": "^4.20.0",
     "tsx": "^4.16.2",
     "typescript": "^5.5.3",

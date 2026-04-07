@@ -5,6 +5,7 @@ import { LOG_LEVELS } from "./types";
 import { isObject, ok } from "./utils";
 
 export const API_BASE_URL = "https://front.reflag.com";
+export const PUBSUB_SSE_URL = "https://pubsub.reflag.com/sse";
 export const SDK_VERSION_HEADER_NAME = "reflag-sdk-version";
 export const SDK_VERSION = `node-sdk/${version}`;
 export const API_TIMEOUT_MS = 10000;

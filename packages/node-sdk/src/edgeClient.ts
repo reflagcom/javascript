@@ -3,12 +3,18 @@ import { ClientOptions } from "./types";
 
 export type EdgeClientOptions = Omit<
   ClientOptions,
-  "cacheStrategy" | "flushIntervalMs" | "batchOptions"
+  "flagsSyncMode" | "cacheStrategy" | "flushIntervalMs" | "batchOptions"
 >;
 
 /**
  * The EdgeClient is ReflagClient pre-configured to be used in edge runtimes, like
  * Cloudflare Workers.
+ *
+ * It always uses `flagsSyncMode: "in-request"`. Refresh fetch starts are
+ * throttled to at most once per second. A `refreshFlags()` call made during
+ * that throttle window only records pending refresh work, so the call may
+ * resolve before the fetch runs. That pending refresh is executed on the next
+ * request/access or `refreshFlags()` call after the window expires.
  *
  * @example
  * ```ts
@@ -28,7 +34,7 @@ export class EdgeClient extends ReflagClient {
   constructor(options: EdgeClientOptions = {}) {
     const opts = {
       ...options,
-      cacheStrategy: "in-request" as const,
+      flagsSyncMode: "in-request" as const,
       batchOptions: {
         intervalMs: 0,
       },

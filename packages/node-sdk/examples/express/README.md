@@ -20,5 +20,5 @@ of the SDK:
 ```sh
 yarn install
 
-REFLAG_SECRET_KEY=<secretKey> yarn start
+REFLAG_SECRET_KEY=<secretKey> yarn workspace @reflag/node-sdk-example-express start
 ```

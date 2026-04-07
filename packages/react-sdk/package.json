@@ -57,7 +57,7 @@
     "rollup-preserve-directives": "^1.1.2",
     "ts-node": "^10.9.2",
     "typescript": "^5.7.3",
-    "vite": "^5.0.13",
+    "vite": "^6.4.2",
     "vite-plugin-dts": "^4.0.0-beta.1",
     "vite-plugin-static-copy": "^2.3.2",
     "vitest": "^2.0.4",

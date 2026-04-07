@@ -75,7 +75,7 @@ export default class BatchBuffer<T> {
     try {
       await this.flushHandler(flushingBuffer);
 
-      this.logger?.info("flushed buffered items", {
+      this.logger?.debug("flushed buffered items", {
         count: flushingBuffer.length,
       });
     } catch (error) {
