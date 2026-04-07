@@ -179,7 +179,7 @@ describe("BatchBuffer", () => {
       await buffer.add("item1");
       await buffer.flush();
 
-      expect(mockLogger.info).toHaveBeenCalledWith("flushed buffered items", {
+      expect(mockLogger.debug).toHaveBeenCalledWith("flushed buffered items", {
         count: 1,
       });
     });
@@ -216,7 +216,7 @@ describe("BatchBuffer", () => {
 
       expect(buffer["timer"]).toBeNull();
 
-      expect(mockLogger.info).toHaveBeenCalledWith("flushed buffered items", {
+      expect(mockLogger.debug).toHaveBeenCalledWith("flushed buffered items", {
         count: 1,
       });
     });
@@ -234,7 +234,7 @@ describe("BatchBuffer", () => {
 
       expect(buffer["timer"]).toBeNull();
 
-      expect(mockLogger.info).toHaveBeenCalledWith("flushed buffered items", {
+      expect(mockLogger.debug).toHaveBeenCalledWith("flushed buffered items", {
         count: 2,
       });
     });
