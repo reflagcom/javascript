@@ -1,5 +1,13 @@
 import { deepEqual } from "fast-equals";
 
+import { BulkEvent, BulkQueue } from "./bulkQueue";
+import {
+  API_BASE_URL,
+  APP_BASE_URL,
+  IS_SERVER,
+  SSE_REALTIME_BASE_URL,
+} from "./config";
+import { ReflagContext, ReflagDeprecatedContext } from "./context";
 import {
   AutoFeedback,
   Feedback,
@@ -15,21 +23,13 @@ import {
   FlagsClient,
   RawFlags,
 } from "./flag/flags";
-import { ToolbarPosition } from "./ui/types";
-import { logResponseError } from "./utils/responseError";
-import { BulkEvent, BulkQueue } from "./bulkQueue";
-import {
-  API_BASE_URL,
-  APP_BASE_URL,
-  IS_SERVER,
-  SSE_REALTIME_BASE_URL,
-} from "./config";
-import { ReflagContext, ReflagDeprecatedContext } from "./context";
 import { HookArgs, HooksManager, State } from "./hooksManager";
 import { HttpClient } from "./httpClient";
 import { Logger, loggerWithPrefix, quietConsoleLogger } from "./logger";
 import { StorageAdapter } from "./storage";
 import { showToolbarToggle } from "./toolbar";
+import { ToolbarPosition } from "./ui/types";
+import { logResponseError } from "./utils/responseError";
 
 const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
 const isNode = typeof document === "undefined"; // deno supports "window" but not "document" according to https://remix.run/docs/en/main/guides/gotchas

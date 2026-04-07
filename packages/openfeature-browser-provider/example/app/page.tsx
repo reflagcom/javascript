@@ -1,6 +1,5 @@
-import Image from "next/image";
-import { HuddleFeature } from "@/components/HuddleFeature";
 import { Context } from "@/components/Context";
+import { HuddleFeature } from "@/components/HuddleFeature";
 
 export default function Home() {
   return (

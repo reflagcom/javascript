@@ -1,7 +1,8 @@
 "use client";
 
-import { ReflagBrowserSDKProvider } from "@reflag/openfeature-browser-provider";
 import { OpenFeature } from "@openfeature/react-sdk";
+
+import { ReflagBrowserSDKProvider } from "@reflag/openfeature-browser-provider";
 
 const publishableKey = process.env.NEXT_PUBLIC_REFLAG_PUBLISHABLE_KEY;
 

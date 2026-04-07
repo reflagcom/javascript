@@ -1,7 +1,7 @@
 import request from "supertest";
-import app, { todos } from "./app";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
+import app, { todos } from "./app";
 import reflag from "./reflag";
 
 function flag(name: string, enabled: boolean): void {

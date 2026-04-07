@@ -6,25 +6,9 @@
     "type": "git",
     "url": "https://github.com/reflagcom/javascript.git"
   },
-  "scripts": {
-    "dev": "vite",
-    "start": "vite",
-    "build": "tsc --project tsconfig.build.json",
-    "test": "vitest -c vite.config.js",
-    "test:ci": "vitest run -c vite.config.js --reporter=default --reporter=junit --outputFile=junit.xml",
-    "coverage": "vitest run --coverage",
-    "lint": "eslint .",
-    "lint:ci": "eslint --output-file eslint-report.json --format json .",
-    "prettier": "prettier --check .",
-    "format": "yarn lint --fix && yarn prettier --write",
-    "preversion": "yarn lint && yarn prettier && yarn vitest run -c vite.config.js && yarn build"
-  },
   "files": [
     "dist"
   ],
-  "publishConfig": {
-    "access": "public"
-  },
   "main": "./dist/index.js",
   "types": "./dist/types/index.d.ts",
   "exports": {
@@ -33,24 +17,39 @@
       "require": "./dist/index.js"
     }
   },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "dev": "vite",
+    "start": "vite",
+    "build": "tsc --project tsconfig.build.json",
+    "test": "vitest -c vite.config.js",
+    "test:ci": "vitest run -c vite.config.js --reporter=default --reporter=junit --outputFile=junit.xml",
+    "coverage": "vitest run --coverage",
+    "lint": "oxlint .",
+    "lint:ci": "oxlint .",
+    "format": "yarn fmt:fix && yarn lint:fix",
+    "preversion": "yarn lint && yarn fmt && yarn vitest run -c vite.config.js && yarn build",
+    "lint:fix": "oxlint --fix .",
+    "fmt": "oxfmt --check .",
+    "fmt:fix": "oxfmt --write ."
+  },
+  "dependencies": {
+    "@reflag/node-sdk": "1.5.0"
+  },
   "devDependencies": {
     "@babel/core": "~7.24.7",
     "@openfeature/core": "^1.5.0",
     "@openfeature/server-sdk": ">=1.16.1",
-    "@reflag/eslint-config": "~0.0.2",
     "@reflag/tsconfig": "~0.0.2",
     "@types/node": "^22.12.0",
-    "eslint": "^9.21.0",
     "flush-promises": "~1.0.2",
-    "prettier": "^3.5.2",
     "ts-node": "~10.9.2",
     "typescript": "^5.7.3",
     "vite": "~6.4.2",
     "vite-plugin-dts": "~3.9.1",
     "vitest": "~1.6.0"
-  },
-  "dependencies": {
-    "@reflag/node-sdk": "1.5.0"
   },
   "peerDependencies": {
     "@openfeature/server-sdk": ">=1.16.1"

@@ -1,13 +1,14 @@
+import { revalidatePath } from "next/cache";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { revalidatePath } from "next/cache";
-import EntityFlagsFilterForm from "../EntityFlagsFilterForm";
+
 import {
   fetchUserFlags,
   listApps,
   listEnvironments,
   toggleUserFlag,
 } from "../actions";
+import EntityFlagsFilterForm from "../EntityFlagsFilterForm";
 
 export const dynamic = "force-dynamic";
 

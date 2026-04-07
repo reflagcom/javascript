@@ -10,7 +10,6 @@ import {
   typesFormatOption,
   typesOutOption,
 } from "../utils/options.js";
-
 import { createFlagAction, generateTypesAction } from "./flags.js";
 import { initAction } from "./init.js";
 

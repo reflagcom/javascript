@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+
 import { useFlag } from "@reflag/react-sdk";
 
 export const Flags = () => {

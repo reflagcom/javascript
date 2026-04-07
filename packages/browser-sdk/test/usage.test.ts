@@ -25,7 +25,6 @@ import {
   closeAblySSEChannel,
   openAblySSEChannel,
 } from "../src/sse";
-
 import { flagsResult } from "./mocks/handlers";
 import { server } from "./mocks/server";
 

@@ -14,7 +14,6 @@ import { Dialog, DialogContent, DialogHeader, useDialog } from "../ui/Dialog";
 import { Logo } from "../ui/icons/Logo";
 import { ToolbarPosition } from "../ui/types";
 import { parseUnanchoredPosition } from "../ui/utils";
-
 import { FlagSearch, FlagsTable } from "./Flags";
 import styles from "./index.css?inline";
 

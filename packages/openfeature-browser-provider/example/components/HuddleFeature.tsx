@@ -1,10 +1,11 @@
 "use client";
 
-import React from "react";
 import {
   useBooleanFlagValue,
   useObjectFlagDetails,
 } from "@openfeature/react-sdk";
+import React from "react";
+
 import { track } from "@/app/featureManagement";
 
 const flagKey = "huddle";

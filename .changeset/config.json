@@ -8,7 +8,6 @@
   "baseBranch": "main",
   "updateInternalDependencies": "patch",
   "ignore": [
-    "@reflag/eslint-config",
     "@reflag/tsconfig",
     "customer-admin-panel",
     "nextjs-bootstrap-demo",

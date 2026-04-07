@@ -2,6 +2,7 @@ import { MiddlewareData, Placement } from "@floating-ui/dom";
 import { Fragment, FunctionComponent, h, Ref } from "preact";
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 
+import styles from "./Dialog.css?inline";
 import {
   arrow,
   autoUpdate,
@@ -10,7 +11,6 @@ import {
   shift,
   useFloating,
 } from "./packages/floating-ui-preact-dom";
-import styles from "./Dialog.css?inline";
 import { Position } from "./types";
 import { parseUnanchoredPosition } from "./utils";
 

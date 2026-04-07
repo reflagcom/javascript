@@ -1,10 +1,10 @@
+import { Configuration, DefaultApi } from "./generated";
 import type {
   ConfigurationParameters,
   InitOverrideFunction,
   RequestOpts,
 } from "./generated/runtime";
 import { ResponseError } from "./generated/runtime";
-import { Configuration, DefaultApi } from "./generated";
 
 export type OmitAppIdParam<F> = F extends (
   arg1: infer A,

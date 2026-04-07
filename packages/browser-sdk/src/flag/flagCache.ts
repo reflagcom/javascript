@@ -1,5 +1,4 @@
 import { StorageAdapter } from "../storage";
-
 import { RawFlags } from "./flags";
 
 const DEFAULT_STORAGE_KEY = "__reflag_fetched_flags";

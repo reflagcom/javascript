@@ -1,4 +1,5 @@
 import { resolve } from "path";
+
 import vue from "@vitejs/plugin-vue";
 import preserveDirectives from "rollup-preserve-directives";
 import { defineConfig } from "vite";

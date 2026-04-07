@@ -1,7 +1,6 @@
 import "dotenv/config";
-
-import reflag from "./reflag";
 import app from "./app";
+import reflag from "./reflag";
 
 // Initialize Reflag SDK before starting the server,
 // so that features are available when the server starts.

@@ -4,9 +4,8 @@ import { version } from "../package.json";
 import { FLAGS_EXPIRE_MS } from "../src/config";
 import { FlagsClient, RawFlag } from "../src/flag/flags";
 import { HttpClient } from "../src/httpClient";
-
-import { flagResponse, flagsResult } from "./mocks/handlers";
 import { newCache, TEST_STALE_MS } from "./flagCache.test";
+import { flagResponse, flagsResult } from "./mocks/handlers";
 import { testLogger } from "./testLogger";
 
 beforeEach(() => {

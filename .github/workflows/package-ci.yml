@@ -46,15 +46,9 @@ jobs:
           name: Build & Test Report
           path: ./packages/*/junit.xml
           reporter: jest-junit
-      - id: prettier
-        name: Check styling
-        run: yarn prettier
+      - id: fmt
+        name: Check formatting
+        run: yarn fmt
       - id: lint
         name: Check for linting errors
         run: yarn lint:ci
-      - name: Annotate from ESLint report
-        uses: ataylorme/eslint-annotate-action@v2
-        with:
-          repo-token: "${{ secrets.GITHUB_TOKEN }}"
-          report-json: ./packages/*/eslint-report.json
-          fail-on-warning: true

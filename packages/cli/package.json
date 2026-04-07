@@ -1,22 +1,13 @@
 {
   "name": "@reflag/cli",
   "version": "1.0.4",
-  "packageManager": "yarn@4.1.1",
   "description": "CLI for Reflag service",
-  "main": "./dist/index.js",
-  "type": "module",
+  "homepage": "https://docs.reflag.com/",
   "license": "MIT",
   "author": "Reflag.",
-  "homepage": "https://docs.reflag.com/",
   "repository": {
     "type": "git",
     "url": "https://github.com/reflagcom/javascript.git"
-  },
-  "publishConfig": {
-    "access": "public"
-  },
-  "engines": {
-    "node": ">=18.0.0"
   },
   "bin": {
     "reflag": "./dist/index.js"
@@ -25,8 +16,13 @@
     "dist",
     "schema.json"
   ],
+  "type": "module",
+  "main": "./dist/index.js",
   "exports": {
     ".": "./dist/index.js"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsc && shx chmod +x dist/index.js",
@@ -35,11 +31,13 @@
     "test:watch": "vitest",
     "test:ci": "yarn test --reporter=default --reporter=junit --outputFile=junit.xml",
     "coverage": "vitest run --coverage",
-    "lint": "eslint .",
-    "lint:ci": "eslint --output-file eslint-report.json --format json .",
-    "prettier": "prettier --check .",
-    "format": "yarn lint --fix && yarn prettier --write",
-    "preversion": "yarn lint && yarn prettier && yarn vitest run -c vite.config.js && yarn build"
+    "lint": "oxlint .",
+    "lint:ci": "oxlint .",
+    "format": "yarn fmt:fix && yarn lint:fix",
+    "preversion": "yarn lint && yarn fmt && yarn vitest run -c vite.config.js && yarn build",
+    "lint:fix": "oxlint --fix .",
+    "fmt": "oxfmt --check .",
+    "fmt:fix": "oxfmt --write ."
   },
   "dependencies": {
     "@inquirer/prompts": "^7.9.0",
@@ -58,16 +56,17 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
-    "@reflag/eslint-config": "^0.0.2",
     "@reflag/tsconfig": "^0.0.2",
     "@types/express": "^5.0.0",
     "@types/node": "^22.5.1",
     "@types/semver": "^7.7.0",
     "@types/slug": "^5.0.9",
-    "eslint": "^9.21.0",
-    "prettier": "^3.5.2",
     "shx": "^0.3.4",
     "typescript": "^5.5.4",
     "vitest": "^3.0.8"
-  }
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "packageManager": "yarn@4.1.1"
 }

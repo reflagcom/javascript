@@ -1,6 +1,6 @@
-import { logResponseError } from "./utils/responseError";
 import { BULK_QUEUE_FLUSH_DELAY_MS, BULK_QUEUE_MAX_SIZE } from "./config";
 import { Logger } from "./logger";
+import { logResponseError } from "./utils/responseError";
 
 const DROP_ERROR_THROTTLE_MS = 15 * 60 * 1000;
 

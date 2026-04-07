@@ -1,4 +1,5 @@
 import Image from "next/image";
+
 import { Flags } from "@/components/Flags";
 
 export default async function Home() {

@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ReflagClient } from "../src/client";
 import { FlagsClient } from "../src/flag/flags";
 import { HttpClient } from "../src/httpClient";
-
 import { flagsResult } from "./mocks/handlers";
 
 describe("ReflagClient", () => {
