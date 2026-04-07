@@ -525,11 +525,13 @@ export class ReflagClient {
           path,
           this._config.flagsFetchRetries,
         );
+        const flagStateVersion = res?.flagStateVersion;
         if (
           !isObject(res) ||
           !Array.isArray(res?.features) ||
-          !Number.isInteger(res?.flagStateVersion) ||
-          res.flagStateVersion < 0
+          typeof flagStateVersion !== "number" ||
+          !Number.isInteger(flagStateVersion) ||
+          flagStateVersion < 0
         ) {
           const fallbackDefinitions = await this.loadFlagsFallbackDefinitions();
           return fallbackDefinitions
@@ -541,7 +543,7 @@ export class ReflagClient {
         this.canLoadFlagsFallbackProvider = false;
         return {
           definitions: compileFlagDefinitions(res.features),
-          flagStateVersion: res.flagStateVersion,
+          flagStateVersion,
         };
       },
       {
