@@ -4464,7 +4464,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@googleapis/storage@npm:^21.2.0":
+"@googleapis/storage@npm:21.2.0":
   version: 21.2.0
   resolution: "@googleapis/storage@npm:21.2.0"
   dependencies:
@@ -7194,7 +7194,7 @@ __metadata:
   dependencies:
     "@aws-sdk/client-s3": "npm:^3.888.0"
     "@babel/core": "npm:~7.24.7"
-    "@googleapis/storage": "npm:^21.2.0"
+    "@googleapis/storage": "npm:21.2.0"
     "@redis/client": "npm:^5.11.0"
     "@reflag/eslint-config": "npm:~0.0.2"
     "@reflag/flag-evaluation": "npm:1.0.0"
