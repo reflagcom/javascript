@@ -1,6 +1,6 @@
 {
   "name": "@reflag/openfeature-node-provider",
-  "version": "1.0.5",
+  "version": "1.1.0",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -36,7 +36,7 @@
     "fmt:fix": "oxfmt --write ."
   },
   "dependencies": {
-    "@reflag/node-sdk": "1.4.2"
+    "@reflag/node-sdk": "1.5.0"
   },
   "devDependencies": {
     "@babel/core": "~7.24.7",
