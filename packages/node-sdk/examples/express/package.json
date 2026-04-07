@@ -1,5 +1,6 @@
 {
-  "name": "example",
+  "name": "@reflag/node-sdk-example-express",
+  "private": true,
   "packageManager": "yarn@4.10.3",
   "scripts": {
     "start": "tsx serve.ts",
@@ -8,6 +9,7 @@
   "type": "commonjs",
   "main": "serve.ts",
   "dependencies": {
+    "@reflag/node-sdk": "workspace:*",
     "express": "^4.20.0",
     "tsx": "^4.16.2",
     "typescript": "^5.5.3",

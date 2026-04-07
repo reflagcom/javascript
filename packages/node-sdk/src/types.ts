@@ -373,6 +373,12 @@ export type FlagAPIResponse = {
  */
 export type FlagsAPIResponse = {
   /**
+   * Optional for backward compatibility; when absent, the snapshot version
+   * should be treated as unknown by consumers.
+   */
+  flagStateVersion?: number;
+
+  /**
    * The feature definitions.
    */
   features: FlagAPIResponse[];
@@ -558,38 +564,6 @@ export interface Logger {
 }
 
 /**
- * A cache for storing values.
- *
- * @typeParam T - The type of the value.
- **/
-export type Cache<T> = {
-  /**
-   * Get the value.
-   * @returns The value or `undefined` if the value is not available.
-   **/
-  get: () => T | undefined;
-
-  /**
-   * Refresh the value immediately and return it, or `undefined` if the value is not available.
-   *
-   * @returns The value or `undefined` if the value is not available.
-   **/
-  refresh: () => Promise<T | undefined>;
-
-  /**
-   * If a refresh is in progress, wait for it to complete.
-   *
-   * @returns A promise that resolves when the refresh is complete.
-   **/
-  waitRefresh: () => Promise<void> | undefined;
-
-  /**
-   * Cleanup and destroy the cache, stopping any background processes.
-   **/
-  destroy: () => void;
-};
-
-/**
  * Options for configuring the BatchBuffer.
  *
  * @template T - The type of items in the buffer.
@@ -629,6 +603,8 @@ export type BatchBufferOptions<T> = {
 };
 
 export type CacheStrategy = "periodically-update" | "in-request";
+
+export type FlagsSyncMode = "polling" | "in-request" | "push";
 
 /**
  * Defines the options for the SDK client.
@@ -731,7 +707,23 @@ export type ClientOptions = {
   configFile?: string;
 
   /**
-   * The cache strategy to use for the client (optional, defaults to "periodically-update").
+   * How flag definitions are synchronized.
+   *
+   * - `polling` (default): periodic background refresh.
+   * - `in-request`: stale refresh is triggered during request handling.
+   * - `push`: live updates over SSE keep flag definitions up to date.
+   */
+  flagsSyncMode?: FlagsSyncMode;
+
+  /**
+   * Push endpoint used when `flagsSyncMode` is `"push"`.
+   *
+   * @defaultValue `"https://pubsub.reflag.com/sse"`
+   */
+  flagsPushUrl?: string;
+
+  /**
+   * @deprecated Use `flagsSyncMode`.
    **/
   cacheStrategy?: CacheStrategy;
 };

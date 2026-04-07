@@ -142,8 +142,10 @@ and downloads the flags with their targeting rules.
 These rules are then matched against the user/company information you provide
 to `getFlags()` (or through `bindClient(..).getFlags()`). That means the
 `getFlags()` call does not need to contact the Reflag servers once
-`initialize()` has completed. `ReflagClient` will continue to periodically
-download the targeting rules from the Reflag servers in the background.
+`initialize()` has completed. By default, `ReflagClient` will continue to
+refresh the targeting rules from the Reflag servers in the background. You can
+change this behavior with `flagsSyncMode` to use request-driven refreshes or
+push-based updates instead.
 
 ### Batch Operations
 
@@ -459,6 +461,8 @@ Reflag maintains a cached set of flag definitions in the memory of your worker w
 
 The SDK caches flag definitions in memory for fast performance. The first request to a new worker instance fetches definitions from Reflag's servers, while subsequent requests use the cache. When the cache expires, it's updated in the background. `ctx.waitUntil(reflag.flush())` ensures completion of the background work, so response times are not affected. This background work may increase wall-clock time for your worker, but it will not measurably increase billable CPU time on platforms like Cloudflare.
 
+`EdgeClient` uses `flagsSyncMode: "in-request"`. Refresh fetch starts are throttled to at most once per second, and Cloudflare Workers cannot rely on delayed timer callbacks to run follow-up refreshes later. That means `refreshFlags()` calls made during the throttle window only mark a refresh as pending, so the call itself may resolve before the fetch runs. The queued refresh runs on the next request/access or `refreshFlags()` call after the throttle window expires.
+
 ## Error Handling
 
 The SDK is designed to fail gracefully and never throw exceptions to the caller. Instead, it logs errors and provides
@@ -557,15 +561,17 @@ a configuration file on disk or by passing options to the `ReflagClient`
 constructor. By default, the SDK searches for `reflag.config.json` in the
 current working directory.
 
-| Option                  | Type                    | Description                                                                                                                                                                                                                                         | Env Var                                     |
-| ----------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| `secretKey`             | string                  | The secret key used for authentication with Reflag's servers.                                                                                                                                                                                       | REFLAG_SECRET_KEY                           |
-| `logLevel`              | string                  | The log level for the SDK (e.g., `"DEBUG"`, `"INFO"`, `"WARN"`, `"ERROR"`). Default: `INFO`                                                                                                                                                         | REFLAG_LOG_LEVEL                            |
-| `offline`               | boolean                 | Operate in offline mode. Default: `false`, except in tests it will default to `true` based off of the `TEST` env. var. In offline mode the SDK does not fetch from Reflag and does not use `flagsFallbackProvider`.                                 | REFLAG_OFFLINE                              |
-| `apiBaseUrl`            | string                  | The base API URL for the Reflag servers.                                                                                                                                                                                                            | REFLAG_API_BASE_URL                         |
-| `flagOverrides`         | Record<string, boolean> | An object specifying flag overrides for testing or local development. See [examples/express/app.test.ts](https://github.com/reflagcom/javascript/tree/main/packages/node-sdk/examples/express/app.test.ts) for how to use `flagOverrides` in tests. | REFLAG_FLAGS_ENABLED, REFLAG_FLAGS_DISABLED |
-| `flagsFallbackProvider` | `FlagsFallbackProvider` | Optional provider used to load and save raw flag definitions for fallback startup when the initial live fetch fails. Available only through the constructor. Ignored in offline mode.                                                               | -                                           |
-| `configFile`            | string                  | Load this config file from disk. Default: `reflag.config.json`                                                                                                                                                                                      | REFLAG_CONFIG_FILE                          |
+| Option                  | Type                                  | Description                                                                                                                                                                                                                                         | Env Var                                     |
+| ----------------------- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| `secretKey`             | string                                | The secret key used for authentication with Reflag's servers.                                                                                                                                                                                       | REFLAG_SECRET_KEY                           |
+| `logLevel`              | string                                | The log level for the SDK (e.g., `"DEBUG"`, `"INFO"`, `"WARN"`, `"ERROR"`). Default: `INFO`                                                                                                                                                         | REFLAG_LOG_LEVEL                            |
+| `offline`               | boolean                               | Operate in offline mode. Default: `false`, except in tests it will default to `true` based off of the `TEST` env. var. In offline mode the SDK does not fetch from Reflag and does not use `flagsFallbackProvider`.                                 | REFLAG_OFFLINE                              |
+| `apiBaseUrl`            | string                                | The base API URL for the Reflag servers.                                                                                                                                                                                                            | REFLAG_API_BASE_URL                         |
+| `flagOverrides`         | Record<string, boolean>               | An object specifying flag overrides for testing or local development. See [examples/express/app.test.ts](https://github.com/reflagcom/javascript/tree/main/packages/node-sdk/examples/express/app.test.ts) for how to use `flagOverrides` in tests. | REFLAG_FLAGS_ENABLED, REFLAG_FLAGS_DISABLED |
+| `flagsFallbackProvider` | `FlagsFallbackProvider`               | Optional provider used to load and save raw flag definitions for fallback startup when the initial live fetch fails. Available only through the constructor. Ignored in offline mode.                                                               | -                                           |
+| `flagsSyncMode`         | `"polling" \| "in-request" \| "push"` | Flag-definition sync mode. `polling` uses periodic background refresh, `in-request` refreshes stale flags during request handling, and `push` subscribes to live updates. Default: `"polling"`.                                                     | -                                           |
+| `flagsPushUrl`          | string                                | Push endpoint used when `flagsSyncMode: "push"`. Default: `https://pubsub.reflag.com/sse`.                                                                                                                                                          | -                                           |
+| `configFile`            | string                                | Load this config file from disk. Default: `reflag.config.json`                                                                                                                                                                                      | REFLAG_CONFIG_FILE                          |
 
 > [!NOTE]
 >

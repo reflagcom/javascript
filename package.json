@@ -8,7 +8,8 @@
     "packages/management-sdk/examples/*",
     "packages/react-sdk/dev/*",
     "packages/react-native-sdk/dev/*",
-    "packages/openfeature-browser-provider/example"
+    "packages/openfeature-browser-provider/example",
+    "packages/node-sdk/examples/express"
   ],
   "scripts": {
     "changeset": "changeset",

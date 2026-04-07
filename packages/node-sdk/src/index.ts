@@ -45,6 +45,7 @@ export type {
   FlagsFallbackProvider,
   FlagsFallbackProviderContext,
   FlagsFallbackSnapshot,
+  FlagsSyncMode,
   FlagType,
   HttpClient,
   HttpClientResponse,
