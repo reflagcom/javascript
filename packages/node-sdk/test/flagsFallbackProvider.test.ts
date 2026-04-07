@@ -241,6 +241,79 @@ describe("flagsFallbackProvider", () => {
     });
   });
 
+  it("creates the default GCS client from @googleapis/storage", async () => {
+    vi.resetModules();
+
+    const get = vi
+      .fn()
+      .mockResolvedValueOnce({ data: { kind: "storage#object" } })
+      .mockResolvedValueOnce({
+        data: Buffer.from(JSON.stringify(snapshot), "utf-8"),
+      });
+    const insert = vi.fn().mockResolvedValue({});
+    const storage = vi.fn().mockReturnValue({
+      objects: {
+        get,
+        insert,
+      },
+    });
+    const GoogleAuth = vi.fn();
+
+    vi.doMock("@googleapis/storage", () => ({
+      auth: { GoogleAuth },
+      storage,
+    }));
+
+    try {
+      const { createGCSFallbackProvider } = await import(
+        "../src/flagsFallbackProvider"
+      );
+      const provider = createGCSFallbackProvider({
+        bucket: "bucket-name",
+        keyPrefix: "reflag/flags-fallback///",
+      });
+
+      await expect(provider.load(context)).resolves.toEqual(snapshot);
+      await provider.save(context, snapshot);
+
+      expect(GoogleAuth).toHaveBeenCalledWith({
+        scopes: ["https://www.googleapis.com/auth/devstorage.read_write"],
+      });
+      expect(storage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          version: "v1",
+        }),
+      );
+      expect(get).toHaveBeenNthCalledWith(1, {
+        bucket: "bucket-name",
+        object: `reflag/flags-fallback/flags-fallback-${context.secretKeyHash.slice(0, 16)}.json`,
+      });
+      expect(get).toHaveBeenNthCalledWith(
+        2,
+        {
+          bucket: "bucket-name",
+          object: `reflag/flags-fallback/flags-fallback-${context.secretKeyHash.slice(0, 16)}.json`,
+          alt: "media",
+        },
+        {
+          responseType: "arraybuffer",
+        },
+      );
+      expect(insert).toHaveBeenCalledWith({
+        bucket: "bucket-name",
+        name: `reflag/flags-fallback/flags-fallback-${context.secretKeyHash.slice(0, 16)}.json`,
+        uploadType: "media",
+        media: {
+          mimeType: "application/json",
+          body: JSON.stringify(snapshot),
+        },
+      });
+    } finally {
+      vi.doUnmock("@googleapis/storage");
+      vi.resetModules();
+    }
+  });
+
   it("loads Redis snapshots", async () => {
     const get = vi.fn().mockResolvedValue(JSON.stringify(snapshot));
     const set = vi.fn();
