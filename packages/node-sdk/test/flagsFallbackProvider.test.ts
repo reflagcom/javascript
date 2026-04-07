@@ -1,3 +1,4 @@
+import { EventEmitter } from "events";
 import { mkdtemp, readFile, rm } from "fs/promises";
 import os from "os";
 import path from "path";
@@ -241,27 +242,55 @@ describe("flagsFallbackProvider", () => {
     });
   });
 
-  it("creates the default GCS client from @googleapis/storage", async () => {
+  it("creates the default GCS client from @google-cloud/storage-control", async () => {
     vi.resetModules();
 
-    const get = vi
-      .fn()
-      .mockResolvedValueOnce({ data: { kind: "storage#object" } })
-      .mockResolvedValueOnce({
-        data: Buffer.from(JSON.stringify(snapshot), "utf-8"),
+    const getObject = vi.fn().mockResolvedValue([{}]);
+    const readObject = vi.fn().mockImplementation(() => {
+      const stream = new EventEmitter();
+      queueMicrotask(() => {
+        stream.emit("data", {
+          checksummedData: {
+            content: Buffer.from(JSON.stringify(snapshot), "utf-8"),
+          },
+        });
+        stream.emit("end");
       });
-    const insert = vi.fn().mockResolvedValue({});
-    const storage = vi.fn().mockReturnValue({
-      objects: {
-        get,
-        insert,
-      },
+      return stream;
     });
-    const GoogleAuth = vi.fn();
+    const write = vi.fn();
+    const end = vi.fn().mockImplementation(function (this: EventEmitter) {
+      queueMicrotask(() => callback(null, {}));
+      this.emit("finish");
+    });
+    let callback: ((error: unknown, response?: unknown) => void) | undefined;
+    const writeObject = vi.fn().mockImplementation((cb) => {
+      callback = cb;
+      const stream = new EventEmitter() as EventEmitter & {
+        write: typeof write;
+        end: typeof end;
+      };
+      stream.write = write;
+      stream.end = end;
+      return stream;
+    });
+    const initialize = vi.fn().mockResolvedValue({
+      getObject,
+      readObject,
+      writeObject,
+    });
+    const bucketPath = vi
+      .fn()
+      .mockImplementation((project: string, bucket: string) =>
+        `projects/${project}/buckets/${bucket}`,
+      );
+    const StorageClient = vi.fn().mockImplementation(() => ({
+      initialize,
+      bucketPath,
+    }));
 
-    vi.doMock("@googleapis/storage", () => ({
-      auth: { GoogleAuth },
-      storage,
+    vi.doMock("@google-cloud/storage-control", () => ({
+      v2: { StorageClient },
     }));
 
     try {
@@ -276,40 +305,34 @@ describe("flagsFallbackProvider", () => {
       await expect(provider.load(context)).resolves.toEqual(snapshot);
       await provider.save(context, snapshot);
 
-      expect(GoogleAuth).toHaveBeenCalledWith({
-        scopes: ["https://www.googleapis.com/auth/devstorage.read_write"],
-      });
-      expect(storage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          version: "v1",
-        }),
-      );
-      expect(get).toHaveBeenNthCalledWith(1, {
-        bucket: "bucket-name",
+      expect(StorageClient).toHaveBeenCalledWith();
+      expect(initialize).toHaveBeenCalledTimes(1);
+      expect(bucketPath).toHaveBeenCalledWith("_", "bucket-name");
+      expect(getObject).toHaveBeenCalledWith({
+        bucket: "projects/_/buckets/bucket-name",
         object: `reflag/flags-fallback/flags-fallback-${context.secretKeyHash.slice(0, 16)}.json`,
       });
-      expect(get).toHaveBeenNthCalledWith(
-        2,
-        {
-          bucket: "bucket-name",
-          object: `reflag/flags-fallback/flags-fallback-${context.secretKeyHash.slice(0, 16)}.json`,
-          alt: "media",
+      expect(readObject).toHaveBeenCalledWith({
+        bucket: "projects/_/buckets/bucket-name",
+        object: `reflag/flags-fallback/flags-fallback-${context.secretKeyHash.slice(0, 16)}.json`,
+      });
+      expect(write).toHaveBeenCalledWith({
+        writeObjectSpec: {
+          resource: {
+            bucket: "projects/_/buckets/bucket-name",
+            name: `reflag/flags-fallback/flags-fallback-${context.secretKeyHash.slice(0, 16)}.json`,
+            contentType: "application/json",
+          },
+          objectSize: Buffer.byteLength(JSON.stringify(snapshot), "utf-8"),
         },
-        {
-          responseType: "arraybuffer",
+        writeOffset: 0,
+        checksummedData: {
+          content: Buffer.from(JSON.stringify(snapshot), "utf-8"),
         },
-      );
-      expect(insert).toHaveBeenCalledWith({
-        bucket: "bucket-name",
-        name: `reflag/flags-fallback/flags-fallback-${context.secretKeyHash.slice(0, 16)}.json`,
-        uploadType: "media",
-        media: {
-          mimeType: "application/json",
-          body: JSON.stringify(snapshot),
-        },
+        finishWrite: true,
       });
     } finally {
-      vi.doUnmock("@googleapis/storage");
+      vi.doUnmock("@google-cloud/storage-control");
       vi.resetModules();
     }
   });
