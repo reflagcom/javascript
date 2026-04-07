@@ -47,6 +47,10 @@ export type GCSFallbackProviderOptions = {
 
   /**
    * Optional GCS client. A default client is created when omitted.
+   *
+   * TODO(next major): Replace this legacy `bucket().file()` client shape with
+   * a simpler object-store interface that doesn't mirror the deprecated
+   * `@google-cloud/storage` API.
    */
   client?: {
     bucket(name: string): {
