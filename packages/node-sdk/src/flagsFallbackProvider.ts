@@ -83,33 +83,6 @@ type GCSObjectStore = {
   ): Promise<unknown>;
 };
 
-type GCSStorageControlReadResponse = {
-  checksummedData?: {
-    content?: string | Uint8Array | ArrayBuffer;
-  };
-};
-
-type GCSStorageControlStub = {
-  getObject(request: { bucket: string; object: string }): Promise<[unknown]>;
-  readObject(request: { bucket: string; object: string }): {
-    on(event: "data", listener: (response: GCSStorageControlReadResponse) => void): unknown;
-    on(event: "error", listener: (error: unknown) => void): unknown;
-    on(event: "end", listener: () => void): unknown;
-  };
-  writeObject(
-    callback: (error: unknown, response?: unknown) => void,
-  ): {
-    on(event: "error", listener: (error: unknown) => void): unknown;
-    write(chunk: unknown): unknown;
-    end(): unknown;
-  };
-};
-
-type GCSStorageControlClient = {
-  bucketPath(project: string, bucket: string): string;
-  initialize(): Promise<GCSStorageControlStub>;
-};
-
 export type RedisFallbackProviderOptions = {
   /**
    * Optional Redis client. When omitted, a client is created using `REDIS_URL`.
@@ -221,7 +194,6 @@ function parseSnapshot(raw: string) {
 
 function isNotFoundError(error: any) {
   return (
-    error?.code === 5 ||
     error?.code === 404 ||
     error?.status === 404 ||
     error?.response?.status === 404 ||
@@ -274,17 +246,19 @@ function createGCSObjectStore(client: LegacyGCSClient): GCSObjectStore {
 }
 
 async function createDefaultGCSObjectStore(): Promise<GCSObjectStore> {
-  const { v2 } = await import("@google-cloud/storage-control");
-  const gcs = new v2.StorageClient() as unknown as GCSStorageControlClient;
-  const stub = await gcs.initialize();
-
-  const bucketResourceName = (bucket: string) => gcs.bucketPath("_", bucket);
+  const { auth, storage } = await import("@googleapis/storage");
+  const gcs = storage({
+    version: "v1",
+    auth: new auth.GoogleAuth({
+      scopes: ["https://www.googleapis.com/auth/devstorage.read_write"],
+    }),
+  });
 
   return {
     async exists(bucket, path) {
       try {
-        await stub.getObject({
-          bucket: bucketResourceName(bucket),
+        await gcs.objects.get({
+          bucket,
           object: path,
         });
         return true;
@@ -297,81 +271,36 @@ async function createDefaultGCSObjectStore(): Promise<GCSObjectStore> {
     },
 
     async download(bucket, path) {
-      const stream = stub.readObject({
-        bucket: bucketResourceName(bucket),
-        object: path,
-      });
+      const response = await gcs.objects.get(
+        {
+          bucket,
+          object: path,
+          alt: "media",
+        },
+        {
+          responseType: "arraybuffer",
+        },
+      );
 
-      return await new Promise<Uint8Array>((resolve, reject) => {
-        const chunks: Uint8Array[] = [];
-        let settled = false;
+      if (response.data instanceof Uint8Array) {
+        return response.data;
+      }
+      if (response.data instanceof ArrayBuffer) {
+        return new Uint8Array(response.data);
+      }
 
-        const fail = (error: unknown) => {
-          if (settled) return;
-          settled = true;
-          reject(error);
-        };
-
-        stream.on("data", (response) => {
-          const content = response?.checksummedData?.content;
-          if (content === undefined || content === null) {
-            return;
-          }
-
-          if (typeof content === "string") {
-            chunks.push(Buffer.from(content, "utf-8"));
-            return;
-          }
-          if (content instanceof Uint8Array) {
-            chunks.push(content);
-            return;
-          }
-          if (content instanceof ArrayBuffer) {
-            chunks.push(new Uint8Array(content));
-            return;
-          }
-
-          fail(new TypeError("Unexpected GCS download response body format"));
-        });
-
-        stream.on("error", fail);
-        stream.on("end", () => {
-          if (settled) return;
-          settled = true;
-          resolve(Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))));
-        });
-      });
+      throw new TypeError("Unexpected GCS download response body format");
     },
 
     async save(bucket, path, body, options) {
-      const content = Buffer.from(body, "utf-8");
-
-      await new Promise<void>((resolve, reject) => {
-        const stream = stub.writeObject((error) => {
-          if (error) {
-            reject(error);
-            return;
-          }
-          resolve();
-        });
-
-        stream.on("error", reject);
-        stream.write({
-          writeObjectSpec: {
-            resource: {
-              bucket: bucketResourceName(bucket),
-              name: path,
-              contentType: options.contentType,
-            },
-            objectSize: content.byteLength,
-          },
-          writeOffset: 0,
-          checksummedData: {
-            content,
-          },
-          finishWrite: true,
-        });
-        stream.end();
+      await gcs.objects.insert({
+        bucket,
+        name: path,
+        uploadType: "media",
+        media: {
+          mimeType: options.contentType,
+          body,
+        },
       });
     },
   };
