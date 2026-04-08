@@ -39,6 +39,44 @@ export type S3FallbackProviderOptions = {
   keyPrefix?: string;
 };
 
+export type GCSLegacyClient = {
+  bucket(name: string): {
+    file(path: string): {
+      exists(): Promise<[boolean]>;
+      download(): Promise<[Uint8Array]>;
+      save(body: string, options: { contentType: string }): Promise<unknown>;
+    };
+  };
+};
+
+export type GCSGoogleApisClient = {
+  objects: {
+    get(
+      params: {
+        bucket: string;
+        object: string;
+        alt?: string;
+      },
+      options?: {
+        responseType?: "arraybuffer";
+      },
+    ): Promise<{
+      data: unknown;
+    }>;
+    insert(params: {
+      bucket: string;
+      name: string;
+      uploadType: "media";
+      media: {
+        mimeType: string;
+        body: string;
+      };
+    }): Promise<unknown>;
+  };
+};
+
+export type GCSFallbackProviderClient = GCSLegacyClient | GCSGoogleApisClient;
+
 export type GCSFallbackProviderOptions = {
   /**
    * Bucket where snapshots are stored.
@@ -47,16 +85,13 @@ export type GCSFallbackProviderOptions = {
 
   /**
    * Optional GCS client. A default client is created when omitted.
+   *
+   * Accepts either a legacy `bucket().file()` client or a generated
+   * `@googleapis/storage` client.
+   *
+   * TODO(next major): Replace this with a simpler object-store interface.
    */
-  client?: {
-    bucket(name: string): {
-      file(path: string): {
-        exists(): Promise<[boolean]>;
-        download(): Promise<[Uint8Array]>;
-        save(body: string, options: { contentType: string }): Promise<unknown>;
-      };
-    };
-  };
+  client?: GCSFallbackProviderClient;
 
   /**
    * Prefix for generated per-environment keys.
@@ -64,6 +99,17 @@ export type GCSFallbackProviderOptions = {
    * @defaultValue `reflag/flags-fallback`
    */
   keyPrefix?: string;
+};
+
+type GCSObjectStore = {
+  exists(bucket: string, objectPath: string): Promise<boolean>;
+  download(bucket: string, objectPath: string): Promise<Uint8Array>;
+  save(
+    bucket: string,
+    objectPath: string,
+    body: string,
+    options: { contentType: string },
+  ): Promise<unknown>;
 };
 
 export type RedisFallbackProviderOptions = {
@@ -153,6 +199,12 @@ function isFlagApiResponse(value: unknown): value is FlagAPIResponse {
 async function readBodyAsString(body: unknown) {
   if (typeof body === "string") return body;
   if (body instanceof Uint8Array) return Buffer.from(body).toString("utf-8");
+  if (body instanceof ArrayBuffer) return Buffer.from(body).toString("utf-8");
+  if (ArrayBuffer.isView(body)) {
+    return Buffer.from(body.buffer, body.byteOffset, body.byteLength).toString(
+      "utf-8",
+    );
+  }
   if (body && typeof body === "object") {
     if (
       "transformToString" in body &&
@@ -167,6 +219,15 @@ async function readBodyAsString(body: unknown) {
 function parseSnapshot(raw: string) {
   const parsed = JSON.parse(raw);
   return isFlagsFallbackSnapshot(parsed) ? parsed : undefined;
+}
+
+function isNotFoundError(error: any) {
+  return (
+    error?.code === 404 ||
+    error?.status === 404 ||
+    error?.response?.status === 404 ||
+    error?.$metadata?.httpStatusCode === 404
+  );
 }
 
 function staticFlagApiResponse(
@@ -195,9 +256,113 @@ async function createDefaultS3Client() {
   return new S3Client({});
 }
 
-async function createDefaultGCSClient() {
-  const { Storage } = await import("@google-cloud/storage");
-  return new Storage();
+function createLegacyGCSObjectStore(client: GCSLegacyClient): GCSObjectStore {
+  return {
+    async exists(bucket, objectPath) {
+      const [exists] = await client.bucket(bucket).file(objectPath).exists();
+      return exists;
+    },
+
+    async download(bucket, objectPath) {
+      const [contents] = await client
+        .bucket(bucket)
+        .file(objectPath)
+        .download();
+      return contents;
+    },
+
+    async save(bucket, objectPath, body, options) {
+      return client.bucket(bucket).file(objectPath).save(body, options);
+    },
+  };
+}
+
+function createGoogleApisGCSObjectStore(
+  client: GCSGoogleApisClient,
+): GCSObjectStore {
+  return {
+    async exists(bucket, objectPath) {
+      try {
+        await client.objects.get({
+          bucket,
+          object: objectPath,
+        });
+        return true;
+      } catch (error) {
+        if (isNotFoundError(error)) {
+          return false;
+        }
+        throw error;
+      }
+    },
+
+    async download(bucket, objectPath) {
+      const response = await client.objects.get(
+        {
+          bucket,
+          object: objectPath,
+          alt: "media",
+        },
+        {
+          responseType: "arraybuffer",
+        },
+      );
+
+      if (response.data instanceof Uint8Array) {
+        return response.data;
+      }
+      if (response.data instanceof ArrayBuffer) {
+        return new Uint8Array(response.data);
+      }
+
+      throw new TypeError("Unexpected GCS download response body format");
+    },
+
+    async save(bucket, objectPath, body, options) {
+      await client.objects.insert({
+        bucket,
+        name: objectPath,
+        uploadType: "media",
+        media: {
+          mimeType: options.contentType,
+          body,
+        },
+      });
+    },
+  };
+}
+
+function isGoogleApisGCSClient(
+  client: GCSFallbackProviderClient,
+): client is GCSGoogleApisClient {
+  return (
+    "objects" in client &&
+    isObject(client.objects) &&
+    typeof client.objects.get === "function" &&
+    typeof client.objects.insert === "function"
+  );
+}
+
+function createGCSObjectStore(
+  client: GCSFallbackProviderClient,
+): GCSObjectStore {
+  if (isGoogleApisGCSClient(client)) {
+    return createGoogleApisGCSObjectStore(client);
+  }
+
+  return createLegacyGCSObjectStore(client);
+}
+
+async function createDefaultGCSObjectStore(): Promise<GCSObjectStore> {
+  const { auth, storage } = await import("@googleapis/storage");
+  return createGoogleApisGCSObjectStore(
+    storage({
+      version: "v1",
+      auth: new auth.GoogleAuth({
+        scopes: ["https://www.googleapis.com/auth/devstorage.read_write"],
+      }),
+    }),
+  );
 }
 
 export function createStaticFallbackProvider({
@@ -281,10 +446,7 @@ export function createS3FallbackProvider({
 
         return parseSnapshot(body);
       } catch (error: any) {
-        if (
-          error?.name === "NoSuchKey" ||
-          error?.$metadata?.httpStatusCode === 404
-        ) {
+        if (error?.name === "NoSuchKey" || isNotFoundError(error)) {
           return undefined;
         }
         throw error;
@@ -312,36 +474,38 @@ export function createGCSFallbackProvider({
   client,
   keyPrefix,
 }: GCSFallbackProviderOptions): FlagsFallbackProvider {
-  let defaultClient: GCSFallbackProviderOptions["client"] | undefined;
+  let defaultClient: GCSObjectStore | undefined;
 
   const getClient = async () => {
-    defaultClient ??= client ?? (await createDefaultGCSClient());
+    defaultClient ??= client
+      ? createGCSObjectStore(client)
+      : await createDefaultGCSObjectStore();
     return defaultClient;
   };
 
   return {
     async load(context) {
       const storage = await getClient();
-      const file = storage
-        .bucket(bucket)
-        .file(snapshotObjectKey(context, keyPrefix));
-      const [exists] = await file.exists();
+      const objectKey = snapshotObjectKey(context, keyPrefix);
+      const exists = await storage.exists(bucket, objectKey);
       if (!exists) {
         return undefined;
       }
 
-      const [contents] = await file.download();
+      const contents = await storage.download(bucket, objectKey);
       return parseSnapshot(Buffer.from(contents).toString("utf-8"));
     },
 
     async save(context, snapshot) {
       const storage = await getClient();
-      await storage
-        .bucket(bucket)
-        .file(snapshotObjectKey(context, keyPrefix))
-        .save(JSON.stringify(snapshot), {
+      await storage.save(
+        bucket,
+        snapshotObjectKey(context, keyPrefix),
+        JSON.stringify(snapshot),
+        {
           contentType: "application/json",
-        });
+        },
+      );
     },
   };
 }

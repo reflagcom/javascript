@@ -32,7 +32,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.888.0",
-    "@google-cloud/storage": "^7.19.0",
+    "@googleapis/storage": "21.2.0",
     "@redis/client": "^5.11.0",
     "@reflag/flag-evaluation": "1.0.0"
   },
