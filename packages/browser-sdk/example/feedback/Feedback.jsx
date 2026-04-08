@@ -72,7 +72,7 @@ export const FeedbackForm = () => {
       <div>
         <label>
           <div>Comment</div>
-          <textarea name="comment" placeholder="Write a comment..."></textarea>
+          <textarea name="comment" placeholder="Write a comment..." />
         </label>
       </div>
 

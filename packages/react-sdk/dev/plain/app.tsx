@@ -82,7 +82,7 @@ function UpdateContext() {
               <textarea
                 value={newCompany}
                 onChange={(e) => setNewCompany(e.target.value)}
-              ></textarea>
+              />
             </td>
             <td>
               <button onClick={() => updateCompany(JSON.parse(newCompany))}>
@@ -95,7 +95,7 @@ function UpdateContext() {
               <textarea
                 value={newUser}
                 onChange={(e) => setNewUser(e.target.value)}
-              ></textarea>
+              />
             </td>
             <td>
               <button onClick={() => updateUser(JSON.parse(newUser))}>
@@ -108,7 +108,7 @@ function UpdateContext() {
               <textarea
                 value={newOtherContext}
                 onChange={(e) => setNewOtherContext(e.target.value)}
-              ></textarea>
+              />
             </td>
             <td>
               <button

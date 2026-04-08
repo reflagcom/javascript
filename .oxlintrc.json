@@ -3,11 +3,23 @@
   "plugins": ["typescript", "react", "import"],
   "rules": {
     "no-unused-vars": "warn",
+    "no-shadow": "warn",
+    "no-empty-function": "warn",
     "unicorn/no-thenable": "off",
     "react/exhaustive-deps": "warn",
+    "react/prefer-es6-class": "error",
+    "react/self-closing-comp": "error",
+    "react/jsx-filename-extension": [
+      "warn",
+      {
+        "extensions": [".mdx", ".jsx", ".tsx"]
+      }
+    ],
+    "import/first": "warn",
     "import/no-duplicates": "warn",
     "sort-imports": "off",
-    "typescript/no-floating-promises": "error"
+    "typescript/no-floating-promises": "error",
+    "typescript/switch-exhaustiveness-check": "warn"
   },
   "ignorePatterns": [
     "build/",
