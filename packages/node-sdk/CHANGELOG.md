@@ -1,5 +1,11 @@
 # @reflag/node-sdk
 
+## 1.5.1
+
+### Patch Changes
+
+- 0f3450e: Replace the built-in GCS fallback provider's default client dependency with `@googleapis/storage`, removing the deprecated `@google-cloud/storage` dependency and its vulnerable transitive request stack.
+
 ## 1.5.0
 
 ### Minor Changes

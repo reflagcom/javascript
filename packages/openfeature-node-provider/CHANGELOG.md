@@ -1,5 +1,12 @@
 # @reflag/openfeature-node-provider
 
+## 1.1.1
+
+### Patch Changes
+
+- Updated dependencies [0f3450e]
+  - @reflag/node-sdk@1.5.1
+
 ## 1.1.0
 
 ### Minor Changes
