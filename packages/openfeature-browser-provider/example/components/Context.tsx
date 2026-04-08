@@ -28,7 +28,7 @@ export const Context = () => {
         className="min-h-[200px]"
         value={context}
         onChange={(e) => setContext(e.target.value)}
-      ></textarea>
+      />
       <button
         disabled={!validJson}
         className="border-solid m-auto max-w-60 border-2 border-indigo-600 rounded-lg p-2 mt-4 disabled:opacity-50"
