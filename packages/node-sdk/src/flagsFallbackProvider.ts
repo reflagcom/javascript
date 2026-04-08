@@ -73,11 +73,11 @@ export type GCSFallbackProviderOptions = {
 type LegacyGCSClient = NonNullable<GCSFallbackProviderOptions["client"]>;
 
 type GCSObjectStore = {
-  exists(bucket: string, path: string): Promise<boolean>;
-  download(bucket: string, path: string): Promise<Uint8Array>;
+  exists(bucket: string, objectPath: string): Promise<boolean>;
+  download(bucket: string, objectPath: string): Promise<Uint8Array>;
   save(
     bucket: string,
-    path: string,
+    objectPath: string,
     body: string,
     options: { contentType: string },
   ): Promise<unknown>;
@@ -229,18 +229,18 @@ async function createDefaultS3Client() {
 
 function createGCSObjectStore(client: LegacyGCSClient): GCSObjectStore {
   return {
-    async exists(bucket, path) {
-      const [exists] = await client.bucket(bucket).file(path).exists();
+    async exists(bucket, objectPath) {
+      const [exists] = await client.bucket(bucket).file(objectPath).exists();
       return exists;
     },
 
-    async download(bucket, path) {
-      const [contents] = await client.bucket(bucket).file(path).download();
+    async download(bucket, objectPath) {
+      const [contents] = await client.bucket(bucket).file(objectPath).download();
       return contents;
     },
 
-    async save(bucket, path, body, options) {
-      return client.bucket(bucket).file(path).save(body, options);
+    async save(bucket, objectPath, body, options) {
+      return client.bucket(bucket).file(objectPath).save(body, options);
     },
   };
 }
@@ -255,11 +255,11 @@ async function createDefaultGCSObjectStore(): Promise<GCSObjectStore> {
   });
 
   return {
-    async exists(bucket, path) {
+    async exists(bucket, objectPath) {
       try {
         await gcs.objects.get({
           bucket,
-          object: path,
+          object: objectPath,
         });
         return true;
       } catch (error) {
@@ -270,11 +270,11 @@ async function createDefaultGCSObjectStore(): Promise<GCSObjectStore> {
       }
     },
 
-    async download(bucket, path) {
+    async download(bucket, objectPath) {
       const response = await gcs.objects.get(
         {
           bucket,
-          object: path,
+          object: objectPath,
           alt: "media",
         },
         {
@@ -292,10 +292,10 @@ async function createDefaultGCSObjectStore(): Promise<GCSObjectStore> {
       throw new TypeError("Unexpected GCS download response body format");
     },
 
-    async save(bucket, path, body, options) {
+    async save(bucket, objectPath, body, options) {
       await gcs.objects.insert({
         bucket,
-        name: path,
+        name: objectPath,
         uploadType: "media",
         media: {
           mimeType: options.contentType,
