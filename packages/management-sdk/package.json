@@ -7,34 +7,33 @@
     "type": "git",
     "url": "https://github.com/reflagcom/javascript.git"
   },
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/types/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "generate": "rm -rf src/generated && npx @openapitools/openapi-generator-cli generate -c openapi-generator.config.yaml && node ./scripts/strip-openapi-doc-tags.mjs",
     "build": "yarn generate && tsc --project tsconfig.build.json",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
     "test:ci": "yarn test --reporter=default --reporter=junit --outputFile=junit.xml",
-    "lint": "eslint .",
-    "lint:ci": "eslint --max-warnings=0 --output-file eslint-report.json --format json .",
-    "prettier": "prettier --check .",
-    "format": "yarn lint --fix && yarn prettier --write",
-    "preversion": "yarn lint && yarn prettier && yarn test && yarn build"
+    "lint": "oxlint .",
+    "lint:ci": "oxlint .",
+    "format": "yarn fmt:fix && yarn lint:fix",
+    "preversion": "yarn lint && yarn fmt && yarn test && yarn build",
+    "lint:fix": "oxlint --fix .",
+    "fmt": "oxfmt --check .",
+    "fmt:fix": "oxfmt --write ."
   },
-  "files": [
-    "dist"
-  ],
-  "publishConfig": {
-    "access": "public"
-  },
-  "main": "./dist/index.js",
-  "types": "./dist/types/index.d.ts",
   "devDependencies": {
     "@openapitools/openapi-generator-cli": "^2.13.5",
-    "@reflag/eslint-config": "~0.0.2",
     "@reflag/tsconfig": "~0.0.2",
     "@types/node": "^22.12.0",
     "@vitest/coverage-v8": "~1.6.0",
-    "eslint": "^9.21.0",
-    "prettier": "^3.5.2",
     "typescript": "^5.7.3",
     "vitest": "~1.6.0"
   }

@@ -1,13 +1,12 @@
 {
   "name": "@reflag/node-sdk-example-express",
   "private": true,
-  "packageManager": "yarn@4.10.3",
+  "type": "commonjs",
+  "main": "serve.ts",
   "scripts": {
     "start": "tsx serve.ts",
     "test": "vitest"
   },
-  "type": "commonjs",
-  "main": "serve.ts",
   "dependencies": {
     "@reflag/node-sdk": "workspace:*",
     "express": "^4.20.0",
@@ -20,5 +19,6 @@
     "@types/supertest": "^6.0.2",
     "supertest": "^7.0.0",
     "vitest": "^2.1.9"
-  }
+  },
+  "packageManager": "yarn@4.10.3"
 }

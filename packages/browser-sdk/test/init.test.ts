@@ -11,7 +11,6 @@ import {
 
 import { ReflagClient } from "../src";
 import { HttpClient } from "../src/httpClient";
-
 import { getFlags } from "./mocks/handlers";
 import { server } from "./mocks/server";
 

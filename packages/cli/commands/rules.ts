@@ -1,8 +1,9 @@
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join, relative } from "node:path";
+
 import { confirm } from "@inquirer/prompts";
 import chalk from "chalk";
 import { Command } from "commander";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join, relative } from "node:path";
 import ora from "ora";
 
 import { getCopilotInstructions, getCursorRules } from "../services/rules.js";

@@ -7,10 +7,6 @@ import {
   useState,
 } from "preact/hooks";
 
-import { deepEqual } from "./utils/deepEqual";
-import { getDPR } from "./utils/getDPR";
-import { roundByDPR } from "./utils/roundByDPR";
-import { useLatestRef } from "./utils/useLatestRef";
 import type {
   ComputePositionConfig,
   ReferenceType,
@@ -18,6 +14,10 @@ import type {
   UseFloatingOptions,
   UseFloatingReturn,
 } from "./types";
+import { deepEqual } from "./utils/deepEqual";
+import { getDPR } from "./utils/getDPR";
+import { roundByDPR } from "./utils/roundByDPR";
+import { useLatestRef } from "./utils/useLatestRef";
 
 /**
  * Provides data to position a floating element.

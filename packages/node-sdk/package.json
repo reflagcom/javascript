@@ -1,10 +1,18 @@
 {
   "name": "@reflag/node-sdk",
-  "version": "1.4.2",
+  "version": "1.5.0",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/reflagcom/javascript.git"
+  },
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/src/index.js",
+  "types": "./dist/types/src/index.d.ts",
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "dev": "vite",
@@ -14,40 +22,31 @@
     "test:watch": "vitest",
     "test:ci": "yarn test --reporter=default --reporter=junit --outputFile=junit.xml",
     "coverage": "yarn test --coverage",
-    "lint": "eslint .",
-    "lint:ci": "eslint --output-file eslint-report.json --format json .",
-    "prettier": "prettier --check .",
-    "format": "yarn lint --fix && yarn prettier --write",
-    "preversion": "yarn lint && yarn prettier && yarn test && yarn build"
-  },
-  "files": [
-    "dist"
-  ],
-  "publishConfig": {
-    "access": "public"
-  },
-  "main": "./dist/src/index.js",
-  "types": "./dist/types/src/index.d.ts",
-  "devDependencies": {
-    "@babel/core": "~7.24.7",
-    "@reflag/eslint-config": "~0.0.2",
-    "@reflag/tsconfig": "~0.0.2",
-    "@types/node": "^22.12.0",
-    "@vitest/coverage-v8": "~1.6.0",
-    "c8": "~10.1.0",
-    "eslint": "^9.21.0",
-    "flush-promises": "~1.0.2",
-    "prettier": "^3.5.2",
-    "ts-node": "~10.9.2",
-    "typescript": "^5.7.3",
-    "vite": "~6.4.2",
-    "vite-plugin-dts": "~3.9.1",
-    "vitest": "~1.6.0"
+    "lint": "oxlint .",
+    "lint:ci": "oxlint .",
+    "format": "yarn fmt:fix && yarn lint:fix",
+    "preversion": "yarn lint && yarn fmt && yarn test && yarn build",
+    "lint:fix": "oxlint --fix .",
+    "fmt": "oxfmt --check .",
+    "fmt:fix": "oxfmt --write ."
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.888.0",
     "@googleapis/storage": "21.2.0",
     "@redis/client": "^5.11.0",
     "@reflag/flag-evaluation": "1.0.0"
+  },
+  "devDependencies": {
+    "@babel/core": "~7.24.7",
+    "@reflag/tsconfig": "~0.0.2",
+    "@types/node": "^22.12.0",
+    "@vitest/coverage-v8": "~1.6.0",
+    "c8": "~10.1.0",
+    "flush-promises": "~1.0.2",
+    "ts-node": "~10.9.2",
+    "typescript": "^5.7.3",
+    "vite": "~6.4.2",
+    "vite-plugin-dts": "~3.9.1",
+    "vitest": "~1.6.0"
   }
 }

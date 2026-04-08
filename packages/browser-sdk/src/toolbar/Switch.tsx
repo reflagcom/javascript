@@ -1,4 +1,4 @@
-import { Fragment, h } from "preact";
+import { h } from "preact";
 
 interface SwitchProps extends h.JSX.HTMLAttributes<HTMLInputElement> {
   checked: boolean;
@@ -15,36 +15,34 @@ export function Switch({
   ...props
 }: SwitchProps) {
   return (
-    <>
-      <label class="switch" data-enabled={checked}>
-        <input
-          checked={checked}
-          class="switch-input"
-          name="enabled"
-          type="checkbox"
-          {...props}
-        />
+    <label class="switch" data-enabled={checked}>
+      <input
+        checked={checked}
+        class="switch-input"
+        name="enabled"
+        type="checkbox"
+        {...props}
+      />
+      <div
+        class="switch-track"
+        style={{
+          width: `${width}px`,
+          height: `${height}px`,
+          borderRadius: `${height}px`,
+        }}
+      >
         <div
-          class="switch-track"
+          class="switch-dot"
           style={{
-            width: `${width}px`,
-            height: `${height}px`,
-            borderRadius: `${height}px`,
+            width: `${height - gutter * 2}px`,
+            height: `${height - gutter * 2}px`,
+            transform: checked
+              ? `translateX(${width - (height - gutter * 2) - gutter}px)`
+              : `translateX(${gutter}px)`,
+            top: `${gutter}px`,
           }}
-        >
-          <div
-            class="switch-dot"
-            style={{
-              width: `${height - gutter * 2}px`,
-              height: `${height - gutter * 2}px`,
-              transform: checked
-                ? `translateX(${width - (height - gutter * 2) - gutter}px)`
-                : `translateX(${gutter}px)`,
-              top: `${gutter}px`,
-            }}
-          />
-        </div>
-      </label>
-    </>
+        />
+      </div>
+    </label>
   );
 }

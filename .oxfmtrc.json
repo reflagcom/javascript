@@ -1,0 +1,25 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 80,
+  "ignorePatterns": [
+    "**/__snapshots__/**",
+    "**/build/**",
+    "**/dist/**",
+    "**/gen/**",
+    "coverage/**",
+    "playwright-report/**",
+    "test-results/**",
+    "packages/management-sdk/src/generated/**",
+    "packages/node-sdk/examples/cloudflare-worker/worker-configuration.d.ts"
+  ],
+  "experimentalSortImports": {
+    "groups": [
+      "builtin",
+      "external",
+      "internal",
+      ["parent", "sibling", "index"]
+    ],
+    "internalPattern": ["@reflag/", "@/"],
+    "newlinesBetween": true
+  }
+}

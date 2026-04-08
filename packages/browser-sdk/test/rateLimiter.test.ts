@@ -9,7 +9,6 @@ import {
 } from "vitest";
 
 import RateLimiter from "../src/rateLimiter";
-
 import { testLogger } from "./testLogger";
 
 describe("rateLimit", () => {

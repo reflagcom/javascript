@@ -1,4 +1,5 @@
 import { OpenFeature } from "@openfeature/server-sdk";
+
 import { ReflagNodeProvider } from "../src";
 
 if (!process.env.REFLAG_SECRET_KEY) {

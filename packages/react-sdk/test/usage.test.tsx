@@ -1,8 +1,8 @@
-import React from "react";
-import { renderToString } from "react-dom/server";
 import { act, render, renderHook, waitFor } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
+import React from "react";
+import { renderToString } from "react-dom/server";
 import {
   afterAll,
   afterEach,

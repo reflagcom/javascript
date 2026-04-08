@@ -2,7 +2,6 @@ import { h, render } from "preact";
 
 import { feedbackContainerId, propagatedEvents } from "../../ui/constants";
 import { Position } from "../../ui/types";
-
 import { FeedbackDialog } from "./FeedbackDialog";
 import { OpenFeedbackFormOptions } from "./types";
 

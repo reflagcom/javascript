@@ -5,12 +5,6 @@ import { AblySSEChannel, openAblySSEChannel } from "../sse";
 import { Position } from "../ui/types";
 import { logResponseError } from "../utils/responseError";
 import { retryOnThrow } from "../utils/retry";
-
-import {
-  FeedbackSubmission,
-  FeedbackTranslations,
-  OpenFeedbackFormOptions,
-} from "./ui/types";
 import {
   FeedbackPromptCompletionHandler,
   parsePromptMessage,
@@ -19,6 +13,11 @@ import {
 import { getAuthToken } from "./promptStorage";
 import * as feedbackLib from "./ui";
 import { DEFAULT_POSITION } from "./ui";
+import {
+  FeedbackSubmission,
+  FeedbackTranslations,
+  OpenFeedbackFormOptions,
+} from "./ui/types";
 
 const INITIAL_FETCH_RETRY_DELAYS_MS = [0, 5000];
 

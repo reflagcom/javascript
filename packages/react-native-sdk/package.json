@@ -6,16 +6,6 @@
     "type": "git",
     "url": "https://github.com/reflagcom/javascript.git"
   },
-  "publishConfig": {
-    "access": "public"
-  },
-  "scripts": {
-    "build": "tsc --project tsconfig.build.json",
-    "lint": "eslint .",
-    "lint:ci": "eslint --output-file eslint-report.json --format json .",
-    "prettier": "prettier --check .",
-    "format": "yarn lint --fix && yarn prettier --write"
-  },
   "files": [
     "dist"
   ],
@@ -24,26 +14,35 @@
   "react-native": "./dist/src/index.js",
   "exports": {
     ".": {
+      "types": "./dist/src/index.d.ts",
       "react-native": "./dist/src/index.js",
       "import": "./dist/src/index.js",
-      "require": "./dist/src/index.js",
-      "types": "./dist/src/index.d.ts"
+      "require": "./dist/src/index.js"
     }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.build.json",
+    "lint": "oxlint .",
+    "lint:ci": "oxlint .",
+    "format": "yarn fmt:fix && yarn lint:fix",
+    "lint:fix": "oxlint --fix .",
+    "fmt": "oxfmt --check .",
+    "fmt:fix": "oxfmt --write ."
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "^2.2.0",
     "@reflag/react-sdk": "1.4.8"
   },
+  "devDependencies": {
+    "@reflag/tsconfig": "^0.0.2",
+    "@types/react": "^19.0.12",
+    "typescript": "^5.7.3"
+  },
   "peerDependencies": {
     "react": "*",
     "react-native": "*"
-  },
-  "devDependencies": {
-    "@reflag/eslint-config": "^0.0.2",
-    "@reflag/tsconfig": "^0.0.2",
-    "@types/react": "^19.0.12",
-    "eslint": "^9.21.0",
-    "prettier": "^3.5.2",
-    "typescript": "^5.7.3"
   }
 }

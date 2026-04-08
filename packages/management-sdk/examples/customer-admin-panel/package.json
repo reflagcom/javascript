@@ -6,7 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "echo 'No lint configured for customer-admin-panel example; skipping.'"
+    "lint": "oxlint .",
+    "lint:fix": "oxlint --fix .",
+    "lint:ci": "oxlint .",
+    "fmt": "oxfmt --check .",
+    "fmt:fix": "oxfmt --write .",
+    "format": "yarn fmt:fix && yarn lint:fix"
   },
   "dependencies": {
     "@reflag/management-sdk": "workspace:*",

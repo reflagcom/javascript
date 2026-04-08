@@ -1,7 +1,8 @@
-import express from "express";
-import "./reflag";
 import { EvaluationContext, OpenFeature } from "@openfeature/server-sdk";
-import { CreateTodosConfig } from "./reflag";
+import express from "express";
+
+import "./reflag";
+import type { CreateTodosConfig } from "./reflag";
 
 // In the following, we assume that targetingKey is a unique identifier for the user.
 type Context = EvaluationContext & {
