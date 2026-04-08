@@ -39,6 +39,44 @@ export type S3FallbackProviderOptions = {
   keyPrefix?: string;
 };
 
+export type GCSLegacyClient = {
+  bucket(name: string): {
+    file(path: string): {
+      exists(): Promise<[boolean]>;
+      download(): Promise<[Uint8Array]>;
+      save(body: string, options: { contentType: string }): Promise<unknown>;
+    };
+  };
+};
+
+export type GCSGoogleApisClient = {
+  objects: {
+    get(
+      params: {
+        bucket: string;
+        object: string;
+        alt?: string;
+      },
+      options?: {
+        responseType?: "arraybuffer";
+      },
+    ): Promise<{
+      data: unknown;
+    }>;
+    insert(params: {
+      bucket: string;
+      name: string;
+      uploadType: "media";
+      media: {
+        mimeType: string;
+        body: string;
+      };
+    }): Promise<unknown>;
+  };
+};
+
+export type GCSFallbackProviderClient = GCSLegacyClient | GCSGoogleApisClient;
+
 export type GCSFallbackProviderOptions = {
   /**
    * Bucket where snapshots are stored.
@@ -48,19 +86,12 @@ export type GCSFallbackProviderOptions = {
   /**
    * Optional GCS client. A default client is created when omitted.
    *
-   * TODO(next major): Replace this legacy `bucket().file()` client shape with
-   * a simpler object-store interface that doesn't mirror the deprecated
-   * `@google-cloud/storage` API.
+   * Accepts either a legacy `bucket().file()` client or a generated
+   * `@googleapis/storage` client.
+   *
+   * TODO(next major): Replace this with a simpler object-store interface.
    */
-  client?: {
-    bucket(name: string): {
-      file(path: string): {
-        exists(): Promise<[boolean]>;
-        download(): Promise<[Uint8Array]>;
-        save(body: string, options: { contentType: string }): Promise<unknown>;
-      };
-    };
-  };
+  client?: GCSFallbackProviderClient;
 
   /**
    * Prefix for generated per-environment keys.
@@ -69,8 +100,6 @@ export type GCSFallbackProviderOptions = {
    */
   keyPrefix?: string;
 };
-
-type LegacyGCSClient = NonNullable<GCSFallbackProviderOptions["client"]>;
 
 type GCSObjectStore = {
   exists(bucket: string, objectPath: string): Promise<boolean>;
@@ -227,7 +256,7 @@ async function createDefaultS3Client() {
   return new S3Client({});
 }
 
-function createGCSObjectStore(client: LegacyGCSClient): GCSObjectStore {
+function createLegacyGCSObjectStore(client: GCSLegacyClient): GCSObjectStore {
   return {
     async exists(bucket, objectPath) {
       const [exists] = await client.bucket(bucket).file(objectPath).exists();
@@ -235,7 +264,10 @@ function createGCSObjectStore(client: LegacyGCSClient): GCSObjectStore {
     },
 
     async download(bucket, objectPath) {
-      const [contents] = await client.bucket(bucket).file(objectPath).download();
+      const [contents] = await client
+        .bucket(bucket)
+        .file(objectPath)
+        .download();
       return contents;
     },
 
@@ -245,19 +277,13 @@ function createGCSObjectStore(client: LegacyGCSClient): GCSObjectStore {
   };
 }
 
-async function createDefaultGCSObjectStore(): Promise<GCSObjectStore> {
-  const { auth, storage } = await import("@googleapis/storage");
-  const gcs = storage({
-    version: "v1",
-    auth: new auth.GoogleAuth({
-      scopes: ["https://www.googleapis.com/auth/devstorage.read_write"],
-    }),
-  });
-
+function createGoogleApisGCSObjectStore(
+  client: GCSGoogleApisClient,
+): GCSObjectStore {
   return {
     async exists(bucket, objectPath) {
       try {
-        await gcs.objects.get({
+        await client.objects.get({
           bucket,
           object: objectPath,
         });
@@ -271,7 +297,7 @@ async function createDefaultGCSObjectStore(): Promise<GCSObjectStore> {
     },
 
     async download(bucket, objectPath) {
-      const response = await gcs.objects.get(
+      const response = await client.objects.get(
         {
           bucket,
           object: objectPath,
@@ -293,7 +319,7 @@ async function createDefaultGCSObjectStore(): Promise<GCSObjectStore> {
     },
 
     async save(bucket, objectPath, body, options) {
-      await gcs.objects.insert({
+      await client.objects.insert({
         bucket,
         name: objectPath,
         uploadType: "media",
@@ -304,6 +330,39 @@ async function createDefaultGCSObjectStore(): Promise<GCSObjectStore> {
       });
     },
   };
+}
+
+function isGoogleApisGCSClient(
+  client: GCSFallbackProviderClient,
+): client is GCSGoogleApisClient {
+  return (
+    "objects" in client &&
+    isObject(client.objects) &&
+    typeof client.objects.get === "function" &&
+    typeof client.objects.insert === "function"
+  );
+}
+
+function createGCSObjectStore(
+  client: GCSFallbackProviderClient,
+): GCSObjectStore {
+  if (isGoogleApisGCSClient(client)) {
+    return createGoogleApisGCSObjectStore(client);
+  }
+
+  return createLegacyGCSObjectStore(client);
+}
+
+async function createDefaultGCSObjectStore(): Promise<GCSObjectStore> {
+  const { auth, storage } = await import("@googleapis/storage");
+  return createGoogleApisGCSObjectStore(
+    storage({
+      version: "v1",
+      auth: new auth.GoogleAuth({
+        scopes: ["https://www.googleapis.com/auth/devstorage.read_write"],
+      }),
+    }),
+  );
 }
 
 export function createStaticFallbackProvider({

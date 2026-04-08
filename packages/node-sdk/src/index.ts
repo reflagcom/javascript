@@ -10,7 +10,10 @@ export { BoundReflagClient, ReflagClient } from "./client";
 export { EdgeClient, EdgeClientOptions } from "./edgeClient";
 export type {
   FileFallbackProviderOptions,
+  GCSFallbackProviderClient,
   GCSFallbackProviderOptions,
+  GCSGoogleApisClient,
+  GCSLegacyClient,
   RedisFallbackProviderOptions,
   S3FallbackProviderOptions,
   StaticFallbackProviderOptions,
