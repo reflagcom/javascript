@@ -1,5 +1,20 @@
 # @reflag/openfeature-node-provider
 
+## 1.2.0
+
+### Minor Changes
+
+- 76f4492: Updated to `@reflag/node-sdk` `1.6.0`, which defaults to `flagsSyncMode="push"`.
+
+### Patch Changes
+
+- Updated dependencies [27da48f]
+- Updated dependencies [860024f]
+- Updated dependencies [403226b]
+- Updated dependencies [76f4492]
+- Updated dependencies [7847875]
+  - @reflag/node-sdk@1.6.0
+
 ## 1.1.1
 
 ### Patch Changes

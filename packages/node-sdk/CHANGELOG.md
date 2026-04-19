@@ -1,5 +1,20 @@
 # @reflag/node-sdk
 
+## 1.6.0
+
+### Minor Changes
+
+- 76f4492: Change the default `flagsSyncMode` from `"polling"` to `"push"`.
+
+  New `ReflagClient` instances now subscribe to live SSE flag updates by default unless `flagsSyncMode` is set explicitly. The deprecated `cacheStrategy` option still maps `"periodically-update"` to `"polling"` and `"in-request"` to `"in-request"`.
+
+### Patch Changes
+
+- 27da48f: Fix `BoundReflagClient.bindClient()` so omitted `user`, `company`, and `other` fields preserve the previously bound context instead of being cleared.
+- 860024f: Fix `REFLAG_CONFIG_FILE` handling so the SDK loads the config file from the path provided by the environment variable.
+- 403226b: Mark `emitEvaluationEvents` as deprecated and note that it no longer has any effect and will be removed in the next major version.
+- 7847875: Fix `fallbackProviders.static()` so it returns a valid fallback snapshot that `ReflagClient` accepts during fallback initialization.
+
 ## 1.5.1
 
 ### Patch Changes
