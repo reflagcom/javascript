@@ -695,7 +695,9 @@ export type ClientOptions = {
   offline?: boolean;
 
   /**
-   * If set to `false`, no evaluation events will be emitted.
+   * Deprecated: evaluation events are no longer emitted.
+   *
+   * @deprecated This option has no effect and will be removed in the next major version.
    */
   emitEvaluationEvents?: boolean;
 
