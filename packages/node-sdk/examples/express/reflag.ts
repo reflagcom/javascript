@@ -40,5 +40,4 @@ export default new ReflagClient({
   // Optional: Set a logger to log debug information, errors, etc.
   // logger: console,
   flagOverrides, // Optional: Set flag overrides
-  flagsSyncMode: "push",
 });
