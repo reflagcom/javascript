@@ -3035,6 +3035,31 @@ describe("BoundReflagClient", () => {
     });
   });
 
+  it("should preserve existing user and company when omitted on rebind", () => {
+    const reboundClient = client
+      .bindClient({ user, company })
+      .bindClient({ other: otherContext });
+
+    expect(reboundClient["_options"]).toEqual({
+      user,
+      company,
+      other: otherContext,
+      enableTracking: true,
+    });
+  });
+
+  it("should preserve existing other context when omitted on rebind", () => {
+    const reboundClient = client
+      .bindClient({ other: otherContext })
+      .bindClient({ user });
+
+    expect(reboundClient["_options"]).toEqual({
+      user,
+      other: otherContext,
+      enableTracking: true,
+    });
+  });
+
   it("should allow using expected methods when bound to user", async () => {
     const boundClient = client.bindClient({ user });
     expect(boundClient.user).toEqual(user);
