@@ -526,12 +526,15 @@ export class ReflagClient {
           this._config.flagsFetchRetries,
         );
         const flagStateVersion = res?.flagStateVersion;
+        const hasValidFlagStateVersion =
+          flagStateVersion === undefined ||
+          (typeof flagStateVersion === "number" &&
+            Number.isInteger(flagStateVersion) &&
+            flagStateVersion >= 0);
         if (
           !isObject(res) ||
           !Array.isArray(res?.features) ||
-          typeof flagStateVersion !== "number" ||
-          !Number.isInteger(flagStateVersion) ||
-          flagStateVersion < 0
+          !hasValidFlagStateVersion
         ) {
           const fallbackDefinitions = await this.loadFlagsFallbackDefinitions();
           return fallbackDefinitions

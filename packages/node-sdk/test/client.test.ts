@@ -1194,6 +1194,42 @@ describe("ReflagClient", () => {
       }
     });
 
+    it("should accept live feature responses without a flagStateVersion", async () => {
+      const flagsFallbackProvider: FlagsFallbackProvider = {
+        load: vi.fn(),
+        save: vi.fn(),
+      };
+
+      httpClient.get.mockResolvedValue({
+        ok: true,
+        status: 200,
+        body: {
+          success: true,
+          features: flagDefinitions.features,
+        },
+      });
+
+      const client = new ReflagClient({
+        ...validOptions,
+        flagsFallbackProvider,
+      });
+
+      await client.initialize();
+
+      expect(flagsFallbackProvider.load).not.toHaveBeenCalled();
+      expect(
+        client.getFlag({ company, user, other: otherContext }, "flag1"),
+      ).toStrictEqual({
+        key: "flag1",
+        isEnabled: true,
+        config: {
+          key: "config-1",
+          payload: { something: "else" },
+        },
+        track: expect.any(Function),
+      });
+    });
+
     it("should log remote flag fetch failures at debug level when using fallback definitions", async () => {
       const error = new Error("fetch failed");
       const savedAt = "2026-03-09T00:00:00.000Z";
