@@ -156,7 +156,7 @@ The batch buffer is configurable through the client options:
 const client = new ReflagClient({
   batchOptions: {
     maxSize: 100, // Maximum number of events to batch
-    intervalMs: 1000, // Flush interval in milliseconds
+    intervalMs: 10000, // Flush interval in milliseconds (default: 10000)
   },
 });
 ```
