@@ -590,7 +590,7 @@ export type BatchBufferOptions<T> = {
    * The interval in milliseconds at which the buffer is flushed.
    * @remarks
    * If `0`, the buffer is flushed only when `maxSize` is reached.
-   * @defaultValue `1000`
+   * @defaultValue `10000`
    **/
   intervalMs?: number;
 
