@@ -1836,9 +1836,18 @@ export class BoundReflagClient {
     // merge new context into existing
     const boundConfig = {
       ...this._options,
-      user: user ? { ...this._options.user, ...user } : undefined,
-      company: company ? { ...this._options.company, ...company } : undefined,
-      other: { ...this._options.other, ...other },
+      user:
+        user === undefined
+          ? this._options.user
+          : { ...this._options.user, ...user },
+      company:
+        company === undefined
+          ? this._options.company
+          : { ...this._options.company, ...company },
+      other:
+        other === undefined
+          ? this._options.other
+          : { ...this._options.other, ...other },
       enableTracking: enableTracking ?? this._options.enableTracking,
       meta: meta ?? this._options.meta,
     };
