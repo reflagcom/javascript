@@ -371,7 +371,7 @@ export function createStaticFallbackProvider({
   return {
     async load() {
       return {
-        version: 0,
+        version: 1,
         savedAt: new Date().toISOString(),
         flags: Object.entries(flags).map(([key, isEnabled]) =>
           staticFlagApiResponse(key, isEnabled),
