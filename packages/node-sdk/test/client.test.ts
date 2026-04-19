@@ -1,3 +1,7 @@
+import { mkdtempSync, rmSync, writeFileSync } from "fs";
+import os from "os";
+import path from "path";
+
 import flushPromises from "flush-promises";
 import {
   afterEach,
@@ -259,6 +263,44 @@ describe("ReflagClient", () => {
           },
         },
       });
+    });
+
+    it("should use the REFLAG_CONFIG_FILE path when set", () => {
+      const tempDir = mkdtempSync(path.join(os.tmpdir(), "reflag-node-sdk-"));
+      const originalCwd = process.cwd();
+      const originalConfigFile = process.env.REFLAG_CONFIG_FILE;
+      const defaultConfigFile = path.join(tempDir, "reflag.config.json");
+      const customConfigFile = path.join(tempDir, "custom.reflag.config.json");
+
+      writeFileSync(
+        defaultConfigFile,
+        JSON.stringify({ apiBaseUrl: "https://default-config.example/" }),
+      );
+      writeFileSync(
+        customConfigFile,
+        JSON.stringify({ apiBaseUrl: "https://custom-config.example/" }),
+      );
+
+      process.chdir(tempDir);
+      process.env.REFLAG_CONFIG_FILE = customConfigFile;
+
+      try {
+        const client = new ReflagClient({
+          offline: true,
+        });
+
+        expect(client["_config"].apiBaseUrl).toBe(
+          "https://custom-config.example/",
+        );
+      } finally {
+        process.chdir(originalCwd);
+        if (originalConfigFile === undefined) {
+          delete process.env.REFLAG_CONFIG_FILE;
+        } else {
+          process.env.REFLAG_CONFIG_FILE = originalConfigFile;
+        }
+        rmSync(tempDir, { recursive: true, force: true });
+      }
     });
 
     it("should create a client instance with valid options", () => {

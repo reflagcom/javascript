@@ -387,12 +387,18 @@ export class ReflagClient {
       "flagsPushUrl must be a non-empty string",
     );
 
+    const envConfigFile =
+      typeof process.env.REFLAG_CONFIG_FILE === "string" &&
+      process.env.REFLAG_CONFIG_FILE.length > 0
+        ? process.env.REFLAG_CONFIG_FILE
+        : undefined;
+
     if (!options.configFile) {
       options.configFile =
-        (process.env.REFLAG_CONFIG_FILE ??
-        fs.existsSync(reflagConfigDefaultFile))
+        envConfigFile ??
+        (fs.existsSync(reflagConfigDefaultFile)
           ? reflagConfigDefaultFile
-          : undefined;
+          : undefined);
     }
 
     const externalConfig = loadConfig(options.configFile);
