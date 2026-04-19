@@ -279,13 +279,14 @@ await client.initialize();
 ```
 
 The file provider stores one snapshot file per environment in the configured
-`directory`.
+`directory`, using the filename
+`flags-fallback-<secretKeyHash.slice(0, 16)>.json`.
 
 ##### Redis provider
 
-The built-in Redis provider creates a Redis client automatically when omitted and uses `REDIS_URL` from the environment. It stores snapshots under the configured `keyPrefix` and uses the first 16 characters of the secret key hash in the Redis key.
+The built-in Redis provider creates a Redis client automatically when omitted and uses `REDIS_URL` from the environment. It stores snapshots under the configured `keyPrefix` and appends the first 16 characters of the secret key hash to that prefix.
 
-Without a `keyPrefix` set, it will default to to the key `reflag:flags-fallback:${secretKeyHash}`.
+Without a `keyPrefix` set, it will default to the key `reflag:flags-fallback:<secretKeyHash.slice(0, 16)>`. When you provide a custom `keyPrefix`, any trailing `:` is trimmed before the hash suffix is appended.
 
 ```typescript
 import { ReflagClient, fallbackProviders } from "@reflag/node-sdk";
@@ -300,9 +301,9 @@ await client.initialize();
 
 ##### S3 provider
 
-The built-in S3 provider works out of the box using the AWS SDK's default credential chain and region resolution. It stores the snapshot object under the configured `keyPrefix` and uses a hash of the secret key in the object name.
+The built-in S3 provider works out of the box using the AWS SDK's default credential chain and region resolution. It stores the snapshot object under the configured `keyPrefix` and uses the filename `flags-fallback-<secretKeyHash.slice(0, 16)>.json`.
 
-Without a `keyPrefix` set, it will default to path `reflag/flags-fallback/${secretKeyHash}`.
+Without a `keyPrefix` set, it will default to the object key `reflag/flags-fallback/flags-fallback-<secretKeyHash.slice(0, 16)>.json`. When you provide a custom `keyPrefix`, any trailing `/` is trimmed before the filename is appended.
 
 ```typescript
 import { ReflagClient, fallbackProviders } from "@reflag/node-sdk";
@@ -319,9 +320,9 @@ await client.initialize();
 
 ##### GCS provider
 
-The built-in GCS provider works out of the box using Google Cloud's default application credentials. It stores the snapshot object under the configured `keyPrefix` and uses a hash of the secret key in the object name.
+The built-in GCS provider works out of the box using Google Cloud's default application credentials. It stores the snapshot object under the configured `keyPrefix` and uses the filename `flags-fallback-<secretKeyHash.slice(0, 16)>.json`.
 
-Without a `keyPrefix` set, it will default to path `reflag/flags-fallback/${secretKeyHash}`.
+Without a `keyPrefix` set, it will default to the object key `reflag/flags-fallback/flags-fallback-<secretKeyHash.slice(0, 16)>.json`. When you provide a custom `keyPrefix`, any trailing `/` is trimmed before the filename is appended.
 
 ```typescript
 import { ReflagClient, fallbackProviders } from "@reflag/node-sdk";
