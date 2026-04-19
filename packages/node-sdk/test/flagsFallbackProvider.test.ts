@@ -46,7 +46,7 @@ describe("flagsFallbackProvider", () => {
     });
 
     await expect(provider.load(context)).resolves.toEqual({
-      version: 0,
+      version: 1,
       savedAt: expect.any(String),
       flags: [
         {

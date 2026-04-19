@@ -10,7 +10,7 @@ import {
   vi,
 } from "vitest";
 
-import { BoundReflagClient, ReflagClient } from "../src";
+import { BoundReflagClient, fallbackProviders, ReflagClient } from "../src";
 import {
   API_BASE_URL,
   API_TIMEOUT_MS,
@@ -1192,6 +1192,42 @@ describe("ReflagClient", () => {
       } finally {
         vi.useRealTimers();
       }
+    });
+
+    it("should load static fallback flag definitions when live fetch fails", async () => {
+      httpClient.get.mockResolvedValue({ success: false });
+
+      const client = new ReflagClient({
+        ...validOptions,
+        flagsFallbackProvider: fallbackProviders.static({
+          flags: {
+            huddle: true,
+            "smart-summaries": false,
+          },
+        }),
+        flagsFetchRetries: 0,
+      });
+
+      await client.initialize();
+
+      expect(client.getFlag({}, "huddle")).toStrictEqual({
+        key: "huddle",
+        isEnabled: true,
+        config: {
+          key: undefined,
+          payload: undefined,
+        },
+        track: expect.any(Function),
+      });
+      expect(client.getFlag({}, "smart-summaries")).toStrictEqual({
+        key: "smart-summaries",
+        isEnabled: false,
+        config: {
+          key: undefined,
+          payload: undefined,
+        },
+        track: expect.any(Function),
+      });
     });
 
     it("should log remote flag fetch failures at debug level when using fallback definitions", async () => {
