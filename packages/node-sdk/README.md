@@ -821,17 +821,17 @@ await client.updateCompany("company456", {
   },
 });
 
-// Later, evaluate flags remotely using stored context
-const flags = await client.getFlagsRemote("company456", "user123");
+// Later, evaluate flags remotely using stored context.
+// Note: the argument order is (userId, companyId, additionalContext?)
+const userId = "user123";
+const companyId = "company456";
+
+const flags = await client.getFlagsRemote(userId, companyId);
 // Or evaluate a single flag
-const flag = await client.getFlagRemote(
-  "create-todos",
-  "company456",
-  "user123",
-);
+const flag = await client.getFlagRemote("create-todos", userId, companyId);
 
 // You can also provide additional context
-const flagsWithContext = await client.getFlagsRemote("company456", "user123", {
+const flagsWithContext = await client.getFlagsRemote(userId, companyId, {
   other: {
     location: "US",
     platform: "mobile",
@@ -913,7 +913,8 @@ See [examples/express/app.ts](https://github.com/reflagcom/javascript/tree/main/
 If you don't want to provide context each time when evaluating flags but
 rather you would like to utilize the attributes you sent to Reflag previously
 (by calling `updateCompany` and `updateUser`) you can do so by calling `getFlagsRemote`
-(or `getFlagRemote` for a specific flag) with providing just `userId` and `companyId`.
+(or `getFlagRemote` for a specific flag) with just `userId` and `companyId`
+in that order.
 These methods will call Reflag's servers and flags will be evaluated remotely
 using the stored attributes.
 
@@ -934,8 +935,8 @@ client.updateCompany("acme_inc", {
 });
 ...
 
-// This will evaluate flags with respecting the attributes sent previously
-const flags = await client.getFlagsRemote("acme_inc", "john_doe");
+// This will evaluate flags using the stored attributes for the user/company pair
+const flags = await client.getFlagsRemote("john_doe", "acme_inc");
 ```
 
 > [!IMPORTANT]
