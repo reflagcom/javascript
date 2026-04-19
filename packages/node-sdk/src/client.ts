@@ -254,6 +254,7 @@ export class ReflagClient {
     flagsFallbackProviderContext: FlagsFallbackProviderContext;
     flagOverrides: FlagOverridesFn;
     offline: boolean;
+    emitEvaluationEvents: boolean;
     configFile?: string;
     flagsFetchRetries: number;
     fetchTimeoutMs: number;
@@ -356,6 +357,11 @@ export class ReflagClient {
       options.configFile === undefined ||
         typeof options.configFile === "string",
       "configFile must be a string",
+    );
+    ok(
+      options.emitEvaluationEvents === undefined ||
+        typeof options.emitEvaluationEvents === "boolean",
+      "emitEvaluationEvents must be a boolean",
     );
 
     ok(
@@ -486,6 +492,7 @@ export class ReflagClient {
 
     this._config = {
       offline,
+      emitEvaluationEvents: config.emitEvaluationEvents ?? true,
       apiBaseUrl: (config.apiBaseUrl ?? config.host) || API_BASE_URL,
       headers: {
         "Content-Type": "application/json",
@@ -1532,7 +1539,11 @@ export class ReflagClient {
 
     return {
       get isEnabled() {
-        if (enableTracking && enableChecks) {
+        if (
+          enableTracking &&
+          enableChecks &&
+          client._config.emitEvaluationEvents
+        ) {
           client._warnMissingFlagContextFields(context, flag);
 
           void client
@@ -1555,7 +1566,11 @@ export class ReflagClient {
         return flag.isEnabled ?? false;
       },
       get config() {
-        if (enableTracking && enableChecks) {
+        if (
+          enableTracking &&
+          enableChecks &&
+          client._config.emitEvaluationEvents
+        ) {
           client._warnMissingFlagContextFields(context, flag);
 
           void client

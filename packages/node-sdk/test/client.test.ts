@@ -1637,6 +1637,37 @@ describe("ReflagClient", () => {
       ]);
     });
 
+    it("does not emit evaluation events when emitEvaluationEvents is false", async () => {
+      const client = new ReflagClient({
+        ...validOptions,
+        emitEvaluationEvents: false,
+      });
+      const context = {
+        company,
+        user,
+        other: otherContext,
+      };
+
+      await client.initialize();
+      const flag = client.getFlag(context, "flag1");
+
+      expect(flag.isEnabled).toBe(true);
+      expect(flag.config).toEqual({
+        key: "config-1",
+        payload: {
+          something: "else",
+        },
+      });
+
+      await client.flush();
+
+      const evaluationEvents = httpClient.post.mock.calls
+        .flatMap((call) => call[2])
+        .filter((event) => event.type === "feature-flag-event");
+
+      expect(evaluationEvents).toStrictEqual([]);
+    });
+
     it("sends events for unknown flags", async () => {
       const context: Context = {
         company,
