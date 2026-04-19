@@ -91,6 +91,7 @@ const validOptions: ClientOptions = {
     intervalMs: 10001,
     flushOnExit: false,
   },
+  flagsSyncMode: "polling",
   offline: false,
 };
 
@@ -314,6 +315,10 @@ describe("ReflagClient", () => {
 
       expect(client["_config"].apiBaseUrl).toBe(API_BASE_URL);
       expect(client["_config"].refetchInterval).toBe(FLAGS_REFETCH_MS);
+      expect(client["_config"].flagsSyncMode).toBe("push");
+      expect(client["_config"].flagsPushUrl).toBe(
+        "https://pubsub.reflag.com/sse?channels=flags-state%3A165d2650f1975f7f",
+      );
       expect(client.httpClient).toBe(fetchClient);
       expect(client["_config"].headers).toEqual(expectedHeaders);
       expect(client["_config"].fallbackFlags).toBeUndefined();
@@ -321,6 +326,20 @@ describe("ReflagClient", () => {
         maxSize: BATCH_MAX_SIZE,
         intervalMs: BATCH_INTERVAL_MS,
       });
+    });
+
+    it("should map deprecated cacheStrategy values to sync modes", () => {
+      const inRequestClient = new ReflagClient({
+        secretKey: "validSecretKeyWithMoreThan22Chars",
+        cacheStrategy: "in-request",
+      });
+      const pollingClient = new ReflagClient({
+        secretKey: "validSecretKeyWithMoreThan22Chars",
+        cacheStrategy: "periodically-update",
+      });
+
+      expect(inRequestClient["_config"].flagsSyncMode).toBe("in-request");
+      expect(pollingClient["_config"].flagsSyncMode).toBe("polling");
     });
 
     it("should throw an error if options are invalid", () => {

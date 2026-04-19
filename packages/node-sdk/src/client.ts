@@ -309,7 +309,7 @@ export class ReflagClient {
    * @param options.configFile - The path to the config file (optional).
    * @param options.flagsFetchRetries - Number of retries for fetching flags (optional, defaults to 3).
    * @param options.fetchTimeoutMs - Timeout for fetching flags (optional, defaults to 10000ms).
-   * @param options.flagsSyncMode - How flag definitions are synchronized (optional, defaults to "polling").
+   * @param options.flagsSyncMode - How flag definitions are synchronized (optional, defaults to "push").
    *
    * @throws An error if the options are invalid.
    **/
@@ -462,7 +462,11 @@ export class ReflagClient {
 
     const flagsSyncMode: FlagsSyncMode =
       options.flagsSyncMode ??
-      (options.cacheStrategy === "in-request" ? "in-request" : "polling");
+      (options.cacheStrategy === "in-request"
+        ? "in-request"
+        : options.cacheStrategy === "periodically-update"
+          ? "polling"
+          : "push");
 
     const secretKeyHash = config.secretKey ? hashString(config.secretKey) : "";
     const secretKeyHashPrefix = secretKeyHash.slice(0, 16);
