@@ -15,7 +15,6 @@ import { API_BASE_URL } from "../src/config";
 import { FeedbackPromptHandler } from "../src/feedback/feedback";
 import {
   checkPromptMessageCompleted,
-  getAuthToken,
   markPromptMessageCompleted,
 } from "../src/feedback/promptStorage";
 import { FlagsClient } from "../src/flag/flags";
@@ -36,7 +35,6 @@ vi.mock("../src/feedback/promptStorage", () => {
     markPromptMessageCompleted: vi.fn(),
     checkPromptMessageCompleted: vi.fn(),
     rememberAuthToken: vi.fn(),
-    getAuthToken: vi.fn(),
   };
 });
 
@@ -123,7 +121,6 @@ describe("feedback prompting", () => {
 
   afterEach(() => {
     vi.clearAllMocks();
-    vi.mocked(getAuthToken).mockReturnValue(undefined);
   });
 
   test("initiates and stops feedback prompting", async () => {
@@ -142,16 +139,12 @@ describe("feedback prompting", () => {
     expect(closeChannel).toBeCalledTimes(1);
   });
 
-  test("does not call tracking endpoints if token cached", async () => {
+  test("uses the discovered prompting channel", async () => {
     const specialChannel = "special-channel";
-    vi.mocked(getAuthToken).mockReturnValue({
-      channel: specialChannel,
-      token: "something",
-    });
 
     server.use(
       http.post(`${API_BASE_URL}/feedback/prompting-init`, () => {
-        throw new Error("should not be called");
+        return HttpResponse.json({ success: true, channel: specialChannel });
       }),
     );
 
@@ -163,8 +156,7 @@ describe("feedback prompting", () => {
 
     expect(openAblySSEChannel).toBeCalledTimes(1);
     const args = vi.mocked(openAblySSEChannel).mock.calls[0][0];
-    expect(args.channel).toBe(specialChannel);
-    expect(args.userId).toBe("foo");
+    expect(args.channels).toEqual([specialChannel]);
   });
 
   test("does not initiate feedback prompting if server does not agree", async () => {

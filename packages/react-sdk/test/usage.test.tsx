@@ -200,6 +200,31 @@ describe("<ReflagProvider />", () => {
     expect(initialize).toHaveBeenCalled();
   });
 
+  test("enables live flag updates by default", async () => {
+    const { result, unmount } = renderHook(() => useClient(), {
+      wrapper: ({ children }) => getProvider({ children }),
+    });
+
+    await waitFor(() => {
+      expect((result.current as any)["enableLiveFlagUpdates"]).toBe(true);
+    });
+
+    unmount();
+  });
+
+  test("allows disabling live flag updates explicitly", async () => {
+    const { result, unmount } = renderHook(() => useClient(), {
+      wrapper: ({ children }) =>
+        getProvider({ children, enableLiveFlagUpdates: false }),
+    });
+
+    await waitFor(() => {
+      expect((result.current as any)["enableLiveFlagUpdates"]).toBe(false);
+    });
+
+    unmount();
+  });
+
   test("uses provided sdkVersion when set", async () => {
     let capturedSdkVersion: string | null = null;
     server.use(

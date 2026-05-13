@@ -2,7 +2,7 @@ import { afterAll, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { version } from "../package.json";
 import { FLAGS_EXPIRE_MS } from "../src/config";
-import { FlagsClient, RawFlag } from "../src/flag/flags";
+import { FlagsClient, FetchedFlagsResult, RawFlag } from "../src/flag/flags";
 import { HttpClient } from "../src/httpClient";
 import { newCache, TEST_STALE_MS } from "./flagCache.test";
 import { flagResponse, flagsResult } from "./mocks/handlers";
@@ -93,6 +93,91 @@ describe("FlagsClient", () => {
     expect(timeoutMs).toEqual(5000);
   });
 
+  test("uses waitForVersion when refreshing flags for a pushed version", async () => {
+    const { newFlagsClient, httpClient } = flagsClientFactory();
+    const flagsClient = newFlagsClient();
+
+    await flagsClient.initialize();
+    vi.mocked(httpClient.get).mockClear();
+    vi.mocked(httpClient.get).mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ ...flagResponse, flagStateVersion: 22 }),
+    } as Response);
+
+    await flagsClient.refreshFlags(22);
+
+    expect(httpClient.get).toHaveBeenCalledTimes(1);
+    const { params, path } = vi.mocked(httpClient.get).mock.calls[0][0];
+    const paramsObj = Object.fromEntries(new URLSearchParams(params));
+
+    expect(path).toEqual("/features/evaluated");
+    expect(paramsObj).toMatchObject({
+      "context.user.id": "123",
+      "context.company.id": "456",
+      "context.other.eventId": "big-conference1",
+      publishableKey: "pk",
+      waitForVersion: "22",
+    });
+  });
+
+  test("preserves flagStateVersion from the initial fetch result", async () => {
+    const { newFlagsClient, httpClient } = flagsClientFactory();
+    vi.mocked(httpClient.get).mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ ...flagResponse, flagStateVersion: 5 }),
+    } as Response);
+
+    const flagsClient = newFlagsClient();
+    await flagsClient.initialize();
+
+    expect(flagsClient.getFlags()).toEqual(flagsResult);
+    expect(flagsClient.getFlagStateVersion()).toBe(5);
+  });
+
+  test("ignores stale waitForVersion refresh responses", async () => {
+    const { newFlagsClient, httpClient } = flagsClientFactory();
+    vi.mocked(httpClient.get)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ ...flagResponse, flagStateVersion: 5 }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            success: true,
+            flagStateVersion: 5,
+            features: {
+              ...flagResponse.features,
+              flagA: {
+                ...flagResponse.features.flagA,
+                isEnabled: false,
+              },
+            },
+          }),
+      } as Response);
+
+    const flagsClient = newFlagsClient();
+    await flagsClient.initialize();
+
+    const result = await flagsClient.refreshFlags(6);
+
+    expect(result).toBeUndefined();
+    expect(flagsClient.getFlags()).toEqual(flagsResult);
+    expect(flagsClient.getFlagStateVersion()).toBe(5);
+    expect(testLogger.warn).toHaveBeenCalledWith(
+      "[Flags] ignoring stale flag response for requested flag state version.",
+      {
+        requestedFlagStateVersion: 6,
+        responseFlagStateVersion: 5,
+      },
+    );
+  });
+
   test("warns about missing context fields", async () => {
     const { newFlagsClient } = flagsClientFactory();
     const flagsClient = newFlagsClient();
@@ -144,16 +229,12 @@ describe("FlagsClient", () => {
     const { newFlagsClient } = flagsClientFactory();
     const flagsClient = newFlagsClient();
 
-    let resolveFirstFetch:
-      | ((flags: Record<string, RawFlag>) => void)
-      | undefined;
-    let resolveSecondFetch:
-      | ((flags: Record<string, RawFlag>) => void)
-      | undefined;
-    const firstFetch = new Promise<Record<string, RawFlag>>((resolve) => {
+    let resolveFirstFetch: ((flags: FetchedFlagsResult) => void) | undefined;
+    let resolveSecondFetch: ((flags: FetchedFlagsResult) => void) | undefined;
+    const firstFetch = new Promise<FetchedFlagsResult>((resolve) => {
       resolveFirstFetch = resolve;
     });
-    const secondFetch = new Promise<Record<string, RawFlag>>((resolve) => {
+    const secondFetch = new Promise<FetchedFlagsResult>((resolve) => {
       resolveSecondFetch = resolve;
     });
 
@@ -173,11 +254,14 @@ describe("FlagsClient", () => {
     });
 
     resolveSecondFetch?.({
-      latestFlag: {
-        key: "latestFlag",
-        isEnabled: true,
-        targetingVersion: 2,
+      flags: {
+        latestFlag: {
+          key: "latestFlag",
+          isEnabled: true,
+          targetingVersion: 2,
+        },
       },
+      flagStateVersion: 2,
     });
 
     await expect(secondUpdate).resolves.toBe(true);
@@ -191,11 +275,14 @@ describe("FlagsClient", () => {
     });
 
     resolveFirstFetch?.({
-      staleFlag: {
-        key: "staleFlag",
-        isEnabled: false,
-        targetingVersion: 1,
+      flags: {
+        staleFlag: {
+          key: "staleFlag",
+          isEnabled: false,
+          targetingVersion: 1,
+        },
       },
+      flagStateVersion: 1,
     });
 
     await expect(firstUpdate).resolves.toBe(false);

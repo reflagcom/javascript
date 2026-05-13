@@ -10,7 +10,6 @@ import {
   parsePromptMessage,
   processPromptMessage,
 } from "./prompts";
-import { getAuthToken } from "./promptStorage";
 import * as feedbackLib from "./ui";
 import { DEFAULT_POSITION } from "./ui";
 import {
@@ -308,11 +307,12 @@ export class AutoFeedback {
     try {
       this.logger.debug(`automatic feedback enabled`, channel);
       this.sseChannel = openAblySSEChannel({
-        userId: this.userId,
         channel,
-        httpClient: this.httpClient,
         callback: (message) =>
-          this.handleFeedbackPromptRequest(this.userId, message),
+          this.handleFeedbackPromptRequest(
+            this.userId,
+            message.data ?? message,
+          ),
         logger: this.logger,
         sseBaseUrl: this.sseBaseUrl,
       });
@@ -334,6 +334,10 @@ export class AutoFeedback {
     this.initialized = false;
     this.userId = userId;
     await this.initialize();
+  }
+
+  setUserId(userId: string) {
+    this.userId = userId;
   }
 
   handleFeedbackPromptRequest(userId: string, message: any) {
@@ -487,14 +491,7 @@ export class AutoFeedback {
     return res;
   }
 
-  private async getChannel() {
-    const existingAuth = getAuthToken(this.userId);
-    const channel = existingAuth?.channel;
-
-    if (channel) {
-      return channel;
-    }
-
+  async getChannel() {
     try {
       return await retryOnThrow(INITIAL_FETCH_RETRY_DELAYS_MS, async () => {
         const res = await this.httpClient.post({

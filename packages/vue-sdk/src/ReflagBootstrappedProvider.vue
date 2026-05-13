@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, provide, ref, watch } from "vue";
+import { getCurrentInstance, onMounted, provide, ref, watch } from "vue";
 
 import { ProviderSymbol, useOnEvent, useReflagClient } from "./hooks";
 import type { ReflagBootstrappedProps } from "./types";
@@ -13,10 +13,19 @@ const {
   ...config
 } = defineProps<ReflagBootstrappedProps>();
 
+const vnodeProps = getCurrentInstance()?.vnode.props ?? {};
+const enableLiveFlagUpdates = Object.prototype.hasOwnProperty.call(
+  vnodeProps,
+  "enableLiveFlagUpdates",
+)
+  ? config.enableLiveFlagUpdates
+  : undefined;
+
 const client = useReflagClient({
   ...config,
   ...flags?.context,
   enableTracking,
+  enableLiveFlagUpdates,
   bootstrappedFlags: flags?.flags,
   debug,
   logger,

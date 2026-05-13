@@ -63,6 +63,49 @@ describe("ReflagProvider", () => {
     expect(wrapper.findComponent(Child).vm.client).toBeDefined();
   });
 
+  test("enables live flag updates by default", async () => {
+    const Child = defineComponent({
+      setup() {
+        const client = useClient();
+        return { client };
+      },
+      template: "<div></div>",
+    });
+
+    const wrapper = mount(ReflagProvider, {
+      ...getProvider(),
+      slots: { default: () => h(Child) },
+    });
+
+    await nextTick();
+    expect(
+      (wrapper.findComponent(Child).vm.client as any)["enableLiveFlagUpdates"],
+    ).toBe(true);
+  });
+
+  test("allows disabling live flag updates explicitly", async () => {
+    const Child = defineComponent({
+      setup() {
+        const client = useClient();
+        return { client };
+      },
+      template: "<div></div>",
+    });
+
+    const wrapper = mount(ReflagProvider, {
+      props: {
+        publishableKey: "key-disabled-live-flags",
+        enableLiveFlagUpdates: false,
+      },
+      slots: { default: () => h(Child) },
+    });
+
+    await nextTick();
+    expect(
+      (wrapper.findComponent(Child).vm.client as any)["enableLiveFlagUpdates"],
+    ).toBe(false);
+  });
+
   test("uses provided logger", async () => {
     const logger = {
       debug: vi.fn(),

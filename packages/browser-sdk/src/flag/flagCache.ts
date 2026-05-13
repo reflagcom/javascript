@@ -7,6 +7,7 @@ interface cacheEntry {
   expireAt: number;
   staleAt: number;
   flags: RawFlags;
+  flagStateVersion?: number;
 }
 
 // Parse and validate an API flags response
@@ -47,6 +48,7 @@ export function parseAPIFlagsResponse(flagsInput: any): RawFlags | undefined {
 export interface CacheResult {
   flags: RawFlags;
   stale: boolean;
+  flagStateVersion?: number;
 }
 
 export class FlagCache {
@@ -74,8 +76,10 @@ export class FlagCache {
     key: string,
     {
       flags,
+      flagStateVersion,
     }: {
       flags: RawFlags;
+      flagStateVersion?: number;
     },
   ) {
     let cacheData: CacheData = {};
@@ -93,6 +97,7 @@ export class FlagCache {
       expireAt: Date.now() + this.expireTimeMs,
       staleAt: Date.now() + this.staleTimeMs,
       flags,
+      flagStateVersion,
     } satisfies cacheEntry;
 
     cacheData = Object.fromEntries(
@@ -117,6 +122,7 @@ export class FlagCache {
           return {
             flags: cachedResponse[key].flags,
             stale: cachedResponse[key].staleAt < Date.now(),
+            flagStateVersion: cachedResponse[key].flagStateVersion,
           };
         }
       }
@@ -141,7 +147,10 @@ function validateCacheData(cacheDataInput: any) {
     if (
       typeof cacheEntry.expireAt !== "number" ||
       typeof cacheEntry.staleAt !== "number" ||
-      (cacheEntry.flags && !parseAPIFlagsResponse(cacheEntry.flags))
+      (cacheEntry.flags && !parseAPIFlagsResponse(cacheEntry.flags)) ||
+      (typeof cacheEntry.flagStateVersion !== "undefined" &&
+        (!Number.isInteger(cacheEntry.flagStateVersion) ||
+          cacheEntry.flagStateVersion < 0))
     ) {
       return;
     }
@@ -150,6 +159,7 @@ function validateCacheData(cacheDataInput: any) {
       expireAt: cacheEntry.expireAt,
       staleAt: cacheEntry.staleAt,
       flags: cacheEntry.flags,
+      flagStateVersion: cacheEntry.flagStateVersion,
     };
   }
   return cacheData;

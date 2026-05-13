@@ -108,7 +108,18 @@ export const DEFAULT_FLAGS_CONFIG: Config = {
   offline: false,
 };
 
-export function validateFlagsResponse(response: any) {
+export type FetchedFlagsResult = {
+  flags: RawFlags;
+  flagStateVersion?: number;
+};
+
+export type FlagsFetchResult = FetchedFlagsResult & {
+  success: boolean;
+};
+
+export function validateFlagsResponse(
+  response: any,
+): FlagsFetchResult | undefined {
   if (!isObject(response)) {
     return;
   }
@@ -123,9 +134,17 @@ export function validateFlagsResponse(response: any) {
     return;
   }
 
+  const flagStateVersion =
+    typeof response.flagStateVersion === "number" &&
+    Number.isInteger(response.flagStateVersion) &&
+    response.flagStateVersion >= 0
+      ? response.flagStateVersion
+      : undefined;
+
   return {
     success: response.success,
     flags,
+    flagStateVersion,
   };
 }
 
@@ -208,6 +227,7 @@ export class FlagsClient {
 
   private cache: FlagCache;
   private fetchedFlags: RawFlags = {};
+  private fetchedFlagStateVersion: number | undefined;
   private flagOverrides: FlagOverrides = {};
   private flags: RawFlags = {};
   private fallbackFlags: FallbackFlags = {};
@@ -269,7 +289,7 @@ export class FlagsClient {
     }
 
     if (!this.bootstrapped) {
-      this.setFetchedFlags((await this.maybeFetchFlags()) || {});
+      this.applyFetchedFlagsResult(await this.maybeFetchFlags());
     }
 
     // Apply overrides and trigger update if flags have changed
@@ -291,23 +311,39 @@ export class FlagsClient {
     return this.fetchedFlags;
   }
 
-  setFetchedFlags(fetchedFlags: RawFlags, triggerEvent = true) {
+  setFetchedFlags(
+    fetchedFlags: RawFlags,
+    triggerEvent = true,
+    flagStateVersion?: number,
+  ) {
     // Create a new fetched flags object making sure to clone the flags
     this.fetchedFlags = { ...fetchedFlags };
+    this.fetchedFlagStateVersion = flagStateVersion;
     this.warnMissingFlagContextFields(fetchedFlags);
     this.updateFlags(triggerEvent);
+  }
+
+  private applyFetchedFlagsResult(
+    result: FetchedFlagsResult | undefined,
+    triggerEvent = true,
+  ) {
+    this.setFetchedFlags(
+      result?.flags ?? {},
+      triggerEvent,
+      result?.flagStateVersion,
+    );
   }
 
   async setContext(context: ReflagContext) {
     this.context = context;
     const requestVersion = ++this.contextFetchVersion;
-    const fetchedFlags = (await this.maybeFetchFlags()) || {};
+    const fetchedFlags = await this.maybeFetchFlags();
 
     if (requestVersion !== this.contextFetchVersion) {
       return false;
     }
 
-    this.setFetchedFlags(fetchedFlags);
+    this.applyFetchedFlagsResult(fetchedFlags);
     return true;
   }
 
@@ -419,8 +455,21 @@ export class FlagsClient {
     return checkEvent.value;
   }
 
-  async fetchFlags(): Promise<RawFlags | undefined> {
+  getFlagStateVersion(): number | undefined {
+    return this.fetchedFlagStateVersion;
+  }
+
+  async fetchFlags(
+    waitForVersion?: number,
+  ): Promise<FlagsFetchResult | undefined> {
     const params = this.fetchParams();
+    if (
+      waitForVersion !== undefined &&
+      Number.isInteger(waitForVersion) &&
+      waitForVersion >= 0
+    ) {
+      params.set("waitForVersion", String(waitForVersion));
+    }
     try {
       return await retryOnThrow(INITIAL_FETCH_RETRY_DELAYS_MS, async () => {
         const res = await this.httpClient.get({
@@ -463,7 +512,22 @@ export class FlagsClient {
           return;
         }
 
-        return typeRes.flags;
+        if (
+          waitForVersion !== undefined &&
+          (typeRes.flagStateVersion === undefined ||
+            typeRes.flagStateVersion < waitForVersion)
+        ) {
+          this.logger.warn(
+            "ignoring stale flag response for requested flag state version.",
+            {
+              requestedFlagStateVersion: waitForVersion,
+              responseFlagStateVersion: typeRes.flagStateVersion,
+            },
+          );
+          return;
+        }
+
+        return typeRes;
       });
     } catch (e) {
       this.logger.error("error fetching flags:", e);
@@ -474,7 +538,7 @@ export class FlagsClient {
   /**
    * Force refresh flags from the API, bypassing cache.
    */
-  async refreshFlags(): Promise<RawFlags | undefined> {
+  async refreshFlags(waitForVersion?: number): Promise<RawFlags | undefined> {
     if (this.config.offline) {
       return;
     }
@@ -490,11 +554,12 @@ export class FlagsClient {
     }
     this.refreshEvents.push(now);
 
-    const flags = await this.fetchFlags();
-    if (flags) {
-      this.setFetchedFlags(flags);
+    const result = await this.fetchFlags(waitForVersion);
+    if (result) {
+      this.setFetchedFlags(result.flags, true, result.flagStateVersion);
+      return result.flags;
     }
-    return flags;
+    return;
   }
 
   private async setOverridesCache(overrides: FlagOverrides) {
@@ -523,7 +588,7 @@ export class FlagsClient {
     }
   }
 
-  private async maybeFetchFlags(): Promise<RawFlags | undefined> {
+  private async maybeFetchFlags(): Promise<FetchedFlagsResult | undefined> {
     if (this.config.offline) {
       return;
     }
@@ -532,24 +597,25 @@ export class FlagsClient {
     const cachedItem = await this.cache.get(cacheKey);
 
     if (cachedItem) {
-      if (!cachedItem.stale) return cachedItem.flags;
+      if (!cachedItem.stale) return cachedItem;
 
       // serve successful stale cache if `staleWhileRevalidate` is enabled
       if (this.config.staleWhileRevalidate) {
         // re-fetch in the background, but immediately return last successful value
         this.fetchFlags()
-          .then(async (flags) => {
-            if (!flags) return;
+          .then(async (result) => {
+            if (!result) return;
 
             await this.cache.set(cacheKey, {
-              flags,
+              flags: result.flags,
+              flagStateVersion: result.flagStateVersion,
             });
-            this.setFetchedFlags(flags);
+            this.setFetchedFlags(result.flags, true, result.flagStateVersion);
           })
           .catch(() => {
             // we don't care about the result, we just want to re-fetch
           });
-        return cachedItem.flags;
+        return cachedItem;
       }
     }
 
@@ -559,31 +625,40 @@ export class FlagsClient {
 
     if (fetchedFlags) {
       await this.cache.set(cacheKey, {
-        flags: fetchedFlags,
+        flags: fetchedFlags.flags,
+        flagStateVersion: fetchedFlags.flagStateVersion,
       });
-      return fetchedFlags;
+      return {
+        flags: fetchedFlags.flags,
+        flagStateVersion: fetchedFlags.flagStateVersion,
+      };
     }
 
     if (cachedItem) {
       // fetch failed, return stale cache
-      return cachedItem.flags;
+      return cachedItem;
     }
 
     // fetch failed, nothing cached => return fallbacks
-    return Object.entries(this.fallbackFlags).reduce((acc, [key, override]) => {
-      acc[key] = {
-        key,
-        isEnabled: !!override,
-        config:
-          typeof override === "object" && "key" in override
-            ? {
-                key: override.key,
-                payload: override.payload,
-              }
-            : undefined,
-      };
-      return acc;
-    }, {} as RawFlags);
+    return {
+      flags: Object.entries(this.fallbackFlags).reduce(
+        (acc, [key, override]) => {
+          acc[key] = {
+            key,
+            isEnabled: !!override,
+            config:
+              typeof override === "object" && "key" in override
+                ? {
+                    key: override.key,
+                    payload: override.payload,
+                  }
+                : undefined,
+          };
+          return acc;
+        },
+        {} as RawFlags,
+      ),
+    };
   }
 
   private mergeFlags(fetchedFlags: RawFlags, overrides: FlagOverrides) {

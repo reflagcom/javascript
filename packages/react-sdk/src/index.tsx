@@ -197,6 +197,7 @@ function useReflagClient(initOptions: InitOptions & { debug?: boolean }) {
     logger,
     publishableKey,
     sdkVersion,
+    enableLiveFlagUpdates,
     ...clientOptions
   } = initOptions;
   const isServer = typeof window === "undefined";
@@ -204,6 +205,7 @@ function useReflagClient(initOptions: InitOptions & { debug?: boolean }) {
     const client = new ReflagClient({
       ...clientOptions,
       publishableKey,
+      enableLiveFlagUpdates: enableLiveFlagUpdates ?? true,
       logger: logger ?? (debug ? console : undefined),
       sdkVersion: sdkVersion ?? SDK_VERSION,
     });

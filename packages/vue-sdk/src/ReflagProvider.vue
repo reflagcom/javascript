@@ -1,5 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, provide, ref, watch } from "vue";
+import {
+  computed,
+  getCurrentInstance,
+  onMounted,
+  provide,
+  ref,
+  watch,
+} from "vue";
 
 import { ProviderSymbol, useOnEvent, useReflagClient } from "./hooks";
 import type { ReflagProps } from "./types";
@@ -19,6 +26,14 @@ const {
   ...config
 } = defineProps<ReflagProps>();
 
+const vnodeProps = getCurrentInstance()?.vnode.props ?? {};
+const enableLiveFlagUpdates = Object.prototype.hasOwnProperty.call(
+  vnodeProps,
+  "enableLiveFlagUpdates",
+)
+  ? config.enableLiveFlagUpdates
+  : undefined;
+
 const resolvedContext = computed(() => ({
   user,
   company,
@@ -30,6 +45,7 @@ const client = useReflagClient({
   ...config,
   ...resolvedContext.value,
   enableTracking,
+  enableLiveFlagUpdates,
   debug,
   logger,
 });

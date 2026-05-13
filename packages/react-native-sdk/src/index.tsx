@@ -87,6 +87,7 @@ export function ReflagProvider(props: ReflagProps) {
       {...props}
       sdkVersion={SDK_VERSION}
       storage={props.storage ?? AsyncStorage}
+      enableLiveFlagUpdates={props.enableLiveFlagUpdates ?? true}
       feedback={{
         ...props.feedback,
         enableAutoFeedback: props.feedback?.enableAutoFeedback ?? false,
@@ -101,6 +102,7 @@ export function ReflagBootstrappedProvider(props: ReflagBootstrappedProps) {
       {...props}
       sdkVersion={SDK_VERSION}
       storage={props.storage ?? AsyncStorage}
+      enableLiveFlagUpdates={props.enableLiveFlagUpdates ?? true}
       feedback={{
         ...props.feedback,
         enableAutoFeedback: props.feedback?.enableAutoFeedback ?? false,

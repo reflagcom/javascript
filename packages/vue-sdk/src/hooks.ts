@@ -44,6 +44,7 @@ export function useReflagClient(
     debug = false,
     logger,
     publishableKey,
+    enableLiveFlagUpdates,
     ...clientOptions
   } = initOptions;
   const isServer = typeof window === "undefined";
@@ -51,6 +52,7 @@ export function useReflagClient(
     const client = new ReflagClient({
       ...clientOptions,
       publishableKey,
+      enableLiveFlagUpdates: enableLiveFlagUpdates ?? true,
       sdkVersion: SDK_VERSION,
       logger: logger ?? (debug ? console : undefined),
     });

@@ -99,7 +99,7 @@ Supply these to the constructor call:
 type Configuration = {
   logger: console; // by default only logs warn/error, by passing `console` you'll log everything
   apiBaseUrl?: "https://front.reflag.com";
-  sseBaseUrl?: "https://livemessaging.bucket.co";
+  sseBaseUrl?: "https://pubsub.reflag.com";
   feedback?: undefined; // See FEEDBACK.md
   enableTracking?: true; // set to `false` to stop sending track events and user/company updates to Reflag servers. Useful when you're impersonating a user
   fallbackFlags?:
@@ -237,7 +237,7 @@ For server-side rendered applications, you can eliminate the initial network req
 type Configuration = {
   logger: console; // by default only logs warn/error, by passing `console` you'll log everything
   apiBaseUrl?: "https://front.reflag.com";
-  sseBaseUrl?: "https://livemessaging.bucket.co";
+  sseBaseUrl?: "https://pubsub.reflag.com";
   feedback?: undefined; // See FEEDBACK.md
   enableTracking?: true; // set to `false` to stop sending track events and user/company updates to Reflag servers. Useful when you're impersonating a user
   offline?: boolean; // Use the SDK in offline mode. Offline mode is useful during testing and local development
@@ -502,11 +502,11 @@ Types are bundled together with the library and exposed automatically when impor
 
 If you are running with strict Content Security Policies active on your website, you will need to enable these directives in order to use the SDK:
 
-| Directive   | Values                                                             | Reason                                                                                                                                |
-| ----------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
-| connect-src | [https://front.reflag.com](https://front.reflag.com)               | Basic functionality`                                                                                                                  |
-| connect-src | [https://livemessaging.bucket.co](https://livemessaging.bucket.co) | Server sent events for use in automated feedback surveys, which allows for automatically collecting feedback when a user used a flag. |
-| style-src   | 'unsafe-inline'                                                    | The feedback UI is styled with inline styles. Not having this directive results unstyled HTML elements.                               |
+| Directive   | Values                                                 | Reason                                                                                                  |
+| ----------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| connect-src | [https://front.reflag.com](https://front.reflag.com)   | Basic functionality`                                                                                    |
+| connect-src | [https://pubsub.reflag.com](https://pubsub.reflag.com) | Server sent events for live flag updates and automated feedback surveys.                                |
+| style-src   | 'unsafe-inline'                                        | The feedback UI is styled with inline styles. Not having this directive results unstyled HTML elements. |
 
 If you are including the Reflag tracking SDK with a `<script>`-tag from `jsdelivr.net` you will also need:
 
