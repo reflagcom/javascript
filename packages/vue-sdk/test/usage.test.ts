@@ -185,21 +185,21 @@ describe("ReflagProvider", () => {
 });
 
 describe("ReflagBootstrappedProvider", () => {
-  test("provides the client with bootstrapped flags", async () => {
-    const bootstrappedFlags = {
-      context: {
-        user: { id: "test-user" },
-        company: { id: "test-company" },
+  const bootstrappedFlags = {
+    context: {
+      user: { id: "test-user" },
+      company: { id: "test-company" },
+    },
+    flags: {
+      "test-flag": {
+        key: "test-flag",
+        isEnabled: true,
+        config: { key: "default", payload: { message: "Hello" } },
       },
-      flags: {
-        "test-flag": {
-          key: "test-flag",
-          isEnabled: true,
-          config: { key: "default", payload: { message: "Hello" } },
-        },
-      },
-    };
+    },
+  };
 
+  test("provides the client with bootstrapped flags", async () => {
     const Child = defineComponent({
       setup() {
         const client = useClient();
@@ -220,5 +220,52 @@ describe("ReflagBootstrappedProvider", () => {
     await nextTick();
     expect(wrapper.findComponent(Child).vm.client).toBeDefined();
     expect(wrapper.findComponent(Child).vm.flag.isEnabled.value).toBe(true);
+  });
+
+  test("enables live flag updates by default for bootstrapped providers", async () => {
+    const Child = defineComponent({
+      setup() {
+        const client = useClient();
+        return { client };
+      },
+      template: "<div></div>",
+    });
+
+    const wrapper = mount(ReflagBootstrappedProvider, {
+      props: {
+        publishableKey: "bootstrapped-default-live-flags",
+        flags: bootstrappedFlags,
+      },
+      slots: { default: () => h(Child) },
+    });
+
+    await nextTick();
+    expect(
+      (wrapper.findComponent(Child).vm.client as any)["enableLiveFlagUpdates"],
+    ).toBe(true);
+  });
+
+  test("allows disabling live flag updates explicitly for bootstrapped providers", async () => {
+    const Child = defineComponent({
+      setup() {
+        const client = useClient();
+        return { client };
+      },
+      template: "<div></div>",
+    });
+
+    const wrapper = mount(ReflagBootstrappedProvider, {
+      props: {
+        publishableKey: "bootstrapped-disabled-live-flags",
+        flags: bootstrappedFlags,
+        enableLiveFlagUpdates: false,
+      },
+      slots: { default: () => h(Child) },
+    });
+
+    await nextTick();
+    expect(
+      (wrapper.findComponent(Child).vm.client as any)["enableLiveFlagUpdates"],
+    ).toBe(false);
   });
 });
