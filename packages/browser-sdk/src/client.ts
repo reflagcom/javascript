@@ -626,7 +626,9 @@ export class ReflagClient {
     }
 
     if (this.autoFeedback) {
-      // ensure fully initialized before stopping
+      // Stop immediately to cancel any in-flight initialization, then stop again
+      // after initialization settles in case a connection opened meanwhile.
+      this.autoFeedback.stop();
       await this.autoFeedbackInit;
       this.autoFeedback.stop();
     }

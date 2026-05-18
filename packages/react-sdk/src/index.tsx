@@ -7,6 +7,7 @@ import React, {
   useEffect,
   useLayoutEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -181,14 +182,41 @@ export type ReflagInitOptionsBase = Omit<
 >;
 
 /**
- * Map of clients by context key. Used to deduplicate initialization of the client.
+ * Map of clients by static config key. Used to deduplicate initialization of the client.
  * @internal
  */
 const reflagClients = new Map<string, ReflagClient>();
 
+function getClientCacheKey(
+  publishableKey: string,
+  clientOptions: Omit<InitOptions, "publishableKey">,
+) {
+  return JSON.stringify({
+    publishableKey,
+    apiBaseUrl: clientOptions.apiBaseUrl,
+    appBaseUrl: clientOptions.appBaseUrl,
+    sseBaseUrl: clientOptions.sseBaseUrl,
+    offline: clientOptions.offline,
+    enableTracking: clientOptions.enableTracking,
+    credentials: clientOptions.credentials,
+    enableAutoFeedback:
+      clientOptions.feedback?.enableAutoFeedback === false ? false : true,
+  });
+}
+
+function removeCachedReflagClient(
+  cacheKey: string | undefined,
+  client: ReflagClient,
+) {
+  if (!cacheKey) return;
+  if (reflagClients.get(cacheKey) !== client) return;
+  reflagClients.delete(cacheKey);
+}
+
 /**
- * Returns the ReflagClient for a given publishable key.
- * Only creates a new ReflagClient is not already created or if it hook is run on the server.
+ * Returns the ReflagClient for a given publishable key and static configuration.
+ * Only creates a new ReflagClient if one is not already created for the same
+ * static configuration, or if the hook is run on the server.
  * @internal
  */
 function useReflagClient(initOptions: InitOptions & { debug?: boolean }) {
@@ -200,19 +228,23 @@ function useReflagClient(initOptions: InitOptions & { debug?: boolean }) {
     ...clientOptions
   } = initOptions;
   const isServer = typeof window === "undefined";
-  if (isServer || !reflagClients.has(publishableKey)) {
+  const cacheKey = isServer
+    ? undefined
+    : getClientCacheKey(publishableKey, clientOptions);
+
+  if (!cacheKey || !reflagClients.has(cacheKey)) {
     const client = new ReflagClient({
       ...clientOptions,
       publishableKey,
       logger: logger ?? (debug ? console : undefined),
       sdkVersion: sdkVersion ?? SDK_VERSION,
     });
-    if (!isServer) {
-      reflagClients.set(publishableKey, client);
+    if (cacheKey) {
+      reflagClients.set(cacheKey, client);
     }
-    return client;
+    return { client, cacheKey };
   }
-  return reflagClients.get(publishableKey)!;
+  return { client: reflagClients.get(cacheKey)!, cacheKey };
 }
 
 type ProviderContextType = {
@@ -314,12 +346,30 @@ export function ReflagProvider({
     () => ({ user, company, other: otherContext, ...context }),
     [user, company, otherContext, context],
   );
-  const client = useReflagClient({
+  const { client, cacheKey } = useReflagClient({
     ...config,
     ...resolvedContext,
     debug,
     logger,
   });
+
+  const previousClientRef = useRef<
+    | {
+        cacheKey: string | undefined;
+        client: ReflagClient;
+      }
+    | undefined
+  >(undefined);
+  useEffect(() => {
+    const previous = previousClientRef.current;
+    previousClientRef.current = { cacheKey, client };
+    if (!previous || previous.client === client) return;
+
+    removeCachedReflagClient(previous.cacheKey, previous.client);
+    void previous.client.stop().catch((e) => {
+      previous.client.logger.error("failed to stop client", e);
+    });
+  }, [cacheKey, client]);
 
   // Initialize the client if it is not already initialized
   useEffect(() => {
@@ -368,13 +418,31 @@ export function ReflagBootstrappedProvider({
   debug,
   ...config
 }: ReflagBootstrappedProps) {
-  const client = useReflagClient({
+  const { client, cacheKey } = useReflagClient({
     ...config,
     ...flags.context,
     bootstrappedFlags: flags.flags,
     debug,
     logger,
   });
+
+  const previousClientRef = useRef<
+    | {
+        cacheKey: string | undefined;
+        client: ReflagClient;
+      }
+    | undefined
+  >(undefined);
+  useEffect(() => {
+    const previous = previousClientRef.current;
+    previousClientRef.current = { cacheKey, client };
+    if (!previous || previous.client === client) return;
+
+    removeCachedReflagClient(previous.cacheKey, previous.client);
+    void previous.client.stop().catch((e) => {
+      previous.client.logger.error("failed to stop client", e);
+    });
+  }, [cacheKey, client]);
 
   // Initialize the client if it is not already initialized
   useEffect(() => {

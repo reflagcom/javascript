@@ -134,6 +134,9 @@ const server = setupServer(
       { status: 200 },
     );
   }),
+  http.post(/\/bulk$/, () => {
+    return HttpResponse.json({ success: true });
+  }),
   http.post(/feedback\/prompting-init$/, () => {
     return new HttpResponse(
       JSON.stringify({
@@ -198,6 +201,75 @@ describe("<ReflagProvider />", () => {
     render(provider);
 
     expect(initialize).toHaveBeenCalled();
+  });
+
+  test("does not initialize automated feedback surveys when disabled", async () => {
+    let promptingInitRequests = 0;
+    server.use(
+      http.post(/feedback\/prompting-init$/, () => {
+        promptingInitRequests++;
+        return HttpResponse.json({ success: false });
+      }),
+    );
+
+    render(
+      getProvider({
+        feedback: { enableAutoFeedback: false },
+      }),
+    );
+
+    await waitFor(() => {
+      expect(ReflagClient.prototype.initialize).toHaveBeenCalled();
+    });
+    await vi.mocked(ReflagClient.prototype.initialize).mock.results[0].value;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(promptingInitRequests).toBe(0);
+  });
+
+  test("does not stop the client during React StrictMode effect replay", async () => {
+    const stop = vi.spyOn(ReflagClient.prototype, "stop");
+
+    render(<React.StrictMode>{getProvider()}</React.StrictMode>);
+
+    await waitFor(() => {
+      expect(ReflagClient.prototype.initialize).toHaveBeenCalled();
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(stop).not.toHaveBeenCalled();
+  });
+
+  test("recreates the client when automated feedback surveys are disabled", async () => {
+    let promptingInitRequests = 0;
+    server.use(
+      http.post(/feedback\/prompting-init$/, () => {
+        promptingInitRequests++;
+        return HttpResponse.json({ success: false });
+      }),
+    );
+    const stop = vi.spyOn(ReflagClient.prototype, "stop");
+    const publishableKey = `KEY-${keyIndex++}`;
+    const props = {
+      context: { user, company, other },
+      publishableKey,
+    };
+
+    const { rerender } = render(
+      <ReflagProvider {...props} feedback={{ enableAutoFeedback: true }} />,
+    );
+    await waitFor(() => {
+      expect(promptingInitRequests).toBe(1);
+    });
+
+    rerender(
+      <ReflagProvider {...props} feedback={{ enableAutoFeedback: false }} />,
+    );
+
+    await waitFor(() => {
+      expect(stop).toHaveBeenCalled();
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(promptingInitRequests).toBe(1);
   });
 
   test("uses provided sdkVersion when set", async () => {

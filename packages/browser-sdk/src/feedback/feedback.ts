@@ -303,7 +303,7 @@ export class AutoFeedback {
     this.initialized = true;
 
     const channel = await this.getChannel();
-    if (!channel) return;
+    if (!this.initialized || !channel) return;
 
     try {
       this.logger.debug(`automatic feedback enabled`, channel);
@@ -323,6 +323,8 @@ export class AutoFeedback {
   }
 
   stop() {
+    this.initialized = false;
+
     if (this.sseChannel) {
       this.sseChannel.close();
       this.sseChannel = null;

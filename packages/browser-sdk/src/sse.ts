@@ -74,7 +74,7 @@ export class AblySSEChannel {
     }
 
     const tokenRequest = await this.refreshTokenRequest();
-    if (!tokenRequest) {
+    if (!this.isOpen || !tokenRequest) {
       return;
     }
 
@@ -191,7 +191,7 @@ export class AblySSEChannel {
     try {
       const token = await this.refreshToken();
 
-      if (!token) return;
+      if (!this.isOpen || !token) return;
 
       const url = new URL("sse", this.sseBaseUrl);
       url.searchParams.append("v", "1.2");

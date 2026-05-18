@@ -142,6 +142,35 @@ describe("connection handling", () => {
     expect(vi.mocked(window.EventSource)).not.toHaveBeenCalled();
   });
 
+  test("does not request a token if closed while auth is pending", async () => {
+    let releaseAuth!: () => void;
+    const authPending = new Promise<void>((resolve) => {
+      releaseAuth = resolve;
+    });
+    let tokenRequests = 0;
+
+    server.use(
+      http.get("https://front.reflag.com/feedback/prompting-auth", async () => {
+        await authPending;
+        return HttpResponse.json({ success: true, ...tokenRequest });
+      }),
+      http.post(`${sseHost}/keys/${tokenRequest.keyName}/requestToken`, () => {
+        tokenRequests++;
+        return HttpResponse.json(tokenDetails);
+      }),
+    );
+
+    const sse = createSSEChannel();
+    const connect = sse.connect();
+    sse.close();
+    releaseAuth();
+
+    const res = await connect;
+    expect(res).toBeUndefined();
+    expect(tokenRequests).toBe(0);
+    expect(vi.mocked(window.EventSource)).not.toHaveBeenCalled();
+  });
+
   test("obtains token, connects and subscribes, then closes", async () => {
     const addEventListener = vi.fn();
     const close = vi.fn();
