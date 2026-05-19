@@ -73,12 +73,9 @@ function runRuntimeChecks(): RuntimeCheck[] {
   }
 
   checks.push({
-    label: "global EventSource (auto feedback only)",
-    status: typeof EventSource !== "undefined" ? "pass" : "warn",
-    details:
-      typeof EventSource !== "undefined"
-        ? "available"
-        : "missing: keep feedback.enableAutoFeedback=false",
+    label: "built-in SSE transport",
+    status: "pass",
+    details: "provided by @reflag/react-native-sdk via react-native-sse",
   });
 
   return checks;

@@ -27,7 +27,12 @@ import { computeFlagUpdatesChannelName } from "./flag/liveUpdates";
 import { HookArgs, HooksManager, State } from "./hooksManager";
 import { HttpClient } from "./httpClient";
 import { Logger, loggerWithPrefix, quietConsoleLogger } from "./logger";
-import { AblySSEChannel, openAblySSEChannel, PubSubMessage } from "./sse";
+import {
+  AblySSEChannel,
+  EventSourceFactory,
+  openAblySSEChannel,
+  PubSubMessage,
+} from "./sse";
 import { StorageAdapter } from "./storage";
 import { showToolbarToggle } from "./toolbar";
 import { ToolbarPosition } from "./ui/types";
@@ -35,6 +40,17 @@ import { logResponseError } from "./utils/responseError";
 
 const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
 const isNode = typeof document === "undefined"; // deno supports "window" but not "document" according to https://remix.run/docs/en/main/guides/gotchas
+
+function normalizeContext({
+  otherContext,
+  ...context
+}: ReflagDeprecatedContext): ReflagContext {
+  return {
+    user: context.user?.id ? { ...context.user } : undefined,
+    company: context.company?.id ? { ...context.company } : undefined,
+    other: { ...otherContext, ...context.other },
+  };
+}
 
 /**
  * (Internal) User context.
@@ -205,6 +221,15 @@ export type ToolbarOptions =
 export type FlagDefinitions = Readonly<Array<string>>;
 
 /**
+ * Pre-fetched evaluated state used to bootstrap the client.
+ */
+export type BootstrappedState = {
+  context: ReflagContext;
+  flags: RawFlags;
+  flagStateVersion?: number;
+};
+
+/**
  * ReflagClient initialization options.
  */
 export type InitOptions = ReflagDeprecatedContext & {
@@ -301,12 +326,18 @@ export type InitOptions = ReflagDeprecatedContext & {
    * server, without relying on context changes or manual refreshes.
    *
    * Defaults to `false` in the browser SDK.
-   *
-   * Note: requires a global `EventSource` implementation. This is available
-   * in all modern browsers but not in React Native, where you would need to
-   * provide a polyfill (for example `react-native-sse`).
    */
   enableLiveFlagUpdates?: boolean;
+
+  /**
+   * Optional factory used to create SSE connections.
+   *
+   * By default the SDK uses the global `EventSource` implementation available
+   * in browsers. This option is intended for alternative runtimes where you
+   * need to provide an EventSource-compatible transport manually. The React
+   * Native wrapper already injects a transport automatically.
+   */
+  eventSourceFactory?: EventSourceFactory;
 
   /**
    * Toolbar configuration
@@ -314,7 +345,13 @@ export type InitOptions = ReflagDeprecatedContext & {
   toolbar?: ToolbarOptions;
 
   /**
+   * Pre-fetched evaluated state to be used instead of fetching it from the server.
+   */
+  bootstrappedState?: BootstrappedState;
+
+  /**
    * Pre-fetched flags to be used instead of fetching them from the server.
+   * @deprecated Use `bootstrappedState` instead.
    */
   bootstrappedFlags?: RawFlags;
 
@@ -445,6 +482,7 @@ export class ReflagClient {
   private readonly autoFeedback: AutoFeedback | undefined;
   private autoFeedbackInit: Promise<void> | undefined;
   private readonly enableLiveFlagUpdates: boolean;
+  private readonly eventSourceFactory: EventSourceFactory | undefined;
   private pubSubChannel: AblySSEChannel | undefined;
   private pubSubInit: Promise<void> | undefined;
   private latestFlagStateVersionSeen: number | undefined;
@@ -467,11 +505,14 @@ export class ReflagClient {
       opts?.logger ?? loggerWithPrefix(quietConsoleLogger, "[Reflag]");
 
     // Create the context object making sure to clone the user and company objects
-    this.context = {
-      user: opts?.user?.id ? { ...opts.user } : undefined,
-      company: opts?.company?.id ? { ...opts.company } : undefined,
-      other: { ...opts?.otherContext, ...opts?.other },
-    };
+    this.context = normalizeContext(
+      opts?.bootstrappedState?.context ?? {
+        user: opts?.user,
+        company: opts?.company,
+        otherContext: opts?.otherContext,
+        other: opts?.other,
+      },
+    );
 
     this.config = {
       apiBaseUrl: opts?.apiBaseUrl ?? defaultConfig.apiBaseUrl,
@@ -480,10 +521,12 @@ export class ReflagClient {
       enableTracking: opts?.enableTracking ?? defaultConfig.enableTracking,
       offline: opts?.offline ?? defaultConfig.offline,
       bootstrapped:
-        opts && "bootstrappedFlags" in opts && !!opts.bootstrappedFlags,
+        !!opts?.bootstrappedState ||
+        (opts && "bootstrappedFlags" in opts && !!opts.bootstrappedFlags),
     };
 
     this.enableLiveFlagUpdates = opts?.enableLiveFlagUpdates ?? false;
+    this.eventSourceFactory = opts?.eventSourceFactory;
 
     this.requestFeedbackOptions = {
       position: opts?.feedback?.ui?.position,
@@ -526,6 +569,14 @@ export class ReflagClient {
       this.context,
       this.logger,
       {
+        bootstrappedState: opts.bootstrappedState
+          ? {
+              flags: opts.bootstrappedState.flags,
+              flagStateVersion: opts.bootstrappedState.flagStateVersion,
+            }
+          : opts.bootstrappedFlags
+            ? { flags: opts.bootstrappedFlags }
+            : undefined,
         bootstrappedFlags: opts.bootstrappedFlags,
         expireTimeMs: opts.expireTimeMs,
         staleTimeMs: opts.staleTimeMs,
@@ -808,17 +859,11 @@ export class ReflagClient {
   }
 
   private async applyContext(
-    { otherContext, ...context }: ReflagDeprecatedContext,
+    context: ReflagDeprecatedContext,
     { warnOnMissingIds }: { warnOnMissingIds: boolean },
   ) {
     const previousContext = this.context;
-
-    // Create a new context object making sure to clone the user and company objects
-    const newContext = {
-      user: context.user?.id ? { ...context.user } : undefined,
-      company: context.company?.id ? { ...context.company } : undefined,
-      other: { ...otherContext, ...context.other },
-    };
+    const newContext = normalizeContext(context);
 
     if (warnOnMissingIds && !context.user?.id) {
       this.logger.warn("No user Id provided in context, user will be ignored");
@@ -865,14 +910,69 @@ export class ReflagClient {
     }
   }
 
+  applyBootstrappedState(
+    bootstrappedState: BootstrappedState,
+    triggerEvent = true,
+  ) {
+    const previousContext = this.context;
+    const newContext = normalizeContext(bootstrappedState.context);
+
+    const contextChanged = !deepEqual(previousContext, newContext);
+    const userChanged = !deepEqual(previousContext.user, newContext.user);
+    const companyChanged = !deepEqual(
+      previousContext.company,
+      newContext.company,
+    );
+    const userIdChanged =
+      !!newContext.user?.id && newContext.user.id !== previousContext.user?.id;
+
+    const currentFlagStateVersion = this.flagsClient.getFlagStateVersion();
+    const latestKnownFlagStateVersion = Math.max(
+      currentFlagStateVersion ?? -1,
+      this.latestFlagStateVersionSeen ?? -1,
+    );
+    const incomingFlagStateVersion = bootstrappedState.flagStateVersion;
+    const shouldIgnoreIncomingFlags =
+      !contextChanged &&
+      latestKnownFlagStateVersion >= 0 &&
+      (incomingFlagStateVersion === undefined ||
+        incomingFlagStateVersion < latestKnownFlagStateVersion);
+
+    this.context = newContext;
+    this.flagsClient.setContextWithoutFetch(newContext);
+
+    if (!shouldIgnoreIncomingFlags) {
+      this.flagsClient.setFetchedFlags(
+        bootstrappedState.flags,
+        triggerEvent,
+        incomingFlagStateVersion,
+      );
+    }
+
+    if (!contextChanged) {
+      return;
+    }
+
+    if (companyChanged) {
+      void this.company();
+    }
+
+    if (userChanged) {
+      void this.user();
+      if (userIdChanged) {
+        void this.updateAutoFeedbackUser(String(newContext.user!.id));
+      }
+    }
+  }
+
   /**
    * Update the flags.
    *
    * @param flags The flags to update.
    * @param triggerEvent Whether to trigger the `flagsUpdated` event.
    */
-  updateFlags(flags: RawFlags, triggerEvent = true) {
-    this.flagsClient.setFetchedFlags(flags, triggerEvent);
+  updateFlags(flags: RawFlags, triggerEvent = true, flagStateVersion?: number) {
+    this.flagsClient.setFetchedFlags(flags, triggerEvent, flagStateVersion);
   }
 
   /**
@@ -1252,6 +1352,7 @@ export class ReflagClient {
       callback: (message) => this.handlePubSubMessage(message),
       logger: this.logger,
       sseBaseUrl: this.config.sseBaseUrl,
+      eventSourceFactory: this.eventSourceFactory,
     });
   }
 

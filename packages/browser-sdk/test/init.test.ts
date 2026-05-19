@@ -242,7 +242,7 @@ describe("init", () => {
       await reflagInstance.stop();
     });
 
-    test("does not refresh flags when the pushed version matches the current version", async () => {
+    test("does not refresh flags when the pushed version matches the bootstrapped version", async () => {
       let callback: ((message: any) => void) | undefined;
       vi.spyOn(
         liveUpdatesModule,
@@ -255,16 +255,21 @@ describe("init", () => {
 
       const reflagInstance = new ReflagClient({
         publishableKey: KEY,
-        user: { id: "foo" },
         enableLiveFlagUpdates: true,
         feedback: { enableAutoFeedback: false },
+        bootstrappedState: {
+          context: { user: { id: "foo" } },
+          flags: {
+            testFlag: {
+              key: "testFlag",
+              isEnabled: true,
+              targetingVersion: 1,
+            },
+          },
+          flagStateVersion: 5,
+        },
       });
       await reflagInstance.initialize();
-      reflagInstance["flagsClient"].setFetchedFlags(
-        reflagInstance["flagsClient"].getFetchedFlags(),
-        false,
-        5,
-      );
 
       const refreshSpy = vi
         .spyOn(reflagInstance["flagsClient"], "refreshFlags")

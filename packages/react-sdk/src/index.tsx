@@ -11,6 +11,7 @@ import React, {
 } from "react";
 
 import {
+  BootstrappedState as BrowserBootstrappedState,
   CheckEvent,
   CompanyContext,
   HookArgs,
@@ -131,8 +132,7 @@ export type FlagKey = keyof TypedFlags;
  */
 export type RawFlags = Record<FlagKey, RawFlag>;
 
-export type BootstrappedFlags = {
-  context: ReflagContext;
+export type BootstrappedFlags = BrowserBootstrappedState & {
   flags: BrowserRawFlags;
 };
 
@@ -177,7 +177,13 @@ export type ReflagPropsBase = {
  */
 export type ReflagInitOptionsBase = Omit<
   InitOptions,
-  "user" | "company" | "other" | "otherContext" | "bootstrappedFlags" | "logger"
+  | "user"
+  | "company"
+  | "other"
+  | "otherContext"
+  | "bootstrappedFlags"
+  | "bootstrappedState"
+  | "logger"
 >;
 
 /**
@@ -372,8 +378,7 @@ export function ReflagBootstrappedProvider({
 }: ReflagBootstrappedProps) {
   const client = useReflagClient({
     ...config,
-    ...flags.context,
-    bootstrappedFlags: flags.flags,
+    bootstrappedState: flags,
     debug,
     logger,
   });
@@ -386,15 +391,10 @@ export function ReflagBootstrappedProvider({
     });
   }, [client]);
 
-  // Update the context if it changes on the client side
+  // Update the bootstrapped state if it changes on the client side
   useEffect(() => {
-    void client.setContext(flags.context);
-  }, [client, flags.context]);
-
-  // Update the bootstrappedFlags if they change on the client side
-  useEffect(() => {
-    client.updateFlags(flags.flags);
-  }, [client, flags.flags]);
+    client.applyBootstrappedState(flags);
+  }, [client, flags]);
 
   return (
     <ReflagClientProvider

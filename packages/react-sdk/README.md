@@ -231,7 +231,7 @@ If you want "bullet proof feature flags" in a React application, use React boots
 
 ### Using `ReflagBootstrappedProvider`
 
-The `<ReflagBootstrappedProvider>` component is a specialized version of `ReflagProvider` designed for server-side rendering, preloaded flag scenarios, and high-reliability setups. Instead of fetching flags on initialization, it uses pre-fetched flags, resulting in faster initial page loads, better SSR compatibility, and a more resilient startup path for React applications.
+The `<ReflagBootstrappedProvider>` component is a specialized version of `ReflagProvider` designed for server-side rendering, preloaded flag scenarios, and high-reliability setups. Instead of fetching flags on initialization, it uses pre-fetched evaluated state, resulting in faster initial page loads, better SSR compatibility, and a more resilient startup path for React applications.
 
 ```tsx
 import { useState, useEffect } from "react";
@@ -300,6 +300,12 @@ app.get("/bootstrap", (req, res) => {
   });
 });
 ```
+
+The `flags` object returned by `getFlagsForBootstrap()` contains the full bootstrapped state package:
+
+- `context`: the evaluation context used on the server
+- `flags`: the evaluated raw flags
+- `flagStateVersion`: an optional version used to avoid redundant live-update refreshes immediately after bootstrapping
 
 ### Next.js Page Router SSR example
 
@@ -542,9 +548,14 @@ The `<ReflagProvider>` initializes the Reflag SDK, fetches flags and starts list
 - `offline`: Provide this option when testing or in local development environments to avoid contacting Reflag servers.
 - `loadingComponent` lets you specify an React component to be rendered instead of the children while the Reflag provider is initializing. If you want more control over loading screens, `useFlag()` and `useIsLoading` returns `isLoading` which you can use to customize the loading experience.
 - `enableTracking`: Set to `false` to stop sending tracking events and user/company updates to Reflag. Useful when you're impersonating a user (defaults to `true`),
+- `enableLiveFlagUpdates`: Enables live flag updates over SSE. Defaults to `true` in the React SDK.
 - `apiBaseUrl`: Optional base URL for the Reflag API. Use this to override the default API endpoint,
 - `appBaseUrl`: Optional base URL for the Reflag application. Use this to override the default app URL,
 - `sseBaseUrl`: Optional base URL for Server-Sent Events. Use this to override the default SSE endpoint (`https://pubsub.reflag.com`),
+
+> [!NOTE]
+> If you previously overrode `sseBaseUrl` with `https://livemessaging.bucket.co`, update it to `https://pubsub.reflag.com` or remove the override to use the default.
+
 - `logger`: Optional custom logger implementation (`debug`, `info`, `warn`, `error`) used by the underlying client,
 - `debug`: Set to `true` to enable debug logging to the console. If both `logger` and `debug` are provided, `logger` takes precedence,
 - `toolbar`: Optional [configuration](https://docs.reflag.com/supported-languages/browser-sdk/globals#toolbaroptions) for the Reflag toolbar,
@@ -556,7 +567,7 @@ The `<ReflagBootstrappedProvider>` is a specialized version of the `ReflagProvid
 
 The component accepts the following props:
 
-- `flags`: Pre-fetched flags data of type `BootstrappedFlags` obtained from the Node SDK's `getFlagsForBootstrap()` method. This contains both the context (user, company, other) and the flags data.
+- `flags`: Pre-fetched bootstrapped state of type `BootstrappedFlags` obtained from the Node SDK's `getFlagsForBootstrap()` method. This contains the context (`flags.context`), the evaluated flags (`flags.flags`), and an optional `flags.flagStateVersion`.
 - All other props available in [`ReflagProvider`](#reflagprovider-component) are supported except `context`, `user`, `company`, and `other` (which are extracted from `flags.context`).
 
 **Example:**
@@ -586,7 +597,9 @@ function App({ bootstrapData }: AppProps) {
 ```
 
 > [!Note]
-> When using `ReflagBootstrappedProvider`, the context (user, company, and other) is extracted from the `flags.context` property and doesn't need to be passed separately.
+> When using `ReflagBootstrappedProvider`, pass the entire object returned by `getFlagsForBootstrap()` directly as the `flags` prop. The context is extracted from `flags.context`, and `flags.flagStateVersion` is used when present.
+>
+> After bootstrapping, any live flag updates are fetched directly by the browser SDK from Reflag using the browser-visible context. If your bootstrapped snapshot depends on server-only or secret context that is not available in the browser, later live refreshes may differ. In that case, keep `enableLiveFlagUpdates` disabled.
 
 ## Hooks
 

@@ -1,6 +1,7 @@
 import type { Ref } from "vue";
 
 import type {
+  BootstrappedState as BrowserBootstrappedState,
   CompanyContext,
   InitOptions,
   Logger,
@@ -55,8 +56,7 @@ export interface ProviderContextType {
   isLoading: Ref<boolean>;
 }
 
-export type BootstrappedFlags = {
-  context: ReflagContext;
+export type BootstrappedFlags = BrowserBootstrappedState & {
   flags: RawFlags;
 };
 
@@ -71,7 +71,13 @@ export type RequestFlagFeedbackOptions = Omit<
  */
 export type ReflagInitOptionsBase = Omit<
   InitOptions,
-  "user" | "company" | "other" | "otherContext" | "bootstrappedFlags" | "logger"
+  | "user"
+  | "company"
+  | "other"
+  | "otherContext"
+  | "bootstrappedFlags"
+  | "bootstrappedState"
+  | "logger"
 >;
 
 /**

@@ -1,5 +1,12 @@
 import { Logger, loggerWithPrefix } from "./logger";
 
+export type EventSourceLike = {
+  addEventListener: (type: string, cb: (event: any) => void) => void;
+  close: () => void;
+};
+
+export type EventSourceFactory = (url: string) => EventSourceLike;
+
 export type PubSubMessage = {
   name?: string;
   event?: string;
@@ -10,7 +17,7 @@ export type PubSubMessage = {
 
 export class AblySSEChannel {
   private isOpen = false;
-  private eventSource: EventSource | null = null;
+  private eventSource: EventSourceLike | null = null;
   private retryInterval: ReturnType<typeof setInterval> | null = null;
   private logger: Logger;
 
@@ -19,6 +26,7 @@ export class AblySSEChannel {
     private sseBaseUrl: string,
     private messageHandler: (message: PubSubMessage) => void,
     logger: Logger,
+    private eventSourceFactory?: EventSourceFactory,
   ) {
     this.logger = loggerWithPrefix(logger, "[SSE]");
 
@@ -83,6 +91,21 @@ export class AblySSEChannel {
     this.disconnect();
   }
 
+  private createEventSource(url: string): EventSourceLike | undefined {
+    if (this.eventSourceFactory) {
+      return this.eventSourceFactory(url);
+    }
+
+    if (typeof EventSource === "undefined") {
+      this.logger.warn(
+        "EventSource is not available in this environment; SSE channel cannot be opened",
+      );
+      return;
+    }
+
+    return new EventSource(url);
+  }
+
   public async connect() {
     if (this.isOpen) {
       this.logger.warn("channel connection already open");
@@ -96,14 +119,10 @@ export class AblySSEChannel {
       url.searchParams.append("channels", this.channels.join(","));
       url.searchParams.append("rewind", "1");
 
-      if (typeof EventSource === "undefined") {
-        this.logger.warn(
-          "EventSource is not available in this environment; SSE channel cannot be opened",
-        );
+      this.eventSource = this.createEventSource(url.toString()) ?? null;
+      if (!this.eventSource) {
         return;
       }
-
-      this.eventSource = new EventSource(url);
 
       this.eventSource.addEventListener("error", (e) => this.onError(e));
       this.eventSource.addEventListener("open", (e) => this.onOpen(e));
@@ -131,7 +150,7 @@ export class AblySSEChannel {
   }
 
   public open(options?: { retryInterval?: number; retryCount?: number }) {
-    if (typeof EventSource === "undefined") {
+    if (!this.eventSourceFactory && typeof EventSource === "undefined") {
       this.logger.warn(
         "EventSource is not available in this environment; SSE channel cannot be opened",
       );
@@ -198,12 +217,14 @@ export function openAblySSEChannel({
   callback,
   sseBaseUrl,
   logger,
+  eventSourceFactory,
 }: {
   channel?: string;
   channels?: string[];
   callback: (req: PubSubMessage) => void;
   logger: Logger;
   sseBaseUrl: string;
+  eventSourceFactory?: EventSourceFactory;
 }) {
   const subscribedChannels = channels ?? (channel ? [channel] : []);
   const sse = new AblySSEChannel(
@@ -211,6 +232,7 @@ export function openAblySSEChannel({
     sseBaseUrl,
     callback,
     logger,
+    eventSourceFactory,
   );
 
   sse.open();

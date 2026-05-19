@@ -1,8 +1,8 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * Reflag API
- * Feature flag management API
+ * Reflag Management API
+ * Feature flag Management API
  *
  * The version of the OpenAPI document: 3.0.1
  * 

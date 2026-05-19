@@ -52,6 +52,8 @@ See the [React SDK README](../react-sdk/README.md) for more details.
 
 - The Reflag toolbar is web-only and is not available in React Native.
 - Built-in feedback UI is web-only. In React Native, use your own UI and call `useSendFeedback` or `client.feedback` when you're ready to send feedback.
+- Live flag updates work out of the box. The React Native SDK bundles an SSE transport via `react-native-sse`, so no global `EventSource` shim is required.
+- If you need custom SSE behavior, you can still override the transport by passing `eventSourceFactory` to `ReflagProvider` or `ReflagBootstrappedProvider`.
 
 ## Reference
 
@@ -105,4 +107,10 @@ export function App() {
 ## Bootstrapping
 
 You can use `<ReflagBootstrappedProvider>` in React Native when you already have pre-fetched flags and want to avoid an initial fetch.
+Pass the full object returned by the Node SDK's `getFlagsForBootstrap()` directly as the provider's `flags` prop; it includes `context`, evaluated `flags`, and an optional `flagStateVersion`.
+
+After bootstrapping, any live flag updates are fetched directly by the client SDK from Reflag using the client-visible context. If your bootstrapped snapshot depends on server-only or secret context that is not available in the app, later live refreshes may differ. In that case, keep `enableLiveFlagUpdates` disabled.
+
+If you previously overrode `sseBaseUrl` with `https://livemessaging.bucket.co`, update it to `https://pubsub.reflag.com` or remove the override to use the default.
+
 For bootstrap usage patterns and options, see the [React SDK bootstrapping docs](../react-sdk/README.md#server-side-rendering-and-bootstrapping).

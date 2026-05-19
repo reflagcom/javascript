@@ -102,6 +102,12 @@ type Configuration = {
   sseBaseUrl?: "https://pubsub.reflag.com";
   feedback?: undefined; // See FEEDBACK.md
   enableTracking?: true; // set to `false` to stop sending track events and user/company updates to Reflag servers. Useful when you're impersonating a user
+  enableLiveFlagUpdates?: false; // Set to `true` to keep flags up to date over SSE (browser SDK default: false)
+  eventSourceFactory?: (url: string) => {
+    // Advanced: provide a custom EventSource-compatible transport
+    addEventListener: (type: string, cb: (event: any) => void) => void;
+    close: () => void;
+  };
   fallbackFlags?:
     | string[]
     | Record<string, { key: string; payload: any } | true>; // Enable these flags if unable to contact reflag.com. Can be a list of flag keys or a record with configuration values
@@ -241,53 +247,105 @@ type Configuration = {
   feedback?: undefined; // See FEEDBACK.md
   enableTracking?: true; // set to `false` to stop sending track events and user/company updates to Reflag servers. Useful when you're impersonating a user
   offline?: boolean; // Use the SDK in offline mode. Offline mode is useful during testing and local development
-  bootstrappedFlags?: FetchedFlags; // Pre-fetched flags from server-side (see Server-side rendering section)
+  bootstrappedState?: {
+    context: ReflagContext;
+    flags: FetchedFlags;
+    flagStateVersion?: number;
+  }; // Pre-fetched evaluated state from server-side (see Server-side rendering section)
+  bootstrappedFlags?: FetchedFlags; // Deprecated: use `bootstrappedState` instead
 };
 ```
 
-### Using bootstrappedFlags
+### Using `bootstrappedState`
 
-Use the Node SDK's `getFlagsForBootstrap()` method to pre-fetch flags server-side, then pass them to the browser client:
+Use the Node SDK's `getFlagsForBootstrap()` method to pre-fetch evaluated state server-side, then pass the returned object directly to the browser client:
 
 ```typescript
-// Server-side: Get flags using Node SDK
+// Server-side: Get bootstrapped state using Node SDK
 import { ReflagClient as ReflagNodeClient } from "@reflag/node-sdk";
 
 const serverClient = new ReflagNodeClient({ secretKey: "your-secret-key" });
 await serverClient.initialize();
 
-const { flags } = serverClient.getFlagsForBootstrap({
+const bootstrappedState = serverClient.getFlagsForBootstrap({
   user: { id: "user123", name: "John Doe", email: "john@acme.com" },
   company: { id: "company456", name: "Acme Inc", plan: "enterprise" },
 });
 
-// Pass flags data to client using your framework's preferred method
-// or for example in a script tag
+// Pass the bootstrapped state to the client using your framework's preferred method
 app.get("/", (req, res) => {
   res.set("Content-Type", "text/html");
   res.send(
     Buffer.from(
-      `<script>var flags = ${JSON.stringify(flags)};</script>
+      `<script>var bootstrappedState = ${JSON.stringify(bootstrappedState)};</script>
       <main id="app"></main>`,
     ),
   );
 });
 
-// Client-side: Initialize with pre-fetched flags
+// Client-side: Initialize with pre-fetched evaluated state
 import { ReflagClient } from "@reflag/browser-sdk";
 
 const reflagClient = new ReflagClient({
   publishableKey: "your-publishable-key",
-  user: { id: "user123", name: "John Doe", email: "john@acme.com" },
-  company: { id: "company456", name: "Acme Inc", plan: "enterprise" },
-  bootstrappedFlags: flags, // No network request needed
+  bootstrappedState, // Contains context, flags, and optional flagStateVersion
 });
 
 await reflagClient.initialize(); // Initializes all but flags
 const { isEnabled } = reflagClient.getFlag("huddle");
 ```
 
+The `bootstrappedState` object contains:
+
+- `context`: the evaluation context used on the server
+- `flags`: the evaluated raw flags
+- `flagStateVersion`: an optional version used to avoid redundant live-update refreshes immediately after bootstrapping
+
+If you previously used `bootstrappedFlags`, migrate like this:
+
+```typescript
+// Before
+const { flags } = serverClient.getFlagsForBootstrap(context);
+const client = new ReflagClient({
+  publishableKey,
+  user: context.user,
+  company: context.company,
+  other: context.other,
+  bootstrappedFlags: flags,
+});
+
+// After
+const bootstrappedState = serverClient.getFlagsForBootstrap(context);
+const client = new ReflagClient({
+  publishableKey,
+  bootstrappedState,
+});
+```
+
+> [!NOTE]
+> After bootstrapping, any live flag updates are fetched directly by the browser SDK from Reflag using the browser-visible context. If your bootstrapped snapshot depends on server-only or secret context that is not available in the browser, later live refreshes may differ. In that case, keep `enableLiveFlagUpdates` disabled.
+
 This eliminates loading states and improves performance by avoiding the initial flags API call.
+
+### SSE endpoint migration
+
+The default pubsub SSE host is now `https://pubsub.reflag.com`.
+
+If you previously overrode `sseBaseUrl` with the old host, update your code like this:
+
+```typescript
+// Before
+const client = new ReflagClient({
+  publishableKey,
+  sseBaseUrl: "https://livemessaging.bucket.co",
+});
+
+// After (or simply remove the override to use the default)
+const client = new ReflagClient({
+  publishableKey,
+  sseBaseUrl: "https://pubsub.reflag.com",
+});
+```
 
 ## Context management
 

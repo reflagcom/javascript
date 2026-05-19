@@ -1,8 +1,8 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * Reflag API
- * Feature flag management API
+ * Reflag Management API
+ * Feature flag Management API
  *
  * The version of the OpenAPI document: 3.0.1
  * 
@@ -47,6 +47,11 @@ export interface Environment {
      */
     order: number;
     /**
+     * Environment version incremented when flag state changes
+     * @type {number}
+     */
+    flagStateVersion: number;
+    /**
      * 
      * @type {EnvironmentSdkAccess}
      */
@@ -61,6 +66,7 @@ export function instanceOfEnvironment(value: object): value is Environment {
     if (!('name' in value) || value['name'] === undefined) return false;
     if (!('isProduction' in value) || value['isProduction'] === undefined) return false;
     if (!('order' in value) || value['order'] === undefined) return false;
+    if (!('flagStateVersion' in value) || value['flagStateVersion'] === undefined) return false;
     if (!('sdkAccess' in value) || value['sdkAccess'] === undefined) return false;
     return true;
 }
@@ -79,6 +85,7 @@ export function EnvironmentFromJSONTyped(json: any, ignoreDiscriminator: boolean
         'name': json['name'],
         'isProduction': json['isProduction'],
         'order': json['order'],
+        'flagStateVersion': json['flagStateVersion'],
         'sdkAccess': EnvironmentSdkAccessFromJSON(json['sdkAccess']),
     };
 }
@@ -98,6 +105,7 @@ export function EnvironmentToJSONTyped(value?: Environment | null, ignoreDiscrim
         'name': value['name'],
         'isProduction': value['isProduction'],
         'order': value['order'],
+        'flagStateVersion': value['flagStateVersion'],
         'sdkAccess': EnvironmentSdkAccessToJSON(value['sdkAccess']),
     };
 }

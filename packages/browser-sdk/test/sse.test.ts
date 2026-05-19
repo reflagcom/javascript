@@ -49,7 +49,7 @@ describe("connection handling", () => {
 
     await sse.connect();
 
-    const url = vi.mocked(window.EventSource).mock.calls[0][0] as URL;
+    const url = new URL(vi.mocked(window.EventSource).mock.calls[0][0]);
     expect(url.searchParams.get("channels")).toBe("channel-a,channel-b");
     expect(url.searchParams.get("accessToken")).toBeNull();
     expect(url.searchParams.get("rewind")).toBe("1");
@@ -166,6 +166,43 @@ describe("connection handling", () => {
     });
 
     expect(vi.mocked(window.EventSource)).toHaveBeenCalledTimes(1);
+  });
+
+  test("uses a provided eventSourceFactory when global EventSource is unavailable", async () => {
+    const originalEventSource = window.EventSource;
+    Object.defineProperty(window, "EventSource", {
+      value: undefined,
+      writable: true,
+    });
+
+    const eventSource = {
+      addEventListener: vi.fn(),
+      close: vi.fn(),
+    };
+    const eventSourceFactory = vi.fn().mockReturnValue(eventSource);
+
+    try {
+      const sse = openAblySSEChannel({
+        channels: ["channel-a", "channel-b"],
+        callback: vi.fn(),
+        logger: testLogger,
+        sseBaseUrl: sseHost,
+        eventSourceFactory,
+      });
+
+      expect(eventSourceFactory).toHaveBeenCalledTimes(1);
+      expect(eventSourceFactory).toHaveBeenCalledWith(
+        `${sseHost}/sse?v=1.2&channels=channel-a%2Cchannel-b&rewind=1`,
+      );
+      expect(eventSource.addEventListener).toHaveBeenCalledTimes(3);
+
+      sse.close();
+    } finally {
+      Object.defineProperty(window, "EventSource", {
+        value: originalEventSource,
+        writable: true,
+      });
+    }
   });
 });
 

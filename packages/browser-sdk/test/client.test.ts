@@ -412,5 +412,173 @@ describe("ReflagClient", () => {
       // maybeFetchFlags should not be called since flagsClient is already bootstrapped
       expect(maybeFetchFlags).not.toHaveBeenCalled();
     });
+
+    it("ignores same-context bootstrapped state with an older flagStateVersion", () => {
+      client = new ReflagClient({
+        publishableKey: "test-key-bootstrap-versioned",
+        enableTracking: false,
+        feedback: { enableAutoFeedback: false },
+        bootstrappedState: {
+          context: {
+            user: { id: "user1" },
+            company: { id: "company1" },
+          },
+          flags: {
+            testFlag: {
+              key: "testFlag",
+              isEnabled: true,
+              targetingVersion: 7,
+            },
+          },
+          flagStateVersion: 7,
+        },
+      });
+
+      client.updateFlags(
+        {
+          testFlag: {
+            key: "testFlag",
+            isEnabled: false,
+            targetingVersion: 8,
+          },
+        },
+        true,
+        8,
+      );
+
+      client.applyBootstrappedState({
+        context: {
+          user: { id: "user1" },
+          company: { id: "company1" },
+        },
+        flags: {
+          testFlag: {
+            key: "testFlag",
+            isEnabled: true,
+            targetingVersion: 7,
+          },
+        },
+        flagStateVersion: 7,
+      });
+
+      expect(client.getFlags()).toEqual({
+        testFlag: {
+          key: "testFlag",
+          isEnabled: false,
+          targetingVersion: 8,
+          isEnabledOverride: null,
+        },
+      });
+      expect(client["flagsClient"].getFlagStateVersion()).toBe(8);
+    });
+
+    it("ignores same-context unversioned bootstrapped state when current state is versioned", () => {
+      client = new ReflagClient({
+        publishableKey: "test-key-bootstrap-unversioned",
+        enableTracking: false,
+        feedback: { enableAutoFeedback: false },
+        bootstrappedState: {
+          context: {
+            user: { id: "user1" },
+            company: { id: "company1" },
+          },
+          flags: {
+            testFlag: {
+              key: "testFlag",
+              isEnabled: true,
+              targetingVersion: 7,
+            },
+          },
+          flagStateVersion: 7,
+        },
+      });
+
+      client.updateFlags(
+        {
+          testFlag: {
+            key: "testFlag",
+            isEnabled: false,
+            targetingVersion: 8,
+          },
+        },
+        true,
+        8,
+      );
+
+      client.applyBootstrappedState({
+        context: {
+          user: { id: "user1" },
+          company: { id: "company1" },
+        },
+        flags: {
+          testFlag: {
+            key: "testFlag",
+            isEnabled: true,
+            targetingVersion: 6,
+          },
+        },
+      });
+
+      expect(client.getFlags()).toEqual({
+        testFlag: {
+          key: "testFlag",
+          isEnabled: false,
+          targetingVersion: 8,
+          isEnabledOverride: null,
+        },
+      });
+      expect(client["flagsClient"].getFlagStateVersion()).toBe(8);
+    });
+
+    it("still applies bootstrapped state when the context changes", () => {
+      client = new ReflagClient({
+        publishableKey: "test-key-bootstrap-context-change",
+        enableTracking: false,
+        feedback: { enableAutoFeedback: false },
+        bootstrappedState: {
+          context: {
+            user: { id: "user1" },
+            company: { id: "company1" },
+          },
+          flags: {
+            testFlag: {
+              key: "testFlag",
+              isEnabled: false,
+              targetingVersion: 8,
+            },
+          },
+          flagStateVersion: 8,
+        },
+      });
+
+      client.applyBootstrappedState({
+        context: {
+          user: { id: "user2" },
+          company: { id: "company2" },
+        },
+        flags: {
+          testFlag: {
+            key: "testFlag",
+            isEnabled: true,
+            targetingVersion: 1,
+          },
+        },
+      });
+
+      expect(client.getContext()).toEqual({
+        user: { id: "user2" },
+        company: { id: "company2" },
+        other: {},
+      });
+      expect(client.getFlags()).toEqual({
+        testFlag: {
+          key: "testFlag",
+          isEnabled: true,
+          targetingVersion: 1,
+          isEnabledOverride: null,
+        },
+      });
+      expect(client["flagsClient"].getFlagStateVersion()).toBeUndefined();
+    });
   });
 });

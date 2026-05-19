@@ -202,11 +202,17 @@ export interface CheckEvent {
 
 const storageOverridesKey = `__reflag_overrides`;
 const REFRESH_LIMIT_COUNT = 10;
-const REFRESH_LIMIT_WINDOW_MS = 5 * 60 * 1000;
+const REFRESH_LIMIT_WINDOW_MS = 60 * 1000;
 
 export type FlagOverrides = Record<string, boolean | undefined>;
 
+type BootstrappedState = {
+  flags: RawFlags;
+  flagStateVersion?: number;
+};
+
 type FlagsClientOptions = Partial<Config> & {
+  bootstrappedState?: BootstrappedState;
   bootstrappedFlags?: RawFlags;
   fallbackFlags?: Record<string, FallbackFlagOverride> | string[];
   cache?: FlagCache;
@@ -246,6 +252,7 @@ export class FlagsClient {
     private context: ReflagContext,
     logger: Logger,
     {
+      bootstrappedState,
       bootstrappedFlags,
       cache,
       rateLimiter,
@@ -270,9 +277,13 @@ export class FlagsClient {
       this.setupCache(this.config.staleTimeMs, this.config.expireTimeMs);
     this.fallbackFlags = this.setupFallbackFlags(fallbackFlags);
 
-    if (bootstrappedFlags) {
+    if (bootstrappedState || bootstrappedFlags) {
       this.bootstrapped = true;
-      this.setFetchedFlags(bootstrappedFlags, false);
+      this.setFetchedFlags(
+        bootstrappedState?.flags ?? bootstrappedFlags ?? {},
+        false,
+        bootstrappedState?.flagStateVersion,
+      );
     }
   }
 
@@ -309,6 +320,10 @@ export class FlagsClient {
 
   getFetchedFlags(): RawFlags {
     return this.fetchedFlags;
+  }
+
+  setContextWithoutFetch(context: ReflagContext) {
+    this.context = context;
   }
 
   setFetchedFlags(

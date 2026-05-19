@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React from "react";
+import ReactNativeEventSource from "react-native-sse";
 
 import type {
   BootstrappedFlags,
@@ -44,6 +45,11 @@ import { version } from "../package.json";
 
 const SDK_VERSION = `react-native-sdk/${version}`;
 
+const defaultEventSourceFactory = (url: string) =>
+  new ReactNativeEventSource(url, {
+    pollingInterval: 0,
+  }) as any;
+
 export {
   ReflagClientProvider,
   useClient,
@@ -87,6 +93,7 @@ export function ReflagProvider(props: ReflagProps) {
       {...props}
       sdkVersion={SDK_VERSION}
       storage={props.storage ?? AsyncStorage}
+      eventSourceFactory={props.eventSourceFactory ?? defaultEventSourceFactory}
       enableLiveFlagUpdates={props.enableLiveFlagUpdates ?? true}
       feedback={{
         ...props.feedback,
@@ -102,6 +109,7 @@ export function ReflagBootstrappedProvider(props: ReflagBootstrappedProps) {
       {...props}
       sdkVersion={SDK_VERSION}
       storage={props.storage ?? AsyncStorage}
+      eventSourceFactory={props.eventSourceFactory ?? defaultEventSourceFactory}
       enableLiveFlagUpdates={props.enableLiveFlagUpdates ?? true}
       feedback={{
         ...props.feedback,

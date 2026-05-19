@@ -7019,6 +7019,7 @@ __metadata:
     "@reflag/react-sdk": "npm:1.4.8"
     "@reflag/tsconfig": "npm:^0.0.2"
     "@types/react": "npm:^19.0.12"
+    react-native-sse: "npm:^1.2.1"
     typescript: "npm:^5.7.3"
   peerDependencies:
     react: "*"
@@ -20803,6 +20804,13 @@ __metadata:
     react: "*"
     react-native: "*"
   checksum: 10c0/3c8df21a1dbac83116b9c9bd5d20b7c1bb7649ecef44a111af6fb6b237241f5f4d692189eec30a69f5701b857249257da3621b9e17165460a2bb71faac7b92ae
+  languageName: node
+  linkType: hard
+
+"react-native-sse@npm:^1.2.1":
+  version: 1.2.1
+  resolution: "react-native-sse@npm:1.2.1"
+  checksum: 10c0/68b95601da2a0d37b2cd7ee4af16169a4650ec615b656cb064aba537f3f516b2242b0533c90b63fc0950ef39e25f5a62d8bc53c70ac892c460d24dc3efe3d844
   languageName: node
   linkType: hard
 

@@ -1,8 +1,8 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * Reflag API
- * Feature flag management API
+ * Reflag Management API
+ * Feature flag Management API
  *
  * The version of the OpenAPI document: 3.0.1
  * 
@@ -74,6 +74,7 @@ export const FlagHeaderCollectionSortByEnum = {
     Stage: 'stage',
     AutoFeedbackSurveysEnabled: 'autoFeedbackSurveysEnabled',
     CreatedAt: 'createdAt',
+    RolledOutToEveryoneAt: 'rolledOutToEveryoneAt',
     EnvironmentStatus: 'environmentStatus',
     Owner: 'owner',
     LastCheck: 'lastCheck',

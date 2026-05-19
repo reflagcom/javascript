@@ -1,8 +1,8 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * Reflag API
- * Feature flag management API
+ * Reflag Management API
+ * Feature flag Management API
  *
  * The version of the OpenAPI document: 3.0.1
  * 
@@ -84,10 +84,35 @@ export interface FlagHeader {
      */
     createdAt?: string;
     /**
+     * Timestamp when the flag was rolled out to everyone
+     * @type {string}
+     */
+    rolledOutToEveryoneAt?: string;
+    /**
+     * Whether code references for this flag have been cleaned up
+     * @type {boolean}
+     */
+    codeRefsCleanedUp: boolean;
+    /**
+     * Name of the user who marked code references as cleaned up
+     * @type {string}
+     */
+    codeRefsMarkedCleanUserName?: string;
+    /**
+     * Timestamp when code references were marked as cleaned up
+     * @type {string}
+     */
+    codeRefsMarkedCleanAt?: string;
+    /**
      * Timestamp when the flag was last checked
      * @type {string}
      */
     lastCheckAt?: string;
+    /**
+     * Whether the flag has no recent access checks
+     * @type {boolean}
+     */
+    noRecentChecks: boolean;
     /**
      * Timestamp when the flag was last tracked
      * @type {string}
@@ -105,6 +130,8 @@ export function instanceOfFlagHeader(value: object): value is FlagHeader {
     if (!('archived' in value) || value['archived'] === undefined) return false;
     if (!('stale' in value) || value['stale'] === undefined) return false;
     if (!('permanent' in value) || value['permanent'] === undefined) return false;
+    if (!('codeRefsCleanedUp' in value) || value['codeRefsCleanedUp'] === undefined) return false;
+    if (!('noRecentChecks' in value) || value['noRecentChecks'] === undefined) return false;
     return true;
 }
 
@@ -128,7 +155,12 @@ export function FlagHeaderFromJSONTyped(json: any, ignoreDiscriminator: boolean)
         'stale': json['stale'],
         'permanent': json['permanent'],
         'createdAt': json['createdAt'] == null ? undefined : json['createdAt'],
+        'rolledOutToEveryoneAt': json['rolledOutToEveryoneAt'] == null ? undefined : json['rolledOutToEveryoneAt'],
+        'codeRefsCleanedUp': json['codeRefsCleanedUp'],
+        'codeRefsMarkedCleanUserName': json['codeRefsMarkedCleanUserName'] == null ? undefined : json['codeRefsMarkedCleanUserName'],
+        'codeRefsMarkedCleanAt': json['codeRefsMarkedCleanAt'] == null ? undefined : json['codeRefsMarkedCleanAt'],
         'lastCheckAt': json['lastCheckAt'] == null ? undefined : json['lastCheckAt'],
+        'noRecentChecks': json['noRecentChecks'],
         'lastTrackAt': json['lastTrackAt'] == null ? undefined : json['lastTrackAt'],
     };
 }
@@ -154,7 +186,12 @@ export function FlagHeaderToJSONTyped(value?: FlagHeader | null, ignoreDiscrimin
         'stale': value['stale'],
         'permanent': value['permanent'],
         'createdAt': value['createdAt'],
+        'rolledOutToEveryoneAt': value['rolledOutToEveryoneAt'],
+        'codeRefsCleanedUp': value['codeRefsCleanedUp'],
+        'codeRefsMarkedCleanUserName': value['codeRefsMarkedCleanUserName'],
+        'codeRefsMarkedCleanAt': value['codeRefsMarkedCleanAt'],
         'lastCheckAt': value['lastCheckAt'],
+        'noRecentChecks': value['noRecentChecks'],
         'lastTrackAt': value['lastTrackAt'],
     };
 }

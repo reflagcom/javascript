@@ -656,6 +656,43 @@ describe("FlagsClient", () => {
       });
     });
 
+    test("should preserve flagStateVersion when bootstrapped state is provided in constructor", () => {
+      const { httpClient } = flagsClientFactory();
+      const preFetchedFlags = {
+        testFlag: {
+          key: "testFlag",
+          isEnabled: true,
+          targetingVersion: 1,
+        },
+      };
+
+      const flagsClient = new FlagsClient(
+        httpClient,
+        {
+          user: { id: "123" },
+          company: { id: "456" },
+          other: { eventId: "big-conference1" },
+        },
+        testLogger,
+        {
+          bootstrappedState: {
+            flags: preFetchedFlags,
+            flagStateVersion: 7,
+          },
+        },
+      );
+
+      expect(flagsClient.getFlagStateVersion()).toBe(7);
+      expect(flagsClient.getFlags()).toEqual({
+        testFlag: {
+          key: "testFlag",
+          isEnabled: true,
+          targetingVersion: 1,
+          isEnabledOverride: null,
+        },
+      });
+    });
+
     test("should skip fetching when already initialized with pre-fetched flags", async () => {
       const { httpClient } = flagsClientFactory();
       vi.spyOn(httpClient, "get");
