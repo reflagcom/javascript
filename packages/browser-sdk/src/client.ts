@@ -1,12 +1,7 @@
 import { deepEqual } from "fast-equals";
 
 import { BulkEvent, BulkQueue } from "./bulkQueue";
-import {
-  API_BASE_URL,
-  APP_BASE_URL,
-  IS_SERVER,
-  SSE_REALTIME_BASE_URL,
-} from "./config";
+import { API_BASE_URL, APP_BASE_URL, IS_SERVER } from "./config";
 import { ReflagContext, ReflagDeprecatedContext } from "./context";
 import {
   AutoFeedback,
@@ -185,7 +180,8 @@ export interface Config {
   appBaseUrl: string;
 
   /**
-   * Base URL of Reflag servers for pubsub SSE connections.
+   * Base URL used for pubsub SSE connections.
+   * Defaults to `apiBaseUrl`.
    */
   sseBaseUrl: string;
 
@@ -299,7 +295,8 @@ export type InitOptions = ReflagDeprecatedContext & {
   credentials?: "include" | "same-origin" | "omit";
 
   /**
-   * Base URL of Reflag servers for pubsub SSE connections.
+   * @deprecated SSE now uses the same origin as `apiBaseUrl` by default.
+   * Override only if you need a separate pubsub host temporarily.
    */
   sseBaseUrl?: string;
 
@@ -396,7 +393,7 @@ export type InitOptions = ReflagDeprecatedContext & {
 const defaultConfig: Config = {
   apiBaseUrl: API_BASE_URL,
   appBaseUrl: APP_BASE_URL,
-  sseBaseUrl: SSE_REALTIME_BASE_URL,
+  sseBaseUrl: API_BASE_URL,
   enableTracking: true,
   offline: false,
   bootstrapped: false,
@@ -514,10 +511,12 @@ export class ReflagClient {
       },
     );
 
+    const apiBaseUrl = opts?.apiBaseUrl ?? defaultConfig.apiBaseUrl;
+
     this.config = {
-      apiBaseUrl: opts?.apiBaseUrl ?? defaultConfig.apiBaseUrl,
+      apiBaseUrl,
       appBaseUrl: opts?.appBaseUrl ?? defaultConfig.appBaseUrl,
-      sseBaseUrl: opts?.sseBaseUrl ?? defaultConfig.sseBaseUrl,
+      sseBaseUrl: opts?.sseBaseUrl ?? apiBaseUrl,
       enableTracking: opts?.enableTracking ?? defaultConfig.enableTracking,
       offline: opts?.offline ?? defaultConfig.offline,
       bootstrapped:

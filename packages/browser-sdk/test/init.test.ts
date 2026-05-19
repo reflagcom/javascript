@@ -77,6 +77,7 @@ describe("init", () => {
     await reflagInstance.initialize();
 
     expect(usedSpecialHost).toBe(true);
+    expect(reflagInstance.getConfig().sseBaseUrl).toBe("https://example.com");
     await reflagInstance.stop();
   });
 

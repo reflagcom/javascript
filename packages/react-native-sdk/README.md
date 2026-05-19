@@ -111,6 +111,4 @@ Pass the full object returned by the Node SDK's `getFlagsForBootstrap()` directl
 
 After bootstrapping, any live flag updates are fetched directly by the client SDK from Reflag using the client-visible context. If your bootstrapped snapshot depends on server-only or secret context that is not available in the app, later live refreshes may differ. In that case, keep `enableLiveFlagUpdates` disabled.
 
-If you previously overrode `sseBaseUrl` with `https://livemessaging.bucket.co`, update it to `https://pubsub.reflag.com` or remove the override to use the default.
-
 For bootstrap usage patterns and options, see the [React SDK bootstrapping docs](../react-sdk/README.md#server-side-rendering-and-bootstrapping).

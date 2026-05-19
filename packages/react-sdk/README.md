@@ -549,12 +549,8 @@ The `<ReflagProvider>` initializes the Reflag SDK, fetches flags and starts list
 - `loadingComponent` lets you specify an React component to be rendered instead of the children while the Reflag provider is initializing. If you want more control over loading screens, `useFlag()` and `useIsLoading` returns `isLoading` which you can use to customize the loading experience.
 - `enableTracking`: Set to `false` to stop sending tracking events and user/company updates to Reflag. Useful when you're impersonating a user (defaults to `true`),
 - `enableLiveFlagUpdates`: Enables live flag updates over SSE. Defaults to `true` in the React SDK.
-- `apiBaseUrl`: Optional base URL for the Reflag API. Use this to override the default API endpoint,
+- `apiBaseUrl`: Optional base URL for the Reflag API. This also controls the SSE origin used for live flag updates and automated feedback,
 - `appBaseUrl`: Optional base URL for the Reflag application. Use this to override the default app URL,
-- `sseBaseUrl`: Optional base URL for Server-Sent Events. Use this to override the default SSE endpoint (`https://pubsub.reflag.com`),
-
-> [!NOTE]
-> If you previously overrode `sseBaseUrl` with `https://livemessaging.bucket.co`, update it to `https://pubsub.reflag.com` or remove the override to use the default.
 
 - `logger`: Optional custom logger implementation (`debug`, `info`, `warn`, `error`) used by the underlying client,
 - `debug`: Set to `true` to enable debug logging to the console. If both `logger` and `debug` are provided, `logger` takes precedence,
