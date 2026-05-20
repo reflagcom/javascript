@@ -930,7 +930,22 @@ export class ReflagClient {
       currentFlagStateVersion ?? -1,
       this.latestFlagStateVersionSeen ?? -1,
     );
+    if (latestKnownFlagStateVersion >= 0) {
+      this.latestFlagStateVersionSeen = latestKnownFlagStateVersion;
+    }
+
     const incomingFlagStateVersion = bootstrappedState.flagStateVersion;
+    if (
+      typeof incomingFlagStateVersion === "number" &&
+      Number.isInteger(incomingFlagStateVersion) &&
+      incomingFlagStateVersion >= 0
+    ) {
+      this.latestFlagStateVersionSeen = Math.max(
+        this.latestFlagStateVersionSeen ?? -1,
+        incomingFlagStateVersion,
+      );
+    }
+
     const shouldIgnoreIncomingFlags =
       !contextChanged &&
       latestKnownFlagStateVersion >= 0 &&
@@ -962,6 +977,8 @@ export class ReflagClient {
         void this.updateAutoFeedbackUser(String(newContext.user!.id));
       }
     }
+
+    this.reconcileFlagsWithLatestPubSubVersion();
   }
 
   /**

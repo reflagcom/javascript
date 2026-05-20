@@ -580,5 +580,52 @@ describe("ReflagClient", () => {
       });
       expect(client["flagsClient"].getFlagStateVersion()).toBeUndefined();
     });
+
+    it("reconciles a context-changing bootstrapped state when a newer version was already seen", async () => {
+      client = new ReflagClient({
+        publishableKey: "test-key-bootstrap-context-reconcile",
+        enableTracking: false,
+        enableLiveFlagUpdates: true,
+        feedback: { enableAutoFeedback: false },
+        bootstrappedState: {
+          context: {
+            user: { id: "user1" },
+            company: { id: "company1" },
+          },
+          flags: {
+            testFlag: {
+              key: "testFlag",
+              isEnabled: false,
+              targetingVersion: 8,
+            },
+          },
+          flagStateVersion: 8,
+        },
+      });
+      client["latestFlagStateVersionSeen"] = 9;
+
+      const refreshFlags = vi
+        .spyOn(client["flagsClient"], "refreshFlags")
+        .mockResolvedValue(undefined);
+
+      client.applyBootstrappedState({
+        context: {
+          user: { id: "user2" },
+          company: { id: "company2" },
+        },
+        flags: {
+          testFlag: {
+            key: "testFlag",
+            isEnabled: true,
+            targetingVersion: 1,
+          },
+        },
+        flagStateVersion: 7,
+      });
+
+      await vi.waitFor(() => {
+        expect(refreshFlags).toHaveBeenCalledWith(9);
+      });
+    });
   });
 });
