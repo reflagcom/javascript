@@ -307,6 +307,8 @@ The `flags` object returned by `getFlagsForBootstrap()` contains the full bootst
 - `flags`: the evaluated raw flags
 - `flagStateVersion`: an optional version used to avoid redundant live-update refreshes immediately after bootstrapping
 
+If you want live flag updates to continue working after bootstrapping, use a recent `@reflag/node-sdk` so `getFlagsForBootstrap()` includes `flagStateVersion`.
+
 ### Next.js Page Router SSR example
 
 For Next.js applications using server-side rendering, you can pre-fetch flags in `getServerSideProps`:
@@ -594,6 +596,8 @@ function App({ bootstrapData }: AppProps) {
 
 > [!Note]
 > When using `ReflagBootstrappedProvider`, pass the entire object returned by `getFlagsForBootstrap()` directly as the `flags` prop. The context is extracted from `flags.context`, and `flags.flagStateVersion` is used when present.
+>
+> If you want live flag updates to continue working after bootstrapping, use a recent `@reflag/node-sdk` so `getFlagsForBootstrap()` includes `flagStateVersion`.
 >
 > After bootstrapping, any live flag updates are fetched directly by the browser SDK from Reflag using the browser-visible context. If your bootstrapped snapshot depends on server-only or secret context that is not available in the browser, later live refreshes may differ. In that case, keep `enableLiveFlagUpdates` disabled.
 

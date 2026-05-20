@@ -299,6 +299,8 @@ The `bootstrappedState` object contains:
 - `flags`: the evaluated raw flags
 - `flagStateVersion`: an optional version used to avoid redundant live-update refreshes immediately after bootstrapping
 
+If you want live flag updates to continue working after bootstrapping, use a recent `@reflag/node-sdk` so `getFlagsForBootstrap()` includes `flagStateVersion`.
+
 If you previously used `bootstrappedFlags`, migrate like this:
 
 ```typescript

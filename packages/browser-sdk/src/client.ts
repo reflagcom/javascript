@@ -535,7 +535,7 @@ export class ReflagClient {
 
     if (requestedEnableLiveFlagUpdates && bootstrappedWithoutFlagStateVersion) {
       this.logger.warn(
-        "Live flag updates require `flagStateVersion` when bootstrapping flags. Disabling live flag updates for this client.",
+        "Live flag updates require `flagStateVersion` when bootstrapping flags. Disabling live flag updates for this client. Upgrade your server SDK (for example `@reflag/node-sdk`) so `getFlagsForBootstrap()` includes `flagStateVersion`.",
       );
     }
 

@@ -109,6 +109,8 @@ export function App() {
 You can use `<ReflagBootstrappedProvider>` in React Native when you already have pre-fetched flags and want to avoid an initial fetch.
 Pass the full object returned by the Node SDK's `getFlagsForBootstrap()` directly as the provider's `flags` prop; it includes `context`, evaluated `flags`, and an optional `flagStateVersion`.
 
+If you want live flag updates to continue working after bootstrapping, use a recent `@reflag/node-sdk` so `getFlagsForBootstrap()` includes `flagStateVersion`.
+
 After bootstrapping, any live flag updates are fetched directly by the client SDK from Reflag using the client-visible context. If your bootstrapped snapshot depends on server-only or secret context that is not available in the app, later live refreshes may differ. In that case, keep `enableLiveFlagUpdates` disabled.
 
 For bootstrap usage patterns and options, see the [React SDK bootstrapping docs](../react-sdk/README.md#server-side-rendering-and-bootstrapping).

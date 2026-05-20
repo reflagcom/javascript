@@ -256,6 +256,8 @@ You'll typically generate the `bootstrappedFlags` object on your server using th
 - `flags`: the evaluated raw flags
 - `flagStateVersion`: an optional version used to avoid redundant live-update refreshes immediately after bootstrapping
 
+If you want live flag updates to continue working after bootstrapping, use a recent `@reflag/node-sdk` so `getFlagsForBootstrap()` includes `flagStateVersion`.
+
 Here's an example using the Node.js SDK:
 
 ```js

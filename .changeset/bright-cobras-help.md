@@ -23,6 +23,6 @@ const client = new ReflagClient({
 });
 ```
 
-`flagStateVersion` is now preserved and used to avoid redundant refreshes immediately after bootstrapping, ignore stale bootstrapped payloads, and request the newest flag state after a live update. If you bootstrap flags without a `flagStateVersion`, the SDK will warn and disable live flag updates for that client.
+`flagStateVersion` is now preserved and used to avoid redundant refreshes immediately after bootstrapping, ignore stale bootstrapped payloads, and request the newest flag state after a live update. Bootstrapped live updates require a recent `@reflag/node-sdk` so `getFlagsForBootstrap()` includes `flagStateVersion`; otherwise the SDK will warn and disable live flag updates for that client.
 
 Browser-facing SDKs now default SSE requests to `apiBaseUrl` (for example `https://front.reflag.com/sse`). `sseBaseUrl` remains available as a temporary compatibility override if you still need a separate pubsub host.
