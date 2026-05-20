@@ -18,6 +18,7 @@ import {
   FlagsClient,
   RawFlags,
 } from "./flag/flags";
+import { isValidFlagStateVersion } from "./flag/flagStateVersion";
 import { computeFlagUpdatesChannelName } from "./flag/liveUpdates";
 import { HookArgs, HooksManager, State } from "./hooksManager";
 import { HttpClient } from "./httpClient";
@@ -524,7 +525,22 @@ export class ReflagClient {
         (opts && "bootstrappedFlags" in opts && !!opts.bootstrappedFlags),
     };
 
-    this.enableLiveFlagUpdates = opts?.enableLiveFlagUpdates ?? false;
+    const requestedEnableLiveFlagUpdates = opts?.enableLiveFlagUpdates ?? false;
+    const hasBootstrappedFlagStateVersion = isValidFlagStateVersion(
+      opts?.bootstrappedState?.flagStateVersion,
+    );
+    const bootstrappedWithoutFlagStateVersion =
+      (!!opts?.bootstrappedState && !hasBootstrappedFlagStateVersion) ||
+      (!!opts && "bootstrappedFlags" in opts && !!opts.bootstrappedFlags);
+
+    if (requestedEnableLiveFlagUpdates && bootstrappedWithoutFlagStateVersion) {
+      this.logger.warn(
+        "Live flag updates require `flagStateVersion` when bootstrapping flags. Disabling live flag updates for this client.",
+      );
+    }
+
+    this.enableLiveFlagUpdates =
+      requestedEnableLiveFlagUpdates && !bootstrappedWithoutFlagStateVersion;
     this.eventSourceFactory = opts?.eventSourceFactory;
 
     this.requestFeedbackOptions = {
@@ -935,11 +951,7 @@ export class ReflagClient {
     }
 
     const incomingFlagStateVersion = bootstrappedState.flagStateVersion;
-    if (
-      typeof incomingFlagStateVersion === "number" &&
-      Number.isInteger(incomingFlagStateVersion) &&
-      incomingFlagStateVersion >= 0
-    ) {
+    if (isValidFlagStateVersion(incomingFlagStateVersion)) {
       this.latestFlagStateVersionSeen = Math.max(
         this.latestFlagStateVersionSeen ?? -1,
         incomingFlagStateVersion,
@@ -1382,8 +1394,7 @@ export class ReflagClient {
     const payload = message.data ?? message;
 
     const flagStateVersion = Number((payload as any)?.flagStateVersion);
-    const hasFlagStateVersion =
-      Number.isInteger(flagStateVersion) && flagStateVersion >= 0;
+    const hasFlagStateVersion = isValidFlagStateVersion(flagStateVersion);
 
     if (eventName === "flags-updated" || hasFlagStateVersion) {
       if (hasFlagStateVersion) {

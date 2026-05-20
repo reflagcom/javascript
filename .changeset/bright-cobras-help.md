@@ -5,11 +5,13 @@
 "@reflag/vue-sdk": minor
 ---
 
-Add support for passing the full bootstrapped flag state package through the browser-facing SDKs.
+Add live flag updates and full bootstrapped state support to the browser-facing SDKs.
 
-The browser SDK now accepts `bootstrappedState`, which contains `context`, evaluated `flags`, and an optional `flagStateVersion`. React, React Native, and Vue bootstrapped providers can pass the full object returned by the Node SDK's `getFlagsForBootstrap()` directly, instead of deconstructing it first.
+The browser SDK now supports `enableLiveFlagUpdates`, which subscribes to Reflag's SSE endpoint and refreshes flags automatically after live update notifications. The browser SDK keeps this disabled by default, while the React, React Native, and Vue SDKs enable it by default.
 
-If you previously initialized the browser SDK with `bootstrappedFlags` plus separate `user`/`company`/`other` values, migrate to the new pattern:
+React Native now includes a built-in SSE transport via `react-native-sse`, so live updates work out of the box without requiring a global `EventSource` shim.
+
+The browser SDK also now accepts `bootstrappedState`, which contains `context`, evaluated `flags`, and an optional `flagStateVersion`. React, React Native, and Vue bootstrapped providers can pass the full object returned by the Node SDK's `getFlagsForBootstrap()` directly, instead of deconstructing it first:
 
 ```ts
 const bootstrappedState = serverClient.getFlagsForBootstrap(context);
@@ -20,6 +22,6 @@ const client = new ReflagClient({
 });
 ```
 
-The bootstrapped payload may now include `flagStateVersion`, which is used to avoid redundant live-update refreshes immediately after bootstrapping.
+`flagStateVersion` is now preserved and used to avoid redundant refreshes immediately after bootstrapping, ignore stale bootstrapped payloads, and request the newest flag state after a live update. If you bootstrap flags without a `flagStateVersion`, the SDK will warn and disable live flag updates for that client.
 
-If you explicitly override `sseBaseUrl`, update any old `https://livemessaging.bucket.co` overrides to `https://pubsub.reflag.com` (or remove the override to use the default).
+Browser-facing SDKs now default SSE requests to `apiBaseUrl` (for example `https://front.reflag.com/sse`). `sseBaseUrl` remains available as a temporary compatibility override if you still need a separate pubsub host.

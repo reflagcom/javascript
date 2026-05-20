@@ -197,6 +197,7 @@ describe("ReflagBootstrappedProvider", () => {
         config: { key: "default", payload: { message: "Hello" } },
       },
     },
+    flagStateVersion: 1,
   };
 
   test("provides the client with bootstrapped flags", async () => {

@@ -283,6 +283,74 @@ describe("init", () => {
       await reflagInstance.stop();
     });
 
+    test("warns and disables live flag updates when bootstrappedState has no flagStateVersion", async () => {
+      const spy = vi.spyOn(sseModule, "openAblySSEChannel");
+      const computeChannel = vi.spyOn(
+        liveUpdatesModule,
+        "computeFlagUpdatesChannelName",
+      );
+
+      const reflagInstance = new ReflagClient({
+        publishableKey: KEY,
+        enableLiveFlagUpdates: true,
+        feedback: { enableAutoFeedback: false },
+        logger,
+        bootstrappedState: {
+          context: { user: { id: "foo" } },
+          flags: {
+            testFlag: {
+              key: "testFlag",
+              isEnabled: true,
+              targetingVersion: 1,
+            },
+          },
+        },
+      });
+      await reflagInstance.initialize();
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        "Live flag updates require `flagStateVersion` when bootstrapping flags. Disabling live flag updates for this client.",
+      );
+      expect((reflagInstance as any)["enableLiveFlagUpdates"]).toBe(false);
+      expect(computeChannel).not.toHaveBeenCalled();
+      expect(spy).not.toHaveBeenCalled();
+
+      await reflagInstance.stop();
+    });
+
+    test("warns and disables live flag updates when using deprecated bootstrappedFlags", async () => {
+      const spy = vi.spyOn(sseModule, "openAblySSEChannel");
+      const computeChannel = vi.spyOn(
+        liveUpdatesModule,
+        "computeFlagUpdatesChannelName",
+      );
+
+      const reflagInstance = new ReflagClient({
+        publishableKey: KEY,
+        enableLiveFlagUpdates: true,
+        feedback: { enableAutoFeedback: false },
+        logger,
+        user: { id: "foo" },
+        bootstrappedFlags: {
+          testFlag: {
+            key: "testFlag",
+            isEnabled: true,
+            targetingVersion: 1,
+          },
+        },
+      });
+      await reflagInstance.initialize();
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        "Live flag updates require `flagStateVersion` when bootstrapping flags. Disabling live flag updates for this client.",
+      );
+      expect((reflagInstance as any)["enableLiveFlagUpdates"]).toBe(false);
+      expect(computeChannel).not.toHaveBeenCalled();
+      expect(spy).not.toHaveBeenCalled();
+
+      await reflagInstance.stop();
+    });
+
     test("reinitializing pubsub closes the previous feedback subscription when no new channel is available", async () => {
       const closeChannel = vi.fn();
       vi.spyOn(AutoFeedback.prototype, "getChannel")

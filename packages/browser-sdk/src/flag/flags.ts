@@ -12,6 +12,7 @@ import { createEventTarget } from "../utils/eventTarget";
 import { logResponseError, parseResponseError } from "../utils/responseError";
 import { retryOnThrow } from "../utils/retry";
 import { FlagCache, isObject, parseAPIFlagsResponse } from "./flagCache";
+import { isValidFlagStateVersion } from "./flagStateVersion";
 
 const INITIAL_FETCH_RETRY_DELAYS_MS = [0, 5000];
 
@@ -134,12 +135,9 @@ export function validateFlagsResponse(
     return;
   }
 
-  const flagStateVersion =
-    typeof response.flagStateVersion === "number" &&
-    Number.isInteger(response.flagStateVersion) &&
-    response.flagStateVersion >= 0
-      ? response.flagStateVersion
-      : undefined;
+  const flagStateVersion = isValidFlagStateVersion(response.flagStateVersion)
+    ? response.flagStateVersion
+    : undefined;
 
   return {
     success: response.success,

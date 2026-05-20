@@ -1,5 +1,6 @@
 import { StorageAdapter } from "../storage";
 import { RawFlags } from "./flags";
+import { isValidFlagStateVersion } from "./flagStateVersion";
 
 const DEFAULT_STORAGE_KEY = "__reflag_fetched_flags";
 
@@ -149,8 +150,7 @@ function validateCacheData(cacheDataInput: any) {
       typeof cacheEntry.staleAt !== "number" ||
       (cacheEntry.flags && !parseAPIFlagsResponse(cacheEntry.flags)) ||
       (typeof cacheEntry.flagStateVersion !== "undefined" &&
-        (!Number.isInteger(cacheEntry.flagStateVersion) ||
-          cacheEntry.flagStateVersion < 0))
+        !isValidFlagStateVersion(cacheEntry.flagStateVersion))
     ) {
       return;
     }
