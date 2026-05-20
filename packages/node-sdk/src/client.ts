@@ -1066,9 +1066,12 @@ export class ReflagClient {
     ...context
   }: ContextWithTracking): BootstrappedFlags {
     const contextWithTracking = { enableTracking, ...context };
+    const flagStateVersion = this.flagsCache.getFlagStateVersion();
+
     return {
       context: contextWithTracking,
       flags: this._getFlags(contextWithTracking),
+      ...(flagStateVersion !== undefined ? { flagStateVersion } : {}),
     };
   }
 

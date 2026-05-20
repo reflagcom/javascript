@@ -2567,6 +2567,7 @@ describe("ReflagClient", () => {
             missingContextFields: ["attributeKey"],
           },
         },
+        flagStateVersion: 1,
       });
 
       // Should not have track function like regular getFlags
@@ -2619,6 +2620,7 @@ describe("ReflagClient", () => {
             missingContextFields: ["company.id"],
           },
         },
+        flagStateVersion: 1,
       });
 
       // Should not have track function
@@ -2671,6 +2673,7 @@ describe("ReflagClient", () => {
             missingContextFields: ["attributeKey"],
           },
         },
+        flagStateVersion: 1,
       });
 
       // Should not have track function
@@ -2717,6 +2720,7 @@ describe("ReflagClient", () => {
             missingContextFields: ["company.id"],
           },
         },
+        flagStateVersion: 1,
       });
 
       // Should not have track function
@@ -2775,6 +2779,7 @@ describe("ReflagClient", () => {
           enableTracking: true,
         },
         flags: {},
+        flagStateVersion: 1,
       });
     });
 
@@ -3281,6 +3286,7 @@ describe("BoundReflagClient", () => {
           missingContextFields: ["attributeKey"],
         },
       },
+      flagStateVersion: 1,
     });
 
     // Should not have track function like regular getFlags
