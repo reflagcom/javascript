@@ -10,7 +10,6 @@ const logger = {
 };
 
 let documentDescriptor: PropertyDescriptor | undefined;
-let cryptoDescriptor: PropertyDescriptor | undefined;
 
 function hideDocumentGlobal() {
   documentDescriptor = Object.getOwnPropertyDescriptor(globalThis, "document");
@@ -27,24 +26,8 @@ function restoreDocumentGlobal() {
   }
 }
 
-function hideWebCryptoGlobal() {
-  cryptoDescriptor = Object.getOwnPropertyDescriptor(globalThis, "crypto");
-  Object.defineProperty(globalThis, "crypto", {
-    configurable: true,
-    value: {},
-  });
-}
-
-function restoreWebCryptoGlobal() {
-  if (cryptoDescriptor) {
-    Object.defineProperty(globalThis, "crypto", cryptoDescriptor);
-    cryptoDescriptor = undefined;
-  }
-}
-
 afterEach(() => {
   restoreDocumentGlobal();
-  restoreWebCryptoGlobal();
   vi.restoreAllMocks();
   vi.resetModules();
 });
@@ -52,7 +35,6 @@ afterEach(() => {
 describe("React Native runtime", () => {
   test("initializes pubsub without document when an SSE transport is provided", async () => {
     hideDocumentGlobal();
-    hideWebCryptoGlobal();
     vi.resetModules();
 
     const closeChannel = vi.fn();
