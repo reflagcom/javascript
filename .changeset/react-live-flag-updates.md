@@ -2,7 +2,7 @@
 "@reflag/react-sdk": minor
 ---
 
-The React SDK now includes an `enableLiveFlagUpdates` config option, which defaults to `true`. When enabled, the SDK subscribes to Reflag SSE through the browser SDK and refreshes flags automatically when they change.
+The React SDK now includes an `enableLiveFlagUpdates` config option, which defaults to `true`. When enabled, the SDK refreshes flags automatically when they change.
 
 `ReflagBootstrappedProvider` keeps its existing `flags` prop, and that prop now accepts the full object returned by `@reflag/node-sdk`'s `getFlagsForBootstrap()`: `{ context, flags, flagStateVersion? }`.
 
