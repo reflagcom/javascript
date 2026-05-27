@@ -6,15 +6,23 @@
 "@reflag/vue-sdk": minor
 ---
 
-Add live flag updates and full bootstrapped state support to the client-facing SDKs.
+Add live flag updates to the client-facing SDKs.
 
-The browser SDK now supports `enableLiveFlagUpdates`, which subscribes to Reflag's SSE endpoint and refreshes flags automatically after live update notifications. The browser SDK keeps this disabled by default, while the React, React Native, and Vue SDKs enable it by default.
+The browser SDK now supports `enableLiveFlagUpdates`, which subscribes to Reflag's SSE endpoint and refreshes flags automatically when they change. The browser SDK keeps this disabled by default, while the React, React Native, and Vue SDKs enable it by default.
 
-React Native now includes a built-in SSE transport via `react-native-sse`, so live updates work out of the box without requiring a global `EventSource` shim.
+The Node SDK's `getFlagsForBootstrap()` output now includes `flagStateVersion` when the Node SDK has received a flag-state version from Reflag:
 
-The browser SDK now accepts `bootstrappedState`. The React, React Native, and Vue bootstrapped providers keep their existing `flags` prop, and that prop now accepts the same full bootstrapped state object. The object contains `context`, evaluated `flags`, and an optional `flagStateVersion`. Existing bootstrapped payloads shaped as `{ context, flags }` continue to initialize the SDK; the provider prop name has not changed.
+```ts
+type BootstrappedState = {
+  context: ReflagContext;
+  flags: RawFlags;
+  flagStateVersion?: number;
+};
+```
 
-The recommended bootstrapping approach is now to pass the full object returned by the Node SDK's `getFlagsForBootstrap()` instead of deconstructing it first:
+`flagStateVersion` lets bootstrapped clients avoid redundant refreshes immediately after hydration, ignore stale bootstrapped payloads, and request the newest flag state after a live update.
+
+The browser SDK accepts this object through `bootstrappedState`. React, React Native, and Vue keep their existing `flags` prop on bootstrapped providers, and that prop now accepts the same full object:
 
 ```tsx
 const bootstrappedState = serverClient.getFlagsForBootstrap(context);
@@ -32,8 +40,8 @@ const client = new ReflagClient({
 </ReflagBootstrappedProvider>;
 ```
 
-`flagStateVersion` is now preserved and used to avoid redundant refreshes immediately after bootstrapping, ignore stale bootstrapped payloads, and request the newest flag state after a live update. Bootstrapped live updates require a recent `@reflag/node-sdk` so `getFlagsForBootstrap()` includes `flagStateVersion`; otherwise the SDK will warn and disable live flag updates for that client. Existing unversioned bootstraps still work for initial rendering; set `enableLiveFlagUpdates={false}` if you intentionally use unversioned bootstrap data and want to avoid that warning.
+This is backwards compatible for initial rendering: existing bootstrapped payloads shaped as `{ context, flags }` still initialize the SDK, and the React, React Native, and Vue provider prop name has not changed. Live flag updates after bootstrapping require `flagStateVersion`; if it is missing, the client will warn and disable live updates for that client.
 
-Browser-facing SDKs now default SSE requests to `apiBaseUrl` and subscribe through `https://front.reflag.com/sse/client?publishableKey=...`. SSE requests include the publishable key and SDK version. `sseBaseUrl` remains available as a temporary compatibility override if you need a separate SSE host.
+Browser-facing SDKs now use `apiBaseUrl` for SSE by default, which points to `https://front.reflag.com` unless overridden. Live flag updates and feedback notifications now share `https://front.reflag.com/sse/client?publishableKey=...`, so default CSP setups only need to allow `connect-src https://front.reflag.com` instead of `https://livemessaging.bucket.co`. `sseBaseUrl` remains available as an override if you need a separate SSE host.
 
-The Node SDK now uses Reflag's server push SSE endpoint (`GET https://front.reflag.com/sse/server`) for live flag definition updates. If you override `flagsPushUrl`, the SDK will open that URL with the same authenticated streaming GET behavior.
+The Node SDK now uses Reflag's server push SSE endpoint (`GET https://front.reflag.com/sse/server`) for live flag definition updates instead of `https://pubsub.reflag.com`. If you override `flagsPushUrl`, the SDK will open that URL with the same authenticated streaming GET behavior.

@@ -334,7 +334,7 @@ describe("init", () => {
       await reflagInstance.initialize();
 
       expect(logger.warn).toHaveBeenCalledWith(
-        "Live flag updates require `flagStateVersion` when bootstrapping flags. Disabling live flag updates for this client. Upgrade your server SDK (for example `@reflag/node-sdk`) so `getFlagsForBootstrap()` includes `flagStateVersion`.",
+        "Live flag updates require `flagStateVersion` when bootstrapping flags. Disabling live flag updates for this client. Upgrade your server SDK (for example `@reflag/node-sdk`) so the bootstrap payload includes `flagStateVersion`, or set `enableLiveFlagUpdates` to `false` when using unversioned bootstrap data.",
       );
       expect((reflagInstance as any)["enableLiveFlagUpdates"]).toBe(false);
       expect(spy).not.toHaveBeenCalled();
@@ -362,7 +362,7 @@ describe("init", () => {
       await reflagInstance.initialize();
 
       expect(logger.warn).toHaveBeenCalledWith(
-        "Live flag updates require `flagStateVersion` when bootstrapping flags. Disabling live flag updates for this client. Upgrade your server SDK (for example `@reflag/node-sdk`) so `getFlagsForBootstrap()` includes `flagStateVersion`.",
+        "Live flag updates require `flagStateVersion` when bootstrapping flags. Disabling live flag updates for this client. Upgrade your server SDK (for example `@reflag/node-sdk`) so the bootstrap payload includes `flagStateVersion`, or set `enableLiveFlagUpdates` to `false` when using unversioned bootstrap data.",
       );
       expect((reflagInstance as any)["enableLiveFlagUpdates"]).toBe(false);
       expect(spy).not.toHaveBeenCalled();
