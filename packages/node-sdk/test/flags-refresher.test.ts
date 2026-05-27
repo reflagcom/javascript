@@ -17,7 +17,7 @@ describe("flagsSyncController", () => {
       mode: "in-request",
       cache,
       intervalMs: 1000,
-      pushUrl: "https://pubsub.reflag.com/sse/server",
+      pushUrl: "https://front.reflag.com/sse/server",
       headers: {},
       logger,
     });

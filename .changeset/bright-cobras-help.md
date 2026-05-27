@@ -27,4 +27,4 @@ const client = new ReflagClient({
 
 Browser-facing SDKs now default SSE requests to `apiBaseUrl` and subscribe through `https://front.reflag.com/sse/client?publishableKey=...`. SSE requests include the publishable key and SDK version. `sseBaseUrl` remains available as a temporary compatibility override if you still need a separate pubsub host.
 
-The Node SDK now uses Reflag's server push SSE endpoint (`GET https://pubsub.reflag.com/sse/server`) for live flag definition updates. If you override `flagsPushUrl`, the SDK will open that URL with the same authenticated streaming GET behavior.
+The Node SDK now uses Reflag's server push SSE endpoint (`GET https://front.reflag.com/sse/server`) for live flag definition updates. If you override `flagsPushUrl`, the SDK will open that URL with the same authenticated streaming GET behavior.

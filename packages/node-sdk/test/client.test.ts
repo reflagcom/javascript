@@ -351,7 +351,7 @@ describe("ReflagClient", () => {
       expect(client["_config"].refetchInterval).toBe(FLAGS_REFETCH_MS);
       expect(client["_config"].flagsSyncMode).toBe("push");
       expect(client["_config"].flagsPushUrl).toBe(
-        "https://pubsub.reflag.com/sse/server",
+        "https://front.reflag.com/sse/server",
       );
       expect(client.httpClient).toBe(fetchClient);
       expect(client["_config"].headers).toEqual(expectedHeaders);
@@ -1133,7 +1133,7 @@ describe("ReflagClient", () => {
 
         const [calledUrl, calledInit] = fetchMock.mock.calls[0] ?? [];
         const url = new URL(String(calledUrl));
-        expect(url.origin).toBe("https://pubsub.reflag.com");
+        expect(url.origin).toBe("https://front.reflag.com");
         expect(url.pathname).toBe("/sse/server");
         expect(url.searchParams.has("channels")).toBe(false);
         expect(calledInit).toMatchObject({
