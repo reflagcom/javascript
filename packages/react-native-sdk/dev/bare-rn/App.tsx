@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo } from "react";
 import {
   Button,
   ScrollView,
@@ -8,6 +8,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import ReactNativeEventSource from "react-native-sse";
 
 import {
   ReflagProvider,
@@ -16,8 +17,35 @@ import {
   useIsLoading,
 } from "@reflag/react-native-sdk";
 
-const publishableKey = "pub_prod_vxuM5hSZOnhzvAfiOnZ9rj";
+const publishableKey = "pub_prod_Y25RPZYAkvrcWPnPMZIseK";
 const isConfigured = publishableKey.length > 0;
+
+const loggingEventSourceFactory = (url: string) => {
+  console.log("[Reflag SSE] opening", url);
+
+  const eventSource = new ReactNativeEventSource(url, {
+    pollingInterval: 0,
+  }) as any;
+
+  const addEventListener = eventSource.addEventListener.bind(eventSource);
+  eventSource.addEventListener = (
+    type: string,
+    callback: (event: any) => void,
+  ) => {
+    return addEventListener(type, (event: any) => {
+      console.log(`[Reflag SSE] ${type}`, event?.data ?? event);
+      callback(event);
+    });
+  };
+
+  const close = eventSource.close.bind(eventSource);
+  eventSource.close = () => {
+    console.log("[Reflag SSE] close");
+    return close();
+  };
+
+  return eventSource;
+};
 
 type CheckStatus = "pass" | "warn" | "fail";
 
@@ -116,6 +144,12 @@ function FlagCard() {
   const isLoading = useIsLoading();
   const { isEnabled, track } = useFlag("bare-rn-demo");
 
+  useEffect(() => {
+    return client.on("flagsUpdated", (flags) => {
+      console.log("[Reflag] flagsUpdated", flags);
+    });
+  }, [client]);
+
   return (
     <View style={styles.card}>
       <Text style={styles.cardTitle}>Flag: bare-rn-demo</Text>
@@ -140,9 +174,12 @@ export default function App() {
           offline={!isConfigured}
           fallbackFlags={["bare-rn-demo"]}
           context={{
+            company: { id: "232" },
             user: { id: "bare-rn-user", name: "Bare RN User" },
             other: { platform: "react-native-bare" },
           }}
+          logger={console}
+          eventSourceFactory={loggingEventSourceFactory}
         >
           <View style={styles.header}>
             <Text style={styles.title}>Reflag Bare RN Smoke App</Text>

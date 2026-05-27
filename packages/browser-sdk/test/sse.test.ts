@@ -39,7 +39,7 @@ describe("connection handling", () => {
     expect(lastCall.toString()).toMatch(`${sseHost}/sse`);
   });
 
-  test("subscribes to the requested channels without an access token", async () => {
+  test("subscribes to the requested channels", async () => {
     const sse = createSSEChannel(vi.fn(), ["channel-a", "channel-b"]);
     const addEventListener = vi.fn();
 
@@ -51,8 +51,49 @@ describe("connection handling", () => {
 
     const url = new URL(vi.mocked(window.EventSource).mock.calls[0][0]);
     expect(url.searchParams.get("channels")).toBe("channel-a,channel-b");
-    expect(url.searchParams.get("accessToken")).toBeNull();
     expect(url.searchParams.get("rewind")).toBe("1");
+  });
+
+  test("includes publishable key and SDK version when provided", async () => {
+    const sse = new AblySSEChannel(
+      ["channel-a"],
+      sseHost,
+      vi.fn(),
+      testLogger,
+      undefined,
+      "pub_test_123",
+      "browser-sdk/test",
+    );
+    const addEventListener = vi.fn();
+
+    vi.mocked(window.EventSource).mockReturnValue({
+      addEventListener,
+    } as any);
+
+    await sse.connect();
+
+    const url = new URL(vi.mocked(window.EventSource).mock.calls[0][0]);
+    expect(url.searchParams.get("publishableKey")).toBe("pub_test_123");
+    expect(url.searchParams.get("reflag-sdk-version")).toBe("browser-sdk/test");
+  });
+
+  test("opens a custom SSE path without channel query parameters", async () => {
+    openAblySSEChannel({
+      channels: [],
+      callback: vi.fn(),
+      logger: testLogger,
+      sseBaseUrl: sseHost,
+      path: "sse/client",
+      publishableKey: "pub_test_123",
+      sdkVersion: "browser-sdk/test",
+    });
+
+    const url = new URL(vi.mocked(window.EventSource).mock.calls[0][0]);
+    expect(url.pathname).toBe("/path/sse/client");
+    expect(url.searchParams.get("channels")).toBeNull();
+    expect(url.searchParams.get("rewind")).toBeNull();
+    expect(url.searchParams.get("publishableKey")).toBe("pub_test_123");
+    expect(url.searchParams.get("reflag-sdk-version")).toBe("browser-sdk/test");
   });
 
   test("passes parsed message envelopes to the callback", async () => {

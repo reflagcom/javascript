@@ -721,7 +721,7 @@ export type ClientOptions = {
   /**
    * Push endpoint used when `flagsSyncMode` is `"push"`.
    *
-   * @defaultValue `"https://pubsub.reflag.com/sse"`
+   * @defaultValue `"https://pubsub.reflag.com/sse/server"`
    */
   flagsPushUrl?: string;
 

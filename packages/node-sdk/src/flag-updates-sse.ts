@@ -157,9 +157,7 @@ export function openFlagUpdatesSSE({
     }
 
     reconnectDelayMs = INITIAL_RECONNECT_DELAY_MS;
-    logger?.debug(
-      `flag updates SSE connection established (channels=${requestUrl.searchParams.get("channels") ?? ""})`,
-    );
+    logger?.debug("flag updates SSE connection established");
     settleReady();
 
     if (shouldNotifyReconnect) {

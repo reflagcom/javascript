@@ -10,11 +10,9 @@ import {
 } from "vitest";
 
 import { ReflagClient } from "../src";
-import { AutoFeedback } from "../src/feedback/feedback";
-import * as liveUpdatesModule from "../src/flag/liveUpdates";
 import { HttpClient } from "../src/httpClient";
 import * as sseModule from "../src/sse";
-import { getFlags, testChannel } from "./mocks/handlers";
+import { getFlags } from "./mocks/handlers";
 import { server } from "./mocks/server";
 
 const KEY = "123";
@@ -146,12 +144,8 @@ describe("init", () => {
       await reflagInstance.stop();
     });
 
-    test("opens a pubsub connection with the live flags channel when enabled", async () => {
+    test("opens the direct client SSE endpoint when enabled", async () => {
       const closeChannel = vi.fn();
-      vi.spyOn(
-        liveUpdatesModule,
-        "computeFlagUpdatesChannelName",
-      ).mockResolvedValue("flags-state:test");
       const spy = vi
         .spyOn(sseModule, "openAblySSEChannel")
         .mockReturnValue({ close: closeChannel } as any);
@@ -161,14 +155,39 @@ describe("init", () => {
         user: { id: "foo" },
         enableLiveFlagUpdates: true,
         feedback: { enableAutoFeedback: false },
+        sdkVersion: "browser-sdk/test",
       });
       await reflagInstance.initialize();
 
       expect(spy).toHaveBeenCalledTimes(1);
-      expect(spy.mock.calls[0][0].channels).toEqual(["flags-state:test"]);
+      expect(spy.mock.calls[0][0].path).toBe("sse/client");
+      expect(spy.mock.calls[0][0].channels).toEqual([]);
+      expect(spy.mock.calls[0][0].publishableKey).toBe(KEY);
+      expect(spy.mock.calls[0][0].sdkVersion).toBe("browser-sdk/test");
 
       await reflagInstance.stop();
       expect(closeChannel).toHaveBeenCalledTimes(1);
+    });
+
+    test("still fetches evaluated flags when live updates are enabled", async () => {
+      const getSpy = vi.spyOn(HttpClient.prototype, "get");
+      vi.spyOn(sseModule, "openAblySSEChannel").mockReturnValue({
+        close: vi.fn(),
+      } as any);
+
+      const reflagInstance = new ReflagClient({
+        publishableKey: KEY,
+        user: { id: "foo" },
+        enableLiveFlagUpdates: true,
+        enableTracking: false,
+        feedback: { enableAutoFeedback: false },
+      });
+      await reflagInstance.initialize();
+
+      expect(getSpy).toHaveBeenCalledTimes(1);
+      expect(getSpy.mock.calls[0][0].path).toBe("/features/evaluated");
+
+      await reflagInstance.stop();
     });
 
     test("does not open a channel when offline", async () => {
@@ -188,10 +207,6 @@ describe("init", () => {
     });
 
     test("uses one shared pubsub connection for live flags and feedback", async () => {
-      vi.spyOn(
-        liveUpdatesModule,
-        "computeFlagUpdatesChannelName",
-      ).mockResolvedValue("flags-state:test");
       const spy = vi
         .spyOn(sseModule, "openAblySSEChannel")
         .mockReturnValue({ close: vi.fn() } as any);
@@ -204,20 +219,14 @@ describe("init", () => {
       await reflagInstance.initialize();
 
       expect(spy).toHaveBeenCalledTimes(1);
-      expect(spy.mock.calls[0][0].channels).toEqual([
-        "flags-state:test",
-        testChannel,
-      ]);
+      expect(spy.mock.calls[0][0].path).toBe("sse/client");
+      expect(spy.mock.calls[0][0].channels).toEqual([]);
 
       await reflagInstance.stop();
     });
 
     test("flag update messages trigger flag refresh", async () => {
       let callback: ((message: any) => void) | undefined;
-      vi.spyOn(
-        liveUpdatesModule,
-        "computeFlagUpdatesChannelName",
-      ).mockResolvedValue("flags-state:test");
       vi.spyOn(sseModule, "openAblySSEChannel").mockImplementation((opts) => {
         callback = opts.callback;
         return { close: vi.fn() } as any;
@@ -236,19 +245,39 @@ describe("init", () => {
         .mockResolvedValue(undefined);
 
       expect(callback).toBeDefined();
-      callback!({ name: "flags-updated", data: { flagStateVersion: 1 } });
+      callback!({ name: "flags-updated", data: { flagStateVersion: 2 } });
       expect(refreshSpy).toHaveBeenCalledTimes(1);
-      expect(refreshSpy).toHaveBeenCalledWith(1);
+      expect(refreshSpy).toHaveBeenCalledWith(2);
+
+      await reflagInstance.stop();
+    });
+
+    test("flag update messages are ignored when only feedback SSE is enabled", async () => {
+      let callback: ((message: any) => void) | undefined;
+      vi.spyOn(sseModule, "openAblySSEChannel").mockImplementation((opts) => {
+        callback = opts.callback;
+        return { close: vi.fn() } as any;
+      });
+
+      const reflagInstance = new ReflagClient({
+        publishableKey: KEY,
+        user: { id: "foo" },
+      });
+      await reflagInstance.initialize();
+
+      const refreshSpy = vi
+        .spyOn(reflagInstance["flagsClient"], "refreshFlags")
+        .mockResolvedValue(undefined);
+
+      expect(callback).toBeDefined();
+      callback!({ name: "flags-updated", data: { flagStateVersion: 2 } });
+      expect(refreshSpy).not.toHaveBeenCalled();
 
       await reflagInstance.stop();
     });
 
     test("does not refresh flags when the pushed version matches the bootstrapped version", async () => {
       let callback: ((message: any) => void) | undefined;
-      vi.spyOn(
-        liveUpdatesModule,
-        "computeFlagUpdatesChannelName",
-      ).mockResolvedValue("flags-state:test");
       vi.spyOn(sseModule, "openAblySSEChannel").mockImplementation((opts) => {
         callback = opts.callback;
         return { close: vi.fn() } as any;
@@ -285,10 +314,6 @@ describe("init", () => {
 
     test("warns and disables live flag updates when bootstrappedState has no flagStateVersion", async () => {
       const spy = vi.spyOn(sseModule, "openAblySSEChannel");
-      const computeChannel = vi.spyOn(
-        liveUpdatesModule,
-        "computeFlagUpdatesChannelName",
-      );
 
       const reflagInstance = new ReflagClient({
         publishableKey: KEY,
@@ -312,7 +337,6 @@ describe("init", () => {
         "Live flag updates require `flagStateVersion` when bootstrapping flags. Disabling live flag updates for this client. Upgrade your server SDK (for example `@reflag/node-sdk`) so `getFlagsForBootstrap()` includes `flagStateVersion`.",
       );
       expect((reflagInstance as any)["enableLiveFlagUpdates"]).toBe(false);
-      expect(computeChannel).not.toHaveBeenCalled();
       expect(spy).not.toHaveBeenCalled();
 
       await reflagInstance.stop();
@@ -320,10 +344,6 @@ describe("init", () => {
 
     test("warns and disables live flag updates when using deprecated bootstrappedFlags", async () => {
       const spy = vi.spyOn(sseModule, "openAblySSEChannel");
-      const computeChannel = vi.spyOn(
-        liveUpdatesModule,
-        "computeFlagUpdatesChannelName",
-      );
 
       const reflagInstance = new ReflagClient({
         publishableKey: KEY,
@@ -345,17 +365,13 @@ describe("init", () => {
         "Live flag updates require `flagStateVersion` when bootstrapping flags. Disabling live flag updates for this client. Upgrade your server SDK (for example `@reflag/node-sdk`) so `getFlagsForBootstrap()` includes `flagStateVersion`.",
       );
       expect((reflagInstance as any)["enableLiveFlagUpdates"]).toBe(false);
-      expect(computeChannel).not.toHaveBeenCalled();
       expect(spy).not.toHaveBeenCalled();
 
       await reflagInstance.stop();
     });
 
-    test("reinitializing pubsub closes the previous feedback subscription when no new channel is available", async () => {
+    test("reinitializing pubsub closes the previous shared SSE connection", async () => {
       const closeChannel = vi.fn();
-      vi.spyOn(AutoFeedback.prototype, "getChannel")
-        .mockResolvedValueOnce(testChannel)
-        .mockResolvedValueOnce(undefined);
       const spy = vi
         .spyOn(sseModule, "openAblySSEChannel")
         .mockReturnValue({ close: closeChannel } as any);
@@ -368,9 +384,9 @@ describe("init", () => {
 
       await reflagInstance["updateAutoFeedbackUser"]("bar");
 
-      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy).toHaveBeenCalledTimes(2);
       expect(closeChannel).toHaveBeenCalledTimes(1);
-      expect(reflagInstance["pubSubChannel"]).toBeUndefined();
+      expect(reflagInstance["pubSubChannel"]).toBeDefined();
 
       await reflagInstance.stop();
     });

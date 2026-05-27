@@ -1,3 +1,4 @@
+import { SDK_VERSION_HEADER_NAME } from "./config";
 import { Logger, loggerWithPrefix } from "./logger";
 
 export type EventSourceLike = {
@@ -27,6 +28,9 @@ export class AblySSEChannel {
     private messageHandler: (message: PubSubMessage) => void,
     logger: Logger,
     private eventSourceFactory?: EventSourceFactory,
+    private publishableKey?: string,
+    private sdkVersion?: string,
+    private path = "sse",
   ) {
     this.logger = loggerWithPrefix(logger, "[SSE]");
 
@@ -114,10 +118,18 @@ export class AblySSEChannel {
 
     this.isOpen = true;
     try {
-      const url = new URL("sse", this.sseBaseUrl);
-      url.searchParams.append("v", "1.2");
-      url.searchParams.append("channels", this.channels.join(","));
-      url.searchParams.append("rewind", "1");
+      const url = new URL(this.path, this.sseBaseUrl);
+      if (this.channels.length > 0) {
+        url.searchParams.append("v", "1.2");
+        url.searchParams.append("channels", this.channels.join(","));
+        url.searchParams.append("rewind", "1");
+      }
+      if (this.publishableKey) {
+        url.searchParams.append("publishableKey", this.publishableKey);
+      }
+      if (this.sdkVersion) {
+        url.searchParams.append(SDK_VERSION_HEADER_NAME, this.sdkVersion);
+      }
 
       this.eventSource = this.createEventSource(url.toString()) ?? null;
       if (!this.eventSource) {
@@ -218,6 +230,9 @@ export function openAblySSEChannel({
   sseBaseUrl,
   logger,
   eventSourceFactory,
+  publishableKey,
+  sdkVersion,
+  path,
 }: {
   channel?: string;
   channels?: string[];
@@ -225,6 +240,9 @@ export function openAblySSEChannel({
   logger: Logger;
   sseBaseUrl: string;
   eventSourceFactory?: EventSourceFactory;
+  publishableKey?: string;
+  sdkVersion?: string;
+  path?: string;
 }) {
   const subscribedChannels = channels ?? (channel ? [channel] : []);
   const sse = new AblySSEChannel(
@@ -233,6 +251,9 @@ export function openAblySSEChannel({
     callback,
     logger,
     eventSourceFactory,
+    publishableKey,
+    sdkVersion,
+    path,
   );
 
   sse.open();

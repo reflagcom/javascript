@@ -139,15 +139,7 @@ describe("feedback prompting", () => {
     expect(closeChannel).toBeCalledTimes(1);
   });
 
-  test("uses the discovered prompting channel", async () => {
-    const specialChannel = "special-channel";
-
-    server.use(
-      http.post(`${API_BASE_URL}/feedback/prompting-init`, () => {
-        return HttpResponse.json({ success: true, channel: specialChannel });
-      }),
-    );
-
+  test("uses the direct client SSE endpoint for feedback prompting", async () => {
     const reflagInstance = new ReflagClient({
       publishableKey: KEY,
       user: { id: "foo" },
@@ -156,23 +148,9 @@ describe("feedback prompting", () => {
 
     expect(openAblySSEChannel).toBeCalledTimes(1);
     const args = vi.mocked(openAblySSEChannel).mock.calls[0][0];
-    expect(args.channels).toEqual([specialChannel]);
-  });
-
-  test("does not initiate feedback prompting if server does not agree", async () => {
-    server.use(
-      http.post(`${API_BASE_URL}/feedback/prompting-init`, () => {
-        return HttpResponse.json({ success: false });
-      }),
-    );
-
-    const reflagInstance = new ReflagClient({
-      publishableKey: KEY,
-      user: { id: "foo" },
-    });
-    await reflagInstance.initialize();
-
-    expect(openAblySSEChannel).toBeCalledTimes(0);
+    expect(args.path).toBe("sse/client");
+    expect(args.channels).toEqual([]);
+    expect(args.publishableKey).toBe(KEY);
   });
 
   test("skip feedback prompting if no user id configured", async () => {
@@ -193,82 +171,20 @@ describe("feedback prompting", () => {
     expect(openAblySSEChannel).toBeCalledTimes(0);
   });
 
-  test("retries prompting init fetch failures before succeeding", async () => {
-    vi.useFakeTimers();
-    const logger = {
-      debug: vi.fn(),
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-    };
+  test("does not call legacy prompting-init when opening feedback prompting SSE", async () => {
     const post = vi.spyOn(HttpClient.prototype, "post");
-    post
-      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
-      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ success: false }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      );
 
     try {
       const reflagInstance = new ReflagClient({
         publishableKey: KEY,
         user: { id: "foo" },
         enableTracking: false,
-        logger,
       });
-      const initializePromise = reflagInstance.initialize();
-      await vi.advanceTimersByTimeAsync(5000);
-      await initializePromise;
+      await reflagInstance.initialize();
 
-      expect(post).toHaveBeenCalledTimes(3);
-      expect(logger.error).not.toHaveBeenCalled();
-      expect(openAblySSEChannel).toBeCalledTimes(0);
+      expect(post).not.toHaveBeenCalled();
+      expect(openAblySSEChannel).toBeCalledTimes(1);
     } finally {
-      vi.useRealTimers();
-      post.mockRestore();
-    }
-  });
-
-  test("retries prompting init body-read failures before succeeding", async () => {
-    vi.useFakeTimers();
-    const logger = {
-      debug: vi.fn(),
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-    };
-    const post = vi.spyOn(HttpClient.prototype, "post");
-    post
-      .mockResolvedValueOnce({
-        ok: true,
-        json: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
-      } as unknown as Response)
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ success: false }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      );
-
-    try {
-      const reflagInstance = new ReflagClient({
-        publishableKey: KEY,
-        user: { id: "foo" },
-        enableTracking: false,
-        logger,
-      });
-      const initializePromise = reflagInstance.initialize();
-      await vi.advanceTimersByTimeAsync(0);
-      await initializePromise;
-
-      expect(post).toHaveBeenCalledTimes(2);
-      expect(logger.error).not.toHaveBeenCalled();
-      expect(openAblySSEChannel).toBeCalledTimes(0);
-    } finally {
-      vi.useRealTimers();
       post.mockRestore();
     }
   });

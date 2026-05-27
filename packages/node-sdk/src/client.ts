@@ -189,10 +189,6 @@ function createFlagsFallbackSnapshot(
   };
 }
 
-function createFlagsStateChannelName(secretKeyHashPrefix: string): string {
-  return `flags-state:${secretKeyHashPrefix}`;
-}
-
 function formatFlagsFallbackAge(savedAt: string): string | undefined {
   const savedAtMs = Date.parse(savedAt);
   if (!Number.isFinite(savedAtMs)) {
@@ -475,7 +471,6 @@ export class ReflagClient {
           : "push");
 
     const secretKeyHash = config.secretKey ? hashString(config.secretKey) : "";
-    const secretKeyHashPrefix = secretKeyHash.slice(0, 16);
 
     ok(
       offline || flagsSyncMode !== "push" || secretKeyHash.length > 0,
@@ -483,16 +478,7 @@ export class ReflagClient {
     );
 
     const pushUrl = new URL(options.flagsPushUrl ?? PUBSUB_SSE_URL);
-    if (
-      flagsSyncMode === "push" &&
-      secretKeyHash.length > 0 &&
-      !pushUrl.searchParams.has("channels")
-    ) {
-      pushUrl.searchParams.set(
-        "channels",
-        createFlagsStateChannelName(secretKeyHashPrefix),
-      );
-    }
+    pushUrl.searchParams.delete("channels");
 
     this._config = {
       offline,
