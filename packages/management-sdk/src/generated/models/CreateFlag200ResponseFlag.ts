@@ -1,8 +1,8 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * Reflag API
- * Feature flag management API
+ * Reflag Management API
+ * Feature flag Management API
  *
  * The version of the OpenAPI document: 3.0.1
  * 
@@ -84,20 +84,40 @@ export interface CreateFlag200ResponseFlag {
      */
     createdAt?: string;
     /**
+     * Timestamp when the flag was rolled out to everyone
+     * @type {string}
+     */
+    rolledOutToEveryoneAt?: string;
+    /**
+     * Whether code references for this flag have been cleaned up
+     * @type {boolean}
+     */
+    codeRefsCleanedUp: boolean;
+    /**
+     * Name of the user who marked code references as cleaned up
+     * @type {string}
+     */
+    codeRefsMarkedCleanUserName?: string;
+    /**
+     * Timestamp when code references were marked as cleaned up
+     * @type {string}
+     */
+    codeRefsMarkedCleanAt?: string;
+    /**
      * Timestamp when the flag was last checked
      * @type {string}
      */
     lastCheckAt?: string;
     /**
+     * Whether the flag has no recent access checks
+     * @type {boolean}
+     */
+    noRecentChecks: boolean;
+    /**
      * Timestamp when the flag was last tracked
      * @type {string}
      */
     lastTrackAt?: string;
-    /**
-     * Timestamp when the flag was rolled out to everyone
-     * @type {string}
-     */
-    rolledOutToEveryoneAt?: string;
     /**
      * Parent flag ID
      * @type {string}
@@ -115,6 +135,8 @@ export function instanceOfCreateFlag200ResponseFlag(value: object): value is Cre
     if (!('archived' in value) || value['archived'] === undefined) return false;
     if (!('stale' in value) || value['stale'] === undefined) return false;
     if (!('permanent' in value) || value['permanent'] === undefined) return false;
+    if (!('codeRefsCleanedUp' in value) || value['codeRefsCleanedUp'] === undefined) return false;
+    if (!('noRecentChecks' in value) || value['noRecentChecks'] === undefined) return false;
     return true;
 }
 
@@ -138,9 +160,13 @@ export function CreateFlag200ResponseFlagFromJSONTyped(json: any, ignoreDiscrimi
         'stale': json['stale'],
         'permanent': json['permanent'],
         'createdAt': json['createdAt'] == null ? undefined : json['createdAt'],
-        'lastCheckAt': json['lastCheckAt'] == null ? undefined : json['lastCheckAt'],
-        'lastTrackAt': json['lastTrackAt'] == null ? undefined : json['lastTrackAt'],
         'rolledOutToEveryoneAt': json['rolledOutToEveryoneAt'] == null ? undefined : json['rolledOutToEveryoneAt'],
+        'codeRefsCleanedUp': json['codeRefsCleanedUp'],
+        'codeRefsMarkedCleanUserName': json['codeRefsMarkedCleanUserName'] == null ? undefined : json['codeRefsMarkedCleanUserName'],
+        'codeRefsMarkedCleanAt': json['codeRefsMarkedCleanAt'] == null ? undefined : json['codeRefsMarkedCleanAt'],
+        'lastCheckAt': json['lastCheckAt'] == null ? undefined : json['lastCheckAt'],
+        'noRecentChecks': json['noRecentChecks'],
+        'lastTrackAt': json['lastTrackAt'] == null ? undefined : json['lastTrackAt'],
         'parentFlagId': json['parentFlagId'] == null ? undefined : json['parentFlagId'],
     };
 }
@@ -166,9 +192,13 @@ export function CreateFlag200ResponseFlagToJSONTyped(value?: CreateFlag200Respon
         'stale': value['stale'],
         'permanent': value['permanent'],
         'createdAt': value['createdAt'],
-        'lastCheckAt': value['lastCheckAt'],
-        'lastTrackAt': value['lastTrackAt'],
         'rolledOutToEveryoneAt': value['rolledOutToEveryoneAt'],
+        'codeRefsCleanedUp': value['codeRefsCleanedUp'],
+        'codeRefsMarkedCleanUserName': value['codeRefsMarkedCleanUserName'],
+        'codeRefsMarkedCleanAt': value['codeRefsMarkedCleanAt'],
+        'lastCheckAt': value['lastCheckAt'],
+        'noRecentChecks': value['noRecentChecks'],
+        'lastTrackAt': value['lastTrackAt'],
         'parentFlagId': value['parentFlagId'],
     };
 }

@@ -217,26 +217,4 @@ export const handlers = [
       return HttpResponse.json({ success: true, channel: testChannel });
     },
   ),
-  http.get(
-    "https://front.reflag.com/feedback/prompting-auth",
-    ({ request }) => {
-      if (!checkRequest(request)) return invalidReqResponse;
-      return HttpResponse.json({ success: true, keyName: "keyName" });
-    },
-  ),
-  http.post(
-    "https://livemessaging.bucket.co/keys/keyName/requestToken",
-    async ({ request }) => {
-      const data = await request.json();
-      if (typeof data !== "object") {
-        return HttpResponse.error();
-      }
-
-      return HttpResponse.json({
-        success: true,
-        token: "token",
-        expires: 1234567890,
-      });
-    },
-  ),
 ];

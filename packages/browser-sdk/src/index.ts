@@ -1,4 +1,5 @@
 export type {
+  BootstrappedState,
   Config,
   Flag,
   FlagRemoteConfig,
@@ -42,6 +43,7 @@ export type {
 } from "./flag/flags";
 export type { HookArgs, State, TrackEvent } from "./hooksManager";
 export type { Logger } from "./logger";
+export type { EventSourceFactory, EventSourceLike } from "./sse";
 export type { StorageAdapter } from "./storage";
 export { feedbackContainerId, propagatedEvents } from "./ui/constants";
 export type {

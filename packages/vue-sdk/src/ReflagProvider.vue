@@ -4,9 +4,6 @@ import { computed, onMounted, provide, ref, watch } from "vue";
 import { ProviderSymbol, useOnEvent, useReflagClient } from "./hooks";
 import type { ReflagProps } from "./types";
 
-// any optional prop which has boolean as part of the type, will default to false
-// instead of `undefined`, so we use `withDefaults` here to pass the undefined
-// down into the client.
 const {
   context,
   user,
@@ -16,6 +13,7 @@ const {
   enableTracking = true,
   logger,
   debug,
+  enableLiveFlagUpdates = undefined,
   ...config
 } = defineProps<ReflagProps>();
 
@@ -30,6 +28,7 @@ const client = useReflagClient({
   ...config,
   ...resolvedContext.value,
   enableTracking,
+  enableLiveFlagUpdates,
   debug,
   logger,
 });

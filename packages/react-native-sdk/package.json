@@ -34,7 +34,8 @@
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "^2.2.0",
-    "@reflag/react-sdk": "1.4.8"
+    "@reflag/react-sdk": "1.4.8",
+    "react-native-sse": "^1.2.1"
   },
   "devDependencies": {
     "@reflag/tsconfig": "^0.0.2",

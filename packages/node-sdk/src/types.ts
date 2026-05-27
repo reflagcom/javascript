@@ -136,6 +136,7 @@ export type RawFlags = Record<TypedFlagKey, RawFlag>;
 export type BootstrappedFlags = {
   context: Context;
   flags: RawFlags;
+  flagStateVersion?: number;
 };
 
 export type EmptyFlagRemoteConfig = { key: undefined; payload: undefined };
@@ -720,7 +721,7 @@ export type ClientOptions = {
   /**
    * Push endpoint used when `flagsSyncMode` is `"push"`.
    *
-   * @defaultValue `"https://pubsub.reflag.com/sse"`
+   * @defaultValue `"https://front.reflag.com/sse/server"`
    */
   flagsPushUrl?: string;
 

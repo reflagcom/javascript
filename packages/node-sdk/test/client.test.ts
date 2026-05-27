@@ -351,7 +351,7 @@ describe("ReflagClient", () => {
       expect(client["_config"].refetchInterval).toBe(FLAGS_REFETCH_MS);
       expect(client["_config"].flagsSyncMode).toBe("push");
       expect(client["_config"].flagsPushUrl).toBe(
-        "https://pubsub.reflag.com/sse?channels=flags-state%3A165d2650f1975f7f",
+        "https://front.reflag.com/sse/server",
       );
       expect(client.httpClient).toBe(fetchClient);
       expect(client["_config"].headers).toEqual(expectedHeaders);
@@ -360,6 +360,17 @@ describe("ReflagClient", () => {
         maxSize: BATCH_MAX_SIZE,
         intervalMs: BATCH_INTERVAL_MS,
       });
+    });
+
+    it("should strip legacy channels from custom push URLs", () => {
+      const client = new ReflagClient({
+        secretKey: "validSecretKeyWithMoreThan22Chars",
+        flagsPushUrl: "https://example.com/sse?channels=legacy&foo=bar",
+      });
+
+      expect(client["_config"].flagsPushUrl).toBe(
+        "https://example.com/sse?foo=bar",
+      );
     });
 
     it("should map deprecated cacheStrategy values to sync modes", () => {
@@ -1121,9 +1132,10 @@ describe("ReflagClient", () => {
         });
 
         const [calledUrl, calledInit] = fetchMock.mock.calls[0] ?? [];
-        expect(String(calledUrl)).toBe(
-          "https://pubsub.reflag.com/sse?channels=flags-state%3A165d2650f1975f7f",
-        );
+        const url = new URL(String(calledUrl));
+        expect(url.origin).toBe("https://front.reflag.com");
+        expect(url.pathname).toBe("/sse/server");
+        expect(url.searchParams.has("channels")).toBe(false);
         expect(calledInit).toMatchObject({
           method: "GET",
           headers: {
@@ -1132,6 +1144,7 @@ describe("ReflagClient", () => {
             "Cache-Control": "no-cache",
           },
         });
+        expect(calledInit?.body).toBeUndefined();
         expect(calledInit?.signal).toBeDefined();
 
         client.destroy();
@@ -2567,6 +2580,7 @@ describe("ReflagClient", () => {
             missingContextFields: ["attributeKey"],
           },
         },
+        flagStateVersion: 1,
       });
 
       // Should not have track function like regular getFlags
@@ -2619,6 +2633,7 @@ describe("ReflagClient", () => {
             missingContextFields: ["company.id"],
           },
         },
+        flagStateVersion: 1,
       });
 
       // Should not have track function
@@ -2671,6 +2686,7 @@ describe("ReflagClient", () => {
             missingContextFields: ["attributeKey"],
           },
         },
+        flagStateVersion: 1,
       });
 
       // Should not have track function
@@ -2717,6 +2733,7 @@ describe("ReflagClient", () => {
             missingContextFields: ["company.id"],
           },
         },
+        flagStateVersion: 1,
       });
 
       // Should not have track function
@@ -2775,6 +2792,7 @@ describe("ReflagClient", () => {
           enableTracking: true,
         },
         flags: {},
+        flagStateVersion: 1,
       });
     });
 
@@ -3281,6 +3299,7 @@ describe("BoundReflagClient", () => {
           missingContextFields: ["attributeKey"],
         },
       },
+      flagStateVersion: 1,
     });
 
     // Should not have track function like regular getFlags

@@ -67,6 +67,10 @@ export class FlagsCache {
     return this.value;
   }
 
+  public getFlagStateVersion() {
+    return this.flagStateVersion;
+  }
+
   public async refresh(waitForVersion?: number) {
     if (this.destroyed) {
       return this.value;

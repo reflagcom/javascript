@@ -231,7 +231,7 @@ Most deployments run multiple SDK processes, so more than one process may save i
 >
 > `flagsFallbackProvider` helps new server processes start if they cannot reach Reflag during initialization. Bootstrapping helps clients render from server-provided flags instead of depending on an initial client-side fetch from the Reflag servers.
 >
-> This applies to React (`getFlagsForBootstrap()` + `ReflagBootstrappedProvider`), the Browser SDK (`bootstrappedFlags`), and the Vue SDK (bootstrapped flags via the provider).
+> This applies to React (`getFlagsForBootstrap()` + `ReflagBootstrappedProvider`), React Native, the Browser SDK (`bootstrappedState`), and the Vue SDK (bootstrapped flags via the provider).
 
 #### Built-in providers
 
@@ -373,8 +373,8 @@ The `getFlagsForBootstrap()` method is useful whenever you need to pass flag dat
 const client = new ReflagClient();
 await client.initialize();
 
-// Get flags for bootstrapping with full context
-const { context, flags } = client.getFlagsForBootstrap({
+// Get bootstrapped state with full context
+const bootstrappedState = client.getFlagsForBootstrap({
   user: {
     id: "user123",
     name: "John Doe",
@@ -392,17 +392,20 @@ const { context, flags } = client.getFlagsForBootstrap({
 });
 
 // Pass this data to your client-side application
-// The flags object contains raw flag data suitable for JSON serialization
-console.log(flags);
+console.log(bootstrappedState);
 // {
-//   "huddle": {
-//     "key": "huddle",
-//     "isEnabled": true,
-//     "config": {
-//       "key": "enhanced",
-//       "payload": { "maxParticipants": 50, "videoQuality": "hd" },
+//   context: { ... },
+//   flags: {
+//     "huddle": {
+//       "key": "huddle",
+//       "isEnabled": true,
+//       "config": {
+//         "key": "enhanced",
+//         "payload": { "maxParticipants": 50, "videoQuality": "hd" },
+//       }
 //     }
-//   }
+//   },
+//   flagStateVersion: 42
 // }
 ```
 
@@ -414,13 +417,14 @@ const boundClient = client.bindClient({
   company: { id: "company456", name: "Acme Inc", plan: "enterprise" },
 });
 
-const { context, flags } = boundClient.getFlagsForBootstrap();
+const bootstrappedState = boundClient.getFlagsForBootstrap();
 ```
 
 ### Key differences from `getFlags()`
 
 - **Raw data**: Returns plain objects without `track()` functions, making them JSON serializable
 - **Context included**: Returns both the evaluated flags and the context used for evaluation
+- **Version included**: Returns `flagStateVersion` when known so bootstrapped clients can avoid redundant live-update refreshes
 - **Bootstrapping focus**: Designed specifically for passing data to client-side applications
 
 ## Edge-runtimes like Cloudflare Workers
@@ -571,7 +575,7 @@ current working directory.
 | `flagOverrides`         | Record<string, boolean>               | An object specifying flag overrides for testing or local development. See [examples/express/app.test.ts](https://github.com/reflagcom/javascript/tree/main/packages/node-sdk/examples/express/app.test.ts) for how to use `flagOverrides` in tests. | REFLAG_FLAGS_ENABLED, REFLAG_FLAGS_DISABLED |
 | `flagsFallbackProvider` | `FlagsFallbackProvider`               | Optional provider used to load and save raw flag definitions for fallback startup when the initial live fetch fails. Available only through the constructor. Ignored in offline mode.                                                               | -                                           |
 | `flagsSyncMode`         | `"polling" \| "in-request" \| "push"` | Flag-definition sync mode. `push` subscribes to live updates, `polling` uses periodic background refresh, and `in-request` refreshes stale flags during request handling. Default: `"push"`.                                                        | -                                           |
-| `flagsPushUrl`          | string                                | Push endpoint used when `flagsSyncMode: "push"`. Default: `https://pubsub.reflag.com/sse`.                                                                                                                                                          | -                                           |
+| `flagsPushUrl`          | string                                | Push endpoint used when `flagsSyncMode: "push"`. The SDK opens it as an authenticated streaming GET. Default: `https://front.reflag.com/sse/server`.                                                                                                | -                                           |
 | `configFile`            | string                                | Load this config file from disk. Default: `reflag.config.json`                                                                                                                                                                                      | REFLAG_CONFIG_FILE                          |
 
 > [!NOTE]

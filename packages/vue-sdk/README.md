@@ -182,9 +182,9 @@ The `<ReflagProvider>` initializes the Reflag SDK, fetches flags and starts list
 - `staleTimeMs`: Maximum time (in milliseconds) that stale flags will be returned if `staleWhileRevalidate` is true and new flags cannot be fetched.
 
 - `enableTracking`: Set to `false` to stop sending tracking events and user/company updates to Reflag. Useful when you're impersonating a user (defaults to `true`),
-- `apiBaseUrl`: Optional base URL for the Reflag API. Use this to override the default API endpoint,
+- `apiBaseUrl`: Optional base URL for the Reflag API. This also controls the SSE origin used for live flag updates and automated feedback,
 - `appBaseUrl`: Optional base URL for the Reflag application. Use this to override the default app URL,
-- `sseBaseUrl`: Optional base URL for Server-Sent Events. Use this to override the default SSE endpoint,
+
 - `debug`: Set to `true` to enable debug logging to the console. If both `logger` and `debug` are provided, `logger` takes precedence,
 - `logger`: Optional custom logger implementation (`debug`, `info`, `warn`, `error`) used by the underlying client,
 - `toolbar`: Optional [configuration](https://docs.reflag.com/supported-languages/browser-sdk/globals#toolbaroptions) for the Reflag toolbar,
@@ -234,6 +234,7 @@ const bootstrappedFlags = {
       },
     },
   },
+  flagStateVersion: 42,
 };
 </script>
 
@@ -249,7 +250,15 @@ const bootstrappedFlags = {
 
 ### Getting bootstrapped flags
 
-You'll typically generate the `bootstrappedFlags` object on your server using the Node.js SDK or by fetching from the Reflag API. Here's an example using the Node.js SDK:
+You'll typically generate the `bootstrappedFlags` object on your server using the Node.js SDK or by fetching from the Reflag API. Pass the full object returned by `getFlagsForBootstrap()` directly to `<ReflagBootstrappedProvider>`. It contains:
+
+- `context`: the evaluation context used on the server
+- `flags`: the evaluated raw flags
+- `flagStateVersion`: an optional version used to avoid redundant live-update refreshes immediately after bootstrapping
+
+If you want live flag updates to continue working after bootstrapping, use a recent `@reflag/node-sdk` so `getFlagsForBootstrap()` includes `flagStateVersion`.
+
+Here's an example using the Node.js SDK:
 
 ```js
 // server.js (Node.js/SSR)
@@ -275,10 +284,13 @@ const bootstrappedFlags = client.getFlagsForBootstrap(context);
 
 `ReflagBootstrappedProvider` accepts all the same props as `ReflagProvider` except:
 
-- `flags`: The pre-fetched flags object containing context and flag data
+- `flags`: The pre-fetched bootstrapped state object containing `context`, evaluated `flags`, and an optional `flagStateVersion`
 - All other props available in `ReflagProvider` are supported except `context`, `user`, `company`, and `otherContext` (which are extracted from `flags.context`)
 
 If the `flags` prop is not provided or is undefined, the provider will not initialize the client and will render in a non-loading state.
+
+> [!NOTE]
+> After bootstrapping, any live flag updates are fetched directly by the browser SDK from Reflag using the browser-visible context. If your bootstrapped snapshot depends on server-only or secret context that is not available in the browser, later live refreshes may differ. In that case, keep `enableLiveFlagUpdates` disabled.
 
 ## `<ReflagClientProvider>` component
 

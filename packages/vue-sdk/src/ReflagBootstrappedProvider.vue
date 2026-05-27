@@ -10,14 +10,15 @@ const {
   enableTracking = true,
   logger,
   debug,
+  enableLiveFlagUpdates = undefined,
   ...config
 } = defineProps<ReflagBootstrappedProps>();
 
 const client = useReflagClient({
   ...config,
-  ...flags?.context,
   enableTracking,
-  bootstrappedFlags: flags?.flags,
+  enableLiveFlagUpdates,
+  bootstrappedState: flags,
   debug,
   logger,
 });
@@ -41,20 +42,11 @@ onMounted(() => {
   });
 });
 
-// Update the context if it changes
+// Update the bootstrapped state if it changes
 watch(
-  () => flags.context,
-  (newContext) => {
-    void client.setContext(newContext);
-  },
-  { deep: true },
-);
-
-// Update the flags if they change
-watch(
-  () => flags.flags,
+  () => flags,
   (newFlags) => {
-    client.updateFlags(newFlags);
+    client.applyBootstrappedState(newFlags);
   },
   { deep: true },
 );

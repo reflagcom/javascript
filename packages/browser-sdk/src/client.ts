@@ -1,12 +1,7 @@
 import { deepEqual } from "fast-equals";
 
 import { BulkEvent, BulkQueue } from "./bulkQueue";
-import {
-  API_BASE_URL,
-  APP_BASE_URL,
-  IS_SERVER,
-  SSE_REALTIME_BASE_URL,
-} from "./config";
+import { API_BASE_URL, APP_BASE_URL, IS_SERVER, SDK_VERSION } from "./config";
 import { ReflagContext, ReflagDeprecatedContext } from "./context";
 import {
   AutoFeedback,
@@ -23,9 +18,16 @@ import {
   FlagsClient,
   RawFlags,
 } from "./flag/flags";
+import { isValidFlagStateVersion } from "./flag/flagStateVersion";
 import { HookArgs, HooksManager, State } from "./hooksManager";
 import { HttpClient } from "./httpClient";
 import { Logger, loggerWithPrefix, quietConsoleLogger } from "./logger";
+import {
+  AblySSEChannel,
+  EventSourceFactory,
+  openAblySSEChannel,
+  PubSubMessage,
+} from "./sse";
 import { StorageAdapter } from "./storage";
 import { showToolbarToggle } from "./toolbar";
 import { ToolbarPosition } from "./ui/types";
@@ -33,6 +35,17 @@ import { logResponseError } from "./utils/responseError";
 
 const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
 const isNode = typeof document === "undefined"; // deno supports "window" but not "document" according to https://remix.run/docs/en/main/guides/gotchas
+
+function normalizeContext({
+  otherContext,
+  ...context
+}: ReflagDeprecatedContext): ReflagContext {
+  return {
+    user: context.user?.id ? { ...context.user } : undefined,
+    company: context.company?.id ? { ...context.company } : undefined,
+    other: { ...otherContext, ...context.other },
+  };
+}
 
 /**
  * (Internal) User context.
@@ -167,7 +180,8 @@ export interface Config {
   appBaseUrl: string;
 
   /**
-   * Base URL of Reflag servers for SSE connections used by AutoFeedback.
+   * Base URL used for pubsub SSE connections.
+   * Defaults to `apiBaseUrl`.
    */
   sseBaseUrl: string;
 
@@ -201,6 +215,15 @@ export type ToolbarOptions =
  * Flag definitions.
  */
 export type FlagDefinitions = Readonly<Array<string>>;
+
+/**
+ * Pre-fetched evaluated state used to bootstrap the client.
+ */
+export type BootstrappedState = {
+  context: ReflagContext;
+  flags: RawFlags;
+  flagStateVersion?: number;
+};
 
 /**
  * ReflagClient initialization options.
@@ -272,7 +295,8 @@ export type InitOptions = ReflagDeprecatedContext & {
   credentials?: "include" | "same-origin" | "omit";
 
   /**
-   * Base URL of Reflag servers for SSE connections used by AutoFeedback.
+   * @deprecated SSE now uses the same origin as `apiBaseUrl` by default.
+   * Override only if you need a separate pubsub host temporarily.
    */
   sseBaseUrl?: string;
 
@@ -292,12 +316,39 @@ export type InitOptions = ReflagDeprecatedContext & {
   enableTracking?: boolean;
 
   /**
+   * Whether to enable live flag updates.
+   *
+   * When enabled, the SDK opens a Server-Sent Events (SSE) connection and
+   * refreshes flag definitions automatically whenever they change on the
+   * server, without relying on context changes or manual refreshes.
+   *
+   * Defaults to `false` in the browser SDK.
+   */
+  enableLiveFlagUpdates?: boolean;
+
+  /**
+   * Optional factory used to create SSE connections.
+   *
+   * By default the SDK uses the global `EventSource` implementation available
+   * in browsers. This option is intended for alternative runtimes where you
+   * need to provide an EventSource-compatible transport manually. The React
+   * Native wrapper already injects a transport automatically.
+   */
+  eventSourceFactory?: EventSourceFactory;
+
+  /**
    * Toolbar configuration
    */
   toolbar?: ToolbarOptions;
 
   /**
+   * Pre-fetched evaluated state to be used instead of fetching it from the server.
+   */
+  bootstrappedState?: BootstrappedState;
+
+  /**
    * Pre-fetched flags to be used instead of fetching them from the server.
+   * @deprecated Use `bootstrappedState` instead.
    */
   bootstrappedFlags?: RawFlags;
 
@@ -342,7 +393,7 @@ export type InitOptions = ReflagDeprecatedContext & {
 const defaultConfig: Config = {
   apiBaseUrl: API_BASE_URL,
   appBaseUrl: APP_BASE_URL,
-  sseBaseUrl: SSE_REALTIME_BASE_URL,
+  sseBaseUrl: API_BASE_URL,
   enableTracking: true,
   offline: false,
   bootstrapped: false,
@@ -427,6 +478,12 @@ export class ReflagClient {
 
   private readonly autoFeedback: AutoFeedback | undefined;
   private autoFeedbackInit: Promise<void> | undefined;
+  private readonly enableLiveFlagUpdates: boolean;
+  private readonly eventSourceFactory: EventSourceFactory | undefined;
+  private readonly sdkVersion: string;
+  private pubSubChannel: AblySSEChannel | undefined;
+  private pubSubInit: Promise<void> | undefined;
+  private latestFlagStateVersionSeen: number | undefined;
   private readonly flagsClient: FlagsClient;
   private readonly bulkQueue: BulkQueue | undefined;
   private readonly handleBeforeUnload?: () => void;
@@ -446,21 +503,46 @@ export class ReflagClient {
       opts?.logger ?? loggerWithPrefix(quietConsoleLogger, "[Reflag]");
 
     // Create the context object making sure to clone the user and company objects
-    this.context = {
-      user: opts?.user?.id ? { ...opts.user } : undefined,
-      company: opts?.company?.id ? { ...opts.company } : undefined,
-      other: { ...opts?.otherContext, ...opts?.other },
-    };
+    this.context = normalizeContext(
+      opts?.bootstrappedState?.context ?? {
+        user: opts?.user,
+        company: opts?.company,
+        otherContext: opts?.otherContext,
+        other: opts?.other,
+      },
+    );
+
+    const apiBaseUrl = opts?.apiBaseUrl ?? defaultConfig.apiBaseUrl;
 
     this.config = {
-      apiBaseUrl: opts?.apiBaseUrl ?? defaultConfig.apiBaseUrl,
+      apiBaseUrl,
       appBaseUrl: opts?.appBaseUrl ?? defaultConfig.appBaseUrl,
-      sseBaseUrl: opts?.sseBaseUrl ?? defaultConfig.sseBaseUrl,
+      sseBaseUrl: opts?.sseBaseUrl ?? apiBaseUrl,
       enableTracking: opts?.enableTracking ?? defaultConfig.enableTracking,
       offline: opts?.offline ?? defaultConfig.offline,
       bootstrapped:
-        opts && "bootstrappedFlags" in opts && !!opts.bootstrappedFlags,
+        !!opts?.bootstrappedState ||
+        (opts && "bootstrappedFlags" in opts && !!opts.bootstrappedFlags),
     };
+
+    const requestedEnableLiveFlagUpdates = opts?.enableLiveFlagUpdates ?? false;
+    const hasBootstrappedFlagStateVersion = isValidFlagStateVersion(
+      opts?.bootstrappedState?.flagStateVersion,
+    );
+    const bootstrappedWithoutFlagStateVersion =
+      (!!opts?.bootstrappedState && !hasBootstrappedFlagStateVersion) ||
+      (!!opts && "bootstrappedFlags" in opts && !!opts.bootstrappedFlags);
+
+    if (requestedEnableLiveFlagUpdates && bootstrappedWithoutFlagStateVersion) {
+      this.logger.warn(
+        "Live flag updates require `flagStateVersion` when bootstrapping flags. Disabling live flag updates for this client. Upgrade your server SDK (for example `@reflag/node-sdk`) so the bootstrap payload includes `flagStateVersion`, or set `enableLiveFlagUpdates` to `false` when using unversioned bootstrap data.",
+      );
+    }
+
+    this.enableLiveFlagUpdates =
+      requestedEnableLiveFlagUpdates && !bootstrappedWithoutFlagStateVersion;
+    this.eventSourceFactory = opts?.eventSourceFactory;
+    this.sdkVersion = opts?.sdkVersion ?? SDK_VERSION;
 
     this.requestFeedbackOptions = {
       position: opts?.feedback?.ui?.position,
@@ -469,7 +551,7 @@ export class ReflagClient {
 
     this.httpClient = new HttpClient(this.publishableKey, {
       baseUrl: this.config.apiBaseUrl,
-      sdkVersion: opts?.sdkVersion,
+      sdkVersion: this.sdkVersion,
       credentials: opts?.credentials,
     });
     if (!this.config.offline && this.config.enableTracking) {
@@ -503,6 +585,14 @@ export class ReflagClient {
       this.context,
       this.logger,
       {
+        bootstrappedState: opts.bootstrappedState
+          ? {
+              flags: opts.bootstrappedState.flags,
+              flagStateVersion: opts.bootstrappedState.flagStateVersion,
+            }
+          : opts.bootstrappedFlags
+            ? { flags: opts.bootstrappedFlags }
+            : undefined,
         bootstrappedFlags: opts.bootstrappedFlags,
         expireTimeMs: opts.expireTimeMs,
         staleTimeMs: opts.staleTimeMs,
@@ -567,14 +657,29 @@ export class ReflagClient {
     this.setState("initializing");
 
     const start = Date.now();
-    if (this.autoFeedback && !IS_SERVER) {
-      // do not block on automated feedback surveys initialization
-      this.autoFeedbackInit = this.autoFeedback.initialize().catch((e) => {
-        this.logger.error("error initializing automated feedback surveys", e);
-      });
+    const wantsPubSub = this.wantsPubSub();
+    const hasPubSubTransport = this.hasPubSubTransport();
+
+    if (!this.config.offline && wantsPubSub && !hasPubSubTransport) {
+      this.logger.debug(
+        "skipping pubsub initialization because this runtime has no browser EventSource transport",
+      );
     }
 
     await this.flagsClient.initialize();
+
+    // Open SSE after the initial flag load. The pubsub server replays the
+    // latest flag-update message, including `flagStateVersion`, so
+    // `reconcileFlagsWithLatestPubSubVersion()` below can catch up if an update
+    // lands between the fetch and the SSE subscription.
+    if (!this.config.offline && wantsPubSub && hasPubSubTransport) {
+      // do not block on pubsub initialization
+      this.logger.debug("initializing pubsub");
+      this.pubSubInit = this.initializePubSub().catch((e) => {
+        this.logger.error("error initializing pubsub", e);
+      });
+    }
+    this.reconcileFlagsWithLatestPubSubVersion();
 
     if (!this.config.bootstrapped) {
       if (this.context.user && this.config.enableTracking) {
@@ -625,10 +730,19 @@ export class ReflagClient {
       }
     }
 
-    if (this.autoFeedback) {
+    if (this.autoFeedback && this.autoFeedbackInit) {
       // ensure fully initialized before stopping
       await this.autoFeedbackInit;
       this.autoFeedback.stop();
+    }
+
+    if (this.pubSubInit) {
+      // ensure fully initialized before stopping
+      await this.pubSubInit;
+    }
+    if (this.pubSubChannel) {
+      this.pubSubChannel.close();
+      this.pubSubChannel = undefined;
     }
 
     this.flagsClient.stop();
@@ -766,17 +880,11 @@ export class ReflagClient {
   }
 
   private async applyContext(
-    { otherContext, ...context }: ReflagDeprecatedContext,
+    context: ReflagDeprecatedContext,
     { warnOnMissingIds }: { warnOnMissingIds: boolean },
   ) {
     const previousContext = this.context;
-
-    // Create a new context object making sure to clone the user and company objects
-    const newContext = {
-      user: context.user?.id ? { ...context.user } : undefined,
-      company: context.company?.id ? { ...context.company } : undefined,
-      other: { ...otherContext, ...context.other },
-    };
+    const newContext = normalizeContext(context);
 
     if (warnOnMissingIds && !context.user?.id) {
       this.logger.warn("No user Id provided in context, user will be ignored");
@@ -823,14 +931,82 @@ export class ReflagClient {
     }
   }
 
+  applyBootstrappedState(
+    bootstrappedState: BootstrappedState,
+    triggerEvent = true,
+  ) {
+    const previousContext = this.context;
+    const newContext = normalizeContext(bootstrappedState.context);
+
+    const contextChanged = !deepEqual(previousContext, newContext);
+    const userChanged = !deepEqual(previousContext.user, newContext.user);
+    const companyChanged = !deepEqual(
+      previousContext.company,
+      newContext.company,
+    );
+    const userIdChanged =
+      !!newContext.user?.id && newContext.user.id !== previousContext.user?.id;
+
+    const currentFlagStateVersion = this.flagsClient.getFlagStateVersion();
+    const latestKnownFlagStateVersion = Math.max(
+      currentFlagStateVersion ?? -1,
+      this.latestFlagStateVersionSeen ?? -1,
+    );
+    if (latestKnownFlagStateVersion >= 0) {
+      this.latestFlagStateVersionSeen = latestKnownFlagStateVersion;
+    }
+
+    const incomingFlagStateVersion = bootstrappedState.flagStateVersion;
+    if (isValidFlagStateVersion(incomingFlagStateVersion)) {
+      this.latestFlagStateVersionSeen = Math.max(
+        this.latestFlagStateVersionSeen ?? -1,
+        incomingFlagStateVersion,
+      );
+    }
+
+    const shouldIgnoreIncomingFlags =
+      !contextChanged &&
+      latestKnownFlagStateVersion >= 0 &&
+      (incomingFlagStateVersion === undefined ||
+        incomingFlagStateVersion < latestKnownFlagStateVersion);
+
+    this.context = newContext;
+    this.flagsClient.setContextWithoutFetch(newContext);
+
+    if (!shouldIgnoreIncomingFlags) {
+      this.flagsClient.setFetchedFlags(
+        bootstrappedState.flags,
+        triggerEvent,
+        incomingFlagStateVersion,
+      );
+    }
+
+    if (!contextChanged) {
+      return;
+    }
+
+    if (companyChanged) {
+      void this.company();
+    }
+
+    if (userChanged) {
+      void this.user();
+      if (userIdChanged) {
+        void this.updateAutoFeedbackUser(String(newContext.user!.id));
+      }
+    }
+
+    this.reconcileFlagsWithLatestPubSubVersion();
+  }
+
   /**
    * Update the flags.
    *
    * @param flags The flags to update.
    * @param triggerEvent Whether to trigger the `flagsUpdated` event.
    */
-  updateFlags(flags: RawFlags, triggerEvent = true) {
-    this.flagsClient.setFetchedFlags(flags, triggerEvent);
+  updateFlags(flags: RawFlags, triggerEvent = true, flagStateVersion?: number) {
+    this.flagsClient.setFetchedFlags(flags, triggerEvent, flagStateVersion);
   }
 
   /**
@@ -1181,10 +1357,114 @@ export class ReflagClient {
     return;
   }
 
+  private wantsPubSub() {
+    return this.enableLiveFlagUpdates || !!this.autoFeedback;
+  }
+
+  private hasPubSubTransport() {
+    return !IS_SERVER || !!this.eventSourceFactory;
+  }
+
+  private async initializePubSub() {
+    this.pubSubChannel?.close();
+    this.pubSubChannel = undefined;
+
+    this.pubSubChannel = openAblySSEChannel({
+      channels: [],
+      callback: (message) => this.handlePubSubMessage(message),
+      logger: this.logger,
+      sseBaseUrl: this.config.sseBaseUrl,
+      eventSourceFactory: this.eventSourceFactory,
+      publishableKey: this.publishableKey,
+      sdkVersion: this.sdkVersion,
+      path: "sse/client",
+    });
+  }
+
+  private handlePubSubMessage(message: PubSubMessage) {
+    const eventName =
+      typeof message.name === "string"
+        ? message.name
+        : typeof message.event === "string"
+          ? message.event
+          : undefined;
+    const payload = message.data ?? message;
+
+    const flagStateVersion = Number((payload as any)?.flagStateVersion);
+    const hasFlagStateVersion = isValidFlagStateVersion(flagStateVersion);
+
+    if (eventName === "flags-updated" || hasFlagStateVersion) {
+      if (!this.enableLiveFlagUpdates) {
+        return;
+      }
+
+      if (hasFlagStateVersion) {
+        this.latestFlagStateVersionSeen = Math.max(
+          this.latestFlagStateVersionSeen ?? -1,
+          flagStateVersion,
+        );
+      }
+
+      const currentVersion = this.flagsClient.getFlagStateVersion();
+      if (
+        this.state === "initialized" &&
+        (!hasFlagStateVersion ||
+          currentVersion === undefined ||
+          flagStateVersion > currentVersion)
+      ) {
+        void this.flagsClient
+          .refreshFlags(hasFlagStateVersion ? flagStateVersion : undefined)
+          .catch((e) => {
+            this.logger.error("error refreshing flags after live update", e);
+          });
+      }
+      return;
+    }
+
+    if (this.autoFeedback && this.context.user?.id) {
+      this.autoFeedback.handleFeedbackPromptRequest(
+        String(this.context.user.id),
+        payload,
+      );
+    }
+  }
+
+  private reconcileFlagsWithLatestPubSubVersion() {
+    if (!this.enableLiveFlagUpdates) {
+      return;
+    }
+
+    const latestVersion = this.latestFlagStateVersionSeen;
+    const currentVersion = this.flagsClient.getFlagStateVersion();
+
+    if (
+      latestVersion !== undefined &&
+      (currentVersion === undefined || latestVersion > currentVersion)
+    ) {
+      void this.flagsClient.refreshFlags(latestVersion).catch((e) => {
+        this.logger.error(
+          "error refreshing flags after pubsub version reconciliation",
+          e,
+        );
+      });
+    }
+  }
+
   private async updateAutoFeedbackUser(userId: string) {
     if (!this.autoFeedback) {
       return;
     }
+
+    if (this.pubSubInit) {
+      await this.pubSubInit;
+      this.autoFeedback.setUserId(userId);
+      this.pubSubInit = this.initializePubSub().catch((e) => {
+        this.logger.error("error reinitializing pubsub", e);
+      });
+      await this.pubSubInit;
+      return;
+    }
+
     // Ensure fully initialized before updating the user
     await this.autoFeedbackInit;
     await this.autoFeedback.setUser(userId);

@@ -57,6 +57,17 @@ describe("cache", () => {
     } satisfies CacheResult);
   });
 
+  test("caches flag state version when present", async () => {
+    const { cache } = newCache();
+
+    await cache.set("key", { flags, flagStateVersion: 7 });
+    await expect(cache.get("key")).resolves.toEqual({
+      stale: false,
+      flags,
+      flagStateVersion: 7,
+    } satisfies CacheResult);
+  });
+
   test("sets stale", async () => {
     const { cache } = newCache();
 

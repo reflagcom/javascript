@@ -2,7 +2,6 @@ import { version } from "../package.json";
 
 export const API_BASE_URL = "https://front.reflag.com";
 export const APP_BASE_URL = "https://app.reflag.com";
-export const SSE_REALTIME_BASE_URL = "https://livemessaging.bucket.co";
 
 export const SDK_VERSION_HEADER_NAME = "reflag-sdk-version";
 

@@ -1,8 +1,8 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * Reflag API
- * Feature flag management API
+ * Reflag Management API
+ * Feature flag Management API
  *
  * The version of the OpenAPI document: 3.0.1
  * 
@@ -38,6 +38,11 @@ export interface EnvironmentHeader {
      * @type {number}
      */
     order: number;
+    /**
+     * Environment version incremented when flag state changes
+     * @type {number}
+     */
+    flagStateVersion: number;
 }
 
 /**
@@ -48,6 +53,7 @@ export function instanceOfEnvironmentHeader(value: object): value is Environment
     if (!('name' in value) || value['name'] === undefined) return false;
     if (!('isProduction' in value) || value['isProduction'] === undefined) return false;
     if (!('order' in value) || value['order'] === undefined) return false;
+    if (!('flagStateVersion' in value) || value['flagStateVersion'] === undefined) return false;
     return true;
 }
 
@@ -65,6 +71,7 @@ export function EnvironmentHeaderFromJSONTyped(json: any, ignoreDiscriminator: b
         'name': json['name'],
         'isProduction': json['isProduction'],
         'order': json['order'],
+        'flagStateVersion': json['flagStateVersion'],
     };
 }
 
@@ -83,6 +90,7 @@ export function EnvironmentHeaderToJSONTyped(value?: EnvironmentHeader | null, i
         'name': value['name'],
         'isProduction': value['isProduction'],
         'order': value['order'],
+        'flagStateVersion': value['flagStateVersion'],
     };
 }
 
