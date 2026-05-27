@@ -2,7 +2,7 @@
 "@reflag/react-native-sdk": minor
 ---
 
-Live flag updates are now enabled by default and work out of the box using the built-in `react-native-sse` transport. Apps no longer need to provide a global `EventSource` shim for Reflag live updates.
+The React Native SDK now includes an `enableLiveFlagUpdates` config option, which defaults to `true`. When enabled, live flag updates work out of the box using the built-in `react-native-sse` transport.
 
 `ReflagBootstrappedProvider` keeps its existing `flags` prop, and that prop now accepts the full object returned by `@reflag/node-sdk`'s `getFlagsForBootstrap()`: `{ context, flags, flagStateVersion? }`.
 
