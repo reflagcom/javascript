@@ -12,7 +12,7 @@ The browser SDK now supports `enableLiveFlagUpdates`, which subscribes to Reflag
 
 React Native now includes a built-in SSE transport via `react-native-sse`, so live updates work out of the box without requiring a global `EventSource` shim.
 
-The browser SDK also now accepts `bootstrappedState`, which contains `context`, evaluated `flags`, and an optional `flagStateVersion`. The Node SDK's `getFlagsForBootstrap()` now includes `flagStateVersion` when it is known, so React, React Native, and Vue bootstrapped providers can pass the full object directly instead of deconstructing it first:
+The browser SDK now accepts `bootstrappedState`, and the React, React Native, and Vue bootstrapped providers now accept the same full bootstrapped state object through their `flags` prop. The object contains `context`, evaluated `flags`, and an optional `flagStateVersion`. The Node SDK's `getFlagsForBootstrap()` now includes `flagStateVersion` when it is known, so you can pass the full object directly instead of deconstructing it first:
 
 ```ts
 const bootstrappedState = serverClient.getFlagsForBootstrap(context);
