@@ -164,6 +164,11 @@ describe("init", () => {
       expect(spy.mock.calls[0][0].channels).toEqual([]);
       expect(spy.mock.calls[0][0].publishableKey).toBe(KEY);
       expect(spy.mock.calls[0][0].sdkVersion).toBe("browser-sdk/test");
+      expect(spy.mock.calls[0][0].context).toEqual({
+        user: { id: "foo" },
+        company: undefined,
+        other: {},
+      });
 
       await reflagInstance.stop();
       expect(closeChannel).toHaveBeenCalledTimes(1);
