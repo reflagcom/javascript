@@ -1,5 +1,13 @@
 # @reflag/vue-sdk
 
+## 1.4.1
+
+### Patch Changes
+
+- 6e4aa8f: Fix auto feedback by attach the current browser SDK context to the `/sse/client` connection.
+- Updated dependencies [6e4aa8f]
+  - @reflag/browser-sdk@1.5.1
+
 ## 1.4.0
 
 ### Minor Changes
