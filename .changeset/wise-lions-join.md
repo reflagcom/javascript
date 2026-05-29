@@ -1,5 +1,7 @@
 ---
 "@reflag/browser-sdk": patch
+"@reflag/react-sdk": patch
+"@reflag/vue-sdk": patch
 ---
 
-Attach the current browser SDK context to the `/sse/client` connection.
+Fix auto feedback by attach the current browser SDK context to the `/sse/client` connection.
