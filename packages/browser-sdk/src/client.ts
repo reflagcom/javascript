@@ -1378,6 +1378,7 @@ export class ReflagClient {
       publishableKey: this.publishableKey,
       sdkVersion: this.sdkVersion,
       path: "sse/client",
+      context: this.context,
     });
   }
 

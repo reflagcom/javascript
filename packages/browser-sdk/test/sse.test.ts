@@ -96,6 +96,25 @@ describe("connection handling", () => {
     expect(url.searchParams.get("reflag-sdk-version")).toBe("browser-sdk/test");
   });
 
+  test("includes context as JSON when provided", async () => {
+    openAblySSEChannel({
+      channels: [],
+      callback: vi.fn(),
+      logger: testLogger,
+      sseBaseUrl: sseHost,
+      path: "sse/client",
+      context: {
+        user: { id: 23, name: undefined },
+        other: {},
+      },
+    });
+
+    const url = new URL(vi.mocked(window.EventSource).mock.calls[0][0]);
+    expect(url.searchParams.get("context")).toBe(
+      JSON.stringify({ user: { id: 23 } }),
+    );
+  });
+
   test("passes parsed message envelopes to the callback", async () => {
     const callback = vi.fn();
     const sse = createSSEChannel(callback);
