@@ -5,9 +5,36 @@ async function loadStorageModule() {
   return import("../src/storage");
 }
 
+const localStorageDescriptor = Object.getOwnPropertyDescriptor(
+  globalThis,
+  "localStorage",
+);
+
+function restoreLocalStorageDescriptor() {
+  const descriptor = localStorageDescriptor;
+  if (descriptor) {
+    Object.defineProperty(globalThis, "localStorage", descriptor);
+  } else {
+    delete (globalThis as Record<string, unknown>).localStorage;
+  }
+}
+
+function defineThrowingLocalStorage(errorName = "SecurityError") {
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    get() {
+      const error = new Error("Access is denied for this document.");
+      error.name = errorName;
+      throw error;
+    },
+  });
+}
+
 describe("storage adapters", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    restoreLocalStorageDescriptor();
+    localStorage.clear();
   });
 
   it("noop adapter ignores writes", async () => {
@@ -29,6 +56,20 @@ describe("storage adapters", () => {
       "localStorage is not available. Provide a custom storage adapter.",
     );
   });
+
+  it.each(["SecurityError", "NS_ERROR_FAILURE", "NS_ERROR_ABORT"])(
+    "localStorage adapter ignores %s when storage access is denied",
+    async (errorName) => {
+      const { getLocalStorageAdapter } = await loadStorageModule();
+      defineThrowingLocalStorage(errorName);
+
+      const adapter = getLocalStorageAdapter();
+
+      expect(await adapter.getItem("key")).toBeNull();
+      await expect(adapter.setItem("key", "value")).resolves.toBeUndefined();
+      await expect(adapter.removeItem?.("key")).resolves.toBeUndefined();
+    },
+  );
 
   it("default adapter falls back to noop on server runtimes", async () => {
     vi.resetModules();
