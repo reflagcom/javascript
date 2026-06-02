@@ -1,5 +1,13 @@
 # @reflag/vue-sdk
 
+## 1.4.2
+
+### Patch Changes
+
+- 7939e31: Handle SecurityError when browser storage access is denied.
+- Updated dependencies [7939e31]
+  - @reflag/browser-sdk@1.5.2
+
 ## 1.4.1
 
 ### Patch Changes
