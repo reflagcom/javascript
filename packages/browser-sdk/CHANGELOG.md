@@ -1,5 +1,11 @@
 # @reflag/browser-sdk
 
+## 1.5.2
+
+### Patch Changes
+
+- 7939e31: Handle SecurityError when browser storage access is denied.
+
 ## 1.5.1
 
 ### Patch Changes
