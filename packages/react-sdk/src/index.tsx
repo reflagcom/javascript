@@ -193,11 +193,6 @@ export type ReflagInitOptionsBase = Omit<
  */
 const reflagClients = new Map<string, ReflagClient>();
 
-/**
- * Returns the ReflagClient for a given publishable key.
- * Only creates a new ReflagClient is not already created or if it hook is run on the server.
- * @internal
- */
 function contextPartEqual(
   a?: Record<string, string | number | undefined>,
   b?: Record<string, string | number | undefined>,
@@ -222,6 +217,11 @@ function contextEqual(a: ReflagContext, b: ReflagContext) {
   );
 }
 
+/**
+ * Returns the ReflagClient for a given publishable key.
+ * Only creates a new ReflagClient if it is not already created or if the hook is run on the server.
+ * @internal
+ */
 function useReflagClient(initOptions: InitOptions & { debug?: boolean }) {
   const {
     debug = false,
