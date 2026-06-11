@@ -1,5 +1,11 @@
 # @reflag/browser-sdk
 
+## 1.5.3
+
+### Patch Changes
+
+- 04ea32c: Start flushing queued user and company updates immediately when `updateUser` or `updateCompany` changes identity context.
+
 ## 1.5.2
 
 ### Patch Changes
