@@ -92,10 +92,13 @@ export class BulkQueue {
     this.schedule(this.flushDelayMs);
   }
 
-  async flush() {
+  async flush(): Promise<void> {
     if (this.inFlightPromise) {
       await this.inFlightPromise;
-      return;
+      if (this.queue.length === 0) {
+        return;
+      }
+      return this.flush();
     }
 
     if (this.queue.length === 0) {

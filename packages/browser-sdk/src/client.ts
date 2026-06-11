@@ -908,16 +908,24 @@ export class ReflagClient {
 
     this.context = newContext;
 
+    let shouldFlushIdentityUpdate = false;
+
     if (companyChanged) {
       void this.company();
+      shouldFlushIdentityUpdate = true;
     }
 
     if (userChanged) {
       void this.user();
+      shouldFlushIdentityUpdate = true;
       // Update the automatic feedback user if the user ID has changed
       if (userIdChanged) {
         void this.updateAutoFeedbackUser(String(newContext.user!.id));
       }
+    }
+
+    if (shouldFlushIdentityUpdate) {
+      void this.bulkQueue?.flush();
     }
 
     const shouldTrackLoading = this.state === "initialized";
