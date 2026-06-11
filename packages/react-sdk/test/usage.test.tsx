@@ -496,6 +496,74 @@ describe("useUpdateUser", () => {
     });
 
     unmount();
+    updateUser.mockRestore();
+  });
+
+  test("preserves user updates across provider rerenders with unchanged context props", async () => {
+    const publishableKey = `KEY-${keyIndex++}`;
+    const seenOptInValues: (string | null)[] = [];
+    let updateUser!: ReturnType<typeof useUpdateUser>;
+    let client!: ReflagClient;
+
+    server.use(
+      http.get(/\/features\/evaluated$/, ({ request }) => {
+        const siteCentricOptIn = new URL(request.url).searchParams.get(
+          "context.user.siteCentricOptIn",
+        );
+        seenOptInValues.push(siteCentricOptIn);
+
+        return HttpResponse.json({
+          success: true,
+          features: {
+            SITE_CENTRIC: {
+              key: "SITE_CENTRIC",
+              isEnabled: siteCentricOptIn === "true",
+              targetingVersion: 1,
+            },
+          },
+        });
+      }),
+    );
+
+    function CaptureClient() {
+      updateUser = useUpdateUser();
+      client = useClient();
+      return null;
+    }
+
+    function ProviderShell() {
+      return (
+        <ReflagProvider
+          context={{ user: { id: "456", name: "test" }, company, other }}
+          enableLiveFlagUpdates={false}
+          enableTracking={false}
+          feedback={{ enableAutoFeedback: false }}
+          initialLoading={false}
+          publishableKey={publishableKey}
+        >
+          <CaptureClient />
+        </ReflagProvider>
+      );
+    }
+
+    const { rerender, unmount } = render(<ProviderShell />);
+
+    await waitFor(() => expect(seenOptInValues).toEqual([null]));
+
+    await act(async () => {
+      await updateUser({ siteCentricOptIn: "true" });
+    });
+    await waitFor(() => expect(seenOptInValues).toEqual([null, "true"]));
+
+    rerender(<ProviderShell />);
+    await act(async () => undefined);
+
+    expect(client.getContext().user).toMatchObject({
+      siteCentricOptIn: "true",
+    });
+    expect(seenOptInValues).toEqual([null, "true"]);
+
+    unmount();
   });
 });
 

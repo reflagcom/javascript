@@ -7,6 +7,7 @@ import React, {
   useEffect,
   useLayoutEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -192,9 +193,33 @@ export type ReflagInitOptionsBase = Omit<
  */
 const reflagClients = new Map<string, ReflagClient>();
 
+function contextPartEqual(
+  a?: Record<string, string | number | undefined>,
+  b?: Record<string, string | number | undefined>,
+) {
+  if (a === b) return true;
+  if (!a || !b) return !a && !b;
+
+  const aKeys = Object.keys(a);
+  const bKeys = Object.keys(b);
+  if (aKeys.length !== bKeys.length) return false;
+
+  return aKeys.every(
+    (key) => Object.prototype.hasOwnProperty.call(b, key) && a[key] === b[key],
+  );
+}
+
+function contextEqual(a: ReflagContext, b: ReflagContext) {
+  return (
+    contextPartEqual(a.user, b.user) &&
+    contextPartEqual(a.company, b.company) &&
+    contextPartEqual(a.other, b.other)
+  );
+}
+
 /**
  * Returns the ReflagClient for a given publishable key.
- * Only creates a new ReflagClient is not already created or if it hook is run on the server.
+ * Only creates a new ReflagClient if it is not already created or if the hook is run on the server.
  * @internal
  */
 function useReflagClient(initOptions: InitOptions & { debug?: boolean }) {
@@ -322,6 +347,9 @@ export function ReflagProvider({
     () => ({ user, company, other: otherContext, ...context }),
     [user, company, otherContext, context],
   );
+  const lastAppliedProviderContext = useRef<ReflagContext | undefined>(
+    undefined,
+  );
   const client = useReflagClient({
     ...config,
     ...resolvedContext,
@@ -337,8 +365,16 @@ export function ReflagProvider({
     });
   }, [client]);
 
-  // Update the context if it changes
+  // Update the context if provider props semantically change. Keep this
+  // independent from the client's current context so imperative updates via
+  // useUpdateUser/useUpdateCompany are not reset by unrelated provider re-renders.
   useEffect(() => {
+    const previousContext = lastAppliedProviderContext.current;
+    if (previousContext && contextEqual(previousContext, resolvedContext)) {
+      return;
+    }
+
+    lastAppliedProviderContext.current = resolvedContext;
     void client.setContext(resolvedContext);
   }, [client, resolvedContext]);
 

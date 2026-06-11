@@ -1,9 +1,11 @@
+import { http, HttpResponse } from "msw";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ReflagClient } from "../src/client";
 import { FlagsClient } from "../src/flag/flags";
 import { HttpClient } from "../src/httpClient";
 import { flagsResult } from "./mocks/handlers";
+import { server } from "./mocks/server";
 
 describe("ReflagClient", () => {
   let client: ReflagClient;
@@ -71,6 +73,84 @@ describe("ReflagClient", () => {
         "No company Id provided in context, company will be ignored",
       );
     });
+
+    it("starts flushing the user update before refetching flags without waiting for it", async () => {
+      const requests: string[] = [];
+      let bulkResolved = false;
+      let resolveBulk: ((response: HttpResponse) => void) | undefined;
+      const bulkResponse = new Promise<HttpResponse>((resolve) => {
+        resolveBulk = (response) => {
+          bulkResolved = true;
+          resolve(response);
+        };
+      });
+
+      server.use(
+        http.post("https://front.reflag.com/bulk", async ({ request }) => {
+          requests.push("bulk");
+          const data = await request.json();
+          const userEvent = Array.isArray(data)
+            ? data.find((event) => event?.type === "user")
+            : undefined;
+          expect(userEvent?.attributes?.siteCentricOptIn).toBe("true");
+
+          return bulkResponse;
+        }),
+        http.get(
+          "https://front.reflag.com/features/evaluated",
+          ({ request }) => {
+            requests.push("flags");
+            const url = new URL(request.url);
+            expect(url.searchParams.get("context.user.siteCentricOptIn")).toBe(
+              "true",
+            );
+
+            return HttpResponse.json({
+              success: true,
+              features: {
+                SITE_CENTRIC: {
+                  key: "SITE_CENTRIC",
+                  isEnabled: true,
+                  targetingVersion: 1,
+                },
+              },
+            });
+          },
+        ),
+      );
+
+      client = new ReflagClient({
+        publishableKey: "test-key-user-update-before-flags",
+        user: { id: "user1" },
+        bootstrappedFlags: {
+          SITE_CENTRIC: {
+            key: "SITE_CENTRIC",
+            isEnabled: false,
+            targetingVersion: 1,
+          },
+        },
+        trackingQueue: {
+          flushDelayMs: 2_000,
+        },
+      });
+      await client.initialize();
+
+      const updatePromise = client.updateUser({ siteCentricOptIn: "true" });
+
+      try {
+        await vi.waitFor(() => expect(requests).toEqual(["bulk", "flags"]));
+
+        let updateResolved = false;
+        void updatePromise.then(() => {
+          updateResolved = true;
+        });
+        await vi.waitFor(() => expect(updateResolved).toBe(true));
+        expect(bulkResolved).toBe(false);
+      } finally {
+        resolveBulk?.(HttpResponse.json({ success: true }));
+        await updatePromise;
+      }
+    });
   });
 
   describe("updateCompany", () => {
@@ -99,6 +179,50 @@ describe("ReflagClient", () => {
         }),
       );
       expect(flagClientSetContext).toHaveBeenCalledWith(client["context"]);
+    });
+
+    it("starts flushing the company update before refetching flags", async () => {
+      const requests: string[] = [];
+      let resolveCompanyPlan: ((plan: unknown) => void) | undefined;
+      const companyPlan = new Promise<unknown>((resolve) => {
+        resolveCompanyPlan = resolve;
+      });
+
+      server.use(
+        http.post("https://front.reflag.com/bulk", async ({ request }) => {
+          requests.push("bulk");
+          const data = await request.json();
+          const companyEvent = Array.isArray(data)
+            ? data.find((event) => event?.type === "company")
+            : undefined;
+          resolveCompanyPlan?.(companyEvent?.attributes?.plan);
+
+          return HttpResponse.json({ success: true });
+        }),
+        http.get("https://front.reflag.com/features/evaluated", () => {
+          requests.push("flags");
+          return HttpResponse.json({
+            success: true,
+            features: {},
+          });
+        }),
+      );
+
+      client = new ReflagClient({
+        publishableKey: "test-key-company-update-before-flags",
+        user: { id: "user1" },
+        company: { id: "company1" },
+        bootstrappedFlags: {},
+        trackingQueue: {
+          flushDelayMs: 2_000,
+        },
+      });
+      await client.initialize();
+
+      await client.updateCompany({ plan: "enterprise" });
+
+      expect(requests).toEqual(["bulk", "flags"]);
+      await expect(companyPlan).resolves.toBe("enterprise");
     });
   });
 

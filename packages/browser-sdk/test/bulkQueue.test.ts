@@ -271,7 +271,7 @@ describe("BulkQueue", () => {
     resolveSend?.(new Response("", { status: 200 }));
   });
 
-  it("requires a second flush to send pending events after an in-flight batch", async () => {
+  it("flush waits for an in-flight batch and sends pending events", async () => {
     let resolveFirstSend: ((res: Response) => void) | undefined;
     const firstSend = new Promise<Response>((resolve) => {
       resolveFirstSend = resolve;
@@ -306,10 +306,6 @@ describe("BulkQueue", () => {
     await flushWhileInFlight;
 
     expect(waitedForInFlight).toBe(true);
-    expect(sendBulk).toHaveBeenCalledTimes(1);
-    expect(await queue.size()).toBe(2);
-
-    await queue.flush();
     expect(sendBulk).toHaveBeenCalledTimes(2);
     expect(sendBulk).toHaveBeenNthCalledWith(2, [trackEvent, lateTrackEvent]);
     expect(await queue.size()).toBe(0);
