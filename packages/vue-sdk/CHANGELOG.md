@@ -1,5 +1,12 @@
 # @reflag/vue-sdk
 
+## 1.4.3
+
+### Patch Changes
+
+- Updated dependencies [04ea32c]
+  - @reflag/browser-sdk@1.5.3
+
 ## 1.4.2
 
 ### Patch Changes

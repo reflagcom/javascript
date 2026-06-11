@@ -1,5 +1,13 @@
 # @reflag/react-sdk
 
+## 1.5.3
+
+### Patch Changes
+
+- 04ea32c: Prevent provider re-renders with unchanged context props from resetting user or company attributes applied via `useUpdateUser` and `useUpdateCompany`.
+- Updated dependencies [04ea32c]
+  - @reflag/browser-sdk@1.5.3
+
 ## 1.5.2
 
 ### Patch Changes
