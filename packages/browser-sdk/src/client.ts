@@ -480,6 +480,7 @@ export class ReflagClient {
   private autoFeedbackInit: Promise<void> | undefined;
   private readonly enableLiveFlagUpdates: boolean;
   private readonly eventSourceFactory: EventSourceFactory | undefined;
+  private readonly credentials: RequestCredentials | undefined;
   private readonly sdkVersion: string;
   private pubSubChannel: AblySSEChannel | undefined;
   private pubSubInit: Promise<void> | undefined;
@@ -542,6 +543,7 @@ export class ReflagClient {
     this.enableLiveFlagUpdates =
       requestedEnableLiveFlagUpdates && !bootstrappedWithoutFlagStateVersion;
     this.eventSourceFactory = opts?.eventSourceFactory;
+    this.credentials = opts?.credentials;
     this.sdkVersion = opts?.sdkVersion ?? SDK_VERSION;
 
     this.requestFeedbackOptions = {
@@ -627,6 +629,7 @@ export class ReflagClient {
           opts?.feedback?.ui?.position,
           opts?.feedback?.ui?.translations,
           bulkQueue ? (event) => bulkQueue.enqueue(event) : undefined,
+          this.credentials,
         );
       }
     }
@@ -1387,6 +1390,7 @@ export class ReflagClient {
       sdkVersion: this.sdkVersion,
       path: "sse/client",
       context: this.context,
+      credentials: this.credentials,
     });
   }
 

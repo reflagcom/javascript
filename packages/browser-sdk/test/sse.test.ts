@@ -115,6 +115,22 @@ describe("connection handling", () => {
     );
   });
 
+  test("enables EventSource credentials when credentials is include", async () => {
+    openAblySSEChannel({
+      channels: [],
+      callback: vi.fn(),
+      logger: testLogger,
+      sseBaseUrl: sseHost,
+      path: "sse/client",
+      credentials: "include",
+    });
+
+    expect(vi.mocked(window.EventSource)).toHaveBeenCalledWith(
+      `${sseHost}/sse/client`,
+      { withCredentials: true },
+    );
+  });
+
   test("passes parsed message envelopes to the callback", async () => {
     const callback = vi.fn();
     const sse = createSSEChannel(callback);

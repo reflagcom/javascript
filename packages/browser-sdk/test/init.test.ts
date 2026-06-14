@@ -156,6 +156,7 @@ describe("init", () => {
         enableLiveFlagUpdates: true,
         feedback: { enableAutoFeedback: false },
         sdkVersion: "browser-sdk/test",
+        credentials: "include",
       });
       await reflagInstance.initialize();
 
@@ -169,6 +170,7 @@ describe("init", () => {
         company: undefined,
         other: {},
       });
+      expect(spy.mock.calls[0][0].credentials).toBe("include");
 
       await reflagInstance.stop();
       expect(closeChannel).toHaveBeenCalledTimes(1);

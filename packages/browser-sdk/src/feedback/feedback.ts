@@ -289,6 +289,7 @@ export class AutoFeedback {
     private position: Position = DEFAULT_POSITION,
     private feedbackTranslations: Partial<FeedbackTranslations> = {},
     private enqueueBulkEvent?: (event: BulkEvent) => Promise<void>,
+    private credentials?: RequestCredentials,
   ) {}
 
   /**
@@ -315,6 +316,7 @@ export class AutoFeedback {
           ),
         logger: this.logger,
         sseBaseUrl: this.sseBaseUrl,
+        credentials: this.credentials,
       });
       this.logger.debug(`automatic feedback connection established`);
     } catch (e) {

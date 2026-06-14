@@ -99,6 +99,7 @@ Supply these to the constructor call:
 type Configuration = {
   logger: console; // by default only logs warn/error, by passing `console` you'll log everything
   apiBaseUrl?: "https://front.reflag.com";
+  credentials?: "include" | "same-origin" | "omit"; // forwarded to fetch requests; "include" also enables credentials for the default EventSource transport
   feedback?: undefined; // See FEEDBACK.md
   enableTracking?: true; // set to `false` to stop sending track events and user/company updates to Reflag servers. Useful when you're impersonating a user
   enableLiveFlagUpdates?: false; // Set to `true` to keep flags up to date over SSE (browser SDK default: false)
@@ -242,6 +243,7 @@ For server-side rendered applications, you can eliminate the initial network req
 type Configuration = {
   logger: console; // by default only logs warn/error, by passing `console` you'll log everything
   apiBaseUrl?: "https://front.reflag.com";
+  credentials?: "include" | "same-origin" | "omit"; // forwarded to fetch requests; "include" also enables credentials for the default EventSource transport
   feedback?: undefined; // See FEEDBACK.md
   enableTracking?: true; // set to `false` to stop sending track events and user/company updates to Reflag servers. Useful when you're impersonating a user
   offline?: boolean; // Use the SDK in offline mode. Offline mode is useful during testing and local development
