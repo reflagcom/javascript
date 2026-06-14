@@ -1,5 +1,13 @@
 # @reflag/openfeature-browser-provider
 
+## 1.3.10
+
+### Patch Changes
+
+- 0d27577: Pass `credentials: "include"` through to EventSource connections so live updates and feedback SSE can include cookies when proxying through an authenticated backend.
+- Updated dependencies [0d27577]
+  - @reflag/browser-sdk@1.5.4
+
 ## 1.3.9
 
 ### Patch Changes

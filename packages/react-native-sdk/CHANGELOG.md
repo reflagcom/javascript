@@ -1,5 +1,13 @@
 # @reflag/react-native-sdk
 
+## 0.2.4
+
+### Patch Changes
+
+- 0d27577: Pass `credentials: "include"` through to EventSource connections so live updates and feedback SSE can include cookies when proxying through an authenticated backend.
+- Updated dependencies [0d27577]
+  - @reflag/react-sdk@1.5.4
+
 ## 0.2.3
 
 ### Patch Changes
