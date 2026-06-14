@@ -552,6 +552,7 @@ The `<ReflagProvider>` initializes the Reflag SDK, fetches flags and starts list
 - `enableTracking`: Set to `false` to stop sending tracking events and user/company updates to Reflag. Useful when you're impersonating a user (defaults to `true`),
 - `enableLiveFlagUpdates`: Enables live flag updates over SSE. Defaults to `true` in the React SDK.
 - `apiBaseUrl`: Optional base URL for the Reflag API. This also controls the SSE origin used for live flag updates and automated feedback,
+- `credentials`: Optional fetch credentials mode. Set to `"include"` when proxying through your backend and authenticating with cookies; this also enables credentials for live-update SSE connections.
 - `appBaseUrl`: Optional base URL for the Reflag application. Use this to override the default app URL,
 
 - `logger`: Optional custom logger implementation (`debug`, `info`, `warn`, `error`) used by the underlying client,

@@ -63,6 +63,7 @@ export class AblySSEChannel {
     private sdkVersion?: string,
     private path = "sse",
     private context?: ReflagContext,
+    private credentials?: RequestCredentials,
   ) {
     this.logger = loggerWithPrefix(logger, "[SSE]");
 
@@ -139,7 +140,9 @@ export class AblySSEChannel {
       return;
     }
 
-    return new EventSource(url);
+    return this.credentials === "include"
+      ? new EventSource(url, { withCredentials: true })
+      : new EventSource(url);
   }
 
   public async connect() {
@@ -270,6 +273,7 @@ export function openAblySSEChannel({
   sdkVersion,
   path,
   context,
+  credentials,
 }: {
   channel?: string;
   channels?: string[];
@@ -281,6 +285,7 @@ export function openAblySSEChannel({
   sdkVersion?: string;
   path?: string;
   context?: ReflagContext;
+  credentials?: RequestCredentials;
 }) {
   const subscribedChannels = channels ?? (channel ? [channel] : []);
   const sse = new AblySSEChannel(
@@ -293,6 +298,7 @@ export function openAblySSEChannel({
     sdkVersion,
     path,
     context,
+    credentials,
   );
 
   sse.open();
