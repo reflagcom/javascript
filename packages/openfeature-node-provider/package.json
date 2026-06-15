@@ -39,7 +39,7 @@
     "@reflag/node-sdk": "1.7.0"
   },
   "devDependencies": {
-    "@babel/core": "~7.24.7",
+    "@babel/core": "~7.29.6",
     "@openfeature/core": "^1.5.0",
     "@openfeature/server-sdk": ">=1.16.1",
     "@reflag/tsconfig": "~0.0.2",
