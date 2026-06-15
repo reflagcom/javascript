@@ -37,7 +37,7 @@
     "@reflag/flag-evaluation": "1.0.0"
   },
   "devDependencies": {
-    "@babel/core": "~7.24.7",
+    "@babel/core": "~7.29.6",
     "@reflag/tsconfig": "~0.0.2",
     "@types/node": "^22.12.0",
     "@vitest/coverage-v8": "~1.6.0",
