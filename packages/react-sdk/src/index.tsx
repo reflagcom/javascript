@@ -483,7 +483,13 @@ export function useFlag<TKey extends FlagKey>(key: TKey): TypedFlags[TKey] {
     client,
   );
 
-  if (isLoading || !flag) {
+  // Only fall back to disabled defaults when the client has no value for the
+  // flag. While the client is initializing it may already hold servable
+  // values (bootstrapped state, cached flags, or previous-context flags
+  // during a setContext() refetch) — masking those with `isEnabled: false`
+  // flashes flag-gated UI. `isLoading` stays exposed for consumers that want
+  // to render loading states themselves.
+  if (!flag) {
     return {
       key,
       isLoading,

@@ -833,6 +833,57 @@ describe("useFlag with ReflagBootstrappedProvider", () => {
     unmount();
   });
 
+  test("never reports a bootstrapped flag as disabled while initializing", async () => {
+    const bootstrapFlags: BootstrappedFlags = {
+      context: {
+        user: { id: "456", name: "test" },
+        company: { id: "123", name: "test" },
+        other: { test: "test" },
+      },
+      flags: {
+        abc: {
+          key: "abc",
+          isEnabled: true,
+          targetingVersion: 1,
+          config: {
+            key: "gpt3",
+            payload: { model: "gpt-something", temperature: 0.5 },
+            version: 2,
+          },
+        },
+      },
+    };
+
+    // Record every render: waitFor-based assertions skip over transient
+    // frames, which is exactly where the value used to flash to disabled
+    // while initialize() passed through the "initializing" state.
+    const observed: { isEnabled: boolean; isLoading: boolean }[] = [];
+
+    function Probe() {
+      const { isEnabled, isLoading } = useFlag("abc");
+      observed.push({ isEnabled, isLoading });
+      return null;
+    }
+
+    const { unmount } = render(
+      getBootstrapProvider(bootstrapFlags, { children: <Probe /> }),
+    );
+
+    // Wait until initialization has fully completed (isLoading settled back
+    // to false) so all transient renders have happened.
+    await waitFor(() => {
+      expect(ReflagClient.prototype.initialize).toHaveBeenCalled();
+      expect(observed.at(-1)?.isLoading).toBe(false);
+    });
+
+    expect(observed.length).toBeGreaterThan(0);
+    // The flag was bootstrapped as enabled — no render may report it
+    // disabled, including renders where the client is initializing.
+    expect(observed.every((o) => o.isEnabled)).toBe(true);
+
+    unmount();
+  });
+
   // Removed test "returns loading state when no flags are bootstrapped"
   // because ReflagBootstrappedProvider requires flags to be provided
 });
