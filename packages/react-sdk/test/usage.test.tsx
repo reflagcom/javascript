@@ -711,6 +711,57 @@ describe("<ReflagBootstrappedProvider />", () => {
   // Removed test "does not initialize when no flags are provided"
   // because ReflagBootstrappedProvider requires flags to be provided
 
+  test("does not enter UI loading during initial bootstrap initialization", async () => {
+    const bootstrapFlags: BootstrappedFlags = {
+      context: { user, company, other },
+      flags: {
+        abc: {
+          key: "abc",
+          isEnabled: true,
+          targetingVersion: 1,
+        },
+      },
+    };
+    let resolveStorageRead: (value: string | null) => void;
+    const storageRead = new Promise<string | null>((resolve) => {
+      resolveStorageRead = resolve;
+    });
+    const storage = {
+      getItem: vi.fn(() => storageRead),
+      setItem: vi.fn(async () => undefined),
+    };
+    let client: ReflagClient | undefined;
+
+    function Content() {
+      client = useClient();
+      return (
+        <span data-testid="bootstrap-content">{String(useIsLoading())}</span>
+      );
+    }
+
+    const { queryByTestId, unmount } = render(
+      getBootstrapProvider(bootstrapFlags, {
+        storage,
+        loadingComponent: <span data-testid="loading">Loading...</span>,
+        children: <Content />,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(client?.getState()).toBe("initializing");
+    });
+
+    expect(queryByTestId("loading")).toBeNull();
+    expect(queryByTestId("bootstrap-content")?.textContent).toBe("false");
+
+    resolveStorageRead!(null);
+    await waitFor(() => {
+      expect(client?.getState()).toBe("initialized");
+    });
+
+    unmount();
+  });
+
   test("shows content after initialization", async () => {
     const bootstrapFlags: BootstrappedFlags = {
       context: {
@@ -1217,7 +1268,10 @@ describe("useIsLoading", () => {
 
     const initializeSpy = vi
       .spyOn(ReflagClient.prototype, "initialize")
-      .mockResolvedValue(undefined);
+      .mockImplementationOnce(async function () {
+        (this as any).hooks.trigger("stateUpdated", "initializing");
+        (this as any).hooks.trigger("stateUpdated", "initialized");
+      });
     let resolveSetContext: (() => void) | undefined;
     const setContextPromise = new Promise<void>((resolve) => {
       resolveSetContext = resolve;

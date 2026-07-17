@@ -271,14 +271,26 @@ export function ReflagClientProvider({
   initialLoading = true,
   children,
 }: ReflagClientProviderProps) {
+  const hasInitialized = useRef(client.getState() === "initialized");
   const [isLoading, setIsLoading] = useState(
-    client.getState() !== "initialized" ? initialLoading : false,
+    hasInitialized.current ? false : initialLoading,
   );
 
   useOnEvent(
     "stateUpdated",
     (state) => {
-      setIsLoading(state === "initializing");
+      if (state === "initialized") {
+        hasInitialized.current = true;
+        setIsLoading(false);
+        return;
+      }
+
+      if (state === "initializing") {
+        setIsLoading(hasInitialized.current || initialLoading);
+        return;
+      }
+
+      setIsLoading(false);
     },
     client,
   );
