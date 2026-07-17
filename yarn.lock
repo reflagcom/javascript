@@ -6875,7 +6875,7 @@ __metadata:
   resolution: "@reflag/react-native-sdk@workspace:packages/react-native-sdk"
   dependencies:
     "@react-native-async-storage/async-storage": "npm:^2.2.0"
-    "@reflag/react-sdk": "npm:1.5.4"
+    "@reflag/react-sdk": "npm:1.5.5"
     "@reflag/tsconfig": "npm:^0.0.2"
     "@types/react": "npm:^19.0.12"
     react-native-sse: "npm:^1.2.1"
@@ -6886,7 +6886,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@reflag/react-sdk@npm:1.5.4, @reflag/react-sdk@workspace:^, @reflag/react-sdk@workspace:packages/react-sdk":
+"@reflag/react-sdk@npm:1.5.5, @reflag/react-sdk@workspace:^, @reflag/react-sdk@workspace:packages/react-sdk":
   version: 0.0.0-use.local
   resolution: "@reflag/react-sdk@workspace:packages/react-sdk"
   dependencies:
