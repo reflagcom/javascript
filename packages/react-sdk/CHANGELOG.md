@@ -1,5 +1,11 @@
 # @reflag/react-sdk
 
+## 1.5.5
+
+### Patch Changes
+
+- a95972c: Avoid loading state during bootstrapped initialization
+
 ## 1.5.4
 
 ### Patch Changes
