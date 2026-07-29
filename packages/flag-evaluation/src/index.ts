@@ -131,7 +131,7 @@ export interface ContextFilter {
  * - `type` - Indicates the type of the filter. For this filter type, it will always be "rolloutPercentage".
  * - `key` - A unique key or identifier that distinguishes this rollout filter.
  * - `partialRolloutAttribute` - Specifies the attribute used to evaluate eligibility for the rollout.
- * - `partialRolloutThreshold` - A numeric value representing the upper-bound threshold (0-100) for the percentage-based rollout.
+ * - `partialRolloutThreshold` - A numeric value representing the upper-bound threshold (0-100000) for the percentage-based rollout.
  */
 export type PercentageRolloutFilter = {
   type: "rolloutPercentage";
