@@ -2,7 +2,12 @@ import { afterAll, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { version } from "../package.json";
 import { FLAGS_EXPIRE_MS } from "../src/config";
-import { FlagsClient, FetchedFlagsResult, RawFlag } from "../src/flag/flags";
+import {
+  FlagsClient,
+  FetchedFlagsResult,
+  RawFlag,
+  validateFlagsResponse,
+} from "../src/flag/flags";
 import { HttpClient } from "../src/httpClient";
 import { newCache, TEST_STALE_MS } from "./flagCache.test";
 import { flagResponse, flagsResult } from "./mocks/handlers";
@@ -60,6 +65,52 @@ function flagsClientFactory() {
 describe("FlagsClient", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  test("parses opt-in metadata", () => {
+    const result = validateFlagsResponse({
+      success: true,
+      features: {
+        optInFlag: {
+          key: "optInFlag",
+          isEnabled: true,
+          targetingVersion: 1,
+          optInEnabled: true,
+          optIn: {
+            userOptedIn: true,
+            companyOptedIn: false,
+            isOptedIn: true,
+            name: "Opt-in flag",
+            description: "Try it early",
+          },
+        },
+        normalFlag: {
+          key: "normalFlag",
+          isEnabled: false,
+          targetingVersion: 2,
+          optInEnabled: false,
+          optIn: null,
+        },
+      },
+    });
+
+    expect(result?.flags.optInFlag).toMatchObject({
+      key: "optInFlag",
+      isEnabled: true,
+      optInEnabled: true,
+      optIn: {
+        userOptedIn: true,
+        companyOptedIn: false,
+        isOptedIn: true,
+        name: "Opt-in flag",
+        description: "Try it early",
+      },
+    });
+    expect(result?.flags.normalFlag).toMatchObject({
+      key: "normalFlag",
+      optInEnabled: false,
+      optIn: null,
+    });
   });
 
   test("fetches flags", async () => {

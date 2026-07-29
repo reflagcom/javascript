@@ -16,6 +16,45 @@ import { isValidFlagStateVersion } from "./flagStateVersion";
 
 const INITIAL_FETCH_RETRY_DELAYS_MS = [0, 5000];
 
+export type RawFlagOptIn = {
+  /**
+   * Whether the current user has opted into the flag.
+   */
+  userOptedIn: boolean;
+
+  /**
+   * Whether the current company has opted into the flag.
+   */
+  companyOptedIn: boolean;
+
+  /**
+   * Whether either the current user or company has opted into the flag.
+   */
+  isOptedIn: boolean;
+
+  /**
+   * Display name of the opt-in flag.
+   */
+  name: string;
+
+  /**
+   * SDK-facing opt-in description.
+   */
+  description: string | null;
+};
+
+export type OptInFlag = RawFlagOptIn & {
+  /**
+   * Flag key.
+   */
+  key: string;
+
+  /**
+   * Result of flag evaluation.
+   */
+  isEnabled: boolean;
+};
+
 /**
  * A flag fetched from the server.
  */
@@ -50,6 +89,16 @@ export type RawFlag = {
    * Missing context fields.
    */
   missingContextFields?: string[];
+
+  /**
+   * Whether end-user opt-in is enabled for this flag.
+   */
+  optInEnabled?: boolean;
+
+  /**
+   * Opt-in metadata for this flag and the current context.
+   */
+  optIn?: RawFlagOptIn | null;
 
   /**
    * Optional user-defined dynamic configuration.

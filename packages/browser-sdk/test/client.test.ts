@@ -236,6 +236,373 @@ describe("ReflagClient", () => {
     });
   });
 
+  describe("opt-in", () => {
+    it("lists opt-in-enabled flags for the current context", async () => {
+      client = new ReflagClient({
+        publishableKey: "test-key-opt-in-list",
+        user: { id: "user1" },
+        bootstrappedFlags: {
+          optInFlag: {
+            key: "optInFlag",
+            isEnabled: false,
+            targetingVersion: 1,
+            optInEnabled: true,
+            optIn: {
+              userOptedIn: false,
+              companyOptedIn: true,
+              isOptedIn: true,
+              name: "Opt-in flag",
+              description: "Try it early",
+            },
+          },
+          notOptInFlag: {
+            key: "notOptInFlag",
+            isEnabled: true,
+            targetingVersion: 2,
+            optInEnabled: false,
+            optIn: null,
+          },
+          hardOffFlag: {
+            key: "hardOffFlag",
+            isEnabled: false,
+            targetingVersion: 3,
+            optInEnabled: true,
+            optIn: null,
+          },
+        },
+      });
+      await client.initialize();
+
+      expect(client.getOptInFlags()).toEqual([
+        {
+          key: "optInFlag",
+          name: "Opt-in flag",
+          description: "Try it early",
+          isEnabled: false,
+          userOptedIn: false,
+          companyOptedIn: true,
+          isOptedIn: true,
+        },
+      ]);
+    });
+
+    it("posts opt-in requests and refreshes flags at the returned state version", async () => {
+      const flagsUpdated = vi.fn();
+      const requests: string[] = [];
+
+      server.use(
+        http.post(
+          "https://front.reflag.com/flags/opt-in",
+          async ({ request }) => {
+            requests.push("set-opt-in");
+            expect(await request.json()).toMatchObject({
+              key: "optInFlag",
+              optedIn: true,
+              scope: "user",
+              context: {
+                user: { id: "user1" },
+                company: { id: "company1" },
+              },
+            });
+
+            return HttpResponse.json({ success: true, flagStateVersion: 7 });
+          },
+        ),
+        http.get(
+          "https://front.reflag.com/features/evaluated",
+          ({ request }) => {
+            requests.push("flags");
+            const url = new URL(request.url);
+            expect(url.searchParams.get("waitForVersion")).toBe("7");
+
+            return HttpResponse.json({
+              success: true,
+              flagStateVersion: 7,
+              features: {
+                optInFlag: {
+                  key: "optInFlag",
+                  isEnabled: true,
+                  targetingVersion: 2,
+                  optInEnabled: true,
+                  optIn: {
+                    userOptedIn: true,
+                    companyOptedIn: false,
+                    isOptedIn: true,
+                    name: "Opt-in flag",
+                    description: "Try it early",
+                  },
+                },
+              },
+            });
+          },
+        ),
+      );
+
+      client = new ReflagClient({
+        publishableKey: "test-key-opt-in",
+        user: { id: "user1" },
+        company: { id: "company1" },
+        bootstrappedFlags: {
+          optInFlag: {
+            key: "optInFlag",
+            isEnabled: false,
+            targetingVersion: 1,
+            optInEnabled: true,
+            optIn: {
+              userOptedIn: false,
+              companyOptedIn: false,
+              isOptedIn: false,
+              name: "Opt-in flag",
+              description: "Try it early",
+            },
+          },
+        },
+      });
+      client.on("flagsUpdated", flagsUpdated);
+      await client.initialize();
+      flagsUpdated.mockClear();
+
+      const response = await client.setOptIn("optInFlag", { optedIn: true });
+
+      expect(response?.ok).toBe(true);
+      await expect(response!.json()).resolves.toEqual({
+        success: true,
+        flagStateVersion: 7,
+      });
+      expect(requests).toEqual(["set-opt-in", "flags"]);
+      expect(client.getOptInFlags()).toEqual([
+        {
+          key: "optInFlag",
+          name: "Opt-in flag",
+          description: "Try it early",
+          isEnabled: true,
+          userOptedIn: true,
+          companyOptedIn: false,
+          isOptedIn: true,
+        },
+      ]);
+      expect(flagsUpdated).toHaveBeenCalledTimes(1);
+    });
+
+    it("cancels opt-in and refreshes flags at the returned state version", async () => {
+      const requests: string[] = [];
+
+      server.use(
+        http.post(
+          "https://front.reflag.com/flags/opt-in",
+          async ({ request }) => {
+            requests.push("cancel-opt-in");
+            expect(await request.json()).toMatchObject({
+              key: "optInFlag",
+              optedIn: false,
+              scope: "user",
+              context: {
+                user: { id: "user1" },
+                company: { id: "company1" },
+              },
+            });
+
+            return HttpResponse.json({ success: true, flagStateVersion: 8 });
+          },
+        ),
+        http.get(
+          "https://front.reflag.com/features/evaluated",
+          ({ request }) => {
+            requests.push("flags");
+            expect(
+              new URL(request.url).searchParams.get("waitForVersion"),
+            ).toBe("8");
+
+            return HttpResponse.json({
+              success: true,
+              flagStateVersion: 8,
+              features: {
+                optInFlag: {
+                  key: "optInFlag",
+                  isEnabled: false,
+                  targetingVersion: 3,
+                  optInEnabled: true,
+                  optIn: {
+                    userOptedIn: false,
+                    companyOptedIn: false,
+                    isOptedIn: false,
+                    name: "Opt-in flag",
+                    description: "Try it early",
+                  },
+                },
+              },
+            });
+          },
+        ),
+      );
+
+      client = new ReflagClient({
+        publishableKey: "test-key-cancel-opt-in",
+        user: { id: "user1" },
+        company: { id: "company1" },
+        bootstrappedFlags: {
+          optInFlag: {
+            key: "optInFlag",
+            isEnabled: true,
+            targetingVersion: 2,
+            optInEnabled: true,
+            optIn: {
+              userOptedIn: true,
+              companyOptedIn: false,
+              isOptedIn: true,
+              name: "Opt-in flag",
+              description: "Try it early",
+            },
+          },
+        },
+      });
+      await client.initialize();
+
+      const response = await client.setOptIn("optInFlag", { optedIn: false });
+
+      expect(response?.ok).toBe(true);
+      expect(requests).toEqual(["cancel-opt-in", "flags"]);
+      expect(client.getOptInFlags()[0]).toMatchObject({
+        key: "optInFlag",
+        isEnabled: false,
+        userOptedIn: false,
+        isOptedIn: false,
+      });
+    });
+
+    it("rejects when the refreshed SDK state does not confirm the membership change", async () => {
+      server.use(
+        http.post("https://front.reflag.com/flags/opt-in", () =>
+          HttpResponse.json({ success: true, flagStateVersion: 9 }),
+        ),
+        http.get("https://front.reflag.com/features/evaluated", () =>
+          HttpResponse.json({
+            success: true,
+            flagStateVersion: 9,
+            features: {
+              optInFlag: {
+                key: "optInFlag",
+                isEnabled: false,
+                targetingVersion: 1,
+                optInEnabled: true,
+                optIn: {
+                  userOptedIn: false,
+                  companyOptedIn: false,
+                  isOptedIn: false,
+                  name: "Opt-in flag",
+                  description: null,
+                },
+              },
+            },
+          }),
+        ),
+      );
+
+      client = new ReflagClient({
+        publishableKey: "test-key-unconfirmed-opt-in",
+        user: { id: "user1" },
+        bootstrappedFlags: {
+          optInFlag: {
+            key: "optInFlag",
+            isEnabled: false,
+            targetingVersion: 1,
+            optInEnabled: true,
+            optIn: {
+              userOptedIn: false,
+              companyOptedIn: false,
+              isOptedIn: false,
+              name: "Opt-in flag",
+              description: null,
+            },
+          },
+        },
+      });
+      await client.initialize();
+
+      await expect(
+        client.setOptIn("optInFlag", { optedIn: true }),
+      ).rejects.toThrow(
+        "the updated user membership was not reflected in the SDK",
+      );
+    });
+
+    it("validates the default user identity before changing opt-in", async () => {
+      client = new ReflagClient({
+        publishableKey: "test-key-opt-in-no-user",
+        company: { id: "company1" },
+        bootstrappedFlags: {},
+      });
+      await client.initialize();
+
+      const response = await client.setOptIn("optInFlag", { optedIn: true });
+
+      expect(response).toBeUndefined();
+      const optInCalls = vi
+        .mocked(httpClientPost)
+        .mock.calls.filter(
+          ([request]) =>
+            (request as { path?: string }).path === "/flags/opt-in",
+        );
+      expect(optInCalls).toHaveLength(0);
+    });
+
+    it("serializes context ids as strings", async () => {
+      server.use(
+        http.post(
+          "https://front.reflag.com/flags/opt-in",
+          async ({ request }) => {
+            expect(await request.json()).toMatchObject({
+              key: "optInFlag",
+              optedIn: true,
+              scope: "company",
+              context: {
+                user: { id: "123" },
+                company: { id: "456" },
+              },
+            });
+            return HttpResponse.json({ success: true, flagStateVersion: 10 });
+          },
+        ),
+        http.get("https://front.reflag.com/features/evaluated", () =>
+          HttpResponse.json({
+            success: true,
+            flagStateVersion: 10,
+            features: {
+              optInFlag: {
+                key: "optInFlag",
+                isEnabled: true,
+                targetingVersion: 1,
+                optInEnabled: true,
+                optIn: {
+                  userOptedIn: false,
+                  companyOptedIn: true,
+                  isOptedIn: true,
+                  name: "Opt-in flag",
+                  description: null,
+                },
+              },
+            },
+          }),
+        ),
+      );
+
+      client = new ReflagClient({
+        publishableKey: "test-key-opt-in-number-ids",
+        user: { id: 123 },
+        company: { id: 456 },
+        bootstrappedFlags: {},
+      });
+      await client.initialize();
+
+      const response = await client.setOptIn("optInFlag", {
+        optedIn: true,
+        scope: "company",
+      });
+
+      expect(response?.ok).toBe(true);
+    });
+  });
+
   describe("track", () => {
     it("sends events directly and returns the delivery response", async () => {
       const response = await client.track("test-event", { a: 1 });

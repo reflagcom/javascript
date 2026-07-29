@@ -391,6 +391,31 @@ const { isEnabled, track, requestFeedback, config } = useFlag("huddles");
 
 See the reference docs for details.
 
+### `useOptInFlags()` and `useSetOptIn()`
+
+Use these composables to build an end-user opt-in UI for flags where opt-in is enabled in Reflag.
+
+```vue
+<script setup lang="ts">
+import { useOptInFlags, useSetOptIn } from "@reflag/vue-sdk";
+
+const optInFlags = useOptInFlags();
+const setOptIn = useSetOptIn();
+</script>
+
+<template>
+  <button
+    v-for="flag in optInFlags"
+    :key="flag.key"
+    @click="setOptIn(flag.key, { optedIn: !flag.userOptedIn })"
+  >
+    {{ flag.userOptedIn ? "Cancel opt-in" : `Try ${flag.name}` }}
+  </button>
+</template>
+```
+
+`scope` defaults to `"user"`. User scope requires a current `user.id`; company scope requires a current `company.id`. Setting `optedIn` to `false` cancels only the selected scope's opt-in. For successful mutation responses, the returned promise resolves only after the Browser SDK has applied and confirmed the refreshed membership state and notified `useOptInFlags()`. Vue commits the resulting render using its normal scheduling.
+
 ### `useTrack()`
 
 `useTrack()` returns a function which lets you send custom events to Reflag. It takes a string argument with the event name and optionally an object with properties to attach the event.

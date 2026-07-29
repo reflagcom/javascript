@@ -16,6 +16,7 @@ import {
   CheckEvent,
   FallbackFlagOverride,
   FlagsClient,
+  OptInFlag,
   RawFlags,
 } from "./flag/flags";
 import { isValidFlagStateVersion } from "./flag/flagStateVersion";
@@ -419,6 +420,18 @@ export type FlagRemoteConfig =
 /**
  * Represents a flag.
  */
+export type SetOptInOptions = {
+  /**
+   * Whether the scoped subject has opted in.
+   */
+  optedIn: boolean;
+
+  /**
+   * Whether to update the current user or current company. Defaults to `user`.
+   */
+  scope?: "user" | "company";
+};
+
 export interface Flag {
   /**
    * Result of flag flag evaluation.
@@ -1190,6 +1203,136 @@ export class ReflagClient {
    */
   refresh() {
     return this.flagsClient.refreshFlags();
+  }
+
+  /**
+   * Returns opt-in-enabled flags for the current context.
+   */
+  getOptInFlags(): OptInFlag[] {
+    return Object.values(this.getFlags()).flatMap((flag) => {
+      if (flag.optInEnabled !== true || !flag.optIn) return [];
+
+      return {
+        key: flag.key,
+        name: flag.optIn.name,
+        description: flag.optIn.description,
+        isEnabled: flag.isEnabledOverride ?? flag.isEnabled,
+        userOptedIn: flag.optIn.userOptedIn,
+        companyOptedIn: flag.optIn.companyOptedIn,
+        isOptedIn: flag.optIn.isOptedIn,
+      } satisfies OptInFlag;
+    });
+  }
+
+  /**
+   * Set whether the current user or company has opted into a flag.
+   */
+  async setOptIn(
+    flagKey: string,
+    options: SetOptInOptions,
+  ): Promise<Response | undefined> {
+    if (this.config.offline) {
+      return;
+    }
+
+    if (typeof flagKey !== "string" || !flagKey) {
+      this.logger.error("`setOptIn` call ignored. No `flagKey` provided");
+      return;
+    }
+
+    if (!options || typeof options.optedIn !== "boolean") {
+      this.logger.error("`setOptIn` call ignored. `optedIn` must be a boolean");
+      return;
+    }
+
+    const scope = options.scope ?? "user";
+    if (scope !== "user" && scope !== "company") {
+      this.logger.error(
+        '`setOptIn` call ignored. `scope` must be "user" or "company"',
+      );
+      return;
+    }
+
+    const scopedContext = this.context[scope];
+    if (!scopedContext?.id) {
+      this.logger.error(
+        `\`setOptIn\` call ignored. No \`${scope}\` context provided`,
+      );
+      return;
+    }
+
+    const context = {
+      user: this.context.user
+        ? { ...this.context.user, id: String(this.context.user.id) }
+        : undefined,
+      company: this.context.company
+        ? { ...this.context.company, id: String(this.context.company.id) }
+        : undefined,
+      other: this.context.other,
+    };
+
+    const res = await this.httpClient.post({
+      path: "/flags/opt-in",
+      body: {
+        key: flagKey,
+        optedIn: options.optedIn,
+        scope,
+        context,
+      },
+    });
+
+    if (!res.ok) {
+      await logResponseError({
+        logger: this.logger,
+        res,
+        message: "set opt-in request failed",
+        extra: { flagKey, optedIn: options.optedIn, scope },
+      });
+      return res;
+    }
+
+    let flagStateVersion: number;
+    try {
+      const body = await res.clone().json();
+      if (!isValidFlagStateVersion(body?.flagStateVersion)) {
+        throw new Error("Response did not include a valid flag state version");
+      }
+      flagStateVersion = body.flagStateVersion;
+    } catch (error) {
+      this.logger.error(
+        "set opt-in succeeded but its flag state version could not be read",
+        error,
+      );
+      throw error;
+    }
+
+    const refreshedFlags =
+      await this.flagsClient.refreshFlags(flagStateVersion);
+    if (!refreshedFlags) {
+      const error = new Error(
+        "Opt-in changed remotely, but the updated flag state could not be confirmed",
+      );
+      this.logger.error("set opt-in confirmation failed", error);
+      throw error;
+    }
+
+    const refreshedOptIn = refreshedFlags[flagKey]?.optIn;
+    const scopedOptIn =
+      scope === "user"
+        ? refreshedOptIn?.userOptedIn
+        : refreshedOptIn?.companyOptedIn;
+    const isConfirmed = options.optedIn
+      ? scopedOptIn === true
+      : scopedOptIn !== true;
+    if (!isConfirmed) {
+      const error = new Error(
+        `Opt-in changed remotely, but the updated ${scope} membership was not reflected in the SDK`,
+      );
+      this.logger.error("set opt-in confirmation failed", error);
+      throw error;
+    }
+
+    return res;
   }
 
   /**

@@ -654,6 +654,30 @@ function StartHuddleButton() {
 }
 ```
 
+### `useOptInFlags()` and `useSetOptIn()`
+
+Use these hooks to build an end-user opt-in UI for flags where opt-in is enabled in Reflag.
+
+```tsx
+import { useOptInFlags, useSetOptIn } from "@reflag/react-sdk";
+
+function OptInList() {
+  const optInFlags = useOptInFlags();
+  const setOptIn = useSetOptIn();
+
+  return optInFlags.map((flag) => (
+    <button
+      key={flag.key}
+      onClick={() => setOptIn(flag.key, { optedIn: !flag.userOptedIn })}
+    >
+      {flag.userOptedIn ? "Cancel opt-in" : `Try ${flag.name}`}
+    </button>
+  ));
+}
+```
+
+`scope` defaults to `"user"`. User scope requires a current `user.id`; company scope requires a current `company.id`. Setting `optedIn` to `false` cancels only the selected scope's opt-in. For successful mutation responses, the returned promise resolves only after the Browser SDK has applied and confirmed the refreshed membership state and notified `useOptInFlags()`. React commits the resulting render using its normal scheduling.
+
 ### `useTrack()`
 
 `useTrack()` lets you send custom events to Reflag. Use this whenever a user _uses_ a feature. These events can be used to analyze feature usage in Reflag.
