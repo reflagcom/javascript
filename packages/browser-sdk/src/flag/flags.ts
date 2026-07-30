@@ -248,7 +248,7 @@ export interface CheckEvent {
 }
 
 const storageOverridesKey = `__reflag_overrides`;
-const REFRESH_LIMIT_COUNT = 10;
+const REFRESH_LIMIT_COUNT = 20;
 const REFRESH_LIMIT_WINDOW_MS = 60 * 1000;
 
 export type FlagOverrides = Record<string, boolean | undefined>;

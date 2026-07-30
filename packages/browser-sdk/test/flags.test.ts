@@ -305,6 +305,39 @@ describe("FlagsClient", () => {
     expect(flagsClient.getFlags().flagA.isEnabled).toBe(false);
   });
 
+  test("rate limits refreshes after 20 requests in the refresh window", async () => {
+    const { newFlagsClient, httpClient } = flagsClientFactory();
+    const flagsClient = newFlagsClient();
+    await flagsClient.initialize();
+
+    vi.mocked(httpClient.get).mockClear();
+    vi.mocked(testLogger.warn).mockClear();
+    vi.mocked(httpClient.get).mockImplementation(() =>
+      Promise.resolve(evaluatedFlagsResponse(1, true)),
+    );
+
+    await Promise.all(
+      Array.from({ length: 20 }, () => flagsClient.refreshFlags()),
+    );
+    expect(httpClient.get).toHaveBeenCalledTimes(20);
+
+    await expect(flagsClient.refreshFlags(22)).resolves.toBeUndefined();
+    expect(httpClient.get).toHaveBeenCalledTimes(20);
+    expect(testLogger.warn).toHaveBeenCalledWith(
+      "[Flags] refresh rate limit exceeded",
+    );
+
+    vi.mocked(httpClient.get).mockImplementation(() =>
+      Promise.resolve(evaluatedFlagsResponse(22, false)),
+    );
+    await vi.advanceTimersByTimeAsync(60 * 1000);
+    const refreshedFlags = await flagsClient.refreshFlags(22);
+    expect(refreshedFlags).toEqual(flagsClient.getFetchedFlags());
+    expect(httpClient.get).toHaveBeenCalledTimes(21);
+    expect(flagsClient.getFlagStateVersion()).toBe(22);
+    expect(flagsClient.getFlags().flagA.isEnabled).toBe(false);
+  });
+
   test("warns about missing context fields", async () => {
     const { newFlagsClient } = flagsClientFactory();
     const flagsClient = newFlagsClient();
