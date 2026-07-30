@@ -4,8 +4,38 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ReflagClient } from "../src/client";
 import { FlagsClient } from "../src/flag/flags";
 import { HttpClient } from "../src/httpClient";
+import { deferred } from "./deferred";
 import { flagsResult } from "./mocks/handlers";
 import { server } from "./mocks/server";
+
+function optInFlags(userOptedIn: boolean, targetingVersion = 1) {
+  return {
+    optInFlag: {
+      key: "optInFlag",
+      isEnabled: userOptedIn,
+      targetingVersion,
+      optInEnabled: true,
+      optIn: {
+        userOptedIn,
+        companyOptedIn: false,
+        isOptedIn: userOptedIn,
+        name: "Opt-in flag",
+        description: null,
+      },
+    },
+  };
+}
+
+function optInEvaluationResponse(
+  flagStateVersion: number,
+  userOptedIn: boolean,
+) {
+  return HttpResponse.json({
+    success: true,
+    flagStateVersion,
+    features: optInFlags(userOptedIn, flagStateVersion),
+  });
+}
 
 describe("ReflagClient", () => {
   let client: ReflagClient;
@@ -470,6 +500,112 @@ describe("ReflagClient", () => {
       });
     });
 
+    it("keeps the newest state when concurrent opt-in refreshes resolve out of order", async () => {
+      const olderRefresh = deferred<HttpResponse>();
+      const newerRefresh = deferred<HttpResponse>();
+
+      server.use(
+        http.post(
+          "https://front.reflag.com/flags/opt-in",
+          async ({ request }) => {
+            const body = (await request.json()) as { optedIn: boolean };
+            return HttpResponse.json({
+              success: true,
+              flagStateVersion: body.optedIn ? 7 : 8,
+            });
+          },
+        ),
+        http.get(
+          "https://front.reflag.com/features/evaluated",
+          ({ request }) => {
+            const version = new URL(request.url).searchParams.get(
+              "waitForVersion",
+            );
+            return version === "7"
+              ? olderRefresh.promise
+              : newerRefresh.promise;
+          },
+        ),
+      );
+
+      client = new ReflagClient({
+        publishableKey: "test-key-concurrent-opt-in",
+        user: { id: "user1" },
+        bootstrappedFlags: optInFlags(false),
+      });
+      await client.initialize();
+
+      const optInPromise = client.setOptIn("optInFlag", { optedIn: true });
+      const optInExpectation = expect(optInPromise).rejects.toThrow(
+        "the updated user membership was not reflected in the SDK",
+      );
+      const cancelPromise = client.setOptIn("optInFlag", { optedIn: false });
+      await vi.waitFor(() => expect(httpClientGet).toHaveBeenCalledTimes(2));
+
+      newerRefresh.resolve(optInEvaluationResponse(8, false));
+      await cancelPromise;
+      olderRefresh.resolve(optInEvaluationResponse(7, true));
+      await optInExpectation;
+
+      expect(client.getOptInFlags()[0]).toMatchObject({
+        isEnabled: false,
+        userOptedIn: false,
+        isOptedIn: false,
+      });
+      expect(client["flagsClient"].getFlagStateVersion()).toBe(8);
+    });
+
+    it("does not apply opt-in flags fetched for a previous context", async () => {
+      const previousContextRefresh = deferred<HttpResponse>();
+      const currentContextRefresh = deferred<HttpResponse>();
+
+      server.use(
+        http.post("https://front.reflag.com/flags/opt-in", () =>
+          HttpResponse.json({ success: true, flagStateVersion: 7 }),
+        ),
+        http.get(
+          "https://front.reflag.com/features/evaluated",
+          ({ request }) => {
+            const userId = new URL(request.url).searchParams.get(
+              "context.user.id",
+            );
+            return userId === "user1"
+              ? previousContextRefresh.promise
+              : currentContextRefresh.promise;
+          },
+        ),
+      );
+
+      client = new ReflagClient({
+        publishableKey: "test-key-opt-in-context-change",
+        user: { id: "user1" },
+        enableTracking: false,
+        bootstrappedFlags: optInFlags(false),
+      });
+      await client.initialize();
+
+      const optInPromise = client.setOptIn("optInFlag", { optedIn: true });
+      const optInExpectation = expect(optInPromise).rejects.toThrow(
+        "user context changed before the updated state could be confirmed",
+      );
+      await vi.waitFor(() => expect(httpClientGet).toHaveBeenCalledTimes(1));
+
+      const contextUpdate = client.setContext({ user: { id: "user2" } });
+      await vi.waitFor(() => expect(httpClientGet).toHaveBeenCalledTimes(2));
+      currentContextRefresh.resolve(optInEvaluationResponse(8, false));
+      await contextUpdate;
+      previousContextRefresh.resolve(optInEvaluationResponse(7, true));
+      await optInExpectation;
+
+      expect(client.getContext().user?.id).toBe("user2");
+      expect(client.getOptInFlags()[0]).toMatchObject({
+        isEnabled: false,
+        userOptedIn: false,
+        isOptedIn: false,
+      });
+      expect(client["flagsClient"].getFlagStateVersion()).toBe(8);
+    });
+
     it("rejects when the refreshed SDK state does not confirm the membership change", async () => {
       server.use(
         http.post("https://front.reflag.com/flags/opt-in", () =>
@@ -759,6 +895,35 @@ describe("ReflagClient", () => {
       resolveFirstFetch?.();
       await firstUpdate;
 
+      expect(client.getState()).toBe("initialized");
+    });
+
+    it("finishes loading when bootstrapped state supersedes a context fetch", async () => {
+      await client.initialize();
+
+      const contextFetch = deferred<boolean>();
+      vi.spyOn(client["flagsClient"], "setContext").mockReturnValue(
+        contextFetch.promise,
+      );
+
+      const contextUpdate = client.setContext({
+        user: { id: "user2" },
+        company: { id: "company2" },
+      });
+      expect(client.getState()).toBe("initializing");
+
+      client.applyBootstrappedState({
+        context: {
+          user: { id: "user3" },
+          company: { id: "company3" },
+        },
+        flags: {},
+        flagStateVersion: 3,
+      });
+      expect(client.getState()).toBe("initialized");
+
+      contextFetch.resolve(false);
+      await contextUpdate;
       expect(client.getState()).toBe("initialized");
     });
   });

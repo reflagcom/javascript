@@ -483,6 +483,7 @@ function shouldShowToolbar(opts: InitOptions) {
  */
 export class ReflagClient {
   private state: State = "idle";
+  private contextUpdateLoading = false;
   private readonly publishableKey: string;
   private context: ReflagContext;
   private config: Config;
@@ -946,12 +947,13 @@ export class ReflagClient {
 
     const shouldTrackLoading = this.state === "initialized";
     if (shouldTrackLoading) {
+      this.contextUpdateLoading = true;
       this.setState("initializing");
     }
 
     const didApply = await this.flagsClient.setContext(this.context);
-    if (didApply && this.state === "initializing") {
-      this.setState("initialized");
+    if (didApply) {
+      this.finishContextUpdate();
     }
   }
 
@@ -1003,6 +1005,10 @@ export class ReflagClient {
         triggerEvent,
         incomingFlagStateVersion,
       );
+    }
+
+    if (contextChanged) {
+      this.finishContextUpdate();
     }
 
     if (!contextChanged) {
@@ -1261,6 +1267,27 @@ export class ReflagClient {
       return;
     }
 
+    const failConfirmation = (message: string): never => {
+      const error = new Error(message);
+      this.logger.error("set opt-in confirmation failed", error);
+      throw error;
+    };
+
+    const scopedContextId = String(scopedContext.id);
+    const assertScopedContextUnchanged = () => {
+      const currentScopedContext = this.context[scope];
+      if (
+        currentScopedContext?.id &&
+        String(currentScopedContext.id) === scopedContextId
+      ) {
+        return;
+      }
+
+      failConfirmation(
+        `Opt-in changed remotely, but the ${scope} context changed before the updated state could be confirmed`,
+      );
+    };
+
     const context = {
       user: this.context.user
         ? { ...this.context.user, id: String(this.context.user.id) }
@@ -1306,17 +1333,17 @@ export class ReflagClient {
       throw error;
     }
 
+    assertScopedContextUnchanged();
     const refreshedFlags =
       await this.flagsClient.refreshFlags(flagStateVersion);
+    assertScopedContextUnchanged();
     if (!refreshedFlags) {
-      const error = new Error(
+      failConfirmation(
         "Opt-in changed remotely, but the updated flag state could not be confirmed",
       );
-      this.logger.error("set opt-in confirmation failed", error);
-      throw error;
     }
 
-    const refreshedOptIn = refreshedFlags[flagKey]?.optIn;
+    const refreshedOptIn = this.flagsClient.getFetchedFlags()[flagKey]?.optIn;
     const scopedOptIn =
       scope === "user"
         ? refreshedOptIn?.userOptedIn
@@ -1325,11 +1352,9 @@ export class ReflagClient {
       ? scopedOptIn === true
       : scopedOptIn !== true;
     if (!isConfirmed) {
-      const error = new Error(
+      failConfirmation(
         `Opt-in changed remotely, but the updated ${scope} membership was not reflected in the SDK`,
       );
-      this.logger.error("set opt-in confirmation failed", error);
-      throw error;
     }
 
     return res;
@@ -1423,6 +1448,15 @@ export class ReflagClient {
       reflagClient: this,
       position,
     });
+  }
+
+  private finishContextUpdate() {
+    if (!this.contextUpdateLoading) return;
+
+    this.contextUpdateLoading = false;
+    if (this.state === "initializing") {
+      this.setState("initialized");
+    }
   }
 
   private setState(state: State) {

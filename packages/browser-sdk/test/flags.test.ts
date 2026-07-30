@@ -9,6 +9,7 @@ import {
   validateFlagsResponse,
 } from "../src/flag/flags";
 import { HttpClient } from "../src/httpClient";
+import { deferred } from "./deferred";
 import { newCache, TEST_STALE_MS } from "./flagCache.test";
 import { flagResponse, flagsResult } from "./mocks/handlers";
 import { testLogger } from "./testLogger";
@@ -21,6 +22,29 @@ beforeEach(() => {
 afterAll(() => {
   vi.useRealTimers();
 });
+
+function evaluatedFlagsResponse(
+  flagStateVersion: number,
+  flagAEnabled: boolean,
+) {
+  return new Response(
+    JSON.stringify({
+      ...flagResponse,
+      flagStateVersion,
+      features: {
+        ...flagResponse.features,
+        flagA: {
+          ...flagResponse.features.flagA,
+          isEnabled: flagAEnabled,
+        },
+      },
+    }),
+    {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    },
+  );
+}
 
 function flagsClientFactory() {
   const { cache } = newCache();
@@ -156,8 +180,9 @@ describe("FlagsClient", () => {
       json: () => Promise.resolve({ ...flagResponse, flagStateVersion: 22 }),
     } as Response);
 
-    await flagsClient.refreshFlags(22);
+    const refreshedFlags = await flagsClient.refreshFlags(22);
 
+    expect(refreshedFlags).not.toBe(flagsClient.getFetchedFlags());
     expect(httpClient.get).toHaveBeenCalledTimes(1);
     const { params, path } = vi.mocked(httpClient.get).mock.calls[0][0];
     const paramsObj = Object.fromEntries(new URLSearchParams(params));
@@ -227,6 +252,57 @@ describe("FlagsClient", () => {
         responseFlagStateVersion: 5,
       },
     );
+  });
+
+  test("does not let an older concurrent refresh replace newer flags", async () => {
+    const { newFlagsClient, httpClient } = flagsClientFactory();
+    const flagsClient = newFlagsClient();
+    await flagsClient.initialize();
+
+    const olderResponse = deferred<Response>();
+    const newerResponse = deferred<Response>();
+    vi.mocked(httpClient.get)
+      .mockReset()
+      .mockReturnValueOnce(olderResponse.promise)
+      .mockReturnValueOnce(newerResponse.promise);
+
+    const olderRefresh = flagsClient.refreshFlags(6);
+    const newerRefresh = flagsClient.refreshFlags(7);
+
+    newerResponse.resolve(evaluatedFlagsResponse(7, false));
+    await newerRefresh;
+    olderResponse.resolve(evaluatedFlagsResponse(6, true));
+
+    await expect(olderRefresh).resolves.toEqual(flagsClient.getFetchedFlags());
+    expect(flagsClient.getFlagStateVersion()).toBe(7);
+    expect(flagsClient.getFlags().flagA.isEnabled).toBe(false);
+  });
+
+  test("does not apply a refresh started for a previous context", async () => {
+    const { newFlagsClient, httpClient } = flagsClientFactory();
+    const flagsClient = newFlagsClient();
+    await flagsClient.initialize();
+
+    const previousContextResponse = deferred<Response>();
+    vi.mocked(httpClient.get)
+      .mockReset()
+      .mockReturnValue(previousContextResponse.promise);
+
+    const previousContextRefresh = flagsClient.refreshFlags(6);
+    flagsClient.setContextWithoutFetch({ user: { id: "789" } });
+    flagsClient.setFetchedFlags(
+      {
+        ...flagsResult,
+        flagA: { ...flagsResult.flagA, isEnabled: false },
+      },
+      true,
+      7,
+    );
+    previousContextResponse.resolve(evaluatedFlagsResponse(6, true));
+
+    await expect(previousContextRefresh).resolves.toBeUndefined();
+    expect(flagsClient.getFlagStateVersion()).toBe(7);
+    expect(flagsClient.getFlags().flagA.isEnabled).toBe(false);
   });
 
   test("warns about missing context fields", async () => {

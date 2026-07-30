@@ -370,6 +370,9 @@ export class FlagsClient {
   }
 
   setContextWithoutFetch(context: ReflagContext) {
+    if (!deepEqual(this.context, context)) {
+      this.contextFetchVersion += 1;
+    }
     this.context = context;
   }
 
@@ -616,12 +619,22 @@ export class FlagsClient {
     }
     this.refreshEvents.push(now);
 
+    const requestContextVersion = this.contextFetchVersion;
     const result = await this.fetchFlags(waitForVersion);
-    if (result) {
-      this.setFetchedFlags(result.flags, true, result.flagStateVersion);
-      return result.flags;
+    if (!result || requestContextVersion !== this.contextFetchVersion) {
+      return;
     }
-    return;
+
+    if (
+      result.flagStateVersion !== undefined &&
+      this.fetchedFlagStateVersion !== undefined &&
+      result.flagStateVersion < this.fetchedFlagStateVersion
+    ) {
+      return { ...this.fetchedFlags };
+    }
+
+    this.setFetchedFlags(result.flags, true, result.flagStateVersion);
+    return { ...this.fetchedFlags };
   }
 
   private async setOverridesCache(overrides: FlagOverrides) {
