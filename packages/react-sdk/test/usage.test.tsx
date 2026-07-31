@@ -367,6 +367,63 @@ describe("useFlag", () => {
     unmount();
   });
 
+  test("suspends while loading when suspense is enabled", async () => {
+    let resolveFlags!: () => void;
+    const flagsRequest = new Promise<void>((resolve) => {
+      resolveFlags = resolve;
+    });
+    const requestStarted = vi.fn();
+
+    server.use(
+      http.get(/\/features\/evaluated$/, async () => {
+        requestStarted();
+        await flagsRequest;
+        return HttpResponse.json({
+          success: true,
+          features: {
+            abc: {
+              key: "abc",
+              isEnabled: true,
+              targetingVersion: 1,
+            },
+          },
+        });
+      }),
+    );
+
+    function FlaggedContent() {
+      const { isEnabled } = useFlag("abc");
+      return <span data-testid="flag-value">{String(isEnabled)}</span>;
+    }
+
+    const { getByTestId, queryByTestId, unmount } = render(
+      <React.Suspense
+        fallback={<span data-testid="suspense-fallback">Loading flags</span>}
+      >
+        {getProvider({
+          children: <FlaggedContent />,
+          suspense: true,
+        })}
+      </React.Suspense>,
+    );
+
+    expect(getByTestId("suspense-fallback").textContent).toBe("Loading flags");
+    expect(queryByTestId("flag-value")).toBeNull();
+
+    await waitFor(() => {
+      expect(requestStarted).toHaveBeenCalled();
+    });
+
+    resolveFlags();
+
+    await waitFor(() => {
+      expect(getByTestId("flag-value").textContent).toBe("true");
+    });
+    expect(queryByTestId("suspense-fallback")).toBeNull();
+
+    unmount();
+  });
+
   test("finishes loading", async () => {
     const { result, unmount } = renderHook(() => useFlag("huddle"), {
       wrapper: ({ children }) => getProvider({ children }),
