@@ -579,7 +579,7 @@ export function useFlag<TKey extends FlagKey>(
 ): TypedFlags[TKey] {
   const context = useSafeContext();
   const { client, isLoading } = context;
-  const [flag, setFlag] = useState(client.getFlag(key));
+  const [flag, setFlag] = useState(() => client.getFlag(key));
 
   const track = () => client.track(key);
   const requestFeedback = (opts: RequestFeedbackOptions) =>
@@ -601,7 +601,7 @@ export function useFlag<TKey extends FlagKey>(
     throw context.getLoadingPromise();
   }
 
-  if (isLoading || !flag) {
+  if (isLoading) {
     return {
       key,
       isLoading,
