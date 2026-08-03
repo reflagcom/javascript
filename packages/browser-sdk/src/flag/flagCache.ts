@@ -44,6 +44,7 @@ export function parseAPIFlagsResponse(flagsInput: any): RawFlags | undefined {
   const flags: RawFlags = {};
   for (const key in flagsInput) {
     const flag = flagsInput[key];
+    if (!isObject(flag)) return;
 
     const optIn = parseOptIn(flag.optIn);
 

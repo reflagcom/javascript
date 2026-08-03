@@ -281,6 +281,7 @@ export class FlagsClient {
   private cache: FlagCache;
   private fetchedFlags: RawFlags = {};
   private fetchedFlagStateVersion: number | undefined;
+  private fetchedFlagsContextVersion = 0;
   private flagOverrides: FlagOverrides = {};
   private flags: RawFlags = {};
   private fallbackFlags: FallbackFlags = {};
@@ -347,7 +348,12 @@ export class FlagsClient {
     }
 
     if (!this.bootstrapped) {
-      this.applyFetchedFlagsResult(await this.maybeFetchFlags());
+      const requestContextVersion = this.contextFetchVersion;
+      this.applyFetchedFlagsResult(
+        await this.maybeFetchFlags(requestContextVersion),
+        true,
+        requestContextVersion,
+      );
     }
 
     // Apply overrides and trigger update if flags have changed
@@ -384,31 +390,67 @@ export class FlagsClient {
     // Create a new fetched flags object making sure to clone the flags
     this.fetchedFlags = { ...fetchedFlags };
     this.fetchedFlagStateVersion = flagStateVersion;
+    this.fetchedFlagsContextVersion = this.contextFetchVersion;
     this.warnMissingFlagContextFields(fetchedFlags);
     this.updateFlags(triggerEvent);
+  }
+
+  private shouldApplyFetchedFlagsResult(
+    flagStateVersion: number | undefined,
+    requestContextVersion: number,
+  ) {
+    if (requestContextVersion !== this.contextFetchVersion) {
+      return false;
+    }
+
+    // A result for the current context must replace flags that still belong to
+    // the previous context, even when the result is unversioned.
+    if (this.fetchedFlagsContextVersion !== requestContextVersion) {
+      return true;
+    }
+
+    if (flagStateVersion === undefined) {
+      return this.fetchedFlagStateVersion === undefined;
+    }
+
+    return (
+      this.fetchedFlagStateVersion === undefined ||
+      flagStateVersion >= this.fetchedFlagStateVersion
+    );
   }
 
   private applyFetchedFlagsResult(
     result: FetchedFlagsResult | undefined,
     triggerEvent = true,
+    requestContextVersion = this.contextFetchVersion,
   ) {
+    if (
+      !this.shouldApplyFetchedFlagsResult(
+        result?.flagStateVersion,
+        requestContextVersion,
+      )
+    ) {
+      return false;
+    }
+
     this.setFetchedFlags(
       result?.flags ?? {},
       triggerEvent,
       result?.flagStateVersion,
     );
+    return true;
   }
 
   async setContext(context: ReflagContext) {
     this.context = context;
     const requestVersion = ++this.contextFetchVersion;
-    const fetchedFlags = await this.maybeFetchFlags();
+    const fetchedFlags = await this.maybeFetchFlags(requestVersion);
 
     if (requestVersion !== this.contextFetchVersion) {
       return false;
     }
 
-    this.applyFetchedFlagsResult(fetchedFlags);
+    this.applyFetchedFlagsResult(fetchedFlags, true, requestVersion);
     return true;
   }
 
@@ -625,15 +667,7 @@ export class FlagsClient {
       return;
     }
 
-    if (
-      result.flagStateVersion !== undefined &&
-      this.fetchedFlagStateVersion !== undefined &&
-      result.flagStateVersion < this.fetchedFlagStateVersion
-    ) {
-      return { ...this.fetchedFlags };
-    }
-
-    this.setFetchedFlags(result.flags, true, result.flagStateVersion);
+    this.applyFetchedFlagsResult(result, true, requestContextVersion);
     return { ...this.fetchedFlags };
   }
 
@@ -663,7 +697,9 @@ export class FlagsClient {
     }
   }
 
-  private async maybeFetchFlags(): Promise<FetchedFlagsResult | undefined> {
+  private async maybeFetchFlags(
+    requestContextVersion = this.contextFetchVersion,
+  ): Promise<FetchedFlagsResult | undefined> {
     if (this.config.offline) {
       return;
     }
@@ -685,7 +721,7 @@ export class FlagsClient {
               flags: result.flags,
               flagStateVersion: result.flagStateVersion,
             });
-            this.setFetchedFlags(result.flags, true, result.flagStateVersion);
+            this.applyFetchedFlagsResult(result, true, requestContextVersion);
           })
           .catch(() => {
             // we don't care about the result, we just want to re-fetch

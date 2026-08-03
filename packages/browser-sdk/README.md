@@ -361,16 +361,6 @@ This eliminates loading states and improves performance by avoiding the initial 
 Attributes given for the user/company/other context in the ReflagClient constructor can be updated for use in flag targeting evaluation with the `updateUser()`, `updateCompany()` and `updateOtherContext()` methods.
 They return a promise which resolves once the flags have been re-evaluated follow the update of the attributes.
 
-The following shows how to let users self-opt-in for a new flag. The flag must have the rule `voiceHuddleOptIn IS true` set in the Reflag UI.
-
-```ts
-// toggle opt-in for the voiceHuddle flag:
-const { isEnabled } = reflagClient.getFlag("voiceHuddle");
-// this toggles the flag on/off. The promise returns once flag targeting has been
-// re-evaluated.
-await reflagClient.updateUser({ voiceHuddleOptIn: (!isEnabled).toString() });
-```
-
 > [!NOTE] > `user`/`company` attributes are also stored remotely on the Reflag servers and will automatically be used to evaluate flag targeting if the page is refreshed.
 
 ### setContext()
