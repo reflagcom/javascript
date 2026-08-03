@@ -223,7 +223,13 @@ await reflagClient.setOptIn("huddle", {
 });
 ```
 
-`scope` defaults to `"user"`. User scope requires a current `user.id`; company scope requires a current `company.id`. Setting `optedIn` to `false` cancels only the selected scope's opt-in, so cancelling user opt-in does not cancel matching company opt-in, and vice versa. After a successful mutation response, `setOptIn()` waits for the returned flag-state version, applies the refreshed flags locally, and synchronously notifies `flagsUpdated` listeners before its promise resolves. It rejects if the updated scoped membership cannot be confirmed in the SDK; the remote mutation may already have succeeded, so retrying the idempotent setter is safe. The `description` comes from the dedicated SDK-facing opt-in description configured in Reflag.
+By default, `setOptIn()` changes the opt-in for the current user, so the current context must include a `user.id`. To manage the current company's opt-in instead, pass `scope: "company"`; the context must then include a `company.id`.
+
+User and company opt-ins are managed independently. Setting `optedIn` to `false` removes the opt-in only for the selected scope. For example, cancelling a user's opt-in does not change the company's opt-in for the same flag.
+
+`setOptIn` returns a promise so you can wait for the new membership state to be synchronized. It resolves after the latest flag state has been applied locally, the requested membership change has been confirmed, and `flagsUpdated` listeners have been notified.
+
+The `description` comes from the dedicated SDK-facing opt-in description configured in Reflag.
 
 ## Remote config
 

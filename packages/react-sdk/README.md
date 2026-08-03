@@ -676,7 +676,11 @@ function OptInList() {
 }
 ```
 
-`scope` defaults to `"user"`. User scope requires a current `user.id`; company scope requires a current `company.id`. Setting `optedIn` to `false` cancels only the selected scope's opt-in. For successful mutation responses, the returned promise resolves only after the Browser SDK has applied and confirmed the refreshed membership state and notified `useOptInFlags()`. React commits the resulting render using its normal scheduling.
+By default, `useSetOptIn()` changes the opt-in for the current user, so the current context must include a `user.id`. To manage the current company's opt-in instead, pass `scope: "company"`; the context must then include a `company.id`.
+
+User and company opt-ins are managed independently. Setting `optedIn` to `false` removes the opt-in only for the selected scope. For example, cancelling a user's opt-in does not change the company's opt-in for the same flag.
+
+`setOptIn` returns a promise so you can wait for the new membership state to be synchronized. It resolves after the latest flag state has been applied, the requested membership change has been confirmed, and components using `useOptInFlags()` have been notified. React schedules the resulting render normally, so it may not yet be committed when the promise resolves.
 
 ### `useTrack()`
 
