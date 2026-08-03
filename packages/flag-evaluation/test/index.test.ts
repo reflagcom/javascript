@@ -198,6 +198,36 @@ describe("evaluate flag targeting integration ", () => {
     });
   });
 
+  it("evaluates percentage rollouts using user.id", () => {
+    const userRollout = {
+      flagKey: "test-flag",
+      rules: [
+        {
+          value: true,
+          filter: {
+            type: "rolloutPercentage" as const,
+            key: "test-flag",
+            partialRolloutAttribute: "user.id",
+            partialRolloutThreshold: 50000,
+          },
+        },
+      ],
+    };
+
+    expect(
+      evaluateFlagRules({
+        ...userRollout,
+        context: { user: { id: "user-1" } },
+      }).value,
+    ).toBe(true);
+    expect(
+      evaluateFlagRules({
+        ...userRollout,
+        context: { user: { id: "user-2" } },
+      }).value,
+    ).toBeUndefined();
+  });
+
   it("returns list of missing context keys ", async () => {
     const res = evaluateFlagRules({
       ...flag,

@@ -1568,6 +1568,59 @@ describe("ReflagClient", () => {
       });
     });
 
+    it("evaluates percentage rollouts using user.id", async () => {
+      const userRolloutDefinitions: FlagsAPIResponse = {
+        flagStateVersion: 2,
+        features: [
+          {
+            key: "test-flag",
+            description: "User rollout",
+            targeting: {
+              version: 1,
+              rules: [
+                {
+                  filter: {
+                    type: "rolloutPercentage",
+                    key: "test-flag",
+                    partialRolloutAttribute: "user.id",
+                    partialRolloutThreshold: 50000,
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      };
+      httpClient.get.mockResolvedValue({
+        ok: true,
+        status: 200,
+        body: { success: true, ...userRolloutDefinitions },
+      });
+
+      await client.initialize();
+
+      expect(
+        client.getFlag(
+          {
+            user: { id: "user-1" },
+            company,
+            enableTracking: false,
+          },
+          "test-flag",
+        ).isEnabled,
+      ).toBe(true);
+      expect(
+        client.getFlag(
+          {
+            user: { id: "user-2" },
+            company,
+            enableTracking: false,
+          },
+          "test-flag",
+        ).isEnabled,
+      ).toBe(false);
+    });
+
     it("`track` sends all expected events when `enableTracking` is `true`", async () => {
       const context = {
         company,
