@@ -40,6 +40,7 @@ export default async function RootLayout({
         <ReflagBootstrappedProvider
           publishableKey={publishableKey}
           flags={flags}
+          suspense
         >
           {children}
         </ReflagBootstrappedProvider>
