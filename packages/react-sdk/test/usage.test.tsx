@@ -349,25 +349,7 @@ describe("<ReflagProvider />", () => {
 });
 
 describe("useFlag", () => {
-  test("returns a loading state initially", async () => {
-    const { result, unmount } = renderHook(() => useFlag("huddle"), {
-      wrapper: ({ children }) => getProvider({ children }),
-    });
-
-    // The flag should exist but may be loading or not depending on implementation
-    expect(result.current.key).toBe("huddle");
-    expect(result.current.isEnabled).toBe(false);
-    expect(result.current.config).toEqual({
-      key: undefined,
-      payload: undefined,
-    });
-    expect(typeof result.current.track).toBe("function");
-    expect(typeof result.current.requestFeedback).toBe("function");
-
-    unmount();
-  });
-
-  test("suspends while loading when suspense is enabled", async () => {
+  function mockDelayedFlagsResponse() {
     let resolveFlags!: () => void;
     const flagsRequest = new Promise<void>((resolve) => {
       resolveFlags = resolve;
@@ -390,6 +372,30 @@ describe("useFlag", () => {
         });
       }),
     );
+
+    return { requestStarted, resolveFlags };
+  }
+
+  test("returns a loading state initially", async () => {
+    const { result, unmount } = renderHook(() => useFlag("huddle"), {
+      wrapper: ({ children }) => getProvider({ children }),
+    });
+
+    // The flag should exist but may be loading or not depending on implementation
+    expect(result.current.key).toBe("huddle");
+    expect(result.current.isEnabled).toBe(false);
+    expect(result.current.config).toEqual({
+      key: undefined,
+      payload: undefined,
+    });
+    expect(typeof result.current.track).toBe("function");
+    expect(typeof result.current.requestFeedback).toBe("function");
+
+    unmount();
+  });
+
+  test("suspends while loading when suspense is enabled", async () => {
+    const { requestStarted, resolveFlags } = mockDelayedFlagsResponse();
 
     function FlaggedContent() {
       const { isEnabled } = useFlag("abc");
@@ -422,6 +428,130 @@ describe("useFlag", () => {
     expect(queryByTestId("suspense-fallback")).toBeNull();
 
     unmount();
+  });
+
+  test("suspends while loading when suspense is enabled for a single useFlag call", async () => {
+    const { requestStarted, resolveFlags } = mockDelayedFlagsResponse();
+
+    function FlaggedContent() {
+      const { isEnabled } = useFlag("abc", { suspense: true });
+      return <span data-testid="flag-value">{String(isEnabled)}</span>;
+    }
+
+    const { getByTestId, queryByTestId, unmount } = render(
+      <React.Suspense
+        fallback={<span data-testid="suspense-fallback">Loading flags</span>}
+      >
+        {getProvider({
+          children: <FlaggedContent />,
+        })}
+      </React.Suspense>,
+    );
+
+    expect(getByTestId("suspense-fallback").textContent).toBe("Loading flags");
+    expect(queryByTestId("flag-value")).toBeNull();
+
+    await waitFor(() => {
+      expect(requestStarted).toHaveBeenCalled();
+    });
+
+    resolveFlags();
+
+    await waitFor(() => {
+      expect(getByTestId("flag-value").textContent).toBe("true");
+    });
+    expect(queryByTestId("suspense-fallback")).toBeNull();
+
+    unmount();
+  });
+
+  test("does not suspend when suspense is disabled for a single useFlag call", async () => {
+    const { requestStarted, resolveFlags } = mockDelayedFlagsResponse();
+
+    function FlaggedContent() {
+      const { isEnabled, isLoading } = useFlag("abc", { suspense: false });
+      return (
+        <span data-testid="flag-value">
+          {String(isLoading)}:{String(isEnabled)}
+        </span>
+      );
+    }
+
+    const { getByTestId, queryByTestId, unmount } = render(
+      <React.Suspense
+        fallback={<span data-testid="suspense-fallback">Loading flags</span>}
+      >
+        {getProvider({
+          children: <FlaggedContent />,
+          suspense: true,
+        })}
+      </React.Suspense>,
+    );
+
+    expect(queryByTestId("suspense-fallback")).toBeNull();
+    expect(getByTestId("flag-value").textContent).toBe("true:false");
+
+    await waitFor(() => {
+      expect(requestStarted).toHaveBeenCalled();
+    });
+
+    resolveFlags();
+
+    await waitFor(() => {
+      expect(getByTestId("flag-value").textContent).toBe("false:true");
+    });
+
+    unmount();
+  });
+
+  test("stops suspending if on-demand initialization fails", async () => {
+    const logger = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+    const initialize = vi
+      .spyOn(ReflagClient.prototype, "initialize")
+      .mockImplementationOnce(async function () {
+        (this as any).setState("initializing");
+        throw new Error("init failed");
+      });
+
+    function FlaggedContent() {
+      const { isEnabled, isLoading } = useFlag("abc");
+      return (
+        <span data-testid="flag-value">
+          {String(isLoading)}:{String(isEnabled)}
+        </span>
+      );
+    }
+
+    const { getByTestId, queryByTestId, unmount } = render(
+      <React.Suspense
+        fallback={<span data-testid="suspense-fallback">Loading flags</span>}
+      >
+        {getProvider({
+          children: <FlaggedContent />,
+          logger,
+          suspense: true,
+        })}
+      </React.Suspense>,
+    );
+
+    expect(getByTestId("suspense-fallback").textContent).toBe("Loading flags");
+
+    await waitFor(() => {
+      expect(getByTestId("flag-value").textContent).toBe("false:false");
+    });
+    expect(queryByTestId("suspense-fallback")).toBeNull();
+    expect(logger.error).toHaveBeenCalledWith(
+      "failed to initialize client",
+      expect.any(Error),
+    );
+
+    unmount();
+    initialize.mockRestore();
   });
 
   test("finishes loading", async () => {

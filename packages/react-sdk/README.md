@@ -477,7 +477,9 @@ This App Router approach leverages Server Components for server-side flag fetchi
 
 ## `<ReflagClientProvider>` component
 
-The `<ReflagClientProvider>` is a lower-level component that accepts a pre-initialized `ReflagClient` instance. This is useful for advanced use cases where you need full control over client initialization or want to share a client instance across multiple parts of your application.
+The `<ReflagClientProvider>` is a lower-level component that accepts a `ReflagClient` instance. This is useful for advanced use cases where you need full control over client initialization or want to share a client instance across multiple parts of your application.
+
+In most cases you should initialize the client before rendering this provider. If you pass an idle client and enable `suspense`, a `useFlag()` call that suspends can initialize the client on demand; without Suspense, you must initialize the client yourself.
 
 ### Usage
 
@@ -509,7 +511,7 @@ function App() {
 
 The `ReflagClientProvider` accepts the following props:
 
-- `client`: A pre-initialized `ReflagClient` instance
+- `client`: A `ReflagClient` instance. Prefer passing an already-initialized client; idle clients are initialized on demand only by suspense-enabled `useFlag()` calls.
 - `loadingComponent`: Optional React component to show while the client is initializing (same as `ReflagProvider`)
 - `suspense`: Optional. Set to `true` to make `useFlag()` suspend while the client is loading
 

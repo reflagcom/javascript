@@ -259,7 +259,11 @@ type LoadingPromiseState = {
   resolve: () => void;
 };
 
+const failedInitializations = new WeakSet<ReflagClient>();
+
 function isClientLoading(client: ReflagClient) {
+  if (failedInitializations.has(client)) return false;
+
   const state = client.getState();
   return state === "idle" || state === "initializing";
 }
@@ -317,7 +321,9 @@ export function ReflagClientProvider({
 }: ReflagClientProviderProps) {
   const hasInitialized = useRef(client.getState() === "initialized");
   const [isLoading, setIsLoading] = useState(
-    hasInitialized.current ? false : initialLoading,
+    hasInitialized.current || failedInitializations.has(client)
+      ? false
+      : initialLoading,
   );
   const loadingPromiseRef = useRef<LoadingPromiseState | null>(null);
 
@@ -331,6 +337,8 @@ export function ReflagClientProvider({
         if (client.getState() !== "idle") return;
         return client.initialize().catch((e) => {
           client.logger.error("failed to initialize client", e);
+          failedInitializations.add(client);
+          setLoading(false);
         });
       });
     }
@@ -358,6 +366,7 @@ export function ReflagClientProvider({
     "stateUpdated",
     (state) => {
       if (state === "initialized") {
+        failedInitializations.delete(client);
         hasInitialized.current = true;
         setLoading(false);
         return;
