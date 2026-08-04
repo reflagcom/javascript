@@ -286,6 +286,7 @@ export class FlagsClient {
   private flags: RawFlags = {};
   private fallbackFlags: FallbackFlags = {};
   private contextFetchVersion = 0;
+  private optInMetadataRefreshAttemptContextVersion: number | undefined;
   private storage: StorageAdapter;
   private refreshEvents: number[] = [];
   private enqueueBulkEvent?: (event: BulkEvent) => Promise<void>;
@@ -373,6 +374,32 @@ export class FlagsClient {
 
   getFetchedFlags(): RawFlags {
     return this.fetchedFlags;
+  }
+
+  resetOptInMetadataRefresh() {
+    this.optInMetadataRefreshAttemptContextVersion = undefined;
+  }
+
+  async refreshOptInMetadataIfNeeded() {
+    if (!this.bootstrapped) return;
+
+    const fetchedFlags = Object.values(this.fetchedFlags);
+    const hasOptInMetadata =
+      fetchedFlags.length > 0 &&
+      fetchedFlags.every(
+        (flag) =>
+          flag.optInEnabled === false ||
+          (flag.optInEnabled === true && flag.optIn !== undefined),
+      );
+    if (hasOptInMetadata) return;
+
+    const contextVersion = this.contextFetchVersion;
+    if (this.optInMetadataRefreshAttemptContextVersion === contextVersion) {
+      return;
+    }
+
+    this.optInMetadataRefreshAttemptContextVersion = contextVersion;
+    return this.refreshFlags(this.fetchedFlagStateVersion);
   }
 
   setContextWithoutFetch(context: ReflagContext) {

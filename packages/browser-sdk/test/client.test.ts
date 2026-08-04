@@ -316,6 +316,89 @@ describe("ReflagClient", () => {
       ]);
     });
 
+    it("refreshes missing opt-in metadata on demand after bootstrapping", async () => {
+      server.use(
+        http.get("https://front.reflag.com/features/evaluated", () =>
+          optInEvaluationResponse(2, false),
+        ),
+      );
+
+      client = new ReflagClient({
+        publishableKey: "test-key-bootstrap-opt-in-metadata",
+        user: { id: "user1" },
+        enableTracking: false,
+        bootstrappedFlags: {
+          optInFlag: {
+            key: "optInFlag",
+            isEnabled: false,
+            targetingVersion: 1,
+          },
+        },
+      });
+
+      await client.initialize();
+      expect(httpClientGet).not.toHaveBeenCalled();
+
+      expect(client.getOptInFlags()).toEqual([]);
+      await vi.waitFor(() => {
+        expect(client.getOptInFlags()).toEqual([
+          {
+            key: "optInFlag",
+            name: "Opt-in flag",
+            description: null,
+            isEnabled: false,
+            userOptedIn: false,
+            companyOptedIn: false,
+            isOptedIn: false,
+          },
+        ]);
+      });
+      expect(httpClientGet).toHaveBeenCalledTimes(1);
+    });
+
+    it("waits for the bootstrapped flag state version when refreshing opt-in metadata", async () => {
+      let requestedWaitForVersion: string | null = null;
+      server.use(
+        http.get(
+          "https://front.reflag.com/features/evaluated",
+          ({ request }) => {
+            requestedWaitForVersion = new URL(request.url).searchParams.get(
+              "waitForVersion",
+            );
+
+            return optInEvaluationResponse(
+              requestedWaitForVersion === "2" ? 2 : 1,
+              false,
+            );
+          },
+        ),
+      );
+
+      client = new ReflagClient({
+        publishableKey: "test-key-versioned-bootstrap-opt-in-metadata",
+        enableTracking: false,
+        bootstrappedState: {
+          context: { user: { id: "user1" } },
+          flags: {
+            optInFlag: {
+              key: "optInFlag",
+              isEnabled: false,
+              targetingVersion: 1,
+            },
+          },
+          flagStateVersion: 2,
+        },
+      });
+
+      await client.initialize();
+      expect(client.getOptInFlags()).toEqual([]);
+
+      await vi.waitFor(() => {
+        expect(client.getOptInFlags()).toHaveLength(1);
+      });
+      expect(requestedWaitForVersion).toBe("2");
+    });
+
     it("posts opt-in requests and refreshes flags at the returned state version", async () => {
       const flagsUpdated = vi.fn();
       const requests: string[] = [];
@@ -1065,8 +1148,9 @@ describe("ReflagClient", () => {
       // After initialize, flagsClient should be properly initialized
       expect(client["flagsClient"]["initialized"]).toBe(true);
 
-      // maybeFetchFlags should not be called since flagsClient is already bootstrapped
+      // No fetch is needed until opt-in data is requested.
       expect(maybeFetchFlags).not.toHaveBeenCalled();
+      expect(httpClientGet).not.toHaveBeenCalled();
     });
 
     it("ignores same-context bootstrapped state with an older flagStateVersion", () => {

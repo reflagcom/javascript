@@ -975,6 +975,69 @@ describe("opt-in hooks", () => {
     unmount();
   });
 
+  test("useOptInFlags refreshes missing metadata after bootstrap", async () => {
+    let evaluatedRequests = 0;
+    server.use(
+      http.get(/\/features\/evaluated$/, () => {
+        evaluatedRequests += 1;
+        return HttpResponse.json({
+          success: true,
+          flagStateVersion: 2,
+          features: {
+            optInFlag: {
+              key: "optInFlag",
+              isEnabled: false,
+              targetingVersion: 1,
+              optInEnabled: true,
+              optIn: {
+                userOptedIn: false,
+                companyOptedIn: false,
+                isOptedIn: false,
+                name: "Opt-in flag",
+                description: "Try it early",
+              },
+            },
+          },
+        });
+      }),
+    );
+
+    const bootstrapFlags: BootstrappedFlags = {
+      context: { user, company, other },
+      flagStateVersion: 1,
+      flags: {
+        optInFlag: {
+          key: "optInFlag",
+          isEnabled: false,
+          targetingVersion: 1,
+        },
+      },
+    };
+
+    const { result, unmount } = renderHook(() => useOptInFlags(), {
+      wrapper: ({ children }) =>
+        getBootstrapProvider(bootstrapFlags, { children }),
+    });
+
+    await waitFor(() => expect(evaluatedRequests).toBe(1));
+    await waitFor(() => {
+      expect(result.current).toEqual([
+        {
+          key: "optInFlag",
+          name: "Opt-in flag",
+          description: "Try it early",
+          isEnabled: false,
+          userOptedIn: false,
+          companyOptedIn: false,
+          isOptedIn: false,
+        },
+      ]);
+    });
+    expect(evaluatedRequests).toBe(1);
+
+    unmount();
+  });
+
   test("useSetOptIn delegates to the browser client", async () => {
     const setOptIn = vi
       .spyOn(ReflagClient.prototype, "setOptIn")

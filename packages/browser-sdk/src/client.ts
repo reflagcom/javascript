@@ -343,12 +343,14 @@ export type InitOptions = ReflagDeprecatedContext & {
   toolbar?: ToolbarOptions;
 
   /**
-   * Pre-fetched evaluated state to be used instead of fetching it from the server.
+   * Pre-fetched evaluated state used for the initial flag state.
+   * If opt-in flags are requested and browser opt-in metadata is missing, the client refreshes it on demand.
    */
   bootstrappedState?: BootstrappedState;
 
   /**
-   * Pre-fetched flags to be used instead of fetching them from the server.
+   * Pre-fetched flags used for the initial flag state.
+   * If opt-in flags are requested and browser opt-in metadata is missing, the client refreshes them on demand.
    * @deprecated Use `bootstrappedState` instead.
    */
   bootstrappedFlags?: RawFlags;
@@ -484,6 +486,7 @@ function shouldShowToolbar(opts: InitOptions) {
 export class ReflagClient {
   private state: State = "idle";
   private contextUpdateLoading = false;
+  private optInFlagsRequested = false;
   private readonly publishableKey: string;
   private context: ReflagContext;
   private config: Config;
@@ -684,6 +687,9 @@ export class ReflagClient {
     }
 
     await this.flagsClient.initialize();
+    if (this.optInFlagsRequested) {
+      void this.refreshOptInMetadataIfNeeded();
+    }
 
     // Open SSE after the initial flag load. The pubsub server replays the
     // latest flag-update message, including `flagStateVersion`, so
@@ -1000,11 +1006,15 @@ export class ReflagClient {
     this.flagsClient.setContextWithoutFetch(newContext);
 
     if (!shouldIgnoreIncomingFlags) {
+      this.flagsClient.resetOptInMetadataRefresh();
       this.flagsClient.setFetchedFlags(
         bootstrappedState.flags,
         triggerEvent,
         incomingFlagStateVersion,
       );
+      if (this.optInFlagsRequested) {
+        void this.refreshOptInMetadataIfNeeded();
+      }
     }
 
     if (contextChanged) {
@@ -1215,6 +1225,11 @@ export class ReflagClient {
    * Returns opt-in-enabled flags for the current context.
    */
   getOptInFlags(): OptInFlag[] {
+    this.optInFlagsRequested = true;
+    if (this.state === "initialized") {
+      void this.refreshOptInMetadataIfNeeded();
+    }
+
     return Object.values(this.getFlags()).flatMap((flag) => {
       if (flag.optInEnabled !== true || !flag.optIn) return [];
 
@@ -1448,6 +1463,14 @@ export class ReflagClient {
       reflagClient: this,
       position,
     });
+  }
+
+  private async refreshOptInMetadataIfNeeded() {
+    try {
+      await this.flagsClient.refreshOptInMetadataIfNeeded();
+    } catch (error) {
+      this.logger.error("error refreshing opt-in flag metadata", error);
+    }
   }
 
   private finishContextUpdate() {

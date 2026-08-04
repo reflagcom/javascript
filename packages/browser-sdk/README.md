@@ -231,6 +231,8 @@ User and company opt-ins are managed independently. Setting `optedIn` to `false`
 
 The `description` comes from the dedicated SDK-facing opt-in description configured in Reflag.
 
+When the client was bootstrapped without browser opt-in metadata, the first `getOptInFlags()` call starts one evaluated-flags refresh. The call returns the currently available list synchronously, and `flagsUpdated` is emitted when the refreshed list is available.
+
 ## Remote config
 
 Remote config is a dynamic and flexible approach to configuring flag behavior outside of your app – without needing to re-deploy it.
@@ -260,7 +262,7 @@ generate a `check` event, contrary to the `config` property on the object return
 
 ## Server-side rendering and bootstrapping
 
-For server-side rendered applications, you can eliminate the initial network request by bootstrapping the client with pre-fetched flag data.
+For server-side rendered applications, you can render immediately with pre-fetched flag data by bootstrapping the client.
 
 ### Init options bootstrapped
 
@@ -316,7 +318,7 @@ const reflagClient = new ReflagClient({
   bootstrappedState, // Contains context, flags, and optional flagStateVersion
 });
 
-await reflagClient.initialize(); // Initializes all but flags
+await reflagClient.initialize();
 const { isEnabled } = reflagClient.getFlag("huddle");
 ```
 
@@ -327,6 +329,8 @@ The `bootstrappedState` object contains:
 - `flagStateVersion`: an optional version used to avoid redundant live-update refreshes immediately after bootstrapping
 
 If you want live flag updates to continue working after bootstrapping, use a recent `@reflag/node-sdk` so `getFlagsForBootstrap()` includes `flagStateVersion`.
+
+The bootstrap payload is available synchronously for the initial render. If the application requests opt-in flags and the bootstrap payload does not include browser opt-in metadata, the browser SDK performs one evaluated-flags refresh on demand. Bootstrapped applications that do not use opt-in data do not make this request. If the refresh fails, the bootstrapped flags remain in use.
 
 If you previously used `bootstrappedFlags`, migrate like this:
 
@@ -352,7 +356,7 @@ const client = new ReflagClient({
 > [!NOTE]
 > After bootstrapping, any live flag updates are fetched directly by the browser SDK from Reflag using the browser-visible context. If your bootstrapped snapshot depends on server-only or secret context that is not available in the browser, later live refreshes may differ. In that case, keep `enableLiveFlagUpdates` disabled.
 
-This eliminates loading states and improves performance by avoiding the initial flags API call.
+This eliminates loading states and removes the initial render's dependency on the flags API.
 
 ## Context management
 
