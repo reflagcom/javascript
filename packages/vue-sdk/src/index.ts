@@ -24,6 +24,7 @@ export type {
   Flag,
   Flags,
   FlagType,
+  OptInFlag,
   ReflagBaseProps,
   ReflagBootstrappedProps,
   ReflagClientProviderProps,
@@ -31,11 +32,11 @@ export type {
   ReflagProps,
   RequestFlagFeedbackOptions,
   TypedFlags,
+  UseOptInFlagsResult,
 } from "./types";
 export type {
   CheckEvent,
   CompanyContext,
-  OptInFlag,
   SetOptInOptions,
   TrackEvent,
   UserContext,

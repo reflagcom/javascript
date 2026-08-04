@@ -27,6 +27,9 @@ beforeAll(() => {
   });
   vi.spyOn(ReflagClient.prototype, "getFlags").mockReturnValue({});
   vi.spyOn(ReflagClient.prototype, "getOptInFlags").mockReturnValue([]);
+  vi.spyOn(ReflagClient.prototype, "getIsLoadingOptInFlags").mockReturnValue(
+    false,
+  );
   vi.spyOn(ReflagClient.prototype, "setOptIn").mockResolvedValue(undefined);
   vi.spyOn(ReflagClient.prototype, "on").mockReturnValue(() => {
     // cleanup function
@@ -38,6 +41,13 @@ beforeAll(() => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(ReflagClient.prototype.getOptInFlags).mockReturnValue([]);
+  vi.mocked(ReflagClient.prototype.getIsLoadingOptInFlags).mockReturnValue(
+    false,
+  );
+  vi.mocked(ReflagClient.prototype.on).mockReturnValue(() => {
+    // cleanup function
+  });
 });
 
 function getProvider() {
@@ -100,11 +110,14 @@ describe("ReflagProvider", () => {
       },
     ];
     vi.mocked(ReflagClient.prototype.getOptInFlags).mockReturnValue(optInFlags);
+    vi.mocked(ReflagClient.prototype.getIsLoadingOptInFlags).mockReturnValue(
+      true,
+    );
 
     const Child = defineComponent({
       setup() {
-        const flags = useOptInFlags();
-        return { flags };
+        const { flags, isLoading } = useOptInFlags();
+        return { flags, isLoading };
       },
       template: "<div></div>",
     });
@@ -118,10 +131,65 @@ describe("ReflagProvider", () => {
 
     await nextTick();
     expect(wrapper.findComponent(Child).vm.flags).toEqual(optInFlags);
+    expect(wrapper.findComponent(Child).vm.isLoading).toBe(false);
     expect(ReflagClient.prototype.on).toHaveBeenCalledWith(
       "flagsUpdated",
       expect.any(Function),
     );
+    expect(ReflagClient.prototype.on).toHaveBeenCalledWith(
+      "optInFlagsLoadingUpdated",
+      expect.any(Function),
+    );
+  });
+
+  test("useOptInFlags updates loading for missing bootstrapped metadata", async () => {
+    let loadingHandler: ((isLoading: boolean) => void) | undefined;
+    vi.mocked(ReflagClient.prototype.getIsLoadingOptInFlags).mockReturnValue(
+      true,
+    );
+    vi.mocked(ReflagClient.prototype.on).mockImplementation(
+      (event, handler) => {
+        if (event === "optInFlagsLoadingUpdated") {
+          loadingHandler = handler as (isLoading: boolean) => void;
+        }
+        return () => {
+          // cleanup function
+        };
+      },
+    );
+
+    const Child = defineComponent({
+      setup() {
+        const { flags, isLoading } = useOptInFlags();
+        return { flags, isLoading };
+      },
+      template: "<div></div>",
+    });
+
+    const wrapper = mount(ReflagBootstrappedProvider, {
+      props: {
+        publishableKey: "key-loading-opt-in-flags",
+        flags: {
+          context: { user: { id: "user-1" } },
+          flags: {
+            optInFlag: {
+              key: "optInFlag",
+              isEnabled: false,
+              targetingVersion: 1,
+            },
+          },
+        },
+      },
+      slots: { default: () => h(Child) },
+    });
+
+    await nextTick();
+    expect(wrapper.findComponent(Child).vm.isLoading).toBe(true);
+
+    loadingHandler?.(false);
+    await nextTick();
+
+    expect(wrapper.findComponent(Child).vm.isLoading).toBe(false);
   });
 
   test("useSetOptIn delegates to the browser client", async () => {

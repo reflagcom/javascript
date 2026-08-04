@@ -1,10 +1,11 @@
-import type { Ref } from "vue";
+import type { ComputedRef, Ref } from "vue";
 
 import type {
   BootstrappedState as BrowserBootstrappedState,
   CompanyContext,
   InitOptions,
   Logger,
+  OptInFlag as BrowserOptInFlag,
   RawFlags,
   ReflagClient,
   ReflagContext,
@@ -50,6 +51,15 @@ export type TypedFlags = keyof Flags extends never
     };
 
 export type FlagKey = keyof TypedFlags;
+
+export type OptInFlag = Omit<BrowserOptInFlag, "key"> & {
+  key: FlagKey;
+};
+
+export type UseOptInFlagsResult = {
+  flags: ComputedRef<OptInFlag[]>;
+  isLoading: ComputedRef<boolean>;
+};
 
 export interface ProviderContextType {
   client: ReflagClient;
