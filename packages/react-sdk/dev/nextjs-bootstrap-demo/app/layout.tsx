@@ -40,6 +40,9 @@ export default async function RootLayout({
         <ReflagBootstrappedProvider
           publishableKey={publishableKey}
           flags={flags}
+          enableLiveFlagUpdates={flags.flagStateVersion !== undefined}
+          feedback={{ enableAutoFeedback: false }}
+          offline={!publishableKey}
           suspense
         >
           {children}
