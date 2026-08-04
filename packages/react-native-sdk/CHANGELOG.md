@@ -1,5 +1,18 @@
 # @reflag/react-native-sdk
 
+## 0.3.0
+
+### Minor Changes
+
+- f31f5e4: Add end-user opt-in helpers for listing opt-in-enabled flags and setting whether the current user or company has opted into a flag. Bootstrapped clients refresh missing browser opt-in metadata on demand when opt-in flags are requested.
+
+### Patch Changes
+
+- 31fd960: Add Suspense support for `useFlag` while flags are loading via provider-level and per-hook `suspense` options.
+- Updated dependencies [7f51b4a]
+- Updated dependencies [6da4faf]
+  - @reflag/react-sdk@1.6.0
+
 ## 0.2.5
 
 ### Patch Changes
