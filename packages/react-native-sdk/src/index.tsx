@@ -22,6 +22,7 @@ import type {
   StorageAdapter,
   TrackEvent,
   TypedFlags,
+  UseFlagOptions,
   UserContext,
 } from "@reflag/react-sdk";
 import {
@@ -84,6 +85,7 @@ export type {
   StorageAdapter,
   TrackEvent,
   TypedFlags,
+  UseFlagOptions,
   UserContext,
 };
 

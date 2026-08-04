@@ -48,6 +48,24 @@ function StartHuddleButton() {
 
 See the [React SDK README](../react-sdk/README.md) for more details.
 
+### Suspense loading
+
+React Native uses the same Suspense support as the React SDK. Enable it for the provider and wrap components that call `useFlag` in a Suspense boundary:
+
+```tsx
+import { Suspense } from "react";
+import { ActivityIndicator } from "react-native";
+import { ReflagProvider } from "@reflag/react-native-sdk";
+
+<ReflagProvider publishableKey="{YOUR_PUBLISHABLE_KEY}" suspense>
+  <Suspense fallback={<ActivityIndicator />}>
+    <App />
+  </Suspense>
+</ReflagProvider>;
+```
+
+You can also override the behavior for one call with `useFlag("huddle", { suspense: true })`.
+
 ## React Native differences
 
 - The Reflag toolbar is web-only and is not available in React Native.
