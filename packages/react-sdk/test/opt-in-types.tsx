@@ -7,10 +7,10 @@ declare module "@reflag/react-sdk" {
 }
 
 export function GeneratedOptInTypes() {
-  const optInFlags = useOptInFlags();
+  const { flags } = useOptInFlags();
   const setOptIn = useSetOptIn();
 
-  for (const flag of optInFlags) {
+  for (const flag of flags) {
     void setOptIn(flag.key, { optedIn: !flag.userOptedIn });
   }
 

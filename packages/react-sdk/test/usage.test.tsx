@@ -26,7 +26,6 @@ import {
   useClient,
   useFlag,
   useIsLoading,
-  useIsLoadingOptInFlags,
   useOnEvent,
   useOptInFlags,
   useRequestFeedback,
@@ -1099,19 +1098,13 @@ describe("opt-in hooks", () => {
       },
     };
 
-    const { result, unmount } = renderHook(
-      () => ({
-        isLoading: useIsLoadingOptInFlags(),
-        optInFlags: useOptInFlags(),
-      }),
-      {
-        wrapper: ({ children }) =>
-          getBootstrapProvider(bootstrapFlags, { children }),
-      },
-    );
+    const { result, unmount } = renderHook(() => useOptInFlags(), {
+      wrapper: ({ children }) =>
+        getBootstrapProvider(bootstrapFlags, { children }),
+    });
 
     expect(result.current.isLoading).toBe(false);
-    expect(result.current.optInFlags).toHaveLength(1);
+    expect(result.current.flags).toHaveLength(1);
     unmount();
   });
 
@@ -1143,10 +1136,9 @@ describe("opt-in hooks", () => {
 
     const { result, unmount } = renderHook(
       () => {
-        const isLoading = useIsLoadingOptInFlags();
-        const optInFlags = useOptInFlags();
-        loadingRenders.push(isLoading);
-        return { isLoading, optInFlags };
+        const state = useOptInFlags();
+        loadingRenders.push(state.isLoading);
+        return state;
       },
       {
         wrapper: ({ children }) =>
@@ -1154,7 +1146,7 @@ describe("opt-in hooks", () => {
       },
     );
 
-    expect(result.current).toEqual({ isLoading: true, optInFlags: [] });
+    expect(result.current).toEqual({ isLoading: true, flags: [] });
     await waitFor(() => expect(requestStarted).toHaveBeenCalledOnce());
 
     resolveResponse(
@@ -1181,7 +1173,7 @@ describe("opt-in hooks", () => {
 
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false);
-      expect(result.current.optInFlags).toHaveLength(1);
+      expect(result.current.flags).toHaveLength(1);
     });
     expect(loadingRenders).toContain(true);
     expect(loadingRenders).toContain(false);
@@ -1206,20 +1198,14 @@ describe("opt-in hooks", () => {
       },
     };
 
-    const { result, unmount } = renderHook(
-      () => ({
-        isLoading: useIsLoadingOptInFlags(),
-        optInFlags: useOptInFlags(),
-      }),
-      {
-        wrapper: ({ children }) =>
-          getBootstrapProvider(bootstrapFlags, { children }),
-      },
-    );
+    const { result, unmount } = renderHook(() => useOptInFlags(), {
+      wrapper: ({ children }) =>
+        getBootstrapProvider(bootstrapFlags, { children }),
+    });
 
     expect(result.current.isLoading).toBe(true);
     await waitFor(() => expect(result.current.isLoading).toBe(false));
-    expect(result.current.optInFlags).toEqual([]);
+    expect(result.current.flags).toEqual([]);
     unmount();
   });
 
@@ -1248,8 +1234,8 @@ describe("opt-in hooks", () => {
     };
 
     function OptInList() {
-      const optInFlags = useOptInFlags();
-      return <span data-testid="opt-in-count">{optInFlags.length}</span>;
+      const { flags } = useOptInFlags();
+      return <span data-testid="opt-in-count">{flags.length}</span>;
     }
 
     const { getByTestId, queryByTestId, unmount } = render(
@@ -1324,7 +1310,7 @@ describe("opt-in hooks", () => {
     };
 
     const { result, unmount } = renderHook(
-      () => ({ client: useClient(), optInFlags: useOptInFlags() }),
+      () => ({ client: useClient(), optInState: useOptInFlags() }),
       {
         wrapper: ({ children }) =>
           getBootstrapProvider(bootstrapFlags, { children }),
@@ -1332,7 +1318,7 @@ describe("opt-in hooks", () => {
     );
 
     await waitFor(() => {
-      expect(result.current.optInFlags).toEqual([
+      expect(result.current.optInState.flags).toEqual([
         {
           key: "optInFlag",
           name: "Opt-in flag",
@@ -1364,7 +1350,7 @@ describe("opt-in hooks", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.optInFlags).toEqual([
+      expect(result.current.optInState.flags).toEqual([
         {
           key: "optInFlag",
           name: "Opt-in flag",
@@ -1426,17 +1412,20 @@ describe("opt-in hooks", () => {
 
     await waitFor(() => expect(evaluatedRequests).toBe(1));
     await waitFor(() => {
-      expect(result.current).toEqual([
-        {
-          key: "optInFlag",
-          name: "Opt-in flag",
-          description: "Try it early",
-          isEnabled: false,
-          userOptedIn: false,
-          companyOptedIn: false,
-          isOptedIn: false,
-        },
-      ]);
+      expect(result.current).toEqual({
+        isLoading: false,
+        flags: [
+          {
+            key: "optInFlag",
+            name: "Opt-in flag",
+            description: "Try it early",
+            isEnabled: false,
+            userOptedIn: false,
+            companyOptedIn: false,
+            isOptedIn: false,
+          },
+        ],
+      });
     });
     expect(evaluatedRequests).toBe(1);
 

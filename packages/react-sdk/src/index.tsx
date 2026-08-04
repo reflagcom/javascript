@@ -633,6 +633,18 @@ export type UseOptInFlagsOptions = {
   suspense?: boolean;
 };
 
+export type UseOptInFlagsResult = {
+  /**
+   * Opt-in-enabled flags for the current context.
+   */
+  flags: OptInFlag[];
+
+  /**
+   * Whether initial flags or required opt-in metadata are loading.
+   */
+  isLoading: boolean;
+};
+
 /**
  * @deprecated use `useFlag` instead
  */
@@ -711,52 +723,42 @@ export function useFlag<TKey extends FlagKey>(
 }
 
 /**
- * Returns opt-in-enabled flags for the current context.
+ * Returns opt-in-enabled flags and their loading state for the current context.
  *
- * When suspense is enabled for the provider or this hook, it suspends while
- * initial flags or required opt-in metadata are loading.
+ * The loading state is primarily useful with `ReflagBootstrappedProvider` when
+ * the bootstrap payload does not contain browser opt-in metadata and it is
+ * fetched on demand. When suspense is enabled for the provider or this hook,
+ * it suspends instead of returning a loading result.
  */
-export function useOptInFlags(options: UseOptInFlagsOptions = {}): OptInFlag[] {
+export function useOptInFlags(
+  options: UseOptInFlagsOptions = {},
+): UseOptInFlagsResult {
   const context = useSafeContext();
   const { client } = context;
-  const isLoading = useIsLoadingOptInFlags();
   const getOptInFlags = () => client.getOptInFlags() as OptInFlag[];
-  const [optInFlags, setOptInFlags] = useState(getOptInFlags);
-
-  useOnEvent(
-    "flagsUpdated",
-    () => {
-      setOptInFlags(getOptInFlags());
-    },
-    client,
-  );
-
-  if (isLoading && (options.suspense ?? context.suspense)) {
-    throw getOptInFlagsLoadingPromise(client);
-  }
-
-  return optInFlags;
-}
-
-/**
- * Returns whether opt-in flags are loading for the current context.
- *
- * This is primarily useful with `ReflagBootstrappedProvider` when the bootstrap
- * payload does not contain browser opt-in metadata and it is fetched on demand.
- */
-export function useIsLoadingOptInFlags(): boolean {
-  const { client } = useSafeContext();
+  const [flags, setFlags] = useState(getOptInFlags);
   const [isLoading, setIsLoading] = useState(() =>
     client.getIsLoadingOptInFlags(),
   );
 
+  useOnEvent(
+    "flagsUpdated",
+    () => {
+      setFlags(getOptInFlags());
+    },
+    client,
+  );
   useOnEvent("optInFlagsLoadingUpdated", setIsLoading, client);
 
   useIsomorphicLayoutEffect(() => {
     setIsLoading(client.getIsLoadingOptInFlags());
   }, [client]);
 
-  return isLoading;
+  if (isLoading && (options.suspense ?? context.suspense)) {
+    throw getOptInFlagsLoadingPromise(client);
+  }
+
+  return { flags, isLoading };
 }
 
 /**
