@@ -558,8 +558,8 @@ export function ReflagProvider({
 export type ReflagBootstrappedProps = ReflagPropsBase &
   ReflagInitOptionsBase & {
     /**
-     * Pre-fetched flags used for the initial render. If opt-in flags are requested and
-     * browser opt-in metadata is missing, the browser client refreshes them on demand.
+     * Pre-fetched flags used for the initial render. The browser client fetches opt-in
+     * metadata on demand when opt-in flags are requested.
      */
     flags: BootstrappedFlags;
   };
@@ -640,7 +640,7 @@ export type UseOptInFlagsResult = {
   flags: OptInFlag[];
 
   /**
-   * Whether opt-in metadata missing from a bootstrapped payload is loading.
+   * Whether a bootstrapped provider is fetching opt-in metadata.
    */
   isLoading: boolean;
 };
@@ -725,9 +725,9 @@ export function useFlag<TKey extends FlagKey>(
 /**
  * Returns opt-in-enabled flags and their loading state for the current context.
  *
- * The loading state is only used with `ReflagBootstrappedProvider` when the
- * bootstrap payload does not contain browser opt-in metadata and it is fetched
- * on demand. Regular providers load opt-in metadata with the initial flags.
+ * The loading state is only used with `ReflagBootstrappedProvider` while
+ * opt-in metadata is fetched on demand. Regular providers load opt-in metadata
+ * with the initial flags.
  * When suspense is enabled for the provider or this hook, it suspends instead
  * of returning a loading result.
  */

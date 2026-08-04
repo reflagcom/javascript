@@ -259,7 +259,7 @@ You'll typically generate the `bootstrappedFlags` object on your server using th
 
 If you want live flag updates to continue working after bootstrapping, use a recent `@reflag/node-sdk` so `getFlagsForBootstrap()` includes `flagStateVersion`.
 
-If bootstrap data omits opt-in metadata, `useOptInFlags()` triggers one flags refresh and reports `isLoading: true` until it settles. No request is made unless the composable is used.
+With `ReflagBootstrappedProvider`, `useOptInFlags()` triggers one flags refresh and reports `isLoading: true` until it settles. No refresh occurs unless the composable is used.
 
 Here's an example using the Node.js SDK:
 
@@ -426,7 +426,7 @@ User and company opt-ins are managed independently. Setting `optedIn` to `false`
 
 `setOptIn` returns a promise so you can wait for the new membership state to be synchronized. It resolves after the latest flag state has been applied, the requested membership change has been confirmed, and components using `useOptInFlags()` have been notified. Vue schedules the resulting render normally, so it may not yet be committed when the promise resolves.
 
-`useOptInFlags()` returns `{ flags, isLoading }`, where both values are computed refs. `isLoading` is only `true` when a bootstrapped payload does not contain browser opt-in metadata: the composable automatically requests it once, reports loading while that on-demand request is pending, and updates after the evaluated flags arrive. It returns to `false` after either success or failure. Bootstrapped payloads that already contain complete opt-in metadata report `false` immediately.
+`useOptInFlags()` returns `{ flags, isLoading }`, where both values are computed refs. With `ReflagBootstrappedProvider`, the composable fetches opt-in metadata on first use and reports `isLoading: true` until the flags refresh succeeds or fails.
 
 With a regular `ReflagProvider`, opt-in metadata arrives as part of the normal initial flags request, so `useOptInFlags().isLoading` remains `false`. Use the general `useIsLoading()` composable or the provider's loading slot for that initial loading state.
 

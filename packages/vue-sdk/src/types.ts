@@ -163,8 +163,8 @@ export type ReflagProps = ReflagInitOptionsBase &
 export type ReflagBootstrappedProps = ReflagInitOptionsBase &
   ReflagBaseProps & {
     /**
-     * Pre-fetched flags used for the initial render. If opt-in flags are requested and
-     * browser opt-in metadata is missing, the browser client refreshes them on demand.
+     * Pre-fetched flags used for the initial render. The browser client fetches opt-in
+     * metadata on demand when opt-in flags are requested.
      */
     flags: BootstrappedFlags;
   };

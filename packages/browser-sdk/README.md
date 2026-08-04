@@ -232,7 +232,7 @@ User and company opt-ins are managed independently. Setting `optedIn` to `false`
 
 The `description` comes from the dedicated SDK-facing opt-in description configured in Reflag.
 
-When the client was bootstrapped without browser opt-in metadata, the first `getOptInFlags()` or `getIsLoadingOptInFlags()` call starts one evaluated-flags refresh. The list call returns the currently available list synchronously. `getIsLoadingOptInFlags()` returns `true` until the refresh succeeds or fails, then returns `false`. It returns `false` immediately when the bootstrapped payload already contains complete opt-in metadata. This loading getter is primarily relevant to bootstrapped clients because normal initialization already exposes loading through the client's state.
+For a bootstrapped client, the first `getOptInFlags()` or `getIsLoadingOptInFlags()` call starts one flags refresh. The list call returns the currently available list synchronously, and the loading getter returns `true` until the refresh succeeds or fails. Normal initialization already exposes loading through the client's state.
 
 Listen for `optInFlagsLoadingUpdated` to update UI when this loading state changes. `flagsUpdated` is emitted when a successful refresh updates the list.
 
@@ -333,7 +333,7 @@ The `bootstrappedState` object contains:
 
 If you want live flag updates to continue working after bootstrapping, use a recent `@reflag/node-sdk` so `getFlagsForBootstrap()` includes `flagStateVersion`.
 
-The bootstrap payload is available synchronously for the initial render. If the application requests opt-in flags and the bootstrap payload does not include browser opt-in metadata, the browser SDK performs one evaluated-flags refresh on demand. Bootstrapped applications that do not use opt-in data do not make this request. If the refresh fails, the bootstrapped flags remain in use.
+If a bootstrapped application requests opt-in flags, the browser SDK performs one flags refresh. Applications that do not request opt-in data do not make this request.
 
 If you previously used `bootstrappedFlags`, migrate like this:
 

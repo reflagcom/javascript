@@ -127,9 +127,9 @@ export function useFlag<TKey extends FlagKey>(key: TKey): TypedFlags[TKey] {
  * Vue composable for getting opt-in-enabled flags and their loading state for
  * the current context.
  *
- * The loading state is only used with `ReflagBootstrappedProvider` when the
- * bootstrap payload does not contain browser opt-in metadata and it is fetched
- * on demand. Regular providers load opt-in metadata with the initial flags.
+ * The loading state is only used with `ReflagBootstrappedProvider` while
+ * opt-in metadata is fetched on demand. Regular providers load opt-in metadata
+ * with the initial flags.
  */
 export function useOptInFlags(): UseOptInFlagsResult {
   const client = useClient();

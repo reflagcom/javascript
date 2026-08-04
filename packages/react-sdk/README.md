@@ -602,7 +602,7 @@ function App({ bootstrapData }: AppProps) {
 > [!Note]
 > When using `ReflagBootstrappedProvider`, pass the entire object returned by `getFlagsForBootstrap()` directly as the `flags` prop. The context is extracted from `flags.context`, and `flags.flagStateVersion` is used when present.
 >
-> If bootstrap data omits opt-in metadata, `useOptInFlags()` triggers one flags refresh and returns `isLoading: true` (or suspends) until it settles. No request is made unless the hook is used.
+> With `ReflagBootstrappedProvider`, `useOptInFlags()` triggers one flags refresh and returns `isLoading: true` (or suspends) until it settles. No refresh occurs unless the hook is used.
 >
 > If you want live flag updates to continue working after bootstrapping, use a recent `@reflag/node-sdk` so `getFlagsForBootstrap()` includes `flagStateVersion`.
 >
@@ -688,8 +688,8 @@ function OptInList() {
   const { flags, isLoading } = useOptInFlags();
   const setOptIn = useSetOptIn();
 
-  // This is only true when a bootstrapped payload does not contain browser
-  // opt-in metadata and the SDK must fetch it on demand.
+  // This is only true with ReflagBootstrappedProvider while the SDK fetches
+  // opt-in metadata on first use.
   if (isLoading) {
     return <Spinner />;
   }
@@ -715,7 +715,7 @@ User and company opt-ins are managed independently. Setting `optedIn` to `false`
 
 `setOptIn` returns a promise so you can wait for the new membership state to be synchronized. It resolves after the latest flag state has been applied, the requested membership change has been confirmed, and components using `useOptInFlags()` have been notified. React schedules the resulting render normally, so it may not yet be committed when the promise resolves.
 
-`useOptInFlags()` returns `{ flags, isLoading }`. `isLoading` is only `true` when a bootstrapped payload does not contain browser opt-in metadata: the hook automatically requests it once, reports loading while that on-demand request is pending, and updates after the evaluated flags arrive. It returns to `false` after either success or failure. Bootstrapped payloads that already contain complete opt-in metadata report `false` immediately.
+`useOptInFlags()` returns `{ flags, isLoading }`. With `ReflagBootstrappedProvider`, the hook fetches opt-in metadata on first use and reports `isLoading: true` until the flags refresh succeeds or fails.
 
 With a regular `ReflagProvider`, opt-in metadata arrives as part of the normal initial flags request, so `useOptInFlags().isLoading` remains `false`. Use the general `useIsLoading()` hook or the provider's `loadingComponent` for that initial loading state.
 
@@ -731,7 +731,7 @@ import { Suspense } from "react";
 </ReflagBootstrappedProvider>;
 ```
 
-Suspense is primarily relevant when bootstrapping from a server payload that lacks browser opt-in metadata. Use `useOptInFlags({ suspense: false })` to opt out for one call when Suspense is enabled on the provider.
+Opt-in metadata Suspense is primarily relevant with `ReflagBootstrappedProvider`. Use `useOptInFlags({ suspense: false })` to opt out for one call when Suspense is enabled on the provider.
 
 ### `useTrack()`
 

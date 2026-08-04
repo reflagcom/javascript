@@ -344,13 +344,13 @@ export type InitOptions = ReflagDeprecatedContext & {
 
   /**
    * Pre-fetched evaluated state used for the initial flag state.
-   * If opt-in flags are requested and browser opt-in metadata is missing, the client refreshes it on demand.
+   * The client fetches opt-in metadata on demand when opt-in flags are requested.
    */
   bootstrappedState?: BootstrappedState;
 
   /**
    * Pre-fetched flags used for the initial flag state.
-   * If opt-in flags are requested and browser opt-in metadata is missing, the client refreshes them on demand.
+   * The client fetches opt-in metadata on demand when opt-in flags are requested.
    * @deprecated Use `bootstrappedState` instead.
    */
   bootstrappedFlags?: RawFlags;
