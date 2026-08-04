@@ -4,6 +4,15 @@ The purpose of this project is to demonstrate usage integration with the Reflag 
 
 ## Getting Started
 
+Configure both SDK keys in `.env.local`:
+
+```bash
+REFLAG_SECRET_KEY=sec_...
+REFLAG_PUBLISHABLE_KEY=pub_...
+```
+
+The example logs a warning and uses offline mode for the affected SDK if either key is missing.
+
 Run the development server:
 
 ```bash
