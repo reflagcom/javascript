@@ -57,6 +57,7 @@ function getProvider(props: Omit<Partial<ReflagProps>, "publishableKey"> = {}) {
     <ReflagProvider
       context={{ user, company, other }}
       publishableKey={publishableKey}
+      toolbar={false}
       {...props}
     />
   );
@@ -71,6 +72,7 @@ function getBootstrapProvider(
     <ReflagBootstrappedProvider
       flags={bootstrapFlags}
       publishableKey={publishableKey}
+      toolbar={false}
       {...props}
     />
   );
@@ -152,6 +154,9 @@ const server = setupServer(
       { status: 200 },
     );
   }),
+  http.post(/\/bulk$/, () => {
+    return HttpResponse.json({ success: true });
+  }),
 );
 
 beforeAll(() =>
@@ -176,7 +181,9 @@ beforeEach(() => {
 
 describe("<ReflagProvider />", () => {
   test("calls initialize", () => {
-    const initialize = vi.spyOn(ReflagClient.prototype, "initialize");
+    const initialize = vi
+      .spyOn(ReflagClient.prototype, "initialize")
+      .mockResolvedValueOnce();
 
     const provider = getProvider({
       apiBaseUrl: "https://apibaseurl.com",
