@@ -10,6 +10,7 @@ export interface HookArgs {
   stateUpdated: State;
   check: CheckEvent;
   flagsUpdated: RawFlags;
+  optInFlagsLoadingUpdated: boolean;
 
   /**
    * @deprecated Use `flagsUpdated` instead.
@@ -36,6 +37,7 @@ export class HooksManager {
     stateUpdated: ((arg0: State) => void)[];
     check: ((arg0: CheckEvent) => void)[];
     flagsUpdated: ((arg0: RawFlags) => void)[];
+    optInFlagsLoadingUpdated: ((arg0: boolean) => void)[];
     user: ((arg0: UserContext) => void)[];
     company: ((arg0: CompanyContext) => void)[];
     track: ((arg0: TrackEvent) => void)[];
@@ -43,6 +45,7 @@ export class HooksManager {
     stateUpdated: [],
     check: [],
     flagsUpdated: [],
+    optInFlagsLoadingUpdated: [],
     user: [],
     company: [],
     track: [],
@@ -75,6 +78,9 @@ export class HooksManager {
     event: THookType,
     arg: HookArgs[THookType],
   ): void {
-    this.hooks[this._adjustEvent(event)].forEach((hook) => hook(arg as any));
+    const hooks = this.hooks[this._adjustEvent(event)] as Array<
+      (value: HookArgs[THookType]) => void
+    >;
+    hooks.forEach((hook) => hook(arg));
   }
 }

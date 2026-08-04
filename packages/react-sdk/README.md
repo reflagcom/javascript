@@ -552,7 +552,7 @@ The `<ReflagProvider>` initializes the Reflag SDK, fetches flags and starts list
 - `staleTimeMs`: Maximum time (in milliseconds) that stale flags will be returned if `staleWhileRevalidate` is true and new flags cannot be fetched.
 - `offline`: Provide this option when testing or in local development environments to avoid contacting Reflag servers.
 - `loadingComponent` lets you specify an React component to be rendered instead of the children while the Reflag provider is initializing. If you want more control over loading screens, `useFlag()` and `useIsLoading` returns `isLoading` which you can use to customize the loading experience.
-- `suspense`: Set to `true` to make `useFlag()` suspend while the provider is loading. Wrap components that call `useFlag()` in React `<Suspense>` boundaries and omit `loadingComponent` if you want Suspense fallbacks to control loading UI.
+- `suspense`: Set to `true` to make `useFlag()` suspend while the provider is loading and `useOptInFlags()` suspend while required opt-in metadata is loading. Wrap components that call these hooks in React `<Suspense>` boundaries and omit `loadingComponent` if you want Suspense fallbacks to control loading UI.
 - `enableTracking`: Set to `false` to stop sending tracking events and user/company updates to Reflag. Useful when you're impersonating a user (defaults to `true`),
 - `enableLiveFlagUpdates`: Enables live flag updates over SSE. Defaults to `true` in the React SDK.
 - `apiBaseUrl`: Optional base URL for the Reflag API. This also controls the SSE origin used for live flag updates and automated feedback,
@@ -602,7 +602,7 @@ function App({ bootstrapData }: AppProps) {
 > [!Note]
 > When using `ReflagBootstrappedProvider`, pass the entire object returned by `getFlagsForBootstrap()` directly as the `flags` prop. The context is extracted from `flags.context`, and `flags.flagStateVersion` is used when present.
 >
-> The bootstrap payload is used synchronously for SSR and the initial client render. If `useOptInFlags()` is used and the bootstrap payload does not include browser opt-in metadata, the browser SDK performs one evaluated-flags refresh on demand. Applications that do not use opt-in data do not make this request. If the refresh fails, the bootstrapped flags remain in use.
+> The bootstrap payload is used synchronously for SSR and the initial client render. If `useOptInFlags()` is used and the bootstrap payload does not include browser opt-in metadata, the browser SDK performs one evaluated-flags refresh on demand. During that refresh, `useIsLoadingOptInFlags()` returns `true`, and `useOptInFlags()` suspends when Suspense is enabled. Applications that do not use opt-in data do not make this request. If the refresh fails, the bootstrapped flags remain in use and the loading state returns to `false`.
 >
 > If you want live flag updates to continue working after bootstrapping, use a recent `@reflag/node-sdk` so `getFlagsForBootstrap()` includes `flagStateVersion`.
 >
@@ -677,16 +677,31 @@ import { ReflagProvider } from "@reflag/react-sdk";
 
 You can also opt in for a single call with `useFlag("huddle", { suspense: true })`, or opt out inside a suspense-enabled provider with `{ suspense: false }`.
 
-### `useOptInFlags()` and `useSetOptIn()`
+### `useOptInFlags()`, `useIsLoadingOptInFlags()`, and `useSetOptIn()`
 
 Use these hooks to build an end-user opt-in UI for flags where opt-in is enabled in Reflag.
 
 ```tsx
-import { useOptInFlags, useSetOptIn } from "@reflag/react-sdk";
+import {
+  useIsLoadingOptInFlags,
+  useOptInFlags,
+  useSetOptIn,
+} from "@reflag/react-sdk";
 
 function OptInList() {
   const optInFlags = useOptInFlags();
+  const isLoading = useIsLoadingOptInFlags();
   const setOptIn = useSetOptIn();
+
+  // This loading check matters when a bootstrapped payload does not contain
+  // browser opt-in metadata and the SDK must fetch it on demand.
+  if (isLoading) {
+    return <Spinner />;
+  }
+
+  if (optInFlags.length === 0) {
+    return <p>No opt-in flags are available.</p>;
+  }
 
   return optInFlags.map((flag) => (
     <button
@@ -705,7 +720,21 @@ User and company opt-ins are managed independently. Setting `optedIn` to `false`
 
 `setOptIn` returns a promise so you can wait for the new membership state to be synchronized. It resolves after the latest flag state has been applied, the requested membership change has been confirmed, and components using `useOptInFlags()` have been notified. React schedules the resulting render normally, so it may not yet be committed when the promise resolves.
 
-When a bootstrapped payload does not contain browser opt-in metadata, `useOptInFlags()` automatically requests it once and updates after the evaluated flags arrive.
+When a bootstrapped payload does not contain browser opt-in metadata, `useOptInFlags()` automatically requests it once and updates after the evaluated flags arrive. `useIsLoadingOptInFlags()` is intended for this bootstrapping case: it is `true` while that on-demand request is pending and returns to `false` after either success or failure. Bootstrapped payloads that already contain complete opt-in metadata report `false` immediately.
+
+`useOptInFlags()` also supports Suspense. It respects the provider-level `suspense` option, or you can enable it for only this hook with `useOptInFlags({ suspense: true })`. While required opt-in metadata is loading, the nearest `<Suspense>` boundary renders its fallback:
+
+```tsx
+import { Suspense } from "react";
+
+<ReflagBootstrappedProvider publishableKey="..." flags={bootstrapData} suspense>
+  <Suspense fallback={<Spinner />}>
+    <OptInList />
+  </Suspense>
+</ReflagBootstrappedProvider>;
+```
+
+Suspense is primarily relevant when bootstrapping from a server payload that lacks browser opt-in metadata. Use `useOptInFlags({ suspense: false })` to opt out for one call when Suspense is enabled on the provider.
 
 ### `useTrack()`
 

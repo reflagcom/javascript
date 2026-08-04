@@ -212,6 +212,7 @@ If a flag has end-user opt-in enabled in Reflag, you can list the opt-in options
 
 ```ts
 const optInFlags = reflagClient.getOptInFlags();
+const isLoadingOptInFlags = reflagClient.getIsLoadingOptInFlags();
 // [{ key, name, description, isEnabled, userOptedIn, companyOptedIn, isOptedIn }]
 
 await reflagClient.setOptIn("huddle", { optedIn: true });
@@ -231,7 +232,9 @@ User and company opt-ins are managed independently. Setting `optedIn` to `false`
 
 The `description` comes from the dedicated SDK-facing opt-in description configured in Reflag.
 
-When the client was bootstrapped without browser opt-in metadata, the first `getOptInFlags()` call starts one evaluated-flags refresh. The call returns the currently available list synchronously, and `flagsUpdated` is emitted when the refreshed list is available.
+When the client was bootstrapped without browser opt-in metadata, the first `getOptInFlags()` or `getIsLoadingOptInFlags()` call starts one evaluated-flags refresh. The list call returns the currently available list synchronously. `getIsLoadingOptInFlags()` returns `true` until the refresh succeeds or fails, then returns `false`. It returns `false` immediately when the bootstrapped payload already contains complete opt-in metadata. This loading getter is primarily relevant to bootstrapped clients because normal initialization already exposes loading through the client's state.
+
+Listen for `optInFlagsLoadingUpdated` to update UI when this loading state changes. `flagsUpdated` is emitted when a successful refresh updates the list.
 
 ## Remote config
 
@@ -506,10 +509,11 @@ reflagClient.track("huddle", { voiceHuddle: true });
 
 ## Event listeners
 
-Event listeners allow for capturing various events occurring in the `ReflagClient`. This is useful to build integrations with other system or for various debugging purposes. There are 5 kinds of events:
+Event listeners allow for capturing various events occurring in the `ReflagClient`. This is useful to build integrations with other system or for various debugging purposes. The available events are:
 
 - `check`: Your code used `isEnabled` or `config` for a flag
 - `flagsUpdated`: Flags were updated. Either because they were loaded as part of initialization or because the user/company updated
+- `optInFlagsLoadingUpdated`: The opt-in flag loading state changed
 - `user`: User information updated (similar to the `identify` call used in tracking terminology)
 - `company`: Company information updated (sometimes to the `group` call used in tracking terminology)
 - `track`: Track event occurred.
