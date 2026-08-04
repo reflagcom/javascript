@@ -1,6 +1,18 @@
 import Image from "next/image";
+import { Suspense } from "react";
 
 import { Flags } from "@/components/Flags";
+
+function FlagsFallback() {
+  return (
+    <div className="border border-gray-300 p-6 rounded-xl dark:border-neutral-800 dark:bg-zinc-800/30">
+      <h3 className="text-xl mb-4">Loading Reflag flags...</h3>
+      <pre>
+        <code className="font-mono font-bold">...</code>
+      </pre>
+    </div>
+  );
+}
 
 export default async function Home() {
   return (
@@ -37,7 +49,9 @@ export default async function Home() {
         />
       </div>
 
-      <Flags />
+      <Suspense fallback={<FlagsFallback />}>
+        <Flags />
+      </Suspense>
 
       <div className="mb-32 grid text-center lg:mb-0 lg:w-full lg:max-w-5xl lg:grid-cols-4 lg:text-left">
         <a

@@ -22,6 +22,8 @@ export const Providers = ({ publishableKey, children }: Props) => {
         },
       }}
       fallbackFlags={["fallback-feature"]}
+      offline={!publishableKey}
+      suspense
     >
       {children}
     </ReflagProvider>

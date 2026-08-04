@@ -477,7 +477,9 @@ This App Router approach leverages Server Components for server-side flag fetchi
 
 ## `<ReflagClientProvider>` component
 
-The `<ReflagClientProvider>` is a lower-level component that accepts a pre-initialized `ReflagClient` instance. This is useful for advanced use cases where you need full control over client initialization or want to share a client instance across multiple parts of your application.
+The `<ReflagClientProvider>` is a lower-level component that accepts a `ReflagClient` instance. This is useful for advanced use cases where you need full control over client initialization or want to share a client instance across multiple parts of your application.
+
+In most cases you should initialize the client before rendering this provider. If you pass an idle client and enable `suspense`, a `useFlag()` call that suspends can initialize the client on demand; without Suspense, you must initialize the client yourself.
 
 ### Usage
 
@@ -509,8 +511,9 @@ function App() {
 
 The `ReflagClientProvider` accepts the following props:
 
-- `client`: A pre-initialized `ReflagClient` instance
+- `client`: A `ReflagClient` instance. Prefer passing an already-initialized client; idle clients are initialized on demand only by suspense-enabled `useFlag()` calls.
 - `loadingComponent`: Optional React component to show while the client is initializing (same as `ReflagProvider`)
+- `suspense`: Optional. Set to `true` to make `useFlag()` suspend while the client is loading
 
 > [!Note]
 > Most applications should use `ReflagProvider` or `ReflagBootstrappedProvider` instead of `ReflagClientProvider`. Only use this component when you need the advanced control it provides.
@@ -549,6 +552,7 @@ The `<ReflagProvider>` initializes the Reflag SDK, fetches flags and starts list
 - `staleTimeMs`: Maximum time (in milliseconds) that stale flags will be returned if `staleWhileRevalidate` is true and new flags cannot be fetched.
 - `offline`: Provide this option when testing or in local development environments to avoid contacting Reflag servers.
 - `loadingComponent` lets you specify an React component to be rendered instead of the children while the Reflag provider is initializing. If you want more control over loading screens, `useFlag()` and `useIsLoading` returns `isLoading` which you can use to customize the loading experience.
+- `suspense`: Set to `true` to make `useFlag()` suspend while the provider is loading. Wrap components that call `useFlag()` in React `<Suspense>` boundaries and omit `loadingComponent` if you want Suspense fallbacks to control loading UI.
 - `enableTracking`: Set to `false` to stop sending tracking events and user/company updates to Reflag. Useful when you're impersonating a user (defaults to `true`),
 - `enableLiveFlagUpdates`: Enables live flag updates over SSE. Defaults to `true` in the React SDK.
 - `apiBaseUrl`: Optional base URL for the Reflag API. This also controls the SSE origin used for live flag updates and automated feedback,
@@ -655,6 +659,23 @@ function StartHuddleButton() {
   );
 }
 ```
+
+#### Suspense loading
+
+Enable `suspense` on the provider to have `useFlag()` throw a promise while `isLoading` is true. The nearest `<Suspense>` boundary will render its fallback until flags are ready.
+
+```tsx
+import { Suspense } from "react";
+import { ReflagProvider } from "@reflag/react-sdk";
+
+<ReflagProvider publishableKey="..." context={context} suspense>
+  <Suspense fallback={<Loading />}>
+    <AppRoutes />
+  </Suspense>
+</ReflagProvider>;
+```
+
+You can also opt in for a single call with `useFlag("huddle", { suspense: true })`, or opt out inside a suspense-enabled provider with `{ suspense: false }`.
 
 ### `useOptInFlags()` and `useSetOptIn()`
 

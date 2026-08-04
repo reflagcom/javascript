@@ -164,6 +164,12 @@ export type ReflagPropsBase = {
   initialLoading?: boolean;
 
   /**
+   * Set to `true` to make `useFlag` suspend while the client is loading.
+   * Components that call `useFlag` must be wrapped in a React `<Suspense>` boundary.
+   */
+  suspense?: boolean;
+
+  /**
    * A custom logger to use for SDK logs.
    * Use this for advanced control or filtering of SDK logs.
    * If both `logger` and `debug` are provided, `logger` takes precedence.
@@ -252,9 +258,50 @@ function useReflagClient(initOptions: InitOptions & { debug?: boolean }) {
   return reflagClients.get(publishableKey)!;
 }
 
+type LoadingPromiseState = {
+  promise: Promise<void>;
+  resolve: () => void;
+};
+
+const failedInitializations = new WeakSet<ReflagClient>();
+
+function isClientLoading(client: ReflagClient) {
+  if (failedInitializations.has(client)) return false;
+
+  const state = client.getState();
+  return state === "idle" || state === "initializing";
+}
+
+function createLoadingPromise(client: ReflagClient): LoadingPromiseState {
+  let resolvePromise!: () => void;
+  let settled = false;
+  let unsubscribe: (() => void) | undefined;
+
+  const promise = new Promise<void>((resolve) => {
+    resolvePromise = resolve;
+  });
+
+  const resolve = () => {
+    if (settled) return;
+    settled = true;
+    unsubscribe?.();
+    resolvePromise();
+  };
+
+  unsubscribe = client.on("stateUpdated", (state) => {
+    if (state === "initialized" || state === "stopped") {
+      resolve();
+    }
+  });
+
+  return { promise, resolve };
+}
+
 type ProviderContextType = {
   isLoading: boolean;
   client: ReflagClient;
+  suspense: boolean;
+  getLoadingPromise: () => Promise<void>;
 };
 
 const ProviderContext = createContext<ProviderContextType | null>(null);
@@ -273,28 +320,68 @@ export function ReflagClientProvider({
   client,
   loadingComponent,
   initialLoading = true,
+  suspense = false,
   children,
 }: ReflagClientProviderProps) {
   const hasInitialized = useRef(client.getState() === "initialized");
   const [isLoading, setIsLoading] = useState(
-    hasInitialized.current ? false : initialLoading,
+    hasInitialized.current || failedInitializations.has(client)
+      ? false
+      : initialLoading,
   );
+  const loadingPromiseRef = useRef<LoadingPromiseState | null>(null);
+
+  const getLoadingPromise = () => {
+    if (!loadingPromiseRef.current) {
+      loadingPromiseRef.current = createLoadingPromise(client);
+    }
+
+    if (client.getState() === "idle") {
+      void Promise.resolve().then(() => {
+        if (client.getState() !== "idle") return;
+        return client.initialize().catch((e) => {
+          client.logger.error("failed to initialize client", e);
+          failedInitializations.add(client);
+          setLoading(false);
+        });
+      });
+    }
+
+    return loadingPromiseRef.current.promise;
+  };
+
+  const setLoading = (loading: boolean) => {
+    if (!loading) {
+      loadingPromiseRef.current?.resolve();
+      loadingPromiseRef.current = null;
+    }
+
+    setIsLoading(loading);
+  };
+
+  useEffect(() => {
+    return () => {
+      loadingPromiseRef.current?.resolve();
+      loadingPromiseRef.current = null;
+    };
+  }, []);
 
   useOnEvent(
     "stateUpdated",
     (state) => {
       if (state === "initialized") {
+        failedInitializations.delete(client);
         hasInitialized.current = true;
-        setIsLoading(false);
+        setLoading(false);
         return;
       }
 
       if (state === "initializing") {
-        setIsLoading(hasInitialized.current || initialLoading);
+        setLoading(hasInitialized.current || initialLoading);
         return;
       }
 
-      setIsLoading(false);
+      setLoading(false);
     },
     client,
   );
@@ -304,6 +391,8 @@ export function ReflagClientProvider({
       value={{
         isLoading,
         client,
+        suspense,
+        getLoadingPromise,
       }}
     >
       {isLoading && typeof loadingComponent !== "undefined"
@@ -355,6 +444,7 @@ export function ReflagProvider({
   otherContext,
   loadingComponent,
   initialLoading = true,
+  suspense,
   logger,
   debug,
   ...config
@@ -399,6 +489,7 @@ export function ReflagProvider({
       client={client}
       initialLoading={initialLoading}
       loadingComponent={loadingComponent}
+      suspense={suspense}
     >
       {children}
     </ReflagClientProvider>
@@ -425,6 +516,7 @@ export function ReflagBootstrappedProvider({
   children,
   loadingComponent,
   initialLoading = false,
+  suspense,
   logger,
   debug,
   ...config
@@ -454,6 +546,7 @@ export function ReflagBootstrappedProvider({
       client={client}
       initialLoading={initialLoading}
       loadingComponent={loadingComponent}
+      suspense={suspense}
     >
       {children}
     </ReflagClientProvider>
@@ -465,11 +558,22 @@ export type RequestFeedbackOptions = Omit<
   "flagKey" | "featureId"
 >;
 
+export type UseFlagOptions = {
+  /**
+   * Override the provider suspense setting for this `useFlag` call.
+   * When true, `useFlag` throws a promise while flags are loading.
+   */
+  suspense?: boolean;
+};
+
 /**
  * @deprecated use `useFlag` instead
  */
-export function useFeature<TKey extends FlagKey>(key: TKey) {
-  return useFlag(key);
+export function useFeature<TKey extends FlagKey>(
+  key: TKey,
+  options?: UseFlagOptions,
+) {
+  return useFlag(key, options);
 }
 
 /**
@@ -483,10 +587,13 @@ export function useFeature<TKey extends FlagKey>(key: TKey) {
  * }
  * ```
  */
-export function useFlag<TKey extends FlagKey>(key: TKey): TypedFlags[TKey] {
-  const client = useClient();
-  const isLoading = useIsLoading();
-  const [flag, setFlag] = useState(client.getFlag(key));
+export function useFlag<TKey extends FlagKey>(
+  key: TKey,
+  options: UseFlagOptions = {},
+): TypedFlags[TKey] {
+  const context = useSafeContext();
+  const { client, isLoading } = context;
+  const [flag, setFlag] = useState(() => client.getFlag(key));
 
   const track = () => client.track(key);
   const requestFeedback = (opts: RequestFeedbackOptions) =>
@@ -500,7 +607,15 @@ export function useFlag<TKey extends FlagKey>(key: TKey): TypedFlags[TKey] {
     client,
   );
 
-  if (isLoading || !flag) {
+  if (
+    isLoading &&
+    isClientLoading(client) &&
+    (options.suspense ?? context.suspense)
+  ) {
+    throw context.getLoadingPromise();
+  }
+
+  if (isLoading) {
     return {
       key,
       isLoading,
