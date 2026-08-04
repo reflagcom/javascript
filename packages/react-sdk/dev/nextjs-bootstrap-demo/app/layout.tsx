@@ -2,9 +2,10 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 
 import "./globals.css";
+import { EnvironmentWarnings } from "@/components/EnvironmentWarnings";
 import { ReflagBootstrappedProvider } from "@reflag/react-sdk";
 
-import { getServerClient, publishableKey } from "./client";
+import { getServerClient, publishableKey, secretKeyConfigured } from "./client";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -35,10 +36,13 @@ export default async function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
+        <EnvironmentWarnings
+          publishableKeyConfigured={Boolean(publishableKey)}
+          secretKeyConfigured={secretKeyConfigured}
+        />
         <ReflagBootstrappedProvider
           publishableKey={publishableKey}
           flags={flags}
-          enableLiveFlagUpdates={flags.flagStateVersion !== undefined}
           feedback={{ enableAutoFeedback: false }}
           offline={!publishableKey}
           suspense

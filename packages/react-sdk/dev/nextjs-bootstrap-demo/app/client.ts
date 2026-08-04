@@ -2,6 +2,7 @@ import { ReflagClient as ReflagNodeClient } from "@reflag/node-sdk";
 
 const secretKey = process.env.REFLAG_SECRET_KEY;
 export const publishableKey = process.env.REFLAG_PUBLISHABLE_KEY || "";
+export const secretKeyConfigured = Boolean(secretKey);
 const offline = process.env.CI === "true" || !secretKey;
 
 declare global {
