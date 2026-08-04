@@ -104,7 +104,6 @@ export function App() {
 }
 ```
 
-
 ## Suspense loading
 
 Enable `<Suspense>` support by setting the `suspense` prop on the provider and wrap components that call `useFlag` in a Suspense boundary:
@@ -122,7 +121,6 @@ import { ReflagProvider } from "@reflag/react-native-sdk";
 ```
 
 You can also override the behavior for one call with `useFlag("huddle", { suspense: true })`.
-
 
 ## Bootstrapping
 
