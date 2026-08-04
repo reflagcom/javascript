@@ -1,5 +1,11 @@
 # @reflag/browser-sdk
 
+## 1.6.1
+
+### Patch Changes
+
+- 879f8d9: Fix React and Vue opt-in flag keys to respect generated flag types, and return reliable loading state from `useOptInFlags()` while bootstrapped clients fetch opt-in metadata. React's hook also supports Suspense.
+
 ## 1.6.0
 
 ### Minor Changes
