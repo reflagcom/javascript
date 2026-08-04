@@ -259,7 +259,7 @@ You'll typically generate the `bootstrappedFlags` object on your server using th
 
 If you want live flag updates to continue working after bootstrapping, use a recent `@reflag/node-sdk` so `getFlagsForBootstrap()` includes `flagStateVersion`.
 
-The bootstrap payload is used synchronously for SSR and the initial client render. If `useOptInFlags()` is used and the bootstrap payload does not include browser opt-in metadata, the browser SDK performs one evaluated-flags refresh on demand. During that refresh, `useOptInFlags()` reports `isLoading: true`. Applications that do not use opt-in data do not make this request. If the refresh fails, the bootstrapped flags remain in use and the loading state returns to `false`.
+If bootstrap data omits opt-in metadata, `useOptInFlags()` triggers one flags refresh and reports `isLoading: true` until it settles. No request is made unless the composable is used.
 
 Here's an example using the Node.js SDK:
 

@@ -602,7 +602,7 @@ function App({ bootstrapData }: AppProps) {
 > [!Note]
 > When using `ReflagBootstrappedProvider`, pass the entire object returned by `getFlagsForBootstrap()` directly as the `flags` prop. The context is extracted from `flags.context`, and `flags.flagStateVersion` is used when present.
 >
-> The bootstrap payload is used synchronously for SSR and the initial client render. If `useOptInFlags()` is used and the bootstrap payload does not include browser opt-in metadata, the browser SDK performs one evaluated-flags refresh on demand. During that refresh, `useOptInFlags()` returns `isLoading: true`, or suspends when Suspense is enabled. Applications that do not use opt-in data do not make this request. If the refresh fails, the bootstrapped flags remain in use and the loading state returns to `false`.
+> If bootstrap data omits opt-in metadata, `useOptInFlags()` triggers one flags refresh and returns `isLoading: true` (or suspends) until it settles. No request is made unless the hook is used.
 >
 > If you want live flag updates to continue working after bootstrapping, use a recent `@reflag/node-sdk` so `getFlagsForBootstrap()` includes `flagStateVersion`.
 >
