@@ -1,5 +1,12 @@
 # @reflag/openfeature-browser-provider
 
+## 1.3.12
+
+### Patch Changes
+
+- Updated dependencies [879f8d9]
+  - @reflag/browser-sdk@1.6.1
+
 ## 1.3.11
 
 ### Patch Changes
