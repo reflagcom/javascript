@@ -4,6 +4,7 @@ export type {
   Flag,
   FlagRemoteConfig,
   InitOptions,
+  SetOptInOptions,
   ToolbarOptions,
 } from "./client";
 export { ReflagClient } from "./client";
@@ -38,7 +39,9 @@ export type {
   CheckEvent,
   FallbackFlagOverride,
   FlagOverrides,
+  OptInFlag,
   RawFlag,
+  RawFlagOptIn,
   RawFlags,
 } from "./flag/flags";
 export type { HookArgs, State, TrackEvent } from "./hooksManager";

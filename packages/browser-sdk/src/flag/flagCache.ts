@@ -1,8 +1,32 @@
 import { StorageAdapter } from "../storage";
-import { RawFlags } from "./flags";
+import { RawFlagOptIn, RawFlags } from "./flags";
 import { isValidFlagStateVersion } from "./flagStateVersion";
 
 const DEFAULT_STORAGE_KEY = "__reflag_fetched_flags";
+
+function parseOptIn(optIn: any): RawFlagOptIn | null | undefined {
+  if (typeof optIn === "undefined") return undefined;
+  if (optIn === null) return null;
+  if (!isObject(optIn)) return;
+
+  if (
+    typeof optIn.userOptedIn !== "boolean" ||
+    typeof optIn.companyOptedIn !== "boolean" ||
+    typeof optIn.isOptedIn !== "boolean" ||
+    typeof optIn.name !== "string" ||
+    !(typeof optIn.description === "string" || optIn.description === null)
+  ) {
+    return;
+  }
+
+  return {
+    userOptedIn: optIn.userOptedIn,
+    companyOptedIn: optIn.companyOptedIn,
+    isOptedIn: optIn.isOptedIn,
+    name: optIn.name,
+    description: optIn.description,
+  };
+}
 
 interface cacheEntry {
   expireAt: number;
@@ -20,6 +44,9 @@ export function parseAPIFlagsResponse(flagsInput: any): RawFlags | undefined {
   const flags: RawFlags = {};
   for (const key in flagsInput) {
     const flag = flagsInput[key];
+    if (!isObject(flag)) return;
+
+    const optIn = parseOptIn(flag.optIn);
 
     if (
       typeof flag.isEnabled !== "boolean" ||
@@ -28,7 +55,11 @@ export function parseAPIFlagsResponse(flagsInput: any): RawFlags | undefined {
       (flag.config && typeof flag.config !== "object") ||
       (flag.missingContextFields &&
         !Array.isArray(flag.missingContextFields)) ||
-      (flag.ruleEvaluationResults && !Array.isArray(flag.ruleEvaluationResults))
+      (flag.ruleEvaluationResults &&
+        !Array.isArray(flag.ruleEvaluationResults)) ||
+      (typeof flag.optInEnabled !== "undefined" &&
+        typeof flag.optInEnabled !== "boolean") ||
+      (typeof flag.optIn !== "undefined" && typeof optIn === "undefined")
     ) {
       return;
     }
@@ -40,6 +71,10 @@ export function parseAPIFlagsResponse(flagsInput: any): RawFlags | undefined {
       config: flag.config,
       missingContextFields: flag.missingContextFields,
       ruleEvaluationResults: flag.ruleEvaluationResults,
+      ...(typeof flag.optInEnabled !== "undefined" && {
+        optInEnabled: flag.optInEnabled,
+      }),
+      ...(typeof flag.optIn !== "undefined" && { optIn }),
     };
   }
 

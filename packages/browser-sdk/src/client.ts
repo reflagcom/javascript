@@ -16,6 +16,7 @@ import {
   CheckEvent,
   FallbackFlagOverride,
   FlagsClient,
+  OptInFlag,
   RawFlags,
 } from "./flag/flags";
 import { isValidFlagStateVersion } from "./flag/flagStateVersion";
@@ -342,12 +343,14 @@ export type InitOptions = ReflagDeprecatedContext & {
   toolbar?: ToolbarOptions;
 
   /**
-   * Pre-fetched evaluated state to be used instead of fetching it from the server.
+   * Pre-fetched evaluated state used for the initial flag state.
+   * If opt-in flags are requested and browser opt-in metadata is missing, the client refreshes it on demand.
    */
   bootstrappedState?: BootstrappedState;
 
   /**
-   * Pre-fetched flags to be used instead of fetching them from the server.
+   * Pre-fetched flags used for the initial flag state.
+   * If opt-in flags are requested and browser opt-in metadata is missing, the client refreshes them on demand.
    * @deprecated Use `bootstrappedState` instead.
    */
   bootstrappedFlags?: RawFlags;
@@ -419,6 +422,18 @@ export type FlagRemoteConfig =
 /**
  * Represents a flag.
  */
+export type SetOptInOptions = {
+  /**
+   * Whether the scoped subject has opted in.
+   */
+  optedIn: boolean;
+
+  /**
+   * Whether to update the current user or current company. Defaults to `user`.
+   */
+  scope?: "user" | "company";
+};
+
 export interface Flag {
   /**
    * Result of flag flag evaluation.
@@ -470,6 +485,8 @@ function shouldShowToolbar(opts: InitOptions) {
  */
 export class ReflagClient {
   private state: State = "idle";
+  private contextUpdateLoading = false;
+  private optInFlagsRequested = false;
   private readonly publishableKey: string;
   private context: ReflagContext;
   private config: Config;
@@ -670,6 +687,9 @@ export class ReflagClient {
     }
 
     await this.flagsClient.initialize();
+    if (this.optInFlagsRequested) {
+      void this.refreshOptInMetadataIfNeeded();
+    }
 
     // Open SSE after the initial flag load. The pubsub server replays the
     // latest flag-update message, including `flagStateVersion`, so
@@ -933,12 +953,13 @@ export class ReflagClient {
 
     const shouldTrackLoading = this.state === "initialized";
     if (shouldTrackLoading) {
+      this.contextUpdateLoading = true;
       this.setState("initializing");
     }
 
     const didApply = await this.flagsClient.setContext(this.context);
-    if (didApply && this.state === "initializing") {
-      this.setState("initialized");
+    if (didApply) {
+      this.finishContextUpdate();
     }
   }
 
@@ -985,11 +1006,19 @@ export class ReflagClient {
     this.flagsClient.setContextWithoutFetch(newContext);
 
     if (!shouldIgnoreIncomingFlags) {
+      this.flagsClient.resetOptInMetadataRefresh();
       this.flagsClient.setFetchedFlags(
         bootstrappedState.flags,
         triggerEvent,
         incomingFlagStateVersion,
       );
+      if (this.optInFlagsRequested) {
+        void this.refreshOptInMetadataIfNeeded();
+      }
+    }
+
+    if (contextChanged) {
+      this.finishContextUpdate();
     }
 
     if (!contextChanged) {
@@ -1193,6 +1222,160 @@ export class ReflagClient {
   }
 
   /**
+   * Returns opt-in-enabled flags for the current context.
+   */
+  getOptInFlags(): OptInFlag[] {
+    this.optInFlagsRequested = true;
+    if (this.state === "initialized") {
+      void this.refreshOptInMetadataIfNeeded();
+    }
+
+    return Object.values(this.getFlags()).flatMap((flag) => {
+      if (flag.optInEnabled !== true || !flag.optIn) return [];
+
+      return {
+        key: flag.key,
+        name: flag.optIn.name,
+        description: flag.optIn.description,
+        isEnabled: flag.isEnabledOverride ?? flag.isEnabled,
+        userOptedIn: flag.optIn.userOptedIn,
+        companyOptedIn: flag.optIn.companyOptedIn,
+        isOptedIn: flag.optIn.isOptedIn,
+      } satisfies OptInFlag;
+    });
+  }
+
+  /**
+   * Set whether the current user or company has opted into a flag.
+   */
+  async setOptIn(
+    flagKey: string,
+    options: SetOptInOptions,
+  ): Promise<Response | undefined> {
+    if (this.config.offline) {
+      return;
+    }
+
+    if (typeof flagKey !== "string" || !flagKey) {
+      this.logger.error("`setOptIn` call ignored. No `flagKey` provided");
+      return;
+    }
+
+    if (!options || typeof options.optedIn !== "boolean") {
+      this.logger.error("`setOptIn` call ignored. `optedIn` must be a boolean");
+      return;
+    }
+
+    const scope = options.scope ?? "user";
+    if (scope !== "user" && scope !== "company") {
+      this.logger.error(
+        '`setOptIn` call ignored. `scope` must be "user" or "company"',
+      );
+      return;
+    }
+
+    const scopedContext = this.context[scope];
+    if (!scopedContext?.id) {
+      this.logger.error(
+        `\`setOptIn\` call ignored. No \`${scope}\` context provided`,
+      );
+      return;
+    }
+
+    const failConfirmation = (message: string): never => {
+      const error = new Error(message);
+      this.logger.error("set opt-in confirmation failed", error);
+      throw error;
+    };
+
+    const scopedContextId = String(scopedContext.id);
+    const assertScopedContextUnchanged = () => {
+      const currentScopedContext = this.context[scope];
+      if (
+        currentScopedContext?.id &&
+        String(currentScopedContext.id) === scopedContextId
+      ) {
+        return;
+      }
+
+      failConfirmation(
+        `Opt-in changed remotely, but the ${scope} context changed before the updated state could be confirmed`,
+      );
+    };
+
+    const context = {
+      user: this.context.user
+        ? { ...this.context.user, id: String(this.context.user.id) }
+        : undefined,
+      company: this.context.company
+        ? { ...this.context.company, id: String(this.context.company.id) }
+        : undefined,
+      other: this.context.other,
+    };
+
+    const res = await this.httpClient.post({
+      path: "/flags/opt-in",
+      body: {
+        key: flagKey,
+        optedIn: options.optedIn,
+        scope,
+        context,
+      },
+    });
+
+    if (!res.ok) {
+      await logResponseError({
+        logger: this.logger,
+        res,
+        message: "set opt-in request failed",
+        extra: { flagKey, optedIn: options.optedIn, scope },
+      });
+      return res;
+    }
+
+    let flagStateVersion: number;
+    try {
+      const body = await res.clone().json();
+      if (!isValidFlagStateVersion(body?.flagStateVersion)) {
+        throw new Error("Response did not include a valid flag state version");
+      }
+      flagStateVersion = body.flagStateVersion;
+    } catch (error) {
+      this.logger.error(
+        "set opt-in succeeded but its flag state version could not be read",
+        error,
+      );
+      throw error;
+    }
+
+    assertScopedContextUnchanged();
+    const refreshedFlags =
+      await this.flagsClient.refreshFlags(flagStateVersion);
+    assertScopedContextUnchanged();
+    if (!refreshedFlags) {
+      failConfirmation(
+        "Opt-in changed remotely, but the updated flag state could not be confirmed",
+      );
+    }
+
+    const refreshedOptIn = this.flagsClient.getFetchedFlags()[flagKey]?.optIn;
+    const scopedOptIn =
+      scope === "user"
+        ? refreshedOptIn?.userOptedIn
+        : refreshedOptIn?.companyOptedIn;
+    const isConfirmed = options.optedIn
+      ? scopedOptIn === true
+      : scopedOptIn !== true;
+    if (!isConfirmed) {
+      failConfirmation(
+        `Opt-in changed remotely, but the updated ${scope} membership was not reflected in the SDK`,
+      );
+    }
+
+    return res;
+  }
+
+  /**
    * @deprecated Use `getFlag` instead.
    */
   getFeature(flagKey: string) {
@@ -1280,6 +1463,23 @@ export class ReflagClient {
       reflagClient: this,
       position,
     });
+  }
+
+  private async refreshOptInMetadataIfNeeded() {
+    try {
+      await this.flagsClient.refreshOptInMetadataIfNeeded();
+    } catch (error) {
+      this.logger.error("error refreshing opt-in flag metadata", error);
+    }
+  }
+
+  private finishContextUpdate() {
+    if (!this.contextUpdateLoading) return;
+
+    this.contextUpdateLoading = false;
+    if (this.state === "initializing") {
+      this.setState("initialized");
+    }
   }
 
   private setState(state: State) {

@@ -9,7 +9,9 @@ export {
   useFlag,
   useIsLoading,
   useOnEvent,
+  useOptInFlags,
   useRequestFeedback,
+  useSetOptIn,
   useSendFeedback,
   useTrack,
   useUpdateCompany,
@@ -33,6 +35,8 @@ export type {
 export type {
   CheckEvent,
   CompanyContext,
+  OptInFlag,
+  SetOptInOptions,
   TrackEvent,
   UserContext,
 } from "@reflag/browser-sdk";

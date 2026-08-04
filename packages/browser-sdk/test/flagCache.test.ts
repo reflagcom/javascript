@@ -8,7 +8,11 @@ import {
   vitest,
 } from "vitest";
 
-import { CacheResult, FlagCache } from "../src/flag/flagCache";
+import {
+  CacheResult,
+  FlagCache,
+  parseAPIFlagsResponse,
+} from "../src/flag/flagCache";
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -41,6 +45,12 @@ export function newCache(): {
     cacheItem,
   };
 }
+
+describe("parseAPIFlagsResponse", () => {
+  test("rejects malformed flag entries without throwing", () => {
+    expect(parseAPIFlagsResponse({ flagA: null })).toBeUndefined();
+  });
+});
 
 describe("cache", () => {
   const flags = {

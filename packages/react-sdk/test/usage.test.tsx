@@ -27,7 +27,9 @@ import {
   useFlag,
   useIsLoading,
   useOnEvent,
+  useOptInFlags,
   useRequestFeedback,
+  useSetOptIn,
   useSendFeedback,
   useTrack,
   useUpdateCompany,
@@ -886,6 +888,173 @@ describe("useFlag with ReflagBootstrappedProvider", () => {
 
   // Removed test "returns loading state when no flags are bootstrapped"
   // because ReflagBootstrappedProvider requires flags to be provided
+});
+
+describe("opt-in hooks", () => {
+  test("useOptInFlags returns and updates opt-in flags", async () => {
+    const bootstrapFlags: BootstrappedFlags = {
+      context: { user, company, other },
+      flags: {
+        optInFlag: {
+          key: "optInFlag",
+          isEnabled: false,
+          targetingVersion: 1,
+          optInEnabled: true,
+          optIn: {
+            userOptedIn: false,
+            companyOptedIn: false,
+            isOptedIn: false,
+            name: "Opt-in flag",
+            description: "Try it early",
+          },
+        },
+        notOptInFlag: {
+          key: "notOptInFlag",
+          isEnabled: true,
+          targetingVersion: 2,
+          optInEnabled: false,
+          optIn: null,
+        },
+      },
+    };
+
+    const { result, unmount } = renderHook(
+      () => ({ client: useClient(), optInFlags: useOptInFlags() }),
+      {
+        wrapper: ({ children }) =>
+          getBootstrapProvider(bootstrapFlags, { children }),
+      },
+    );
+
+    await waitFor(() => {
+      expect(result.current.optInFlags).toEqual([
+        {
+          key: "optInFlag",
+          name: "Opt-in flag",
+          description: "Try it early",
+          isEnabled: false,
+          userOptedIn: false,
+          companyOptedIn: false,
+          isOptedIn: false,
+        },
+      ]);
+    });
+
+    act(() => {
+      result.current.client.updateFlags({
+        optInFlag: {
+          key: "optInFlag",
+          isEnabled: true,
+          targetingVersion: 2,
+          optInEnabled: true,
+          optIn: {
+            userOptedIn: true,
+            companyOptedIn: false,
+            isOptedIn: true,
+            name: "Opt-in flag",
+            description: "Try it early",
+          },
+        },
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.optInFlags).toEqual([
+        {
+          key: "optInFlag",
+          name: "Opt-in flag",
+          description: "Try it early",
+          isEnabled: true,
+          userOptedIn: true,
+          companyOptedIn: false,
+          isOptedIn: true,
+        },
+      ]);
+    });
+
+    unmount();
+  });
+
+  test("useOptInFlags refreshes missing metadata after bootstrap", async () => {
+    let evaluatedRequests = 0;
+    server.use(
+      http.get(/\/features\/evaluated$/, () => {
+        evaluatedRequests += 1;
+        return HttpResponse.json({
+          success: true,
+          flagStateVersion: 2,
+          features: {
+            optInFlag: {
+              key: "optInFlag",
+              isEnabled: false,
+              targetingVersion: 1,
+              optInEnabled: true,
+              optIn: {
+                userOptedIn: false,
+                companyOptedIn: false,
+                isOptedIn: false,
+                name: "Opt-in flag",
+                description: "Try it early",
+              },
+            },
+          },
+        });
+      }),
+    );
+
+    const bootstrapFlags: BootstrappedFlags = {
+      context: { user, company, other },
+      flagStateVersion: 1,
+      flags: {
+        optInFlag: {
+          key: "optInFlag",
+          isEnabled: false,
+          targetingVersion: 1,
+        },
+      },
+    };
+
+    const { result, unmount } = renderHook(() => useOptInFlags(), {
+      wrapper: ({ children }) =>
+        getBootstrapProvider(bootstrapFlags, { children }),
+    });
+
+    await waitFor(() => expect(evaluatedRequests).toBe(1));
+    await waitFor(() => {
+      expect(result.current).toEqual([
+        {
+          key: "optInFlag",
+          name: "Opt-in flag",
+          description: "Try it early",
+          isEnabled: false,
+          userOptedIn: false,
+          companyOptedIn: false,
+          isOptedIn: false,
+        },
+      ]);
+    });
+    expect(evaluatedRequests).toBe(1);
+
+    unmount();
+  });
+
+  test("useSetOptIn delegates to the browser client", async () => {
+    const setOptIn = vi
+      .spyOn(ReflagClient.prototype, "setOptIn")
+      .mockResolvedValue(undefined);
+
+    const { result, unmount } = renderHook(() => useSetOptIn(), {
+      wrapper: ({ children }) => getProvider({ children }),
+    });
+
+    await act(async () => {
+      await result.current("abc", { optedIn: false });
+    });
+
+    expect(setOptIn).toHaveBeenCalledWith("abc", { optedIn: false });
+    setOptIn.mockRestore();
+    unmount();
+  });
 });
 
 describe("<ReflagClientProvider />", () => {

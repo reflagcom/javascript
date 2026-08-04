@@ -18,11 +18,13 @@ import {
   HookArgs,
   InitOptions,
   Logger,
+  OptInFlag,
   RawFlag,
   RawFlags as BrowserRawFlags,
   ReflagClient,
   ReflagContext,
   RequestFeedbackData,
+  SetOptInOptions,
   StorageAdapter,
   TrackEvent,
   UnassignedFeedback,
@@ -37,6 +39,8 @@ const useIsomorphicLayoutEffect =
 export type {
   CheckEvent,
   CompanyContext,
+  OptInFlag,
+  SetOptInOptions,
   StorageAdapter,
   TrackEvent,
   UserContext,
@@ -407,7 +411,8 @@ export function ReflagProvider({
 export type ReflagBootstrappedProps = ReflagPropsBase &
   ReflagInitOptionsBase & {
     /**
-     * Pre-fetched flags to be used instead of fetching them from the server.
+     * Pre-fetched flags used for the initial render. If opt-in flags are requested and
+     * browser opt-in metadata is missing, the browser client refreshes them on demand.
      */
     flags: BootstrappedFlags;
   };
@@ -521,6 +526,33 @@ export function useFlag<TKey extends FlagKey>(key: TKey): TypedFlags[TKey] {
       return flag.config as TypedFlags[TKey]["config"];
     },
   };
+}
+
+/**
+ * Returns opt-in-enabled flags for the current context.
+ */
+export function useOptInFlags(): OptInFlag[] {
+  const client = useClient();
+  const [optInFlags, setOptInFlags] = useState(client.getOptInFlags());
+
+  useOnEvent(
+    "flagsUpdated",
+    () => {
+      setOptInFlags(client.getOptInFlags());
+    },
+    client,
+  );
+
+  return optInFlags;
+}
+
+/**
+ * Returns a function to set whether the current user or company has opted into a flag.
+ */
+export function useSetOptIn() {
+  const client = useClient();
+  return (key: FlagKey, options: SetOptInOptions) =>
+    client.setOptIn(String(key), options);
 }
 
 /**
