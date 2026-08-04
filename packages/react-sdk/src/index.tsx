@@ -640,7 +640,7 @@ export type UseOptInFlagsResult = {
   flags: OptInFlag[];
 
   /**
-   * Whether initial flags or required opt-in metadata are loading.
+   * Whether opt-in metadata missing from a bootstrapped payload is loading.
    */
   isLoading: boolean;
 };
@@ -725,10 +725,11 @@ export function useFlag<TKey extends FlagKey>(
 /**
  * Returns opt-in-enabled flags and their loading state for the current context.
  *
- * The loading state is primarily useful with `ReflagBootstrappedProvider` when
- * the bootstrap payload does not contain browser opt-in metadata and it is
- * fetched on demand. When suspense is enabled for the provider or this hook,
- * it suspends instead of returning a loading result.
+ * The loading state is only used with `ReflagBootstrappedProvider` when the
+ * bootstrap payload does not contain browser opt-in metadata and it is fetched
+ * on demand. Regular providers load opt-in metadata with the initial flags.
+ * When suspense is enabled for the provider or this hook, it suspends instead
+ * of returning a loading result.
  */
 export function useOptInFlags(
   options: UseOptInFlagsOptions = {},
@@ -737,7 +738,8 @@ export function useOptInFlags(
   const { client } = context;
   const getOptInFlags = () => client.getOptInFlags() as OptInFlag[];
   const [flags, setFlags] = useState(getOptInFlags);
-  const [isLoading, setIsLoading] = useState(() =>
+  const isBootstrapped = client.getConfig().bootstrapped;
+  const [isOptInFlagsLoading, setIsOptInFlagsLoading] = useState(() =>
     client.getIsLoadingOptInFlags(),
   );
 
@@ -748,13 +750,19 @@ export function useOptInFlags(
     },
     client,
   );
-  useOnEvent("optInFlagsLoadingUpdated", setIsLoading, client);
+  useOnEvent("optInFlagsLoadingUpdated", setIsOptInFlagsLoading, client);
 
   useIsomorphicLayoutEffect(() => {
-    setIsLoading(client.getIsLoadingOptInFlags());
+    setIsOptInFlagsLoading(client.getIsLoadingOptInFlags());
   }, [client]);
 
-  if (isLoading && (options.suspense ?? context.suspense)) {
+  const suspense = options.suspense ?? context.suspense;
+  if (suspense && context.isLoading && isClientLoading(client)) {
+    throw context.getLoadingPromise();
+  }
+
+  const isLoading = isBootstrapped && isOptInFlagsLoading;
+  if (suspense && isLoading) {
     throw getOptInFlagsLoadingPromise(client);
   }
 

@@ -1078,6 +1078,125 @@ describe("useFlag with ReflagBootstrappedProvider", () => {
 });
 
 describe("opt-in hooks", () => {
+  test("uses the normal provider loading state for the initial flags request", async () => {
+    let resolveResponse!: (response: HttpResponse) => void;
+    const response = new Promise<HttpResponse>((resolve) => {
+      resolveResponse = resolve;
+    });
+    const requestStarted = vi.fn();
+    server.use(
+      http.get(/\/features\/evaluated$/, () => {
+        requestStarted();
+        return response;
+      }),
+    );
+
+    const { result, unmount } = renderHook(
+      () => ({
+        isLoading: useIsLoading(),
+        optInState: useOptInFlags(),
+      }),
+      {
+        wrapper: ({ children }) => getProvider({ children }),
+      },
+    );
+
+    expect(result.current.isLoading).toBe(true);
+    expect(result.current.optInState).toEqual({
+      flags: [],
+      isLoading: false,
+    });
+    await waitFor(() => expect(requestStarted).toHaveBeenCalledOnce());
+
+    resolveResponse(
+      HttpResponse.json({
+        success: true,
+        features: {
+          optInFlag: {
+            key: "optInFlag",
+            isEnabled: false,
+            targetingVersion: 1,
+            optInEnabled: true,
+            optIn: {
+              userOptedIn: false,
+              companyOptedIn: false,
+              isOptedIn: false,
+              name: "Opt-in flag",
+              description: null,
+            },
+          },
+        },
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+      expect(result.current.optInState).toEqual({
+        flags: [expect.objectContaining({ key: "optInFlag" })],
+        isLoading: false,
+      });
+    });
+    unmount();
+  });
+
+  test("suspends with a regular provider during the initial flags request", async () => {
+    let resolveResponse!: (response: HttpResponse) => void;
+    const response = new Promise<HttpResponse>((resolve) => {
+      resolveResponse = resolve;
+    });
+    const requestStarted = vi.fn();
+    server.use(
+      http.get(/\/features\/evaluated$/, () => {
+        requestStarted();
+        return response;
+      }),
+    );
+
+    function OptInList() {
+      const { flags } = useOptInFlags();
+      return <span data-testid="regular-opt-in-count">{flags.length}</span>;
+    }
+
+    const { getByTestId, queryByTestId, unmount } = render(
+      <React.Suspense
+        fallback={<span data-testid="regular-opt-in-loading">Loading</span>}
+      >
+        {getProvider({ suspense: true, children: <OptInList /> })}
+      </React.Suspense>,
+    );
+
+    expect(getByTestId("regular-opt-in-loading").textContent).toBe("Loading");
+    expect(queryByTestId("regular-opt-in-count")).toBeNull();
+    await waitFor(() => expect(requestStarted).toHaveBeenCalledOnce());
+
+    resolveResponse(
+      HttpResponse.json({
+        success: true,
+        features: {
+          optInFlag: {
+            key: "optInFlag",
+            isEnabled: false,
+            targetingVersion: 1,
+            optInEnabled: true,
+            optIn: {
+              userOptedIn: false,
+              companyOptedIn: false,
+              isOptedIn: false,
+              name: "Opt-in flag",
+              description: null,
+            },
+          },
+        },
+      }),
+    );
+
+    await waitFor(() => {
+      expect(getByTestId("regular-opt-in-count").textContent).toBe("1");
+    });
+    expect(queryByTestId("regular-opt-in-loading")).toBeNull();
+    unmount();
+  });
+
   test("complete bootstrapped metadata is not loading", () => {
     const bootstrapFlags: BootstrappedFlags = {
       context: { user, company, other },
@@ -1209,6 +1328,49 @@ describe("opt-in hooks", () => {
     unmount();
   });
 
+  test("stops suspending when a bootstrapped metadata refresh fails", async () => {
+    server.use(
+      http.get(/\/features\/evaluated$/, () =>
+        HttpResponse.json({ success: false }, { status: 500 }),
+      ),
+    );
+
+    const bootstrapFlags: BootstrappedFlags = {
+      context: { user, company, other },
+      flags: {
+        optInFlag: {
+          key: "optInFlag",
+          isEnabled: false,
+          targetingVersion: 1,
+        },
+      },
+    };
+
+    function OptInList() {
+      const { flags } = useOptInFlags();
+      return <span data-testid="failed-opt-in-count">{flags.length}</span>;
+    }
+
+    const { getByTestId, queryByTestId, unmount } = render(
+      <React.Suspense
+        fallback={<span data-testid="failed-opt-in-loading">Loading</span>}
+      >
+        {getBootstrapProvider(bootstrapFlags, {
+          suspense: true,
+          children: <OptInList />,
+        })}
+      </React.Suspense>,
+    );
+
+    expect(getByTestId("failed-opt-in-loading").textContent).toBe("Loading");
+
+    await waitFor(() => {
+      expect(getByTestId("failed-opt-in-count").textContent).toBe("0");
+    });
+    expect(queryByTestId("failed-opt-in-loading")).toBeNull();
+    unmount();
+  });
+
   test("useOptInFlags suspends for missing bootstrapped metadata", async () => {
     let resolveResponse!: (response: HttpResponse) => void;
     const response = new Promise<HttpResponse>((resolve) => {
@@ -1279,6 +1441,74 @@ describe("opt-in hooks", () => {
     });
     expect(queryByTestId("opt-in-loading")).toBeNull();
     expect(requestStarted).toHaveBeenCalledOnce();
+    unmount();
+  });
+
+  test("can opt out of provider Suspense for opt-in metadata", async () => {
+    let resolveResponse!: (response: HttpResponse) => void;
+    const response = new Promise<HttpResponse>((resolve) => {
+      resolveResponse = resolve;
+    });
+    server.use(http.get(/\/features\/evaluated$/, () => response));
+
+    const bootstrapFlags: BootstrappedFlags = {
+      context: { user, company, other },
+      flags: {
+        optInFlag: {
+          key: "optInFlag",
+          isEnabled: false,
+          targetingVersion: 1,
+        },
+      },
+    };
+
+    function OptInList() {
+      const { flags, isLoading } = useOptInFlags({ suspense: false });
+      return (
+        <span data-testid="opt-in-state">
+          {String(isLoading)}:{flags.length}
+        </span>
+      );
+    }
+
+    const { getByTestId, queryByTestId, unmount } = render(
+      <React.Suspense
+        fallback={<span data-testid="opt-in-loading">Loading opt-ins</span>}
+      >
+        {getBootstrapProvider(bootstrapFlags, {
+          suspense: true,
+          children: <OptInList />,
+        })}
+      </React.Suspense>,
+    );
+
+    expect(queryByTestId("opt-in-loading")).toBeNull();
+    expect(getByTestId("opt-in-state").textContent).toBe("true:0");
+
+    resolveResponse(
+      HttpResponse.json({
+        success: true,
+        features: {
+          optInFlag: {
+            key: "optInFlag",
+            isEnabled: false,
+            targetingVersion: 1,
+            optInEnabled: true,
+            optIn: {
+              userOptedIn: false,
+              companyOptedIn: false,
+              isOptedIn: false,
+              name: "Opt-in flag",
+              description: null,
+            },
+          },
+        },
+      }),
+    );
+
+    await waitFor(() => {
+      expect(getByTestId("opt-in-state").textContent).toBe("false:1");
+    });
     unmount();
   });
 

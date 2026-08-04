@@ -688,8 +688,8 @@ function OptInList() {
   const { flags, isLoading } = useOptInFlags();
   const setOptIn = useSetOptIn();
 
-  // This loading check matters when a bootstrapped payload does not contain
-  // browser opt-in metadata and the SDK must fetch it on demand.
+  // This is only true when a bootstrapped payload does not contain browser
+  // opt-in metadata and the SDK must fetch it on demand.
   if (isLoading) {
     return <Spinner />;
   }
@@ -715,7 +715,9 @@ User and company opt-ins are managed independently. Setting `optedIn` to `false`
 
 `setOptIn` returns a promise so you can wait for the new membership state to be synchronized. It resolves after the latest flag state has been applied, the requested membership change has been confirmed, and components using `useOptInFlags()` have been notified. React schedules the resulting render normally, so it may not yet be committed when the promise resolves.
 
-`useOptInFlags()` returns `{ flags, isLoading }`. The loading state is primarily useful when a bootstrapped payload does not contain browser opt-in metadata: the hook automatically requests it once, returns `isLoading: true` while that on-demand request is pending, and updates after the evaluated flags arrive. It returns to `false` after either success or failure. Bootstrapped payloads that already contain complete opt-in metadata report `false` immediately. With a regular `ReflagProvider`, the general `useIsLoading()` hook also covers the initial flags request.
+`useOptInFlags()` returns `{ flags, isLoading }`. `isLoading` is only `true` when a bootstrapped payload does not contain browser opt-in metadata: the hook automatically requests it once, reports loading while that on-demand request is pending, and updates after the evaluated flags arrive. It returns to `false` after either success or failure. Bootstrapped payloads that already contain complete opt-in metadata report `false` immediately.
+
+With a regular `ReflagProvider`, opt-in metadata arrives as part of the normal initial flags request, so `useOptInFlags().isLoading` remains `false`. Use the general `useIsLoading()` hook or the provider's `loadingComponent` for that initial loading state.
 
 `useOptInFlags()` also supports Suspense. It respects the provider-level `suspense` option, or you can enable it for only this hook with `useOptInFlags({ suspense: true })`. While required opt-in metadata is loading, the nearest `<Suspense>` boundary renders its fallback:
 
