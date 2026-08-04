@@ -22,6 +22,7 @@ export type {
   BootstrappedFlags,
   EmptyFlagRemoteConfig,
   Flag,
+  FlagKey,
   Flags,
   FlagType,
   OptInFlag,
