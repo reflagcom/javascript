@@ -104,6 +104,24 @@ export function App() {
 }
 ```
 
+## Suspense loading
+
+Enable `<Suspense>` support by setting the `suspense` prop on the provider and wrap components that call `useFlag` in a Suspense boundary:
+
+```tsx
+import { Suspense } from "react";
+import { ActivityIndicator } from "react-native";
+import { ReflagProvider } from "@reflag/react-native-sdk";
+
+<ReflagProvider publishableKey="{YOUR_PUBLISHABLE_KEY}" suspense>
+  <Suspense fallback={<ActivityIndicator />}>
+    <App />
+  </Suspense>
+</ReflagProvider>;
+```
+
+You can also override the behavior for one call with `useFlag("huddle", { suspense: true })`.
+
 ## Bootstrapping
 
 You can use `<ReflagBootstrappedProvider>` in React Native when you already have pre-fetched flags and want to avoid an initial fetch.
