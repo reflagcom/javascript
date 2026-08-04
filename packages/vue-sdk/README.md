@@ -212,7 +212,7 @@ If you want more control over loading screens, `useIsLoading()` returns a `Ref<b
 
 ## `<ReflagBootstrappedProvider>` component
 
-The `<ReflagBootstrappedProvider>` component is a specialized version of `ReflagProvider` designed for server-side rendering and preloaded flag scenarios. Instead of fetching flags on initialization, it uses pre-fetched flags, resulting in faster initial page loads and better SSR compatibility.
+The `<ReflagBootstrappedProvider>` component is a specialized version of `ReflagProvider` designed for server-side rendering and preloaded flag scenarios. It uses pre-fetched flags for the initial render, resulting in faster initial page loads and better SSR compatibility.
 
 ### Usage
 
@@ -259,6 +259,8 @@ You'll typically generate the `bootstrappedFlags` object on your server using th
 
 If you want live flag updates to continue working after bootstrapping, use a recent `@reflag/node-sdk` so `getFlagsForBootstrap()` includes `flagStateVersion`.
 
+The bootstrap payload is used synchronously for SSR and the initial client render. If `useOptInFlags()` is used and the bootstrap payload does not include browser opt-in metadata, the browser SDK performs one evaluated-flags refresh on demand. Applications that do not use opt-in data do not make this request. If the refresh fails, the bootstrapped flags remain in use.
+
 Here's an example using the Node.js SDK:
 
 ```js
@@ -291,7 +293,7 @@ const bootstrappedFlags = client.getFlagsForBootstrap(context);
 If the `flags` prop is not provided or is undefined, the provider will not initialize the client and will render in a non-loading state.
 
 > [!NOTE]
-> After bootstrapping, any live flag updates are fetched directly by the browser SDK from Reflag using the browser-visible context. If your bootstrapped snapshot depends on server-only or secret context that is not available in the browser, later live refreshes may differ. In that case, keep `enableLiveFlagUpdates` disabled.
+> The on-demand browser refresh and any later live flag updates use the browser-visible context. If your bootstrapped snapshot depends on server-only or secret context that is not available in the browser, refreshed flags may differ. In that case, keep `enableLiveFlagUpdates` disabled.
 
 ## `<ReflagClientProvider>` component
 
@@ -390,6 +392,37 @@ const { isEnabled, track, requestFeedback, config } = useFlag("huddles");
 ```
 
 See the reference docs for details.
+
+### `useOptInFlags()` and `useSetOptIn()`
+
+Use these composables to build an end-user opt-in UI for flags where opt-in is enabled in Reflag.
+
+```vue
+<script setup lang="ts">
+import { useOptInFlags, useSetOptIn } from "@reflag/vue-sdk";
+
+const optInFlags = useOptInFlags();
+const setOptIn = useSetOptIn();
+</script>
+
+<template>
+  <button
+    v-for="flag in optInFlags"
+    :key="flag.key"
+    @click="setOptIn(flag.key, { optedIn: !flag.userOptedIn })"
+  >
+    {{ flag.userOptedIn ? "Cancel opt-in" : `Try ${flag.name}` }}
+  </button>
+</template>
+```
+
+By default, `useSetOptIn()` changes the opt-in for the current user, so the current context must include a `user.id`. To manage the current company's opt-in instead, pass `scope: "company"`; the context must then include a `company.id`.
+
+User and company opt-ins are managed independently. Setting `optedIn` to `false` removes the opt-in only for the selected scope. For example, cancelling a user's opt-in does not change the company's opt-in for the same flag.
+
+`setOptIn` returns a promise so you can wait for the new membership state to be synchronized. It resolves after the latest flag state has been applied, the requested membership change has been confirmed, and components using `useOptInFlags()` have been notified. Vue schedules the resulting render normally, so it may not yet be committed when the promise resolves.
+
+When a bootstrapped payload does not contain browser opt-in metadata, `useOptInFlags()` automatically requests it once and updates after the evaluated flags arrive.
 
 ### `useTrack()`
 

@@ -16,6 +16,45 @@ import { isValidFlagStateVersion } from "./flagStateVersion";
 
 const INITIAL_FETCH_RETRY_DELAYS_MS = [0, 5000];
 
+export type RawFlagOptIn = {
+  /**
+   * Whether the current user has opted into the flag.
+   */
+  userOptedIn: boolean;
+
+  /**
+   * Whether the current company has opted into the flag.
+   */
+  companyOptedIn: boolean;
+
+  /**
+   * Whether either the current user or company has opted into the flag.
+   */
+  isOptedIn: boolean;
+
+  /**
+   * Display name of the opt-in flag.
+   */
+  name: string;
+
+  /**
+   * SDK-facing opt-in description.
+   */
+  description: string | null;
+};
+
+export type OptInFlag = RawFlagOptIn & {
+  /**
+   * Flag key.
+   */
+  key: string;
+
+  /**
+   * Result of flag evaluation.
+   */
+  isEnabled: boolean;
+};
+
 /**
  * A flag fetched from the server.
  */
@@ -50,6 +89,16 @@ export type RawFlag = {
    * Missing context fields.
    */
   missingContextFields?: string[];
+
+  /**
+   * Whether end-user opt-in is enabled for this flag.
+   */
+  optInEnabled?: boolean;
+
+  /**
+   * Opt-in metadata for this flag and the current context.
+   */
+  optIn?: RawFlagOptIn | null;
 
   /**
    * Optional user-defined dynamic configuration.
@@ -199,7 +248,7 @@ export interface CheckEvent {
 }
 
 const storageOverridesKey = `__reflag_overrides`;
-const REFRESH_LIMIT_COUNT = 10;
+const REFRESH_LIMIT_COUNT = 20;
 const REFRESH_LIMIT_WINDOW_MS = 60 * 1000;
 
 export type FlagOverrides = Record<string, boolean | undefined>;
@@ -232,10 +281,12 @@ export class FlagsClient {
   private cache: FlagCache;
   private fetchedFlags: RawFlags = {};
   private fetchedFlagStateVersion: number | undefined;
+  private fetchedFlagsContextVersion = 0;
   private flagOverrides: FlagOverrides = {};
   private flags: RawFlags = {};
   private fallbackFlags: FallbackFlags = {};
   private contextFetchVersion = 0;
+  private optInMetadataRefreshAttemptContextVersion: number | undefined;
   private storage: StorageAdapter;
   private refreshEvents: number[] = [];
   private enqueueBulkEvent?: (event: BulkEvent) => Promise<void>;
@@ -298,7 +349,12 @@ export class FlagsClient {
     }
 
     if (!this.bootstrapped) {
-      this.applyFetchedFlagsResult(await this.maybeFetchFlags());
+      const requestContextVersion = this.contextFetchVersion;
+      this.applyFetchedFlagsResult(
+        await this.maybeFetchFlags(requestContextVersion),
+        true,
+        requestContextVersion,
+      );
     }
 
     // Apply overrides and trigger update if flags have changed
@@ -320,7 +376,36 @@ export class FlagsClient {
     return this.fetchedFlags;
   }
 
+  resetOptInMetadataRefresh() {
+    this.optInMetadataRefreshAttemptContextVersion = undefined;
+  }
+
+  async refreshOptInMetadataIfNeeded() {
+    if (!this.bootstrapped) return;
+
+    const fetchedFlags = Object.values(this.fetchedFlags);
+    const hasOptInMetadata =
+      fetchedFlags.length > 0 &&
+      fetchedFlags.every(
+        (flag) =>
+          flag.optInEnabled === false ||
+          (flag.optInEnabled === true && flag.optIn !== undefined),
+      );
+    if (hasOptInMetadata) return;
+
+    const contextVersion = this.contextFetchVersion;
+    if (this.optInMetadataRefreshAttemptContextVersion === contextVersion) {
+      return;
+    }
+
+    this.optInMetadataRefreshAttemptContextVersion = contextVersion;
+    return this.refreshFlags(this.fetchedFlagStateVersion);
+  }
+
   setContextWithoutFetch(context: ReflagContext) {
+    if (!deepEqual(this.context, context)) {
+      this.contextFetchVersion += 1;
+    }
     this.context = context;
   }
 
@@ -332,31 +417,67 @@ export class FlagsClient {
     // Create a new fetched flags object making sure to clone the flags
     this.fetchedFlags = { ...fetchedFlags };
     this.fetchedFlagStateVersion = flagStateVersion;
+    this.fetchedFlagsContextVersion = this.contextFetchVersion;
     this.warnMissingFlagContextFields(fetchedFlags);
     this.updateFlags(triggerEvent);
+  }
+
+  private shouldApplyFetchedFlagsResult(
+    flagStateVersion: number | undefined,
+    requestContextVersion: number,
+  ) {
+    if (requestContextVersion !== this.contextFetchVersion) {
+      return false;
+    }
+
+    // A result for the current context must replace flags that still belong to
+    // the previous context, even when the result is unversioned.
+    if (this.fetchedFlagsContextVersion !== requestContextVersion) {
+      return true;
+    }
+
+    if (flagStateVersion === undefined) {
+      return this.fetchedFlagStateVersion === undefined;
+    }
+
+    return (
+      this.fetchedFlagStateVersion === undefined ||
+      flagStateVersion >= this.fetchedFlagStateVersion
+    );
   }
 
   private applyFetchedFlagsResult(
     result: FetchedFlagsResult | undefined,
     triggerEvent = true,
+    requestContextVersion = this.contextFetchVersion,
   ) {
+    if (
+      !this.shouldApplyFetchedFlagsResult(
+        result?.flagStateVersion,
+        requestContextVersion,
+      )
+    ) {
+      return false;
+    }
+
     this.setFetchedFlags(
       result?.flags ?? {},
       triggerEvent,
       result?.flagStateVersion,
     );
+    return true;
   }
 
   async setContext(context: ReflagContext) {
     this.context = context;
     const requestVersion = ++this.contextFetchVersion;
-    const fetchedFlags = await this.maybeFetchFlags();
+    const fetchedFlags = await this.maybeFetchFlags(requestVersion);
 
     if (requestVersion !== this.contextFetchVersion) {
       return false;
     }
 
-    this.applyFetchedFlagsResult(fetchedFlags);
+    this.applyFetchedFlagsResult(fetchedFlags, true, requestVersion);
     return true;
   }
 
@@ -567,12 +688,14 @@ export class FlagsClient {
     }
     this.refreshEvents.push(now);
 
+    const requestContextVersion = this.contextFetchVersion;
     const result = await this.fetchFlags(waitForVersion);
-    if (result) {
-      this.setFetchedFlags(result.flags, true, result.flagStateVersion);
-      return result.flags;
+    if (!result || requestContextVersion !== this.contextFetchVersion) {
+      return;
     }
-    return;
+
+    this.applyFetchedFlagsResult(result, true, requestContextVersion);
+    return { ...this.fetchedFlags };
   }
 
   private async setOverridesCache(overrides: FlagOverrides) {
@@ -601,7 +724,9 @@ export class FlagsClient {
     }
   }
 
-  private async maybeFetchFlags(): Promise<FetchedFlagsResult | undefined> {
+  private async maybeFetchFlags(
+    requestContextVersion = this.contextFetchVersion,
+  ): Promise<FetchedFlagsResult | undefined> {
     if (this.config.offline) {
       return;
     }
@@ -623,7 +748,7 @@ export class FlagsClient {
               flags: result.flags,
               flagStateVersion: result.flagStateVersion,
             });
-            this.setFetchedFlags(result.flags, true, result.flagStateVersion);
+            this.applyFetchedFlagsResult(result, true, requestContextVersion);
           })
           .catch(() => {
             // we don't care about the result, we just want to re-fetch

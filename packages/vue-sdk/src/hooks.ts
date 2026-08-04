@@ -10,8 +10,10 @@ import {
 import {
   HookArgs,
   InitOptions,
+  OptInFlag,
   ReflagClient,
   RequestFeedbackData,
+  SetOptInOptions,
   UnassignedFeedback,
 } from "@reflag/browser-sdk";
 
@@ -118,6 +120,35 @@ export function useFlag<TKey extends FlagKey>(key: TKey): TypedFlags[TKey] {
     track,
     requestFeedback,
   } as TypedFlags[TKey];
+}
+
+/**
+ * Vue composable for getting opt-in-enabled flags for the current context.
+ */
+export function useOptInFlags() {
+  const client = useClient();
+  const optInFlags = ref<OptInFlag[]>(client.getOptInFlags());
+
+  const updateOptInFlags = () => {
+    optInFlags.value = client.getOptInFlags();
+  };
+
+  onMounted(() => {
+    updateOptInFlags();
+  });
+
+  useOnEvent("flagsUpdated", updateOptInFlags, client);
+
+  return computed(() => optInFlags.value);
+}
+
+/**
+ * Vue composable for setting whether the current user or company has opted into a flag.
+ */
+export function useSetOptIn() {
+  const client = useClient();
+  return (key: FlagKey, options: SetOptInOptions) =>
+    client.setOptIn(String(key), options);
 }
 
 /**

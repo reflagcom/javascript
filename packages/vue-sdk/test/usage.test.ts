@@ -9,6 +9,8 @@ import {
   ReflagProvider,
   useClient,
   useFlag,
+  useOptInFlags,
+  useSetOptIn,
 } from "../src";
 
 // Mock ReflagClient prototype methods like the React SDK tests
@@ -24,6 +26,8 @@ beforeAll(() => {
     isEnabledOverride: null,
   });
   vi.spyOn(ReflagClient.prototype, "getFlags").mockReturnValue({});
+  vi.spyOn(ReflagClient.prototype, "getOptInFlags").mockReturnValue([]);
+  vi.spyOn(ReflagClient.prototype, "setOptIn").mockResolvedValue(undefined);
   vi.spyOn(ReflagClient.prototype, "on").mockReturnValue(() => {
     // cleanup function
   });
@@ -81,6 +85,71 @@ describe("ReflagProvider", () => {
     expect(
       (wrapper.findComponent(Child).vm.client as any)["enableLiveFlagUpdates"],
     ).toBe(true);
+  });
+
+  test("useOptInFlags returns opt-in flags and subscribes to updates", async () => {
+    const optInFlags = [
+      {
+        key: "optInFlag",
+        name: "Opt-in flag",
+        description: "Try it early",
+        isEnabled: false,
+        userOptedIn: false,
+        companyOptedIn: false,
+        isOptedIn: false,
+      },
+    ];
+    vi.mocked(ReflagClient.prototype.getOptInFlags).mockReturnValue(optInFlags);
+
+    const Child = defineComponent({
+      setup() {
+        const flags = useOptInFlags();
+        return { flags };
+      },
+      template: "<div></div>",
+    });
+
+    const wrapper = mount(ReflagProvider, {
+      props: {
+        publishableKey: "key-opt-in-flags",
+      },
+      slots: { default: () => h(Child) },
+    });
+
+    await nextTick();
+    expect(wrapper.findComponent(Child).vm.flags).toEqual(optInFlags);
+    expect(ReflagClient.prototype.on).toHaveBeenCalledWith(
+      "flagsUpdated",
+      expect.any(Function),
+    );
+  });
+
+  test("useSetOptIn delegates to the browser client", async () => {
+    const Child = defineComponent({
+      setup() {
+        const setOptIn = useSetOptIn();
+        return { setOptIn };
+      },
+      template: "<div></div>",
+    });
+
+    const wrapper = mount(ReflagProvider, {
+      props: {
+        publishableKey: "key-set-opt-in",
+      },
+      slots: { default: () => h(Child) },
+    });
+
+    await nextTick();
+    await wrapper.findComponent(Child).vm.setOptIn("optInFlag", {
+      optedIn: false,
+      scope: "company",
+    });
+
+    expect(ReflagClient.prototype.setOptIn).toHaveBeenCalledWith("optInFlag", {
+      optedIn: false,
+      scope: "company",
+    });
   });
 
   test("allows disabling live flag updates explicitly", async () => {
