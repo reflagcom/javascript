@@ -51,6 +51,15 @@ describe("HookManager", () => {
     expect(callback).toHaveBeenCalledWith(flags);
   });
 
+  it("should add and trigger `optInFlagsLoadingUpdated` hooks", () => {
+    const callback = vi.fn();
+    hookManager.addHook("optInFlagsLoadingUpdated", callback);
+
+    hookManager.trigger("optInFlagsLoadingUpdated", true);
+
+    expect(callback).toHaveBeenCalledWith(true);
+  });
+
   it("should add and trigger `track` hooks", () => {
     const callback = vi.fn();
     const user: UserContext = { id: "user-id", name: "user-name" };

@@ -18,7 +18,7 @@ import {
   HookArgs,
   InitOptions,
   Logger,
-  OptInFlag,
+  OptInFlag as BrowserOptInFlag,
   RawFlag,
   RawFlags as BrowserRawFlags,
   ReflagClient,
@@ -39,7 +39,6 @@ const useIsomorphicLayoutEffect =
 export type {
   CheckEvent,
   CompanyContext,
-  OptInFlag,
   SetOptInOptions,
   StorageAdapter,
   TrackEvent,
@@ -133,6 +132,13 @@ export type TypedFlags = keyof Flags extends never
 export type FlagKey = keyof TypedFlags;
 
 /**
+ * An opt-in-enabled flag for the generated React SDK flag definitions.
+ */
+export type OptInFlag = Omit<BrowserOptInFlag, "key"> & {
+  key: FlagKey;
+};
+
+/**
  * Describes a collection of evaluated raw flags.
  */
 export type RawFlags = Record<FlagKey, RawFlag>;
@@ -164,8 +170,9 @@ export type ReflagPropsBase = {
   initialLoading?: boolean;
 
   /**
-   * Set to `true` to make `useFlag` suspend while the client is loading.
-   * Components that call `useFlag` must be wrapped in a React `<Suspense>` boundary.
+   * Set to `true` to make `useFlag` and `useOptInFlags` suspend while their
+   * required flag data is loading. Components that call either hook must be
+   * wrapped in a React `<Suspense>` boundary.
    */
   suspense?: boolean;
 
@@ -202,6 +209,10 @@ export type ReflagInitOptionsBase = Omit<
  * @internal
  */
 const reflagClients = new Map<string, ReflagClient>();
+const reflagClientBootstrappedStates = new WeakMap<
+  ReflagClient,
+  BrowserBootstrappedState
+>();
 
 function contextPartEqual(
   a?: Record<string, string | number | undefined>,
@@ -250,6 +261,12 @@ function useReflagClient(initOptions: InitOptions & { debug?: boolean }) {
       logger: logger ?? (debug ? console : undefined),
       sdkVersion: sdkVersion ?? SDK_VERSION,
     });
+    if (clientOptions.bootstrappedState) {
+      reflagClientBootstrappedStates.set(
+        client,
+        clientOptions.bootstrappedState,
+      );
+    }
     if (!isServer) {
       reflagClients.set(publishableKey, client);
     }
@@ -295,6 +312,45 @@ function createLoadingPromise(client: ReflagClient): LoadingPromiseState {
   });
 
   return { promise, resolve };
+}
+
+const optInFlagsLoadingPromises = new WeakMap<ReflagClient, Promise<void>>();
+
+function getOptInFlagsLoadingPromise(client: ReflagClient) {
+  const existingPromise = optInFlagsLoadingPromises.get(client);
+  if (existingPromise) return existingPromise;
+
+  let unsubscribe: (() => void) | undefined;
+  const promise = new Promise<void>((resolve) => {
+    const finish = () => {
+      unsubscribe?.();
+      resolve();
+    };
+
+    unsubscribe = client.on("optInFlagsLoadingUpdated", (isLoading) => {
+      if (!isLoading) finish();
+    });
+
+    if (!client.getIsLoadingOptInFlags()) finish();
+  });
+
+  optInFlagsLoadingPromises.set(client, promise);
+  void promise.then(() => {
+    if (optInFlagsLoadingPromises.get(client) === promise) {
+      optInFlagsLoadingPromises.delete(client);
+    }
+  });
+
+  if (client.getState() === "idle") {
+    void Promise.resolve().then(() => {
+      if (client.getState() !== "idle") return;
+      return client.initialize().catch((error) => {
+        client.logger.error("failed to initialize client", error);
+      });
+    });
+  }
+
+  return promise;
 }
 
 type ProviderContextType = {
@@ -502,8 +558,8 @@ export function ReflagProvider({
 export type ReflagBootstrappedProps = ReflagPropsBase &
   ReflagInitOptionsBase & {
     /**
-     * Pre-fetched flags used for the initial render. If opt-in flags are requested and
-     * browser opt-in metadata is missing, the browser client refreshes them on demand.
+     * Pre-fetched flags used for the initial render. The browser client fetches opt-in
+     * metadata on demand when opt-in flags are requested.
      */
     flags: BootstrappedFlags;
   };
@@ -538,6 +594,9 @@ export function ReflagBootstrappedProvider({
 
   // Update the bootstrapped state if it changes on the client side
   useEffect(() => {
+    if (reflagClientBootstrappedStates.get(client) === flags) return;
+
+    reflagClientBootstrappedStates.set(client, flags);
     client.applyBootstrappedState(flags);
   }, [client, flags]);
 
@@ -564,6 +623,26 @@ export type UseFlagOptions = {
    * When true, `useFlag` throws a promise while flags are loading.
    */
   suspense?: boolean;
+};
+
+export type UseOptInFlagsOptions = {
+  /**
+   * Override the provider suspense setting for this `useOptInFlags` call.
+   * When true, `useOptInFlags` throws a promise while opt-in flags are loading.
+   */
+  suspense?: boolean;
+};
+
+export type UseOptInFlagsResult = {
+  /**
+   * Opt-in-enabled flags for the current context.
+   */
+  flags: OptInFlag[];
+
+  /**
+   * Whether a bootstrapped provider is fetching opt-in metadata.
+   */
+  isLoading: boolean;
 };
 
 /**
@@ -644,21 +723,50 @@ export function useFlag<TKey extends FlagKey>(
 }
 
 /**
- * Returns opt-in-enabled flags for the current context.
+ * Returns opt-in-enabled flags and their loading state for the current context.
+ *
+ * The loading state is only used with `ReflagBootstrappedProvider` while
+ * opt-in metadata is fetched on demand. Regular providers load opt-in metadata
+ * with the initial flags.
+ * When suspense is enabled for the provider or this hook, it suspends instead
+ * of returning a loading result.
  */
-export function useOptInFlags(): OptInFlag[] {
-  const client = useClient();
-  const [optInFlags, setOptInFlags] = useState(client.getOptInFlags());
+export function useOptInFlags(
+  options: UseOptInFlagsOptions = {},
+): UseOptInFlagsResult {
+  const context = useSafeContext();
+  const { client } = context;
+  const getOptInFlags = () => client.getOptInFlags() as OptInFlag[];
+  const [flags, setFlags] = useState(getOptInFlags);
+  const isBootstrapped = client.getConfig().bootstrapped;
+  const [isOptInFlagsLoading, setIsOptInFlagsLoading] = useState(() =>
+    client.getIsLoadingOptInFlags(),
+  );
 
   useOnEvent(
     "flagsUpdated",
     () => {
-      setOptInFlags(client.getOptInFlags());
+      setFlags(getOptInFlags());
     },
     client,
   );
+  useOnEvent("optInFlagsLoadingUpdated", setIsOptInFlagsLoading, client);
 
-  return optInFlags;
+  useIsomorphicLayoutEffect(() => {
+    setIsOptInFlagsLoading(client.getIsLoadingOptInFlags());
+  }, [client]);
+
+  const suspense = options.suspense ?? context.suspense;
+  if (suspense && context.isLoading && isClientLoading(client)) {
+    throw context.getLoadingPromise();
+  }
+
+  const isLoading = isBootstrapped && isOptInFlagsLoading;
+  if (suspense && isLoading) {
+    throw getOptInFlagsLoadingPromise(client);
+  }
+
+  return { flags, isLoading };
 }
 
 /**

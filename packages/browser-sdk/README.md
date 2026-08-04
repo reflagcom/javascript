@@ -212,6 +212,7 @@ If a flag has end-user opt-in enabled in Reflag, you can list the opt-in options
 
 ```ts
 const optInFlags = reflagClient.getOptInFlags();
+const isLoadingOptInFlags = reflagClient.getIsLoadingOptInFlags();
 // [{ key, name, description, isEnabled, userOptedIn, companyOptedIn, isOptedIn }]
 
 await reflagClient.setOptIn("huddle", { optedIn: true });
@@ -231,7 +232,9 @@ User and company opt-ins are managed independently. Setting `optedIn` to `false`
 
 The `description` comes from the dedicated SDK-facing opt-in description configured in Reflag.
 
-When the client was bootstrapped without browser opt-in metadata, the first `getOptInFlags()` call starts one evaluated-flags refresh. The call returns the currently available list synchronously, and `flagsUpdated` is emitted when the refreshed list is available.
+For a bootstrapped client, the first `getOptInFlags()` or `getIsLoadingOptInFlags()` call starts one flags refresh. The list call returns the currently available list synchronously, and the loading getter returns `true` until the refresh succeeds or fails. Normal initialization already exposes loading through the client's state.
+
+Listen for `optInFlagsLoadingUpdated` to update UI when this loading state changes. `flagsUpdated` is emitted when a successful refresh updates the list.
 
 ## Remote config
 
@@ -330,7 +333,7 @@ The `bootstrappedState` object contains:
 
 If you want live flag updates to continue working after bootstrapping, use a recent `@reflag/node-sdk` so `getFlagsForBootstrap()` includes `flagStateVersion`.
 
-The bootstrap payload is available synchronously for the initial render. If the application requests opt-in flags and the bootstrap payload does not include browser opt-in metadata, the browser SDK performs one evaluated-flags refresh on demand. Bootstrapped applications that do not use opt-in data do not make this request. If the refresh fails, the bootstrapped flags remain in use.
+If a bootstrapped application requests opt-in flags, the browser SDK performs one flags refresh. Applications that do not request opt-in data do not make this request.
 
 If you previously used `bootstrappedFlags`, migrate like this:
 
@@ -506,10 +509,11 @@ reflagClient.track("huddle", { voiceHuddle: true });
 
 ## Event listeners
 
-Event listeners allow for capturing various events occurring in the `ReflagClient`. This is useful to build integrations with other system or for various debugging purposes. There are 5 kinds of events:
+Event listeners allow for capturing various events occurring in the `ReflagClient`. This is useful to build integrations with other system or for various debugging purposes. The available events are:
 
 - `check`: Your code used `isEnabled` or `config` for a flag
 - `flagsUpdated`: Flags were updated. Either because they were loaded as part of initialization or because the user/company updated
+- `optInFlagsLoadingUpdated`: The opt-in flag loading state changed
 - `user`: User information updated (similar to the `identify` call used in tracking terminology)
 - `company`: Company information updated (sometimes to the `group` call used in tracking terminology)
 - `track`: Track event occurred.

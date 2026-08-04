@@ -356,6 +356,230 @@ describe("ReflagClient", () => {
       expect(httpClientGet).toHaveBeenCalledTimes(1);
     });
 
+    it("reports opt-in flags as loading during the initial flag fetch", async () => {
+      client = new ReflagClient({
+        publishableKey: "test-key-initial-opt-in-loading",
+        user: { id: "user1" },
+        enableTracking: false,
+      });
+
+      expect(client.getIsLoadingOptInFlags()).toBe(true);
+      await client.initialize();
+      expect(client.getIsLoadingOptInFlags()).toBe(false);
+    });
+
+    it("reports complete bootstrapped opt-in metadata as ready immediately", async () => {
+      client = new ReflagClient({
+        publishableKey: "test-key-complete-bootstrap-opt-in-metadata",
+        user: { id: "user1" },
+        enableTracking: false,
+        bootstrappedFlags: optInFlags(false),
+      });
+
+      expect(client.getIsLoadingOptInFlags()).toBe(false);
+      await client.initialize();
+      expect(client.getIsLoadingOptInFlags()).toBe(false);
+      expect(httpClientGet).not.toHaveBeenCalled();
+    });
+
+    it("reports missing bootstrapped opt-in metadata as loading until refresh succeeds", async () => {
+      const response = deferred<HttpResponse>();
+      server.use(
+        http.get(
+          "https://front.reflag.com/features/evaluated",
+          () => response.promise,
+        ),
+      );
+
+      client = new ReflagClient({
+        publishableKey: "test-key-loading-bootstrap-opt-in-metadata",
+        user: { id: "user1" },
+        enableTracking: false,
+        bootstrappedFlags: {
+          optInFlag: {
+            key: "optInFlag",
+            isEnabled: false,
+            targetingVersion: 1,
+          },
+        },
+      });
+      const loadingUpdated = vi.fn();
+      client.on("optInFlagsLoadingUpdated", loadingUpdated);
+
+      await client.initialize();
+      expect(client.getIsLoadingOptInFlags()).toBe(true);
+      await vi.waitFor(() => expect(httpClientGet).toHaveBeenCalledTimes(1));
+
+      response.resolve(optInEvaluationResponse(2, false));
+
+      await vi.waitFor(() => {
+        expect(client.getIsLoadingOptInFlags()).toBe(false);
+      });
+      expect(client.getOptInFlags()).toHaveLength(1);
+      expect(loadingUpdated).toHaveBeenCalledWith(true);
+      expect(loadingUpdated).toHaveBeenLastCalledWith(false);
+    });
+
+    it("stops loading opt-in flags when the metadata refresh fails", async () => {
+      server.use(
+        http.get("https://front.reflag.com/features/evaluated", () =>
+          HttpResponse.json({ success: false }, { status: 500 }),
+        ),
+      );
+
+      client = new ReflagClient({
+        publishableKey: "test-key-failed-bootstrap-opt-in-metadata",
+        user: { id: "user1" },
+        enableTracking: false,
+        bootstrappedFlags: {
+          optInFlag: {
+            key: "optInFlag",
+            isEnabled: false,
+            targetingVersion: 1,
+          },
+        },
+      });
+
+      await client.initialize();
+      expect(client.getIsLoadingOptInFlags()).toBe(true);
+
+      await vi.waitFor(() => {
+        expect(client.getIsLoadingOptInFlags()).toBe(false);
+      });
+      expect(httpClientGet).toHaveBeenCalledTimes(1);
+      expect(client.getOptInFlags()).toEqual([]);
+    });
+
+    it("keeps opt-in loading tied to the newest context fetch", async () => {
+      const previousContextResponse = deferred<HttpResponse>();
+      const currentContextResponse = deferred<HttpResponse>();
+      const previousContextSettled = vi.fn();
+
+      server.use(
+        http.get(
+          "https://front.reflag.com/features/evaluated",
+          ({ request }) => {
+            const userId = new URL(request.url).searchParams.get(
+              "context.user.id",
+            );
+            if (userId === "user1") {
+              return previousContextResponse.promise.then((response) => {
+                previousContextSettled();
+                return response;
+              });
+            }
+            return currentContextResponse.promise;
+          },
+        ),
+      );
+
+      client = new ReflagClient({
+        publishableKey: "test-key-opt-in-loading-context-race",
+        user: { id: "user1" },
+        enableTracking: false,
+        bootstrappedFlags: {
+          optInFlag: {
+            key: "optInFlag",
+            isEnabled: false,
+            targetingVersion: 1,
+          },
+        },
+      });
+      await client.initialize();
+
+      expect(client.getIsLoadingOptInFlags()).toBe(true);
+      await vi.waitFor(() => expect(httpClientGet).toHaveBeenCalledTimes(1));
+
+      const contextUpdate = client.setContext({ user: { id: "user2" } });
+      await vi.waitFor(() => expect(httpClientGet).toHaveBeenCalledTimes(2));
+
+      previousContextResponse.resolve(optInEvaluationResponse(2, false));
+      await vi.waitFor(() => expect(previousContextSettled).toHaveBeenCalled());
+      expect(client.getIsLoadingOptInFlags()).toBe(true);
+
+      currentContextResponse.resolve(optInEvaluationResponse(3, true));
+      await contextUpdate;
+
+      expect(client.getIsLoadingOptInFlags()).toBe(false);
+      expect(client.getContext().user?.id).toBe("user2");
+      expect(client.getOptInFlags()[0]).toMatchObject({
+        userOptedIn: true,
+      });
+    });
+
+    it("uses newly applied bootstrapped metadata and ignores a stale refresh", async () => {
+      const staleResponse = deferred<HttpResponse>();
+      const staleResponseSettled = vi.fn();
+      server.use(
+        http.get("https://front.reflag.com/features/evaluated", () =>
+          staleResponse.promise.then((response) => {
+            staleResponseSettled();
+            return response;
+          }),
+        ),
+      );
+
+      client = new ReflagClient({
+        publishableKey: "test-key-applied-bootstrap-opt-in-metadata",
+        user: { id: "user1" },
+        enableTracking: false,
+        bootstrappedFlags: {
+          optInFlag: {
+            key: "optInFlag",
+            isEnabled: false,
+            targetingVersion: 1,
+          },
+        },
+      });
+      await client.initialize();
+
+      expect(client.getIsLoadingOptInFlags()).toBe(true);
+      await vi.waitFor(() => expect(httpClientGet).toHaveBeenCalledTimes(1));
+
+      client.applyBootstrappedState({
+        context: { user: { id: "user2" } },
+        flags: optInFlags(true, 3),
+        flagStateVersion: 3,
+      });
+
+      expect(client.getIsLoadingOptInFlags()).toBe(false);
+      expect(client.getOptInFlags()[0]).toMatchObject({
+        userOptedIn: true,
+      });
+
+      staleResponse.resolve(optInEvaluationResponse(2, false));
+      await vi.waitFor(() => expect(staleResponseSettled).toHaveBeenCalled());
+      await vi.waitFor(() =>
+        expect(client["flagsClient"]["optInMetadataRefresh"]).toBeUndefined(),
+      );
+
+      expect(client.getIsLoadingOptInFlags()).toBe(false);
+      expect(client.getOptInFlags()[0]).toMatchObject({
+        userOptedIn: true,
+      });
+    });
+
+    it("does not leave missing opt-in metadata loading while offline", async () => {
+      client = new ReflagClient({
+        publishableKey: "test-key-offline-bootstrap-opt-in-metadata",
+        user: { id: "user1" },
+        enableTracking: false,
+        offline: true,
+        bootstrappedFlags: {
+          optInFlag: {
+            key: "optInFlag",
+            isEnabled: false,
+            targetingVersion: 1,
+          },
+        },
+      });
+
+      expect(client.getIsLoadingOptInFlags()).toBe(true);
+      await client.initialize();
+      expect(client.getIsLoadingOptInFlags()).toBe(false);
+      expect(httpClientGet).not.toHaveBeenCalled();
+    });
+
     it("waits for the bootstrapped flag state version when refreshing opt-in metadata", async () => {
       let requestedWaitForVersion: string | null = null;
       server.use(

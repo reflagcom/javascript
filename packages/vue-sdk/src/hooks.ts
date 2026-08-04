@@ -10,7 +10,6 @@ import {
 import {
   HookArgs,
   InitOptions,
-  OptInFlag,
   ReflagClient,
   RequestFeedbackData,
   SetOptInOptions,
@@ -19,9 +18,11 @@ import {
 
 import {
   FlagKey,
+  OptInFlag,
   ProviderContextType,
   RequestFlagFeedbackOptions,
   TypedFlags,
+  UseOptInFlagsResult,
 } from "./types";
 import { SDK_VERSION } from "./version";
 
@@ -123,23 +124,38 @@ export function useFlag<TKey extends FlagKey>(key: TKey): TypedFlags[TKey] {
 }
 
 /**
- * Vue composable for getting opt-in-enabled flags for the current context.
+ * Vue composable for getting opt-in-enabled flags and their loading state for
+ * the current context.
+ *
+ * The loading state is only used with `ReflagBootstrappedProvider` while
+ * opt-in metadata is fetched on demand. Regular providers load opt-in metadata
+ * with the initial flags.
  */
-export function useOptInFlags() {
+export function useOptInFlags(): UseOptInFlagsResult {
   const client = useClient();
-  const optInFlags = ref<OptInFlag[]>(client.getOptInFlags());
+  const isBootstrapped = client.getConfig().bootstrapped;
+  const optInFlags = ref<OptInFlag[]>(client.getOptInFlags() as OptInFlag[]);
+  const isOptInFlagsLoading = ref(client.getIsLoadingOptInFlags());
 
   const updateOptInFlags = () => {
-    optInFlags.value = client.getOptInFlags();
+    optInFlags.value = client.getOptInFlags() as OptInFlag[];
   };
+  const updateIsLoading = (isLoading = client.getIsLoadingOptInFlags()) => {
+    isOptInFlagsLoading.value = isLoading;
+  };
+
+  useOnEvent("flagsUpdated", updateOptInFlags, client);
+  useOnEvent("optInFlagsLoadingUpdated", updateIsLoading, client);
 
   onMounted(() => {
     updateOptInFlags();
+    updateIsLoading();
   });
 
-  useOnEvent("flagsUpdated", updateOptInFlags, client);
-
-  return computed(() => optInFlags.value);
+  return {
+    flags: computed(() => optInFlags.value),
+    isLoading: computed(() => isBootstrapped && isOptInFlagsLoading.value),
+  };
 }
 
 /**

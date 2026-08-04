@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "noEmit": true,
+    "paths": {
+      "@reflag/react-sdk": ["./src/index.tsx"]
+    }
+  },
+  "include": ["src", "test/opt-in-types.tsx"]
+}

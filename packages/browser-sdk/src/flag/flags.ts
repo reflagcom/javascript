@@ -274,6 +274,7 @@ type FlagsClientOptions = Partial<Config> & {
 export class FlagsClient {
   private initialized = false;
   private bootstrapped = false;
+  private initializationComplete = false;
 
   private rateLimiter: RateLimiter;
   private readonly logger: Logger;
@@ -286,7 +287,17 @@ export class FlagsClient {
   private flags: RawFlags = {};
   private fallbackFlags: FallbackFlags = {};
   private contextFetchVersion = 0;
+  private optInFlagsRequested = false;
+  private optInFlagsLoading = false;
+  private optInFlagsLoadingGeneration = 0;
   private optInMetadataRefreshAttemptContextVersion: number | undefined;
+  private optInMetadataRefresh:
+    | {
+        contextVersion: number;
+        id: object;
+        promise: Promise<void>;
+      }
+    | undefined;
   private storage: StorageAdapter;
   private refreshEvents: number[] = [];
   private enqueueBulkEvent?: (event: BulkEvent) => Promise<void>;
@@ -343,28 +354,43 @@ export class FlagsClient {
     }
     this.initialized = true;
 
-    const cachedOverrides = await this.getOverridesCache();
-    if (Object.keys(cachedOverrides).length > 0) {
-      this.flagOverrides = { ...cachedOverrides, ...this.flagOverrides };
-    }
+    let initializationSucceeded = false;
+    try {
+      const cachedOverrides = await this.getOverridesCache();
+      if (Object.keys(cachedOverrides).length > 0) {
+        this.flagOverrides = { ...cachedOverrides, ...this.flagOverrides };
+      }
 
-    if (!this.bootstrapped) {
-      const requestContextVersion = this.contextFetchVersion;
-      this.applyFetchedFlagsResult(
-        await this.maybeFetchFlags(requestContextVersion),
-        true,
-        requestContextVersion,
-      );
-    }
+      if (!this.bootstrapped) {
+        const requestContextVersion = this.contextFetchVersion;
+        this.applyFetchedFlagsResult(
+          await this.maybeFetchFlags(requestContextVersion),
+          true,
+          requestContextVersion,
+        );
+      }
 
-    // Apply overrides and trigger update if flags have changed
-    this.updateFlags();
+      // Apply overrides and trigger update if flags have changed
+      this.updateFlags();
+      initializationSucceeded = true;
+    } finally {
+      this.initializationComplete = true;
+
+      if (this.optInFlagsRequested) {
+        if (initializationSucceeded && this.bootstrapped) {
+          void this.refreshOptInMetadataIfNeeded();
+        } else {
+          this.finishOptInFlagsLoading(this.optInFlagsLoadingGeneration);
+        }
+      }
+    }
   }
 
   /**
    * Stop the client.
    */
   public stop() {
+    this.supersedeOptInFlagsLoading(false);
     this.abortController.abort();
   }
 
@@ -376,35 +402,117 @@ export class FlagsClient {
     return this.fetchedFlags;
   }
 
+  requestOptInFlags() {
+    this.optInFlagsRequested = true;
+
+    if (
+      !this.initializationComplete ||
+      this.fetchedFlagsContextVersion !== this.contextFetchVersion
+    ) {
+      if (!this.bootstrapped || !this.hasOptInMetadataForCurrentContext()) {
+        this.ensureOptInFlagsLoading();
+      }
+      return;
+    }
+
+    if (!this.bootstrapped) {
+      this.finishOptInFlagsLoading(this.optInFlagsLoadingGeneration);
+      return;
+    }
+
+    void this.refreshOptInMetadataIfNeeded();
+  }
+
+  getIsLoadingOptInFlags() {
+    return this.optInFlagsLoading;
+  }
+
+  onOptInFlagsLoadingUpdated(callback: (isLoading: boolean) => void) {
+    const listener = () => callback(this.optInFlagsLoading);
+    this.eventTarget.addEventListener("optInFlagsLoadingUpdated", listener, {
+      signal: this.abortController.signal,
+    });
+  }
+
   resetOptInMetadataRefresh() {
     this.optInMetadataRefreshAttemptContextVersion = undefined;
   }
 
-  async refreshOptInMetadataIfNeeded() {
-    if (!this.bootstrapped) return;
+  markBootstrappedStateApplied() {
+    this.bootstrapped = true;
+    if (!this.optInFlagsRequested) return;
 
-    const fetchedFlags = Object.values(this.fetchedFlags);
-    const hasOptInMetadata =
-      fetchedFlags.length > 0 &&
-      fetchedFlags.every(
-        (flag) =>
-          flag.optInEnabled === false ||
-          (flag.optInEnabled === true && flag.optIn !== undefined),
-      );
-    if (hasOptInMetadata) return;
+    if (this.hasOptInMetadataForCurrentContext()) {
+      this.finishOptInFlagsLoading(this.optInFlagsLoadingGeneration);
+      return;
+    }
+
+    this.ensureOptInFlagsLoading();
+    if (this.initializationComplete) {
+      void this.refreshOptInMetadataIfNeeded();
+    }
+  }
+
+  async refreshOptInMetadataIfNeeded(): Promise<void> {
+    if (!this.bootstrapped || !this.optInFlagsRequested) return;
+
+    if (
+      !this.initializationComplete ||
+      this.fetchedFlagsContextVersion !== this.contextFetchVersion
+    ) {
+      this.ensureOptInFlagsLoading();
+      return;
+    }
+
+    if (this.hasOptInMetadataForCurrentContext()) {
+      this.finishOptInFlagsLoading(this.optInFlagsLoadingGeneration);
+      return;
+    }
 
     const contextVersion = this.contextFetchVersion;
-    if (this.optInMetadataRefreshAttemptContextVersion === contextVersion) {
+    const pendingRefresh = this.optInMetadataRefresh;
+    if (pendingRefresh?.contextVersion === contextVersion) {
+      return pendingRefresh.promise;
+    }
+
+    if (
+      this.config.offline ||
+      this.optInMetadataRefreshAttemptContextVersion === contextVersion
+    ) {
+      this.finishOptInFlagsLoading(this.optInFlagsLoadingGeneration);
       return;
     }
 
     this.optInMetadataRefreshAttemptContextVersion = contextVersion;
-    return this.refreshFlags(this.fetchedFlagStateVersion);
+    this.ensureOptInFlagsLoading();
+    const loadingGeneration = this.optInFlagsLoadingGeneration;
+    const id = {};
+    const promise = (async () => {
+      try {
+        await this.refreshFlags(this.fetchedFlagStateVersion);
+      } catch (error) {
+        this.logger.error("error refreshing opt-in flag metadata", error);
+      } finally {
+        if (this.optInMetadataRefresh?.id === id) {
+          this.optInMetadataRefresh = undefined;
+        }
+        this.finishOptInFlagsLoading(loadingGeneration);
+      }
+    })();
+
+    this.optInMetadataRefresh = { contextVersion, id, promise };
+    return promise;
   }
 
-  setContextWithoutFetch(context: ReflagContext) {
-    if (!deepEqual(this.context, context)) {
+  setContextWithoutFetch(
+    context: ReflagContext,
+    invalidatePendingFetches = false,
+  ) {
+    if (!deepEqual(this.context, context) || invalidatePendingFetches) {
       this.contextFetchVersion += 1;
+      if (this.optInFlagsRequested) {
+        this.startOptInFlagsLoading();
+      }
     }
     this.context = context;
   }
@@ -471,14 +579,25 @@ export class FlagsClient {
   async setContext(context: ReflagContext) {
     this.context = context;
     const requestVersion = ++this.contextFetchVersion;
-    const fetchedFlags = await this.maybeFetchFlags(requestVersion);
+    this.optInMetadataRefreshAttemptContextVersion = requestVersion;
+    const loadingGeneration = this.optInFlagsRequested
+      ? this.startOptInFlagsLoading()
+      : undefined;
 
-    if (requestVersion !== this.contextFetchVersion) {
-      return false;
+    try {
+      const fetchedFlags = await this.maybeFetchFlags(requestVersion);
+
+      if (requestVersion !== this.contextFetchVersion) {
+        return false;
+      }
+
+      this.applyFetchedFlagsResult(fetchedFlags, true, requestVersion);
+      return true;
+    } finally {
+      if (loadingGeneration !== undefined) {
+        this.finishOptInFlagsLoading(loadingGeneration);
+      }
     }
-
-    this.applyFetchedFlagsResult(fetchedFlags, true, requestVersion);
-    return true;
   }
 
   updateFlags(triggerEvent = true) {
@@ -797,6 +916,52 @@ export class FlagsClient {
         {} as RawFlags,
       ),
     };
+  }
+
+  private hasOptInMetadataForCurrentContext() {
+    if (this.fetchedFlagsContextVersion !== this.contextFetchVersion) {
+      return false;
+    }
+
+    const fetchedFlags = Object.values(this.fetchedFlags);
+    return (
+      fetchedFlags.length > 0 &&
+      fetchedFlags.every(
+        (flag) =>
+          flag.optInEnabled === false ||
+          (flag.optInEnabled === true && flag.optIn !== undefined),
+      )
+    );
+  }
+
+  private ensureOptInFlagsLoading() {
+    if (!this.optInFlagsLoading) {
+      this.startOptInFlagsLoading();
+    }
+    return this.optInFlagsLoadingGeneration;
+  }
+
+  private startOptInFlagsLoading() {
+    this.optInFlagsLoadingGeneration += 1;
+    this.setOptInFlagsLoading(true);
+    return this.optInFlagsLoadingGeneration;
+  }
+
+  private finishOptInFlagsLoading(generation: number) {
+    if (generation !== this.optInFlagsLoadingGeneration) return;
+    this.setOptInFlagsLoading(false);
+  }
+
+  private supersedeOptInFlagsLoading(isLoading: boolean) {
+    this.optInFlagsLoadingGeneration += 1;
+    this.setOptInFlagsLoading(isLoading);
+  }
+
+  private setOptInFlagsLoading(isLoading: boolean) {
+    if (this.optInFlagsLoading === isLoading) return;
+
+    this.optInFlagsLoading = isLoading;
+    this.eventTarget.dispatchEvent({ type: "optInFlagsLoadingUpdated" });
   }
 
   private mergeFlags(fetchedFlags: RawFlags, overrides: FlagOverrides) {
