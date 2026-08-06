@@ -1146,6 +1146,67 @@ describe("opt-in hooks", () => {
     unmount();
   });
 
+  test("does not miss opt-in flags updated between render and subscription", async () => {
+    const client = new ReflagClient({
+      publishableKey: "key-opt-in-mount-race",
+      offline: true,
+    });
+    const optInFlag = {
+      key: "optInFlag",
+      name: "Opt-in flag",
+      description: null,
+      isEnabled: false,
+      userOptedIn: false,
+      companyOptedIn: false,
+      isOptedIn: false,
+    };
+    const getOptInFlags = vi
+      .spyOn(client, "getOptInFlags")
+      .mockReturnValueOnce([])
+      .mockReturnValue([optInFlag]);
+
+    const { result, unmount } = renderHook(() => useOptInFlags(), {
+      wrapper: ({ children }) => (
+        <ReflagClientProvider client={client} initialLoading={false}>
+          {children}
+        </ReflagClientProvider>
+      ),
+    });
+
+    expect(result.current).toEqual({ flags: [optInFlag], isLoading: false });
+    expect(getOptInFlags).toHaveBeenCalledTimes(2);
+
+    unmount();
+    await client.stop();
+  });
+
+  test("returns an empty flags array when regular provider initialization fails", async () => {
+    const logger = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+    const initialize = vi
+      .spyOn(ReflagClient.prototype, "initialize")
+      .mockRejectedValueOnce(new Error("init failed"));
+
+    const { result, unmount } = renderHook(() => useOptInFlags(), {
+      wrapper: ({ children }) => getProvider({ children, logger }),
+    });
+
+    await waitFor(() => {
+      expect(logger.error).toHaveBeenCalledWith(
+        "failed to initialize client",
+        expect.any(Error),
+      );
+    });
+    expect(result.current).toEqual({ flags: [], isLoading: false });
+
+    unmount();
+    initialize.mockRestore();
+  });
+
   test("suspends with a regular provider during the initial flags request", async () => {
     let resolveResponse!: (response: HttpResponse) => void;
     const response = new Promise<HttpResponse>((resolve) => {

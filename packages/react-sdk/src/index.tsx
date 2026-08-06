@@ -753,6 +753,7 @@ export function useOptInFlags(
   useOnEvent("optInFlagsLoadingUpdated", setIsOptInFlagsLoading, client);
 
   useIsomorphicLayoutEffect(() => {
+    setFlags(getOptInFlags());
     setIsOptInFlagsLoading(client.getIsLoadingOptInFlags());
   }, [client]);
 
