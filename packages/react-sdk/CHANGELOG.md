@@ -1,5 +1,11 @@
 # @reflag/react-sdk
 
+## 1.6.2
+
+### Patch Changes
+
+- 127ac7f: Prevent `useOptInFlags()` from missing a flag update that finishes between render and event subscription.
+
 ## 1.6.1
 
 ### Patch Changes
