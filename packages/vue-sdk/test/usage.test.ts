@@ -1,6 +1,6 @@
 import { mount } from "@vue/test-utils";
 import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
-import { defineComponent, h, nextTick } from "vue";
+import { defineComponent, h, nextTick, Suspense } from "vue";
 
 import { ReflagClient } from "@reflag/browser-sdk";
 
@@ -9,6 +9,7 @@ import {
   ReflagProvider,
   useClient,
   useFlag,
+  useOnEvent,
   useOptInFlags,
   useSetOptIn,
 } from "../src";
@@ -75,6 +76,30 @@ describe("ReflagProvider", () => {
 
     await nextTick();
     expect(wrapper.findComponent(Child).vm.client).toBeDefined();
+  });
+
+  test("does not throw when unmounted before an event listener is registered", () => {
+    const AsyncChild = defineComponent({
+      setup() {
+        useOnEvent("flagsUpdated", vi.fn());
+        return new Promise(() => {
+          // Remain suspended until the component is unmounted.
+        });
+      },
+    });
+
+    const wrapper = mount(ReflagProvider, {
+      ...getProvider(),
+      slots: {
+        default: () =>
+          h(Suspense, null, {
+            default: () => h(AsyncChild),
+            fallback: () => h("div"),
+          }),
+      },
+    });
+
+    expect(() => wrapper.unmount()).not.toThrow();
   });
 
   test("enables live flag updates by default", async () => {

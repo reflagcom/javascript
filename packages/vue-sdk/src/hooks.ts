@@ -390,12 +390,12 @@ export function useOnEvent<THookType extends keyof HookArgs>(
   client?: ReflagClient,
 ) {
   const resolvedClient = client ?? useClient();
-  let off: () => void;
+  let off: (() => void) | undefined;
   onMounted(() => {
     off = resolvedClient.on(event, handler);
   });
   onUnmounted(() => {
-    off();
+    off?.();
   });
 }
 
