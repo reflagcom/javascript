@@ -201,7 +201,6 @@ describe("<ReflagProvider />", () => {
       staleWhileRevalidate: true,
       fallbackFlags: ["flag2"],
       feedback: { enableAutoFeedback: true },
-      toolbar: { show: true },
     });
 
     render(provider);
@@ -871,7 +870,6 @@ describe("<ReflagBootstrappedProvider />", () => {
         staleWhileRevalidate: true,
         fallbackFlags: ["flag2"],
         feedback: { enableAutoFeedback: true },
-        toolbar: { show: true },
         children: <span>Test Content</span>,
       }),
     );
