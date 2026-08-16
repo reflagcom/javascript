@@ -1202,6 +1202,33 @@ describe("unflattenJSON", () => {
     expect(output).toEqual({});
   });
 
+  it("should prevent prototype pollution", () => {
+    const unexpectedProperties = [
+      "unexpectedConstructorPathProperty",
+      "unexpectedProtoPathProperty",
+    ];
+
+    for (const property of unexpectedProperties) {
+      delete Object.prototype[property];
+    }
+
+    try {
+      const output = unflattenJSON({
+        "constructor.prototype.unexpectedConstructorPathProperty": "value",
+        "__proto__.unexpectedProtoPathProperty": "value",
+      });
+
+      expect(output).toEqual({});
+      for (const property of unexpectedProperties) {
+        expect(Object.hasOwn(Object.prototype, property)).toBe(false);
+      }
+    } finally {
+      for (const property of unexpectedProperties) {
+        delete Object.prototype[property];
+      }
+    }
+  });
+
   it("should convert a flat object with one level deep keys to a nested object", () => {
     const input = {
       "a.b.c": "value",
