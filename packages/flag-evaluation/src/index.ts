@@ -254,9 +254,16 @@ export function flattenJSON(data: object): Record<string, string> {
  */
 export function unflattenJSON(data: Record<string, any>): Record<string, any> {
   const result: Record<string, any> = {};
+  // Traversing these properties on a plain object can reach Object.prototype.
+  const unsafePathSegments = new Set(["__proto__", "constructor", "prototype"]);
 
-  for (const i in data) {
+  for (const i of Object.keys(data)) {
     const keys = i.split(".");
+
+    if (keys.some((key) => unsafePathSegments.has(key))) {
+      continue;
+    }
+
     keys.reduce((acc, key, index) => {
       if (index === keys.length - 1) {
         if (typeof acc === "object") {
