@@ -1220,7 +1220,9 @@ describe("unflattenJSON", () => {
 
       expect(output).toEqual({});
       for (const property of unexpectedProperties) {
-        expect(Object.hasOwn(Object.prototype, property)).toBe(false);
+        expect(
+          Object.prototype.hasOwnProperty.call(Object.prototype, property),
+        ).toBe(false);
       }
     } finally {
       for (const property of unexpectedProperties) {
