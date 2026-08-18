@@ -1,5 +1,11 @@
 # @reflag/vue-sdk
 
+## 1.5.2
+
+### Patch Changes
+
+- 869fe86: Avoid calling an uninitialized event cleanup function when a suspended component unmounts before mounting.
+
 ## 1.5.1
 
 ### Patch Changes

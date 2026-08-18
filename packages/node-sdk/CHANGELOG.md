@@ -1,5 +1,12 @@
 # @reflag/node-sdk
 
+## 1.7.1
+
+### Patch Changes
+
+- Updated dependencies [338e9d2]
+  - @reflag/flag-evaluation@1.0.1
+
 ## 1.7.0
 
 ### Minor Changes
