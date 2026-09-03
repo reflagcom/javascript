@@ -1375,75 +1375,67 @@ export class ReflagClient {
       };
     },
   ) {
-    const report: Record<string, string[]> = {};
+    const missingFieldsReport: Record<string, string[]> = {};
     const errorReport: Record<string, EvaluationError[]> = {};
     const { config, ...flagData } = flag;
+    const evaluations = [
+      {
+        reportKey: flagData.key,
+        rateLimitKey: { flagKey: flagData.key },
+        missingContextFields: flagData.missingContextFields,
+        errors: flagData.evaluationErrors,
+      },
+      ...(config
+        ? [
+            {
+              reportKey: `${flagData.key}.config`,
+              rateLimitKey: { flagKey: flagData.key, configKey: config.key },
+              missingContextFields: config.missingContextFields,
+              errors: config.evaluationErrors,
+            },
+          ]
+        : []),
+    ];
 
-    if (
-      flagData.missingContextFields?.length &&
-      !flagData.evaluationErrors?.some(
-        ({ code }) => code === "MISSING_CONTEXT_FIELD",
-      ) &&
-      this.rateLimiter.isAllowed(
-        hashObject({
-          flagKey: flagData.key,
-          missingContextFields: flagData.missingContextFields,
-          context,
-        }),
-      )
-    ) {
-      report[flagData.key] = flagData.missingContextFields;
+    for (const evaluation of evaluations) {
+      if (
+        evaluation.missingContextFields?.length &&
+        !evaluation.errors?.some(
+          ({ code }) => code === "MISSING_CONTEXT_FIELD",
+        ) &&
+        this.rateLimiter.isAllowed(
+          hashObject({
+            ...evaluation.rateLimitKey,
+            missingContextFields: evaluation.missingContextFields,
+            context,
+          }),
+        )
+      ) {
+        missingFieldsReport[evaluation.reportKey] =
+          evaluation.missingContextFields;
+      }
     }
 
-    if (
-      config?.missingContextFields?.length &&
-      !config.evaluationErrors?.some(
-        ({ code }) => code === "MISSING_CONTEXT_FIELD",
-      ) &&
-      this.rateLimiter.isAllowed(
-        hashObject({
-          flagKey: flagData.key,
-          configKey: config.key,
-          missingContextFields: config.missingContextFields,
-          context,
-        }),
-      )
-    ) {
-      report[`${flagData.key}.config`] = config.missingContextFields;
-    }
-
-    if (Object.keys(report).length > 0) {
+    if (Object.keys(missingFieldsReport).length > 0) {
       this.logger.warn(
         `flag targeting rules might not be correctly evaluated due to missing context fields.`,
-        report,
+        missingFieldsReport,
       );
     }
 
-    if (
-      flagData.evaluationErrors?.length &&
-      this.rateLimiter.isAllowed(
-        hashObject({
-          flagKey: flagData.key,
-          evaluationErrors: flagData.evaluationErrors,
-          context,
-        }),
-      )
-    ) {
-      errorReport[flagData.key] = flagData.evaluationErrors;
-    }
-
-    if (
-      config?.evaluationErrors?.length &&
-      this.rateLimiter.isAllowed(
-        hashObject({
-          flagKey: flagData.key,
-          configKey: config.key,
-          evaluationErrors: config.evaluationErrors,
-          context,
-        }),
-      )
-    ) {
-      errorReport[`${flagData.key}.config`] = config.evaluationErrors;
+    for (const evaluation of evaluations) {
+      if (
+        evaluation.errors?.length &&
+        this.rateLimiter.isAllowed(
+          hashObject({
+            ...evaluation.rateLimitKey,
+            evaluationErrors: evaluation.errors,
+            context,
+          }),
+        )
+      ) {
+        errorReport[evaluation.reportKey] = evaluation.errors;
+      }
     }
 
     if (Object.keys(errorReport).length > 0) {

@@ -384,6 +384,19 @@ function parseLegacyArray(value: string): string[] | undefined {
   }
 }
 
+function normalizeContextValue(
+  value: NormalizedContextValue,
+): NormalizedContextValue {
+  return typeof value === "string" ? (parseLegacyArray(value) ?? value) : value;
+}
+
+const ARRAY_OPERATORS = new Set<ContextFilterOperator>([
+  "ANY_OF",
+  "NOT_ANY_OF",
+  "SET",
+  "NOT_SET",
+]);
+
 /**
  * Evaluates a scalar or array field value against an operator and comparison values.
  * Legacy JSON-encoded arrays are interpreted the same way as native arrays.
@@ -394,9 +407,7 @@ export function evaluate(
   values: string[],
   valueSet?: Set<string>,
 ): boolean {
-  const normalizedFieldValue = Array.isArray(fieldValue)
-    ? fieldValue
-    : (parseLegacyArray(fieldValue) ?? fieldValue);
+  const normalizedFieldValue = normalizeContextValue(fieldValue);
   const value = values[0];
 
   if (Array.isArray(normalizedFieldValue)) {
@@ -524,7 +535,6 @@ function addMissingContextFieldError(
 function evaluateRecursively(
   filter: RuleFilter,
   context: FlattenedContext,
-  missingContextFieldsSet: Set<string>,
   errors: Map<string, EvaluationError>,
 ): boolean {
   switch (filter.type) {
@@ -536,19 +546,16 @@ function evaluateRecursively(
         filter.operator !== "SET" &&
         filter.operator !== "NOT_SET"
       ) {
-        missingContextFieldsSet.add(filter.field);
         addMissingContextFieldError(errors, filter.field);
         return false;
       }
 
-      const fieldValue = context[filter.field] ?? "";
-      const normalizedFieldValue =
-        typeof fieldValue === "string"
-          ? (parseLegacyArray(fieldValue) ?? fieldValue)
-          : fieldValue;
+      const normalizedFieldValue = normalizeContextValue(
+        context[filter.field] ?? "",
+      );
       if (
         Array.isArray(normalizedFieldValue) &&
-        !["ANY_OF", "NOT_ANY_OF", "SET", "NOT_SET"].includes(filter.operator)
+        !ARRAY_OPERATORS.has(filter.operator)
       ) {
         addUnsupportedArrayOperatorError(errors, filter.field, filter.operator);
         return false;
@@ -563,16 +570,13 @@ function evaluateRecursively(
     }
     case "rolloutPercentage": {
       if (!(filter.partialRolloutAttribute in context)) {
-        missingContextFieldsSet.add(filter.partialRolloutAttribute);
         addMissingContextFieldError(errors, filter.partialRolloutAttribute);
         return false;
       }
 
-      const rolloutValue = context[filter.partialRolloutAttribute];
-      const normalizedRolloutValue =
-        typeof rolloutValue === "string"
-          ? (parseLegacyArray(rolloutValue) ?? rolloutValue)
-          : rolloutValue;
+      const normalizedRolloutValue = normalizeContextValue(
+        context[filter.partialRolloutAttribute],
+      );
       if (Array.isArray(normalizedRolloutValue)) {
         addUnsupportedArrayOperatorError(
           errors,
@@ -585,31 +589,15 @@ function evaluateRecursively(
       const hashVal = hashInt(`${filter.key}.${normalizedRolloutValue}`);
       return hashVal < filter.partialRolloutThreshold;
     }
-    case "group":
-      return filter.filters.reduce((acc, current) => {
-        if (filter.operator === "and") {
-          return (
-            acc &&
-            evaluateRecursively(
-              current,
-              context,
-              missingContextFieldsSet,
-              errors,
-            )
-          );
-        }
-        return (
-          acc ||
-          evaluateRecursively(current, context, missingContextFieldsSet, errors)
-        );
-      }, filter.operator === "and");
+    case "group": {
+      const evaluateChild = (child: RuleFilter) =>
+        evaluateRecursively(child, context, errors);
+      return filter.operator === "and"
+        ? filter.filters.every(evaluateChild)
+        : filter.filters.some(evaluateChild);
+    }
     case "negation":
-      return !evaluateRecursively(
-        filter.filter,
-        context,
-        missingContextFieldsSet,
-        errors,
-      );
+      return !evaluateRecursively(filter.filter, context, errors);
     default:
       return false;
   }
@@ -660,19 +648,16 @@ export function evaluateFlagRules<T extends RuleValue>({
   rules,
 }: EvaluationParams<T>): EvaluationResult<T> {
   const flatContext = flattenContext(context);
-  const missingContextFieldsSet = new Set<string>();
   const evaluationErrors = new Map<string, EvaluationError>();
 
   const ruleEvaluationResults = rules.map((rule) =>
-    evaluateRecursively(
-      rule.filter,
-      flatContext,
-      missingContextFieldsSet,
-      evaluationErrors,
-    ),
+    evaluateRecursively(rule.filter, flatContext, evaluationErrors),
   );
 
-  const missingContextFields = Array.from(missingContextFieldsSet);
+  const errors = Array.from(evaluationErrors.values());
+  const missingContextFields = errors.flatMap((error) =>
+    error.code === "MISSING_CONTEXT_FIELD" ? [error.field] : [],
+  );
 
   const firstMatchedRuleIndex = ruleEvaluationResults.findIndex(Boolean);
   const firstMatchedRule =
@@ -687,9 +672,7 @@ export function evaluateFlagRules<T extends RuleValue>({
         ? `rule #${firstMatchedRuleIndex} matched`
         : "no matched rules",
     missingContextFields,
-    ...(evaluationErrors.size > 0
-      ? { errors: Array.from(evaluationErrors.values()) }
-      : {}),
+    ...(errors.length > 0 ? { errors } : {}),
   };
 }
 
