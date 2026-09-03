@@ -200,6 +200,7 @@ export interface Rule<T extends RuleValue> {
 /**
  * Flattens a nested JSON object into a single-level object, with keys indicating the nesting levels.
  * Keys in the resulting object are represented in a dot notation to reflect the nesting structure of the original data.
+ * Arrays are preserved at their property path and serialized as JSON strings.
  *
  * @param {object} data - The nested JSON object to be flattened.
  * @return {Record<string, string>} A flattened JSON object with "stringified" keys and values.
@@ -221,13 +222,7 @@ export function flattenJSON(data: object): Record<string, string> {
     } else if (typeof value !== "object") {
       result[prop] = String(value);
     } else if (Array.isArray(value)) {
-      if (value.length === 0) {
-        result[prop] = "";
-      }
-
-      for (let i = 0; i < value.length; i++) {
-        recurse(value[i], prop ? prop + "." + i : "" + i);
-      }
+      result[prop] = JSON.stringify(value);
     } else {
       let isEmpty = true;
 

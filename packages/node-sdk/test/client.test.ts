@@ -1621,6 +1621,48 @@ describe("ReflagClient", () => {
       ).toBe(false);
     });
 
+    it("evaluates CONTAINS against array context attributes", async () => {
+      const roleFlagDefinitions: FlagsAPIResponse = {
+        flagStateVersion: 2,
+        features: [
+          {
+            key: "role-based-flag",
+            description: "Role-based flag",
+            targeting: {
+              version: 1,
+              rules: [
+                {
+                  filter: {
+                    type: "context",
+                    field: "user.roles",
+                    operator: "CONTAINS",
+                    values: ["a"],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      };
+      httpClient.get.mockResolvedValue({
+        ok: true,
+        status: 200,
+        body: { success: true, ...roleFlagDefinitions },
+      });
+
+      await client.initialize();
+
+      expect(
+        client.getFlag(
+          {
+            user: { id: "user-1", roles: ["a", "b"] },
+            enableTracking: false,
+          },
+          "role-based-flag",
+        ).isEnabled,
+      ).toBe(true);
+    });
+
     it("`track` sends all expected events when `enableTracking` is `true`", async () => {
       const context = {
         company,
@@ -3033,6 +3075,17 @@ describe("getFlagsRemote", () => {
       expectedHeaders,
       API_TIMEOUT_MS,
     );
+  });
+
+  it("should stringify array context values", async () => {
+    await client.getFlagsRemote(undefined, undefined, {
+      user: { id: "u1", roles: ["a", "b"] },
+    });
+
+    const url = new URL(httpClient.get.mock.calls[0][0]);
+    expect(url.searchParams.get("context.user.roles")).toBe('["a","b"]');
+    expect(url.searchParams.has("context.user.roles.0")).toBe(false);
+    expect(url.searchParams.has("context.user.roles.1")).toBe(false);
   });
 
   it("should not try to append the context if it's empty", async () => {

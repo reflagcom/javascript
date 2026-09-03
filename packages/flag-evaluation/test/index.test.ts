@@ -502,6 +502,39 @@ describe("evaluate flag targeting integration ", () => {
     },
   );
 
+  it("evaluates CONTAINS against stringified array context values", () => {
+    const res = evaluateFlagRules({
+      flagKey: "role-based-flag",
+      rules: [
+        {
+          value: true,
+          filter: {
+            type: "context",
+            field: "user.roles",
+            operator: "CONTAINS",
+            values: ["a"],
+          },
+        },
+      ],
+      context: {
+        user: {
+          roles: ["a", "b"],
+        },
+      },
+    });
+
+    expect(res).toEqual({
+      flagKey: "role-based-flag",
+      value: true,
+      context: {
+        "user.roles": '["a","b"]',
+      },
+      ruleEvaluationResults: [true],
+      reason: "rule #0 matched",
+      missingContextFields: [],
+    });
+  });
+
   describe("DATE_AFTER and DATE_BEFORE in flag rules", () => {
     it("should evaluate DATE_AFTER operator in flag rules", () => {
       const res = evaluateFlagRules({
@@ -973,7 +1006,7 @@ describe("flattenJSON", () => {
     });
   });
 
-  it("should flatten arrays", () => {
+  it("should stringify arrays", () => {
     const input = {
       a: ["value1", "value2", "value3"],
     };
@@ -981,13 +1014,11 @@ describe("flattenJSON", () => {
     const output = flattenJSON(input);
 
     expect(output).toEqual({
-      "a.0": "value1",
-      "a.1": "value2",
-      "a.2": "value3",
+      a: '["value1","value2","value3"]',
     });
   });
 
-  it("should handle empty arrays", () => {
+  it("should stringify empty arrays", () => {
     const input = {
       a: [],
     };
@@ -995,11 +1026,11 @@ describe("flattenJSON", () => {
     const output = flattenJSON(input);
 
     expect(output).toEqual({
-      a: "",
+      a: "[]",
     });
   });
 
-  it("should correctly flatten mixed structures involving arrays and objects", () => {
+  it("should stringify arrays containing objects", () => {
     const input = {
       a: {
         b: ["value1", { nested: "value2" }, "value3"],
@@ -1009,9 +1040,7 @@ describe("flattenJSON", () => {
     const output = flattenJSON(input);
 
     expect(output).toEqual({
-      "a.b.0": "value1",
-      "a.b.1.nested": "value2",
-      "a.b.2": "value3",
+      "a.b": '["value1",{"nested":"value2"},"value3"]',
     });
   });
 
@@ -1121,7 +1150,7 @@ describe("flattenJSON", () => {
     });
   });
 
-  it("should handle arrays with null and undefined values", () => {
+  it("should stringify arrays with null and undefined values", () => {
     const input = {
       a: ["value1", null, undefined, "value4"],
     };
@@ -1129,9 +1158,7 @@ describe("flattenJSON", () => {
     const output = flattenJSON(input);
 
     expect(output).toEqual({
-      "a.0": "value1",
-      "a.1": "",
-      "a.3": "value4",
+      a: '["value1",null,null,"value4"]',
     });
   });
 
@@ -1149,7 +1176,7 @@ describe("flattenJSON", () => {
 
     expect(output).toEqual({
       "a.b.c": "",
-      "a.b.d": "",
+      "a.b.d": "[]",
     });
   });
 
