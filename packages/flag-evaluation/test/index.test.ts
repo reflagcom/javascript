@@ -241,6 +241,14 @@ describe("evaluate flag targeting integration ", () => {
       reason: "no matched rules",
       flagKey: "flag",
       missingContextFields: ["company.id"],
+      errors: [
+        {
+          code: "MISSING_CONTEXT_FIELD",
+          field: "company.id",
+          message:
+            'Context field "company.id" is required to evaluate targeting rules.',
+        },
+      ],
       ruleEvaluationResults: [false],
     });
   });
@@ -268,6 +276,14 @@ describe("evaluate flag targeting integration ", () => {
       value: undefined,
       reason: "no matched rules",
       missingContextFields: ["happening.id"],
+      errors: [
+        {
+          code: "MISSING_CONTEXT_FIELD",
+          field: "happening.id",
+          message:
+            'Context field "happening.id" is required to evaluate targeting rules.',
+        },
+      ],
       ruleEvaluationResults: [false],
     });
   });
@@ -575,8 +591,47 @@ describe("evaluate flag targeting integration ", () => {
 
         expect(res.value).toBeUndefined();
         expect(res.missingContextFields).toEqual([]);
+        expect(res.errors).toEqual([
+          {
+            code: "UNSUPPORTED_ARRAY_OPERATOR",
+            field: "user.ids",
+            operator: "rolloutPercentage",
+            message:
+              'Percentage rollout does not support array-valued context field "user.ids".',
+          },
+        ]);
       },
     );
+
+    it("returns a non-fatal diagnostic for scalar-only operators", () => {
+      const res = evaluateFlagRules({
+        flagKey: "role-based-flag",
+        rules: [
+          {
+            value: true,
+            filter: {
+              type: "context",
+              field: "user.roles",
+              operator: "CONTAINS",
+              values: ["admin"],
+            },
+          },
+        ],
+        context: { user: { roles: ["admin"] } },
+      });
+
+      expect(res.value).toBeUndefined();
+      expect(res.ruleEvaluationResults).toEqual([false]);
+      expect(res.errors).toEqual([
+        {
+          code: "UNSUPPORTED_ARRAY_OPERATOR",
+          field: "user.roles",
+          operator: "CONTAINS",
+          message:
+            'Operator CONTAINS does not support array-valued context field "user.roles".',
+        },
+      ]);
+    });
 
     it("does not report an array leaf as missing", () => {
       const res = evaluateFlagRules({

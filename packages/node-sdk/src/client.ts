@@ -1,6 +1,7 @@
 import fs from "fs";
 
 import {
+  EvaluationError,
   EvaluationResult,
   flattenJSON,
   newEvaluator,
@@ -1366,17 +1367,23 @@ export class ReflagClient {
     flag: {
       key: string;
       missingContextFields?: string[];
+      evaluationErrors?: EvaluationError[];
       config?: {
         key: string;
         missingContextFields?: string[];
+        evaluationErrors?: EvaluationError[];
       };
     },
   ) {
     const report: Record<string, string[]> = {};
+    const errorReport: Record<string, EvaluationError[]> = {};
     const { config, ...flagData } = flag;
 
     if (
       flagData.missingContextFields?.length &&
+      !flagData.evaluationErrors?.some(
+        ({ code }) => code === "MISSING_CONTEXT_FIELD",
+      ) &&
       this.rateLimiter.isAllowed(
         hashObject({
           flagKey: flagData.key,
@@ -1390,6 +1397,9 @@ export class ReflagClient {
 
     if (
       config?.missingContextFields?.length &&
+      !config.evaluationErrors?.some(
+        ({ code }) => code === "MISSING_CONTEXT_FIELD",
+      ) &&
       this.rateLimiter.isAllowed(
         hashObject({
           flagKey: flagData.key,
@@ -1406,6 +1416,40 @@ export class ReflagClient {
       this.logger.warn(
         `flag targeting rules might not be correctly evaluated due to missing context fields.`,
         report,
+      );
+    }
+
+    if (
+      flagData.evaluationErrors?.length &&
+      this.rateLimiter.isAllowed(
+        hashObject({
+          flagKey: flagData.key,
+          evaluationErrors: flagData.evaluationErrors,
+          context,
+        }),
+      )
+    ) {
+      errorReport[flagData.key] = flagData.evaluationErrors;
+    }
+
+    if (
+      config?.evaluationErrors?.length &&
+      this.rateLimiter.isAllowed(
+        hashObject({
+          flagKey: flagData.key,
+          configKey: config.key,
+          evaluationErrors: config.evaluationErrors,
+          context,
+        }),
+      )
+    ) {
+      errorReport[`${flagData.key}.config`] = config.evaluationErrors;
+    }
+
+    if (Object.keys(errorReport).length > 0) {
+      this.logger.warn(
+        "flag targeting rules could not be fully evaluated.",
+        errorReport,
       );
     }
   }
@@ -1461,6 +1505,7 @@ export class ReflagClient {
             value: undefined,
             ruleEvaluationResults: [],
             missingContextFields: [],
+            errors: undefined,
           } satisfies EvaluationResult<any>),
       }));
 
@@ -1470,6 +1515,9 @@ export class ReflagClient {
         isEnabled: res.enabledResult.value ?? false,
         ruleEvaluationResults: res.enabledResult.ruleEvaluationResults,
         missingContextFields: res.enabledResult.missingContextFields,
+        ...(res.enabledResult.errors?.length
+          ? { evaluationErrors: res.enabledResult.errors }
+          : {}),
         targetingVersion: res.targetingVersion,
         config: {
           key: res.configResult?.value?.key,
@@ -1477,6 +1525,9 @@ export class ReflagClient {
           targetingVersion: res.configVersion,
           ruleEvaluationResults: res.configResult?.ruleEvaluationResults,
           missingContextFields: res.configResult?.missingContextFields,
+          ...(res.configResult?.errors?.length
+            ? { evaluationErrors: res.configResult.errors }
+            : {}),
         },
       };
       return acc;

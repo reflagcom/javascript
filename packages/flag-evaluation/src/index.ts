@@ -74,7 +74,7 @@ export type FilterTree<T extends FilterClass> =
  * - "IS_TRUE": Checks if a boolean value is true.
  * - "IS_FALSE": Checks if a boolean value is false.
  */
-type ContextFilterOperator =
+export type ContextFilterOperator =
   | "IS"
   | "IS_NOT"
   | "ANY_OF"
@@ -199,6 +199,19 @@ export interface Rule<T extends RuleValue> {
 
 export type NormalizedContextValue = string | string[];
 export type FlattenedContext = Record<string, NormalizedContextValue>;
+
+export type EvaluationError =
+  | {
+      code: "MISSING_CONTEXT_FIELD";
+      field: string;
+      message: string;
+    }
+  | {
+      code: "UNSUPPORTED_ARRAY_OPERATOR";
+      field: string;
+      operator: ContextFilterOperator | "rolloutPercentage";
+      message: string;
+    };
 
 function normalizeArrayElement(value: unknown): string | undefined {
   if (value === undefined) return undefined;
@@ -480,33 +493,78 @@ export function evaluate(
   }
 }
 
+function addUnsupportedArrayOperatorError(
+  errors: Map<string, EvaluationError>,
+  field: string,
+  operator: ContextFilterOperator | "rolloutPercentage",
+): void {
+  const message =
+    operator === "rolloutPercentage"
+      ? `Percentage rollout does not support array-valued context field "${field}".`
+      : `Operator ${operator} does not support array-valued context field "${field}".`;
+  errors.set(`${field}:${operator}`, {
+    code: "UNSUPPORTED_ARRAY_OPERATOR",
+    field,
+    operator,
+    message,
+  });
+}
+
+function addMissingContextFieldError(
+  errors: Map<string, EvaluationError>,
+  field: string,
+): void {
+  errors.set(`missing:${field}`, {
+    code: "MISSING_CONTEXT_FIELD",
+    field,
+    message: `Context field "${field}" is required to evaluate targeting rules.`,
+  });
+}
+
 function evaluateRecursively(
   filter: RuleFilter,
   context: FlattenedContext,
   missingContextFieldsSet: Set<string>,
+  errors: Map<string, EvaluationError>,
 ): boolean {
   switch (filter.type) {
     case "constant":
       return filter.value;
-    case "context":
+    case "context": {
       if (
         !(filter.field in context) &&
         filter.operator !== "SET" &&
         filter.operator !== "NOT_SET"
       ) {
         missingContextFieldsSet.add(filter.field);
+        addMissingContextFieldError(errors, filter.field);
+        return false;
+      }
+
+      const fieldValue = context[filter.field] ?? "";
+      const normalizedFieldValue =
+        typeof fieldValue === "string"
+          ? (parseLegacyArray(fieldValue) ?? fieldValue)
+          : fieldValue;
+      if (
+        Array.isArray(normalizedFieldValue) &&
+        !["ANY_OF", "NOT_ANY_OF", "SET", "NOT_SET"].includes(filter.operator)
+      ) {
+        addUnsupportedArrayOperatorError(errors, filter.field, filter.operator);
         return false;
       }
 
       return evaluate(
-        context[filter.field] ?? "",
+        normalizedFieldValue,
         filter.operator,
         filter.values || [],
         filter.valueSet,
       );
+    }
     case "rolloutPercentage": {
       if (!(filter.partialRolloutAttribute in context)) {
         missingContextFieldsSet.add(filter.partialRolloutAttribute);
+        addMissingContextFieldError(errors, filter.partialRolloutAttribute);
         return false;
       }
 
@@ -515,7 +573,14 @@ function evaluateRecursively(
         typeof rolloutValue === "string"
           ? (parseLegacyArray(rolloutValue) ?? rolloutValue)
           : rolloutValue;
-      if (Array.isArray(normalizedRolloutValue)) return false;
+      if (Array.isArray(normalizedRolloutValue)) {
+        addUnsupportedArrayOperatorError(
+          errors,
+          filter.partialRolloutAttribute,
+          "rolloutPercentage",
+        );
+        return false;
+      }
 
       const hashVal = hashInt(`${filter.key}.${normalizedRolloutValue}`);
       return hashVal < filter.partialRolloutThreshold;
@@ -525,11 +590,17 @@ function evaluateRecursively(
         if (filter.operator === "and") {
           return (
             acc &&
-            evaluateRecursively(current, context, missingContextFieldsSet)
+            evaluateRecursively(
+              current,
+              context,
+              missingContextFieldsSet,
+              errors,
+            )
           );
         }
         return (
-          acc || evaluateRecursively(current, context, missingContextFieldsSet)
+          acc ||
+          evaluateRecursively(current, context, missingContextFieldsSet, errors)
         );
       }, filter.operator === "and");
     case "negation":
@@ -537,6 +608,7 @@ function evaluateRecursively(
         filter.filter,
         context,
         missingContextFieldsSet,
+        errors,
       );
     default:
       return false;
@@ -568,7 +640,8 @@ export interface EvaluationParams<T extends RuleValue> {
  * @property {Record<string, any>} context - The normalized contextual information used during evaluation.
  * @property {boolean[]} ruleEvaluationResults - Array indicating the success or failure of each rule evaluated.
  * @property {string} [reason] - Optional field providing additional explanation regarding the evaluation result.
- * @property {string[]} [missingContextFields] - Optional array of context fields that were required but not provided during the evaluation.
+ * @property {string[]} [missingContextFields] - Legacy array of context fields that were required but not provided during evaluation.
+ * @property {EvaluationError[]} [errors] - Non-fatal diagnostics for rules that could not be evaluated.
  */
 export interface EvaluationResult<T extends RuleValue> {
   flagKey: string;
@@ -576,7 +649,9 @@ export interface EvaluationResult<T extends RuleValue> {
   context: Record<string, any>;
   ruleEvaluationResults: boolean[];
   reason?: string;
+  /** @deprecated Use `errors` and check for `MISSING_CONTEXT_FIELD`. */
   missingContextFields?: string[];
+  errors?: EvaluationError[];
 }
 
 export function evaluateFlagRules<T extends RuleValue>({
@@ -586,9 +661,15 @@ export function evaluateFlagRules<T extends RuleValue>({
 }: EvaluationParams<T>): EvaluationResult<T> {
   const flatContext = flattenContext(context);
   const missingContextFieldsSet = new Set<string>();
+  const evaluationErrors = new Map<string, EvaluationError>();
 
   const ruleEvaluationResults = rules.map((rule) =>
-    evaluateRecursively(rule.filter, flatContext, missingContextFieldsSet),
+    evaluateRecursively(
+      rule.filter,
+      flatContext,
+      missingContextFieldsSet,
+      evaluationErrors,
+    ),
   );
 
   const missingContextFields = Array.from(missingContextFieldsSet);
@@ -606,6 +687,9 @@ export function evaluateFlagRules<T extends RuleValue>({
         ? `rule #${firstMatchedRuleIndex} matched`
         : "no matched rules",
     missingContextFields,
+    ...(evaluationErrors.size > 0
+      ? { errors: Array.from(evaluationErrors.values()) }
+      : {}),
   };
 }
 
