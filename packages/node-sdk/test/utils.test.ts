@@ -3,6 +3,7 @@ import { createHash } from "crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  canonicalJSONStringify,
   decorateLogger,
   hashObject,
   isObject,
@@ -121,6 +122,21 @@ describe("mergeSkipUndefined", () => {
     const source = {};
     const result = mergeSkipUndefined(target, source);
     expect(result).toEqual({});
+  });
+});
+
+describe("canonicalJSONStringify", () => {
+  it("sorts object keys recursively while preserving array order", () => {
+    expect(
+      canonicalJSONStringify({
+        z: { second: 2, first: 1 },
+        values: [{ b: true, a: false }, "second"],
+        a: 1,
+        omitted: undefined,
+      }),
+    ).toBe(
+      '{"a":1,"values":[{"a":false,"b":true},"second"],"z":{"first":1,"second":2}}',
+    );
   });
 });
 

@@ -131,9 +131,10 @@ describe("ReflagClient", () => {
           ({ request }) => {
             requests.push("flags");
             const url = new URL(request.url);
-            expect(url.searchParams.get("context.user.siteCentricOptIn")).toBe(
-              "true",
-            );
+            expect(
+              JSON.parse(url.searchParams.get("contextJson") ?? "{}").user
+                .siteCentricOptIn,
+            ).toBe("true");
 
             return HttpResponse.json({
               success: true,
@@ -459,9 +460,12 @@ describe("ReflagClient", () => {
         http.get(
           "https://front.reflag.com/features/evaluated",
           ({ request }) => {
-            const userId = new URL(request.url).searchParams.get(
-              "context.user.id",
+            const contextJson = new URL(request.url).searchParams.get(
+              "contextJson",
             );
+            const userId = contextJson
+              ? JSON.parse(contextJson).user?.id
+              : undefined;
             if (userId === "user1") {
               return previousContextResponse.promise.then((response) => {
                 previousContextSettled();
@@ -873,9 +877,12 @@ describe("ReflagClient", () => {
         http.get(
           "https://front.reflag.com/features/evaluated",
           ({ request }) => {
-            const userId = new URL(request.url).searchParams.get(
-              "context.user.id",
+            const contextJson = new URL(request.url).searchParams.get(
+              "contextJson",
             );
+            const userId = contextJson
+              ? JSON.parse(contextJson).user?.id
+              : undefined;
             return userId === "user1"
               ? previousContextRefresh.promise
               : currentContextRefresh.promise;

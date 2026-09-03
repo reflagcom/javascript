@@ -10,6 +10,7 @@ export type {
 export { ReflagClient } from "./client";
 export type {
   CompanyContext,
+  ContextValue,
   ReflagContext,
   ReflagDeprecatedContext,
   UserContext,

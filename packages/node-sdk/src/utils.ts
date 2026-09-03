@@ -148,6 +148,29 @@ function updateSha1Hash(hash: Hash, value: any) {
   }
 }
 
+/**
+ * Serialize JSON with object keys sorted recursively. Array order is preserved.
+ */
+export function canonicalJSONStringify(value: unknown): string {
+  const serialized = JSON.stringify(value, (_key, nestedValue: unknown) => {
+    if (
+      nestedValue === null ||
+      typeof nestedValue !== "object" ||
+      Array.isArray(nestedValue)
+    ) {
+      return nestedValue;
+    }
+
+    return Object.fromEntries(
+      Object.entries(nestedValue).sort(([left], [right]) =>
+        left < right ? -1 : left > right ? 1 : 0,
+      ),
+    );
+  });
+  ok(serialized !== undefined, "value must be JSON serializable");
+  return serialized;
+}
+
 /** Hash an object using SHA1.
  *
  * @param obj - The object to hash.

@@ -1,3 +1,52 @@
+export type ContextValue =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | ContextValue[]
+  | { [key: string]: ContextValue };
+
+/**
+ * Serialize context with recursively sorted object keys. Array order is preserved.
+ */
+function canonicalJSONStringify(value: unknown): string {
+  const serialized = JSON.stringify(value, (_key, nestedValue: unknown) => {
+    if (
+      nestedValue === null ||
+      typeof nestedValue !== "object" ||
+      Array.isArray(nestedValue)
+    ) {
+      return nestedValue;
+    }
+
+    return Object.fromEntries(
+      Object.entries(nestedValue).sort(([left], [right]) =>
+        left < right ? -1 : left > right ? 1 : 0,
+      ),
+    );
+  });
+  if (serialized === undefined)
+    throw new Error("value must be JSON serializable");
+  return serialized;
+}
+
+export function canonicalContextJSONStringify(
+  context: ReflagContext | undefined,
+): string | undefined {
+  if (!context) return undefined;
+  const nonEmptyContext = Object.fromEntries(
+    Object.entries(context).filter(
+      ([, attributes]) =>
+        attributes &&
+        Object.values(attributes).some((value) => value !== undefined),
+    ),
+  );
+  return Object.keys(nonEmptyContext).length
+    ? canonicalJSONStringify(nonEmptyContext)
+    : undefined;
+}
+
 /**
  * Context is a set of key-value pairs.
  * This is used to determine if feature targeting matches and to track events.
@@ -17,7 +66,7 @@ export interface CompanyContext {
   /**
    * Other company attributes
    */
-  [key: string]: string | number | undefined;
+  [key: string]: ContextValue;
 }
 
 /**
@@ -44,7 +93,7 @@ export interface UserContext {
   /**
    * Other user attributes
    */
-  [key: string]: string | number | undefined;
+  [key: string]: ContextValue;
 }
 
 /**
@@ -67,7 +116,7 @@ export interface ReflagContext {
   /**
    * Context which is not related to a user or a company.
    */
-  other?: Record<string, string | number | undefined>;
+  other?: Record<string, ContextValue>;
 }
 
 /**
@@ -79,5 +128,5 @@ export interface ReflagDeprecatedContext extends ReflagContext {
    * Context which is not related to a user or a company.
    * @deprecated Use `other` instead, this property will be removed in the next major version
    */
-  otherContext?: Record<string, string | number | undefined>;
+  otherContext?: Record<string, ContextValue>;
 }

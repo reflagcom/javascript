@@ -2,7 +2,7 @@ import { deepEqual } from "fast-equals";
 
 import type { BulkEvent } from "../bulkQueue";
 import { FLAG_EVENTS_PER_MIN, FLAGS_EXPIRE_MS } from "../config";
-import { ReflagContext } from "../context";
+import { canonicalContextJSONStringify, ReflagContext } from "../context";
 import { HttpClient } from "../httpClient";
 import { Logger, loggerWithPrefix } from "../logger";
 import RateLimiter from "../rateLimiter";
@@ -1005,8 +1005,10 @@ export class FlagsClient {
   }
 
   private fetchParams() {
-    const flattenedContext = flattenJSON({ context: this.context });
-    const params = new URLSearchParams(flattenedContext);
+    const contextJson = canonicalContextJSONStringify(this.context);
+    const params = new URLSearchParams(
+      contextJson ? { contextJson } : undefined,
+    );
     // publishableKey should be part of the cache key
     params.append("publishableKey", this.httpClient.publishableKey);
 

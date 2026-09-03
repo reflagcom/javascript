@@ -60,6 +60,7 @@ import {
 } from "./types";
 import {
   applyLogLevel,
+  canonicalJSONStringify,
   decorateLogger,
   hashObject,
   hashString,
@@ -1679,9 +1680,10 @@ export class ReflagClient {
 
     checkContextWithTracking(contextWithTracking);
 
-    const params = new URLSearchParams(
-      Object.keys(context).length ? flattenJSON({ context }) : undefined,
-    );
+    const params = new URLSearchParams();
+    if (Object.keys(context).length) {
+      params.set("contextJson", canonicalJSONStringify(context));
+    }
 
     if (key) {
       params.append("key", key);
