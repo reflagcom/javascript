@@ -650,9 +650,15 @@ export function evaluateFlagRules<T extends RuleValue>({
   const flatContext = flattenContext(context);
   const evaluationErrors = new Map<string, EvaluationError>();
 
-  const ruleEvaluationResults = rules.map((rule) =>
-    evaluateRecursively(rule.filter, flatContext, evaluationErrors),
-  );
+  const ruleEvaluationResults = rules.map((rule) => {
+    const ruleErrors = new Map<string, EvaluationError>();
+    const matched = evaluateRecursively(rule.filter, flatContext, ruleErrors);
+    for (const [key, error] of ruleErrors) evaluationErrors.set(key, error);
+
+    // An invalid condition must fail the entire rule, even when wrapped in a
+    // negation or combined with another condition that would otherwise match.
+    return ruleErrors.size === 0 && matched;
+  });
 
   const errors = Array.from(evaluationErrors.values());
   const missingContextFields = errors.flatMap((error) =>

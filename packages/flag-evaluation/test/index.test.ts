@@ -633,6 +633,65 @@ describe("evaluate flag targeting integration ", () => {
       ]);
     });
 
+    it("fails the top-level rule when a nested condition produces an error", () => {
+      const res = evaluateFlagRules({
+        flagKey: "invalid-rules",
+        rules: [
+          {
+            value: "negated-array",
+            filter: {
+              type: "negation",
+              filter: {
+                type: "context",
+                field: "user.roles",
+                operator: "CONTAINS",
+                values: ["admin"],
+              },
+            },
+          },
+          {
+            value: "negated-missing",
+            filter: {
+              type: "negation",
+              filter: {
+                type: "context",
+                field: "user.plan",
+                operator: "IS",
+                values: ["pro"],
+              },
+            },
+          },
+          {
+            value: "matching-or",
+            filter: {
+              type: "group",
+              operator: "or",
+              filters: [
+                {
+                  type: "context",
+                  field: "user.teams",
+                  operator: "IS",
+                  values: ["platform"],
+                },
+                { type: "constant", value: true },
+              ],
+            },
+          },
+        ],
+        context: {
+          user: { roles: ["admin"], teams: ["platform"] },
+        },
+      });
+
+      expect(res.value).toBeUndefined();
+      expect(res.ruleEvaluationResults).toEqual([false, false, false]);
+      expect(res.errors?.map(({ code, field }) => ({ code, field }))).toEqual([
+        { code: "UNSUPPORTED_ARRAY_OPERATOR", field: "user.roles" },
+        { code: "MISSING_CONTEXT_FIELD", field: "user.plan" },
+        { code: "UNSUPPORTED_ARRAY_OPERATOR", field: "user.teams" },
+      ]);
+    });
+
     it("does not report an array leaf as missing", () => {
       const res = evaluateFlagRules({
         flagKey: "role-based-flag",
