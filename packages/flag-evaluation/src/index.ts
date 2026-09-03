@@ -197,6 +197,64 @@ export interface Rule<T extends RuleValue> {
   value: T;
 }
 
+export type NormalizedContextValue = string | string[];
+export type FlattenedContext = Record<string, NormalizedContextValue>;
+
+function normalizeArrayElement(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return "";
+  if (typeof value !== "object") return String(value);
+
+  // Composite array elements are outside the targeting model. Keep their
+  // behavior explicit by comparing their JSON encoding.
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizeArray(value: unknown[]): string[] {
+  return value.flatMap((entry) => {
+    const normalized = normalizeArrayElement(entry);
+    return normalized === undefined ? [] : [normalized];
+  });
+}
+
+/**
+ * Flattens context for evaluation while preserving arrays as leaf values.
+ * Primitive array elements use the same string coercion as scalar values;
+ * composite elements are JSON encoded.
+ */
+export function flattenContext(data: object): FlattenedContext {
+  const result: FlattenedContext = {};
+
+  function recurse(value: unknown, prop: string): void {
+    if (value === undefined) return;
+
+    if (value === null) {
+      result[prop] = "";
+    } else if (Array.isArray(value)) {
+      result[prop] = normalizeArray(value);
+    } else if (typeof value !== "object") {
+      result[prop] = String(value);
+    } else {
+      const entries = Object.entries(value);
+      if (entries.length === 0) {
+        result[prop] = "";
+        return;
+      }
+
+      for (const [key, entry] of entries) {
+        recurse(entry, prop ? `${prop}.${key}` : key);
+      }
+    }
+  }
+
+  if (Object.keys(data).length > 0) recurse(data, "");
+  return result;
+}
+
 /**
  * Flattens a nested JSON object into a single-level object, with keys indicating the nesting levels.
  * Keys in the resulting object are represented in a dot notation to reflect the nesting structure of the original data.
@@ -302,50 +360,81 @@ export function hashInt(hashInput: string): number {
   return Math.floor((value / 0xfffff) * 100000);
 }
 
+function parseLegacyArray(value: string): string[] | undefined {
+  if (!value.trimStart().startsWith("[")) return undefined;
+
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed) ? normalizeArray(parsed) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
- * Evaluates a field value against a specified operator and comparison values.
- *
- * @param {string} fieldValue - The value to be evaluated.
- * @param {ContextFilterOperator} operator - The operator used for the evaluation (e.g., "CONTAINS", "GT").
- * @param {string[]} values - An array of comparison values for evaluation.
- * @return {boolean} The result of the evaluation based on the operator and comparison values.
+ * Evaluates a scalar or array field value against an operator and comparison values.
+ * Legacy JSON-encoded arrays are interpreted the same way as native arrays.
  */
 export function evaluate(
-  fieldValue: string,
+  fieldValue: NormalizedContextValue,
   operator: ContextFilterOperator,
   values: string[],
   valueSet?: Set<string>,
 ): boolean {
+  const normalizedFieldValue = Array.isArray(fieldValue)
+    ? fieldValue
+    : (parseLegacyArray(fieldValue) ?? fieldValue);
   const value = values[0];
+
+  if (Array.isArray(normalizedFieldValue)) {
+    switch (operator) {
+      case "ANY_OF": {
+        const candidates = valueSet ?? new Set(values);
+        return normalizedFieldValue.some((entry) => candidates.has(entry));
+      }
+      case "NOT_ANY_OF": {
+        const candidates = valueSet ?? new Set(values);
+        return !normalizedFieldValue.some((entry) => candidates.has(entry));
+      }
+      case "SET":
+        return normalizedFieldValue.length > 0;
+      case "NOT_SET":
+        return normalizedFieldValue.length === 0;
+      default:
+        // Exact, textual, numeric, date, and boolean operators are scalar-only.
+        // Do not accidentally stringify arrays for comparison.
+        return false;
+    }
+  }
 
   switch (operator) {
     case "CONTAINS":
-      return fieldValue.toLowerCase().includes(value.toLowerCase());
+      return normalizedFieldValue.toLowerCase().includes(value.toLowerCase());
     case "NOT_CONTAINS":
-      return !fieldValue.toLowerCase().includes(value.toLowerCase());
+      return !normalizedFieldValue.toLowerCase().includes(value.toLowerCase());
     case "GT":
-      if (isNaN(Number(fieldValue)) || isNaN(Number(value))) {
+      if (isNaN(Number(normalizedFieldValue)) || isNaN(Number(value))) {
         // TODO: return error instead? used logger previously
         console.error(
-          `GT operator requires numeric values: ${fieldValue}, ${value}`,
+          `GT operator requires numeric values: ${normalizedFieldValue}, ${value}`,
         );
         return false;
       }
-      return Number(fieldValue) > Number(value);
+      return Number(normalizedFieldValue) > Number(value);
     case "LT":
-      if (isNaN(Number(fieldValue)) || isNaN(Number(value))) {
+      if (isNaN(Number(normalizedFieldValue)) || isNaN(Number(value))) {
         console.error(
-          `LT operator requires numeric values: ${fieldValue}, ${value}`,
+          `LT operator requires numeric values: ${normalizedFieldValue}, ${value}`,
         );
         return false;
       }
-      return Number(fieldValue) < Number(value);
+      return Number(normalizedFieldValue) < Number(value);
     case "AFTER":
     case "BEFORE": {
       // more/less than `value` days ago
       const daysAgo = new Date();
       daysAgo.setDate(daysAgo.getDate() - Number(value));
-      const fieldValueDate = new Date(fieldValue).getTime();
+      const fieldValueDate = new Date(normalizedFieldValue).getTime();
 
       return operator === "AFTER"
         ? fieldValueDate > daysAgo.getTime()
@@ -353,11 +442,11 @@ export function evaluate(
     }
     case "DATE_AFTER":
     case "DATE_BEFORE": {
-      const fieldValueDate = new Date(fieldValue).getTime();
+      const fieldValueDate = new Date(normalizedFieldValue).getTime();
       const valueDate = new Date(value).getTime();
       if (isNaN(fieldValueDate) || isNaN(valueDate)) {
         console.error(
-          `${operator} operator requires valid date values: ${fieldValue}, ${value}`,
+          `${operator} operator requires valid date values: ${normalizedFieldValue}, ${value}`,
         );
         return false;
       }
@@ -366,23 +455,25 @@ export function evaluate(
         : fieldValueDate <= valueDate;
     }
     case "SET":
-      return fieldValue !== "";
+      return normalizedFieldValue !== "";
     case "NOT_SET":
-      return fieldValue === "";
+      return normalizedFieldValue === "";
     case "IS":
-      return fieldValue === value;
+      return normalizedFieldValue === value;
     case "IS_NOT":
-      return fieldValue !== value;
+      return normalizedFieldValue !== value;
     case "ANY_OF":
-      return valueSet ? valueSet.has(fieldValue) : values.includes(fieldValue);
+      return valueSet
+        ? valueSet.has(normalizedFieldValue)
+        : values.includes(normalizedFieldValue);
     case "NOT_ANY_OF":
       return valueSet
-        ? !valueSet.has(fieldValue)
-        : !values.includes(fieldValue);
+        ? !valueSet.has(normalizedFieldValue)
+        : !values.includes(normalizedFieldValue);
     case "IS_TRUE":
-      return fieldValue == "true";
+      return normalizedFieldValue == "true";
     case "IS_FALSE":
-      return fieldValue == "false";
+      return normalizedFieldValue == "false";
     default:
       console.error(`unknown operator: ${operator}`);
       return false;
@@ -391,7 +482,7 @@ export function evaluate(
 
 function evaluateRecursively(
   filter: RuleFilter,
-  context: Record<string, string>,
+  context: FlattenedContext,
   missingContextFieldsSet: Set<string>,
 ): boolean {
   switch (filter.type) {
@@ -419,10 +510,14 @@ function evaluateRecursively(
         return false;
       }
 
-      const hashVal = hashInt(
-        `${filter.key}.${context[filter.partialRolloutAttribute]}`,
-      );
+      const rolloutValue = context[filter.partialRolloutAttribute];
+      const normalizedRolloutValue =
+        typeof rolloutValue === "string"
+          ? (parseLegacyArray(rolloutValue) ?? rolloutValue)
+          : rolloutValue;
+      if (Array.isArray(normalizedRolloutValue)) return false;
 
+      const hashVal = hashInt(`${filter.key}.${normalizedRolloutValue}`);
       return hashVal < filter.partialRolloutThreshold;
     }
     case "group":
@@ -470,7 +565,7 @@ export interface EvaluationParams<T extends RuleValue> {
  *
  * @property {string} flagKey - The unique key identifying the flag being evaluated.
  * @property {T | undefined} value - The resolved value of the flag, if the evaluation is successful.
- * @property {Record<string, any>} context - The contextual information used during the evaluation process.
+ * @property {Record<string, any>} context - The normalized contextual information used during evaluation.
  * @property {boolean[]} ruleEvaluationResults - Array indicating the success or failure of each rule evaluated.
  * @property {string} [reason] - Optional field providing additional explanation regarding the evaluation result.
  * @property {string[]} [missingContextFields] - Optional array of context fields that were required but not provided during the evaluation.
@@ -489,7 +584,7 @@ export function evaluateFlagRules<T extends RuleValue>({
   flagKey,
   rules,
 }: EvaluationParams<T>): EvaluationResult<T> {
-  const flatContext = flattenJSON(context);
+  const flatContext = flattenContext(context);
   const missingContextFieldsSet = new Set<string>();
 
   const ruleEvaluationResults = rules.map((rule) =>
