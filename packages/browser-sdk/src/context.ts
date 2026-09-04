@@ -1,11 +1,12 @@
-export type ContextValue =
+type DefinedContextValue =
   | string
   | number
   | boolean
   | null
-  | undefined
-  | ContextValue[]
+  | DefinedContextValue[]
   | { [key: string]: ContextValue };
+
+export type ContextValue = DefinedContextValue | undefined;
 
 /**
  * Serialize context with recursively sorted object keys. Array order is preserved.
