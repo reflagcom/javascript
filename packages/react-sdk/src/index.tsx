@@ -214,10 +214,29 @@ const reflagClientBootstrappedStates = new WeakMap<
   BrowserBootstrappedState
 >();
 
+function contextValueEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    return (
+      Array.isArray(a) &&
+      Array.isArray(b) &&
+      a.length === b.length &&
+      a.every((value, index) => contextValueEqual(value, b[index]))
+    );
+  }
+  if (!a || !b || typeof a !== "object" || typeof b !== "object") {
+    return false;
+  }
+  return contextPartEqual(
+    a as Record<string, unknown>,
+    b as Record<string, unknown>,
+  );
+}
+
 function contextPartEqual(
-  a?: Record<string, string | number | undefined>,
-  b?: Record<string, string | number | undefined>,
-) {
+  a?: Record<string, unknown>,
+  b?: Record<string, unknown>,
+): boolean {
   if (a === b) return true;
   if (!a || !b) return !a && !b;
 
@@ -226,7 +245,9 @@ function contextPartEqual(
   if (aKeys.length !== bKeys.length) return false;
 
   return aKeys.every(
-    (key) => Object.prototype.hasOwnProperty.call(b, key) && a[key] === b[key],
+    (key) =>
+      Object.prototype.hasOwnProperty.call(b, key) &&
+      contextValueEqual(a[key], b[key]),
   );
 }
 

@@ -3199,8 +3199,11 @@ describe("getFlagsRemote", () => {
     expect(requestUrl.searchParams.has("context.other.roles.0")).toBe(false);
   });
 
-  it("should not try to append the context if it's empty", async () => {
-    await client.getFlagsRemote();
+  it.each([
+    ["absent", undefined],
+    ["effectively empty", { other: { nested: { value: undefined } } }],
+  ])("does not append %s context", async (_case, additionalContext) => {
+    await client.getFlagsRemote(undefined, undefined, additionalContext);
 
     expect(httpClient.get).toHaveBeenCalledTimes(1);
 

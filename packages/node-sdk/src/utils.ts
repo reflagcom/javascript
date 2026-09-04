@@ -152,23 +152,75 @@ function updateSha1Hash(hash: Hash, value: any) {
  * Serialize JSON with object keys sorted recursively. Array order is preserved.
  */
 export function canonicalJSONStringify(value: unknown): string {
-  const serialized = JSON.stringify(value, (_key, nestedValue: unknown) => {
-    if (
-      nestedValue === null ||
-      typeof nestedValue !== "object" ||
-      Array.isArray(nestedValue)
-    ) {
-      return nestedValue;
-    }
+  let serialized: string | undefined;
+  try {
+    serialized = JSON.stringify(value, (_key, nestedValue: unknown) => {
+      if (typeof nestedValue === "bigint") return String(nestedValue);
+      if (
+        nestedValue === null ||
+        typeof nestedValue !== "object" ||
+        Array.isArray(nestedValue)
+      ) {
+        return nestedValue;
+      }
 
-    return Object.fromEntries(
-      Object.entries(nestedValue).sort(([left], [right]) =>
-        left < right ? -1 : left > right ? 1 : 0,
-      ),
-    );
-  });
+      return Object.fromEntries(
+        Object.entries(nestedValue).sort(([left], [right]) =>
+          left < right ? -1 : left > right ? 1 : 0,
+        ),
+      );
+    });
+  } catch {
+    ok(false, "value must be JSON serializable");
+  }
   ok(serialized !== undefined, "value must be JSON serializable");
   return serialized;
+}
+
+function pruneUndefinedObjectValues(
+  value: object,
+  ancestors: WeakSet<object>,
+): Record<string, unknown> {
+  ok(!ancestors.has(value), "value must be JSON serializable");
+  ancestors.add(value);
+
+  const entries = Object.entries(value).flatMap(([key, nestedValue]) => {
+    if (nestedValue === undefined) return [];
+    if (
+      nestedValue !== null &&
+      typeof nestedValue === "object" &&
+      !Array.isArray(nestedValue)
+    ) {
+      const originalKeys = Object.keys(nestedValue);
+      const pruned = pruneUndefinedObjectValues(nestedValue, ancestors);
+      if (originalKeys.length > 0 && Object.keys(pruned).length === 0)
+        return [];
+      return [[key, pruned] as const];
+    }
+    return [[key, nestedValue] as const];
+  });
+
+  ancestors.delete(value);
+  return Object.fromEntries(entries);
+}
+
+export function canonicalContextJSONStringify(
+  context: object | undefined,
+): string | undefined {
+  if (!context) return undefined;
+
+  const pruned = Object.fromEntries(
+    Object.entries(pruneUndefinedObjectValues(context, new WeakSet())).filter(
+      ([, section]) =>
+        !section ||
+        typeof section !== "object" ||
+        Array.isArray(section) ||
+        Object.keys(section).length > 0,
+    ),
+  );
+  return Object.keys(pruned).length
+    ? canonicalJSONStringify(pruned)
+    : undefined;
 }
 
 /** Hash an object using SHA1.

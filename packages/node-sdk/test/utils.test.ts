@@ -3,6 +3,7 @@ import { createHash } from "crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  canonicalContextJSONStringify,
   canonicalJSONStringify,
   decorateLogger,
   hashObject,
@@ -137,6 +138,37 @@ describe("canonicalJSONStringify", () => {
     ).toBe(
       '{"a":1,"values":[{"a":false,"b":true},"second"],"z":{"first":1,"second":2}}',
     );
+  });
+
+  it("normalizes bigint and reports circular values consistently", () => {
+    expect(canonicalJSONStringify({ value: 42n })).toBe('{"value":"42"}');
+
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    expect(() => canonicalJSONStringify(circular)).toThrow(
+      "validation failed: value must be JSON serializable",
+    );
+  });
+});
+
+describe("canonicalContextJSONStringify", () => {
+  it("deeply prunes undefined-only objects but preserves explicit empties", () => {
+    expect(
+      canonicalContextJSONStringify({
+        user: { id: undefined },
+        other: {
+          dropped: { value: undefined },
+          explicitEmpty: {},
+          values: [{ value: undefined }],
+        },
+      }),
+    ).toBe('{"other":{"explicitEmpty":{},"values":[{}]}}');
+  });
+
+  it("omits an effectively empty context", () => {
+    expect(
+      canonicalContextJSONStringify({ user: { id: undefined } }),
+    ).toBeUndefined();
   });
 });
 
