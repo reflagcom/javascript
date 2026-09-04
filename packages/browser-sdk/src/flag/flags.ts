@@ -195,6 +195,21 @@ export function validateFlagsResponse(
   };
 }
 
+export function flattenJSON(obj: Record<string, any>): Record<string, any> {
+  const result: Record<string, any> = {};
+  for (const key in obj) {
+    if (typeof obj[key] === "object") {
+      const flat = flattenJSON(obj[key]);
+      for (const flatKey in flat) {
+        result[`${key}.${flatKey}`] = flat[flatKey];
+      }
+    } else if (typeof obj[key] !== "undefined") {
+      result[key] = obj[key];
+    }
+  }
+  return result;
+}
+
 /**
  * Event representing checking the flag evaluation result
  */
