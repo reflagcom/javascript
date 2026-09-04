@@ -1,4 +1,5 @@
-type DefinedContextValue =
+/** A JSON-compatible context value that is not `undefined`. */
+export type DefinedContextValue =
   | string
   | number
   | boolean
@@ -6,6 +7,7 @@ type DefinedContextValue =
   | DefinedContextValue[]
   | { [key: string]: ContextValue };
 
+/** A context value. Object properties set to `undefined` are omitted. */
 export type ContextValue = DefinedContextValue | undefined;
 
 /**
