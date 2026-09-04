@@ -3208,7 +3208,7 @@ describe("getFlagsRemote", () => {
     expect(httpClient.get).toHaveBeenCalledTimes(1);
 
     expect(httpClient.get).toHaveBeenCalledWith(
-      "https://api.example.com/features/evaluated?",
+      "https://api.example.com/features/evaluated",
       expectedHeaders,
       API_TIMEOUT_MS,
     );

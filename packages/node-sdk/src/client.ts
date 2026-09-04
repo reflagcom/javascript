@@ -1690,8 +1690,9 @@ export class ReflagClient {
       params.append("key", key);
     }
 
+    const query = params.toString();
     const res = await this.get<EvaluatedFlagsAPIResponse>(
-      `features/evaluated?${params}`,
+      `features/evaluated${query ? `?${query}` : ""}`,
     );
 
     if (key) {
