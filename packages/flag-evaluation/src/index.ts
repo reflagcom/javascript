@@ -240,7 +240,7 @@ function normalizeArray(value: unknown[]): string[] {
  * composite elements are JSON encoded.
  */
 export function flattenContext(data: object): FlattenedContext {
-  const result: FlattenedContext = {};
+  const result = Object.create(null) as FlattenedContext;
 
   function recurse(value: unknown, prop: string): void {
     if (value === undefined) return;
@@ -433,9 +433,15 @@ export function evaluate(
 
   switch (operator) {
     case "CONTAINS":
-      return normalizedFieldValue.toLowerCase().includes(value.toLowerCase());
+      return (
+        typeof value === "string" &&
+        normalizedFieldValue.toLowerCase().includes(value.toLowerCase())
+      );
     case "NOT_CONTAINS":
-      return !normalizedFieldValue.toLowerCase().includes(value.toLowerCase());
+      return (
+        typeof value === "string" &&
+        !normalizedFieldValue.toLowerCase().includes(value.toLowerCase())
+      );
     case "GT":
       if (isNaN(Number(normalizedFieldValue)) || isNaN(Number(value))) {
         // TODO: return error instead? used logger previously

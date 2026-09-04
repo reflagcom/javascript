@@ -72,6 +72,19 @@ import {
 
 const reflagConfigDefaultFile = "reflag.config.json";
 
+function evaluationErrorsRateLimitKey(errors: EvaluationError[]): string {
+  return errors
+    .map((error) =>
+      JSON.stringify([
+        error.code,
+        error.field,
+        "operator" in error ? error.operator : "",
+      ]),
+    )
+    .sort()
+    .join("\n");
+}
+
 type PartialBy<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
 type FlagOverrideLayer = {
   id: number;
@@ -1429,8 +1442,7 @@ export class ReflagClient {
         this.rateLimiter.isAllowed(
           hashObject({
             ...evaluation.rateLimitKey,
-            evaluationErrors: evaluation.errors,
-            context,
+            evaluationErrors: evaluationErrorsRateLimitKey(evaluation.errors),
           }),
         )
       ) {
@@ -1598,7 +1610,7 @@ export class ReflagClient {
       },
       get config() {
         if (enableTracking && enableChecks) {
-          client._warnMissingFlagContextFields(context, flag);
+          client._warnMissingFlagContextFields(context, { ...flag, config });
 
           void client
             .sendFlagEvent({

@@ -692,6 +692,56 @@ describe("evaluate flag targeting integration ", () => {
       ]);
     });
 
+    it("does not report errors for short-circuited conditions", () => {
+      const res = evaluateFlagRules({
+        flagKey: "conditional-context",
+        rules: [
+          {
+            value: "admin",
+            filter: {
+              type: "group",
+              operator: "and",
+              filters: [
+                {
+                  type: "context",
+                  field: "user.role",
+                  operator: "SET",
+                },
+                {
+                  type: "context",
+                  field: "user.role",
+                  operator: "IS",
+                  values: ["admin"],
+                },
+              ],
+            },
+          },
+          {
+            value: "fallback",
+            filter: {
+              type: "group",
+              operator: "or",
+              filters: [
+                { type: "constant", value: true },
+                {
+                  type: "context",
+                  field: "user.department",
+                  operator: "IS",
+                  values: ["engineering"],
+                },
+              ],
+            },
+          },
+        ],
+        context: { user: {} },
+      });
+
+      expect(res.value).toBe("fallback");
+      expect(res.ruleEvaluationResults).toEqual([false, true]);
+      expect(res.errors).toBeUndefined();
+      expect(res.missingContextFields).toEqual([]);
+    });
+
     it("does not report an array leaf as missing", () => {
       const res = evaluateFlagRules({
         flagKey: "role-based-flag",
@@ -1006,6 +1056,13 @@ describe("operator evaluation", () => {
     });
   }
 
+  it.each(["CONTAINS", "NOT_CONTAINS"] as const)(
+    "returns false for %s without comparison values",
+    (operator) => {
+      expect(evaluate("value", operator, [])).toBe(false);
+    },
+  );
+
   it.each([
     [["a", "b"], "ANY_OF", ["a"], true],
     [["a", "b"], "ANY_OF", ["c"], false],
@@ -1186,6 +1243,16 @@ describe("flattenContext", () => {
       "user.states": ["true", "false"],
       "user.nullable": [""],
     });
+  });
+
+  it("stores dangerous root keys without mutating the accumulator prototype", () => {
+    const flattened = flattenContext(
+      JSON.parse('{"__proto__":["safe"],"constructor":"value"}'),
+    );
+
+    expect(Object.getPrototypeOf(flattened)).toBeNull();
+    expect(flattened["__proto__"]).toEqual(["safe"]);
+    expect(flattened.constructor).toBe("value");
   });
 
   it("JSON-encodes composite array elements without traversing them", () => {

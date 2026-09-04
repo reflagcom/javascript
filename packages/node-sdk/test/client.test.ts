@@ -1799,6 +1799,71 @@ describe("ReflagClient", () => {
           ],
         },
       );
+
+      const sameErrorForAnotherUser = client.getFlag(
+        { user: { id: "another-user", roles: ["admin"] } },
+        "array-flag",
+      );
+      expect(sameErrorForAnotherUser.isEnabled).toBe(false);
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+    });
+
+    it("`config` warns about unsupported array operators", async () => {
+      const arrayConfigDefinitions: FlagsAPIResponse = {
+        flagStateVersion: 2,
+        features: [
+          {
+            key: "array-config",
+            description: "Array config",
+            targeting: {
+              version: 1,
+              rules: [{ filter: { type: "constant", value: true } }],
+            },
+            config: {
+              version: 1,
+              variants: [
+                {
+                  key: "admin",
+                  payload: { access: true },
+                  filter: {
+                    type: "context",
+                    field: "user.roles",
+                    operator: "CONTAINS",
+                    values: ["admin"],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      };
+      httpClient.get.mockResolvedValue({
+        ok: true,
+        status: 200,
+        body: { success: true, ...arrayConfigDefinitions },
+      });
+
+      await client.initialize();
+      const flag = client.getFlag(
+        { user: { id: "user123", roles: ["admin"] } },
+        "array-config",
+      );
+
+      expect(flag.config).toEqual({ key: undefined, payload: undefined });
+      expect(logger.warn).toHaveBeenCalledWith(
+        "flag targeting rules could not be fully evaluated.",
+        {
+          "array-config.config": [
+            {
+              code: "UNSUPPORTED_ARRAY_OPERATOR",
+              field: "user.roles",
+              operator: "CONTAINS",
+              message:
+                'Operator CONTAINS does not support array-valued context field "user.roles".',
+            },
+          ],
+        },
+      );
     });
 
     it("`isEnabled` should not warn about missing context fields if not needed", async () => {
