@@ -1747,6 +1747,13 @@ describe("ReflagClient", () => {
           ],
         },
       );
+
+      const sameErrorForAnotherUser = client.getFlag(
+        { ...context, user: { ...context.user, id: "another-user" } },
+        "flag2",
+      );
+      expect(sameErrorForAnotherUser.isEnabled).toBe(false);
+      expect(logger.warn).toHaveBeenCalledTimes(1);
     });
 
     it("`isEnabled` warns about unsupported array operators", async () => {

@@ -1370,24 +1370,20 @@ export class ReflagClient {
   }
 
   /**
-   * Warns if a flag has targeting rules that require context fields that are missing.
+   * Warns if a flag or config evaluation produced diagnostics.
    *
-   * @param context - The context.
    * @param flag - The flag to check.
    */
-  private _warnMissingFlagContextFields(
-    context: Context,
-    flag: {
+  private _warnFlagEvaluationDiagnostics(flag: {
+    key: string;
+    missingContextFields?: string[];
+    evaluationErrors?: EvaluationError[];
+    config?: {
       key: string;
       missingContextFields?: string[];
       evaluationErrors?: EvaluationError[];
-      config?: {
-        key: string;
-        missingContextFields?: string[];
-        evaluationErrors?: EvaluationError[];
-      };
-    },
-  ) {
+    };
+  }) {
     const missingFieldsReport: Record<string, string[]> = {};
     const errorReport: Record<string, EvaluationError[]> = {};
     const { config, ...flagData } = flag;
@@ -1419,8 +1415,9 @@ export class ReflagClient {
         this.rateLimiter.isAllowed(
           hashObject({
             ...evaluation.rateLimitKey,
-            missingContextFields: evaluation.missingContextFields,
-            context,
+            missingContextFields: JSON.stringify(
+              [...evaluation.missingContextFields].sort(),
+            ),
           }),
         )
       ) {
@@ -1587,7 +1584,7 @@ export class ReflagClient {
     return {
       get isEnabled() {
         if (enableTracking && enableChecks) {
-          client._warnMissingFlagContextFields(context, flag);
+          client._warnFlagEvaluationDiagnostics(flag);
 
           void client
             .sendFlagEvent({
@@ -1610,7 +1607,7 @@ export class ReflagClient {
       },
       get config() {
         if (enableTracking && enableChecks) {
-          client._warnMissingFlagContextFields(context, { ...flag, config });
+          client._warnFlagEvaluationDiagnostics({ ...flag, config });
 
           void client
             .sendFlagEvent({
