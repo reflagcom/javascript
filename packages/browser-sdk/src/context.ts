@@ -41,6 +41,14 @@ function canonicalJSONStringify(value: unknown): string {
   return serialized;
 }
 
+function isPlainObjectWithoutToJSON(value: object): boolean {
+  const prototype = Object.getPrototypeOf(value);
+  return (
+    (prototype === Object.prototype || prototype === null) &&
+    typeof (value as { toJSON?: unknown }).toJSON !== "function"
+  );
+}
+
 function pruneUndefinedObjectValues(
   value: object,
   ancestors: WeakSet<object>,
@@ -55,7 +63,8 @@ function pruneUndefinedObjectValues(
     if (
       nestedValue !== null &&
       typeof nestedValue === "object" &&
-      !Array.isArray(nestedValue)
+      !Array.isArray(nestedValue) &&
+      isPlainObjectWithoutToJSON(nestedValue)
     ) {
       const originalKeys = Object.keys(nestedValue);
       const pruned = pruneUndefinedObjectValues(nestedValue, ancestors);

@@ -170,6 +170,24 @@ describe("canonicalContextJSONStringify", () => {
       canonicalContextJSONStringify({ user: { id: undefined } }),
     ).toBeUndefined();
   });
+
+  it("preserves JSON serialization for dates and custom toJSON values", () => {
+    const custom = {
+      ignored: undefined,
+      toJSON: () => ({ z: 2, a: 1 }),
+    };
+
+    expect(
+      canonicalContextJSONStringify({
+        other: {
+          createdAt: new Date("2025-01-02T03:04:05.000Z"),
+          custom,
+        },
+      }),
+    ).toBe(
+      '{"other":{"createdAt":"2025-01-02T03:04:05.000Z","custom":{"a":1,"z":2}}}',
+    );
+  });
 });
 
 describe("hashObject", () => {

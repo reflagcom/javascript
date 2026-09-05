@@ -24,6 +24,24 @@ describe("canonicalContextJSONStringify", () => {
     ).toBeUndefined();
   });
 
+  it("preserves JSON serialization for dates and custom toJSON values", () => {
+    const custom = {
+      ignored: undefined,
+      toJSON: () => ({ z: 2, a: 1 }),
+    };
+
+    expect(
+      canonicalContextJSONStringify({
+        other: {
+          createdAt: new Date("2025-01-02T03:04:05.000Z"),
+          custom,
+        },
+      } as any),
+    ).toBe(
+      '{"other":{"createdAt":"2025-01-02T03:04:05.000Z","custom":{"a":1,"z":2}}}',
+    );
+  });
+
   it("normalizes bigint and reports circular values consistently", () => {
     expect(
       canonicalContextJSONStringify({ other: { value: 42n } } as any),
