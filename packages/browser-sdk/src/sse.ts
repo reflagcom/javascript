@@ -137,7 +137,7 @@ export class AblySSEChannel {
       }
       const serializedContext = canonicalContextJSONStringify(this.context);
       if (serializedContext) {
-        url.searchParams.append("context", serializedContext);
+        url.searchParams.append("contextJson", serializedContext);
       }
 
       this.eventSource = this.createEventSource(url.toString()) ?? null;
