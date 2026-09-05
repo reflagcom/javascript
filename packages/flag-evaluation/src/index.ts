@@ -373,23 +373,6 @@ export function hashInt(hashInput: string): number {
   return Math.floor((value / 0xfffff) * 100000);
 }
 
-function parseLegacyArray(value: string): string[] | undefined {
-  if (!value.trimStart().startsWith("[")) return undefined;
-
-  try {
-    const parsed: unknown = JSON.parse(value);
-    return Array.isArray(parsed) ? normalizeArray(parsed) : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function normalizeContextValue(
-  value: NormalizedContextValue,
-): NormalizedContextValue {
-  return typeof value === "string" ? (parseLegacyArray(value) ?? value) : value;
-}
-
 const ARRAY_OPERATORS = new Set<ContextFilterOperator>([
   "ANY_OF",
   "NOT_ANY_OF",
@@ -399,9 +382,8 @@ const ARRAY_OPERATORS = new Set<ContextFilterOperator>([
 
 /**
  * Evaluates a scalar or array field value against an operator and comparison values.
- * Legacy JSON-encoded arrays are interpreted the same way as native arrays.
  */
-function evaluateNormalized(
+export function evaluate(
   normalizedFieldValue: NormalizedContextValue,
   operator: ContextFilterOperator,
   values: string[],
@@ -509,20 +491,6 @@ function evaluateNormalized(
   }
 }
 
-export function evaluate(
-  fieldValue: NormalizedContextValue,
-  operator: ContextFilterOperator,
-  values: string[],
-  valueSet?: Set<string>,
-): boolean {
-  return evaluateNormalized(
-    normalizeContextValue(fieldValue),
-    operator,
-    values,
-    valueSet,
-  );
-}
-
 function addUnsupportedArrayOperatorError(
   errors: Map<string, EvaluationError>,
   field: string,
@@ -569,9 +537,7 @@ function evaluateRecursively(
         return false;
       }
 
-      const normalizedFieldValue = normalizeContextValue(
-        context[filter.field] ?? "",
-      );
+      const normalizedFieldValue = context[filter.field] ?? "";
       if (
         Array.isArray(normalizedFieldValue) &&
         !ARRAY_OPERATORS.has(filter.operator)
@@ -580,7 +546,7 @@ function evaluateRecursively(
         return false;
       }
 
-      return evaluateNormalized(
+      return evaluate(
         normalizedFieldValue,
         filter.operator,
         filter.values || [],
@@ -593,9 +559,7 @@ function evaluateRecursively(
         return false;
       }
 
-      const normalizedRolloutValue = normalizeContextValue(
-        context[filter.partialRolloutAttribute],
-      );
+      const normalizedRolloutValue = context[filter.partialRolloutAttribute];
       if (Array.isArray(normalizedRolloutValue)) {
         addUnsupportedArrayOperatorError(
           errors,
