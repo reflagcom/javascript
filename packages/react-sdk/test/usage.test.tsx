@@ -335,6 +335,27 @@ describe("<ReflagProvider />", () => {
     expect(setContext).toHaveBeenCalledTimes(1);
   });
 
+  test("does not recurse indefinitely for structurally equal circular values", async () => {
+    vi.spyOn(ReflagClient.prototype, "initialize").mockResolvedValueOnce();
+    const setContext = vi
+      .spyOn(ReflagClient.prototype, "setContext")
+      .mockResolvedValue();
+    const circularContext = () => {
+      const value: Record<string, unknown> = { id: "circular-user" };
+      value.self = value;
+      return { user: value } as any;
+    };
+    const provider = getProvider({ context: circularContext() });
+
+    const { rerender } = render(provider);
+    await waitFor(() => expect(setContext).toHaveBeenCalledTimes(1));
+
+    rerender(React.cloneElement(provider, { context: circularContext() }));
+    await act(async () => undefined);
+
+    expect(setContext).toHaveBeenCalledTimes(1);
+  });
+
   test("handles context changes", async () => {
     const { queryByTestId, rerender } = render(
       getProvider({
