@@ -3,6 +3,8 @@ import { createHash } from "crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  canonicalContextJSONStringify,
+  canonicalJSONStringify,
   decorateLogger,
   hashObject,
   isObject,
@@ -121,6 +123,70 @@ describe("mergeSkipUndefined", () => {
     const source = {};
     const result = mergeSkipUndefined(target, source);
     expect(result).toEqual({});
+  });
+});
+
+describe("canonicalJSONStringify", () => {
+  it("sorts object keys recursively while preserving array order", () => {
+    expect(
+      canonicalJSONStringify({
+        z: { second: 2, first: 1 },
+        values: [{ b: true, a: false }, "second"],
+        a: 1,
+        omitted: undefined,
+      }),
+    ).toBe(
+      '{"a":1,"values":[{"a":false,"b":true},"second"],"z":{"first":1,"second":2}}',
+    );
+  });
+
+  it("normalizes bigint and reports circular values consistently", () => {
+    expect(canonicalJSONStringify({ value: 42n })).toBe('{"value":"42"}');
+
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    expect(() => canonicalJSONStringify(circular)).toThrow(
+      "validation failed: value must be JSON serializable",
+    );
+  });
+});
+
+describe("canonicalContextJSONStringify", () => {
+  it("deeply prunes undefined-only objects but preserves explicit empties", () => {
+    expect(
+      canonicalContextJSONStringify({
+        user: { id: undefined },
+        other: {
+          dropped: { value: undefined },
+          explicitEmpty: {},
+          values: [{ value: undefined }],
+        },
+      }),
+    ).toBe('{"other":{"explicitEmpty":{},"values":[{}]}}');
+  });
+
+  it("omits an effectively empty context", () => {
+    expect(
+      canonicalContextJSONStringify({ user: { id: undefined } }),
+    ).toBeUndefined();
+  });
+
+  it("preserves JSON serialization for dates and custom toJSON values", () => {
+    const custom = {
+      ignored: undefined,
+      toJSON: () => ({ z: 2, a: 1 }),
+    };
+
+    expect(
+      canonicalContextJSONStringify({
+        other: {
+          createdAt: new Date("2025-01-02T03:04:05.000Z"),
+          custom,
+        },
+      }),
+    ).toBe(
+      '{"other":{"createdAt":"2025-01-02T03:04:05.000Z","custom":{"a":1,"z":2}}}',
+    );
   });
 });
 

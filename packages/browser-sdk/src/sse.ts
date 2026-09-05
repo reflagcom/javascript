@@ -1,5 +1,5 @@
 import { SDK_VERSION_HEADER_NAME } from "./config";
-import { ReflagContext } from "./context";
+import { canonicalContextJSONStringify, ReflagContext } from "./context";
 import { Logger, loggerWithPrefix } from "./logger";
 
 export type EventSourceLike = {
@@ -16,36 +16,6 @@ export type PubSubMessage = {
   data?: any;
   [key: string]: any;
 };
-
-function withoutUndefinedValues(
-  attributes: Record<string, string | number | undefined> | undefined,
-) {
-  if (!attributes) return undefined;
-
-  const cleaned: Record<string, string | number> = {};
-  for (const [key, value] of Object.entries(attributes)) {
-    if (value !== undefined) {
-      cleaned[key] = value;
-    }
-  }
-
-  return Object.keys(cleaned).length > 0 ? cleaned : undefined;
-}
-
-function serializeContext(context: ReflagContext | undefined) {
-  if (!context) return undefined;
-
-  const payload: Record<string, Record<string, string | number>> = {};
-  const user = withoutUndefinedValues(context.user);
-  const company = withoutUndefinedValues(context.company);
-  const other = withoutUndefinedValues(context.other);
-
-  if (user) payload.user = user;
-  if (company) payload.company = company;
-  if (other) payload.other = other;
-
-  return Object.keys(payload).length > 0 ? JSON.stringify(payload) : undefined;
-}
 
 export class AblySSEChannel {
   private isOpen = false;
@@ -165,9 +135,9 @@ export class AblySSEChannel {
       if (this.sdkVersion) {
         url.searchParams.append(SDK_VERSION_HEADER_NAME, this.sdkVersion);
       }
-      const serializedContext = serializeContext(this.context);
+      const serializedContext = canonicalContextJSONStringify(this.context);
       if (serializedContext) {
-        url.searchParams.append("context", serializedContext);
+        url.searchParams.append("contextJson", serializedContext);
       }
 
       this.eventSource = this.createEventSource(url.toString()) ?? null;

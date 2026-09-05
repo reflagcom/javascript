@@ -60,6 +60,7 @@ import {
 } from "./types";
 import {
   applyLogLevel,
+  canonicalContextJSONStringify,
   decorateLogger,
   hashObject,
   hashString,
@@ -1679,16 +1680,19 @@ export class ReflagClient {
 
     checkContextWithTracking(contextWithTracking);
 
-    const params = new URLSearchParams(
-      Object.keys(context).length ? flattenJSON({ context }) : undefined,
-    );
+    const params = new URLSearchParams();
+    const contextJson = canonicalContextJSONStringify(context);
+    if (contextJson) {
+      params.set("contextJson", contextJson);
+    }
 
     if (key) {
       params.append("key", key);
     }
 
+    const query = params.toString();
     const res = await this.get<EvaluatedFlagsAPIResponse>(
-      `features/evaluated?${params}`,
+      `features/evaluated${query ? `?${query}` : ""}`,
     );
 
     if (key) {

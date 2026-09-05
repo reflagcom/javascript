@@ -313,6 +313,49 @@ describe("<ReflagProvider />", () => {
     expect(ReflagClient.prototype.stop).not.toHaveBeenCalledOnce();
   });
 
+  test("does not reset context for structurally equal nested values", async () => {
+    const setContext = vi.spyOn(ReflagClient.prototype, "setContext");
+    const provider = () =>
+      getProvider({
+        context: {
+          user: {
+            id: "nested-user",
+            roles: ["admin", "editor"],
+            settings: { notifications: { enabled: true } },
+          },
+        },
+      });
+
+    const { rerender } = render(provider());
+    await waitFor(() => expect(setContext).toHaveBeenCalledTimes(1));
+
+    rerender(provider());
+    await act(async () => undefined);
+
+    expect(setContext).toHaveBeenCalledTimes(1);
+  });
+
+  test("does not recurse indefinitely for structurally equal circular values", async () => {
+    vi.spyOn(ReflagClient.prototype, "initialize").mockResolvedValueOnce();
+    const setContext = vi
+      .spyOn(ReflagClient.prototype, "setContext")
+      .mockResolvedValue();
+    const circularContext = () => {
+      const value: Record<string, unknown> = { id: "circular-user" };
+      value.self = value;
+      return { user: value } as any;
+    };
+    const provider = getProvider({ context: circularContext() });
+
+    const { rerender } = render(provider);
+    await waitFor(() => expect(setContext).toHaveBeenCalledTimes(1));
+
+    rerender(React.cloneElement(provider, { context: circularContext() }));
+    await act(async () => undefined);
+
+    expect(setContext).toHaveBeenCalledTimes(1);
+  });
+
   test("handles context changes", async () => {
     const { queryByTestId, rerender } = render(
       getProvider({
@@ -702,9 +745,15 @@ describe("useUpdateUser", () => {
 
     server.use(
       http.get(/\/features\/evaluated$/, ({ request }) => {
-        const siteCentricOptIn = new URL(request.url).searchParams.get(
-          "context.user.siteCentricOptIn",
+        const contextJson = new URL(request.url).searchParams.get(
+          "contextJson",
         );
+        const context = contextJson
+          ? (JSON.parse(contextJson) as {
+              user?: { siteCentricOptIn?: string };
+            })
+          : undefined;
+        const siteCentricOptIn = context?.user?.siteCentricOptIn ?? null;
         seenOptInValues.push(siteCentricOptIn);
 
         return HttpResponse.json({

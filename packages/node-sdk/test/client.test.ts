@@ -3174,19 +3174,41 @@ describe("getFlagsRemote", () => {
     expect(httpClient.get).toHaveBeenCalledTimes(1);
 
     expect(httpClient.get).toHaveBeenCalledWith(
-      "https://api.example.com/features/evaluated?context.other.custom=context&context.other.key=value&context.user.id=c1&context.company.id=u1",
+      `https://api.example.com/features/evaluated?${new URLSearchParams({
+        contextJson:
+          '{"company":{"id":"u1"},"other":{"custom":"context","key":"value"},"user":{"id":"c1"}}',
+      })}`,
       expectedHeaders,
       API_TIMEOUT_MS,
     );
   });
 
-  it("should not try to append the context if it's empty", async () => {
-    await client.getFlagsRemote();
+  it("sends array context as canonical JSON", async () => {
+    await client.getFlagsRemote(undefined, undefined, {
+      other: {
+        z: { second: 2, first: 1 },
+        roles: ["admin", "editor"],
+        a: true,
+      },
+    });
+
+    const requestUrl = new URL(httpClient.get.mock.calls[0][0]);
+    expect(requestUrl.searchParams.get("contextJson")).toBe(
+      '{"other":{"a":true,"roles":["admin","editor"],"z":{"first":1,"second":2}}}',
+    );
+    expect(requestUrl.searchParams.has("context.other.roles.0")).toBe(false);
+  });
+
+  it.each([
+    ["absent", undefined],
+    ["effectively empty", { other: { nested: { value: undefined } } }],
+  ])("does not append %s context", async (_case, additionalContext) => {
+    await client.getFlagsRemote(undefined, undefined, additionalContext);
 
     expect(httpClient.get).toHaveBeenCalledTimes(1);
 
     expect(httpClient.get).toHaveBeenCalledWith(
-      "https://api.example.com/features/evaluated?",
+      "https://api.example.com/features/evaluated",
       expectedHeaders,
       API_TIMEOUT_MS,
     );
@@ -3246,7 +3268,11 @@ describe("getFlagRemote", () => {
     expect(httpClient.get).toHaveBeenCalledTimes(1);
 
     expect(httpClient.get).toHaveBeenCalledWith(
-      "https://api.example.com/features/evaluated?context.other.custom=context&context.other.key=value&context.user.id=c1&context.company.id=u1&key=flag1",
+      `https://api.example.com/features/evaluated?${new URLSearchParams({
+        contextJson:
+          '{"company":{"id":"u1"},"other":{"custom":"context","key":"value"},"user":{"id":"c1"}}',
+        key: "flag1",
+      })}`,
       expectedHeaders,
       API_TIMEOUT_MS,
     );
@@ -3566,7 +3592,10 @@ describe("BoundReflagClient", () => {
       expect(httpClient.get).toHaveBeenCalledTimes(1);
 
       expect(httpClient.get).toHaveBeenCalledWith(
-        "https://api.example.com/features/evaluated?context.user.id=user123&context.user.age=1&context.user.name=John&context.company.id=company123&context.company.employees=100&context.company.name=Acme+Inc.&context.other.custom=context&context.other.key=value",
+        `https://api.example.com/features/evaluated?${new URLSearchParams({
+          contextJson:
+            '{"company":{"employees":100,"id":"company123","name":"Acme Inc."},"other":{"custom":"context","key":"value"},"user":{"age":1,"id":"user123","name":"John"}}',
+        })}`,
         expectedHeaders,
         API_TIMEOUT_MS,
       );
@@ -3591,7 +3620,11 @@ describe("BoundReflagClient", () => {
       expect(httpClient.get).toHaveBeenCalledTimes(1);
 
       expect(httpClient.get).toHaveBeenCalledWith(
-        "https://api.example.com/features/evaluated?context.user.id=user123&context.user.age=1&context.user.name=John&context.company.id=company123&context.company.employees=100&context.company.name=Acme+Inc.&context.other.custom=context&context.other.key=value&key=flag1",
+        `https://api.example.com/features/evaluated?${new URLSearchParams({
+          contextJson:
+            '{"company":{"employees":100,"id":"company123","name":"Acme Inc."},"other":{"custom":"context","key":"value"},"user":{"age":1,"id":"user123","name":"John"}}',
+          key: "flag1",
+        })}`,
         expectedHeaders,
         API_TIMEOUT_MS,
       );
