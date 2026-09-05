@@ -401,13 +401,12 @@ const ARRAY_OPERATORS = new Set<ContextFilterOperator>([
  * Evaluates a scalar or array field value against an operator and comparison values.
  * Legacy JSON-encoded arrays are interpreted the same way as native arrays.
  */
-export function evaluate(
-  fieldValue: NormalizedContextValue,
+function evaluateNormalized(
+  normalizedFieldValue: NormalizedContextValue,
   operator: ContextFilterOperator,
   values: string[],
   valueSet?: Set<string>,
 ): boolean {
-  const normalizedFieldValue = normalizeContextValue(fieldValue);
   const value = values[0];
 
   if (Array.isArray(normalizedFieldValue)) {
@@ -510,6 +509,20 @@ export function evaluate(
   }
 }
 
+export function evaluate(
+  fieldValue: NormalizedContextValue,
+  operator: ContextFilterOperator,
+  values: string[],
+  valueSet?: Set<string>,
+): boolean {
+  return evaluateNormalized(
+    normalizeContextValue(fieldValue),
+    operator,
+    values,
+    valueSet,
+  );
+}
+
 function addUnsupportedArrayOperatorError(
   errors: Map<string, EvaluationError>,
   field: string,
@@ -567,7 +580,7 @@ function evaluateRecursively(
         return false;
       }
 
-      return evaluate(
+      return evaluateNormalized(
         normalizedFieldValue,
         filter.operator,
         filter.values || [],
