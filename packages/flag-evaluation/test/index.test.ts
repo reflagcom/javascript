@@ -549,7 +549,7 @@ describe("evaluate flag targeting integration ", () => {
       });
     });
 
-    it("supports legacy stringified arrays", () => {
+    it("keeps JSON-looking strings scalar", () => {
       const evaluator = newEvaluator([
         {
           value: "matched",
@@ -557,51 +557,45 @@ describe("evaluate flag targeting integration ", () => {
             type: "context",
             field: "user.roles",
             operator: "ANY_OF",
-            values: ["admin"],
+            values: ['["viewer","admin"]'],
           },
         },
       ]);
 
       expect(
-        evaluator({ user: { roles: '["viewer","admin"]' } }, "legacy").value,
+        evaluator({ user: { roles: '["viewer","admin"]' } }, "scalar").value,
       ).toBe("matched");
     });
 
-    it.each([
-      ["native", ["u1"]],
-      ["legacy", '["u1"]'],
-    ] as const)(
-      "does not apply percentage rollout to %s arrays",
-      (_format, ids) => {
-        const res = evaluateFlagRules({
-          flagKey: "rollout",
-          rules: [
-            {
-              value: true,
-              filter: {
-                type: "rolloutPercentage",
-                key: "rollout",
-                partialRolloutAttribute: "user.ids",
-                partialRolloutThreshold: 100000,
-              },
-            },
-          ],
-          context: { user: { ids } },
-        });
-
-        expect(res.value).toBeUndefined();
-        expect(res.missingContextFields).toEqual([]);
-        expect(res.errors).toEqual([
+    it("does not apply percentage rollout to arrays", () => {
+      const res = evaluateFlagRules({
+        flagKey: "rollout",
+        rules: [
           {
-            code: "UNSUPPORTED_ARRAY_OPERATOR",
-            field: "user.ids",
-            operator: "rolloutPercentage",
-            message:
-              'Percentage rollout does not support array-valued context field "user.ids".',
+            value: true,
+            filter: {
+              type: "rolloutPercentage",
+              key: "rollout",
+              partialRolloutAttribute: "user.ids",
+              partialRolloutThreshold: 100000,
+            },
           },
-        ]);
-      },
-    );
+        ],
+        context: { user: { ids: ["u1"] } },
+      });
+
+      expect(res.value).toBeUndefined();
+      expect(res.missingContextFields).toEqual([]);
+      expect(res.errors).toEqual([
+        {
+          code: "UNSUPPORTED_ARRAY_OPERATOR",
+          field: "user.ids",
+          operator: "rolloutPercentage",
+          message:
+            'Percentage rollout does not support array-valued context field "user.ids".',
+        },
+      ]);
+    });
 
     it("returns a non-fatal diagnostic for scalar-only operators", () => {
       const res = evaluateFlagRules({
@@ -1074,8 +1068,9 @@ describe("operator evaluation", () => {
     [[""], "SET", [], true],
     [["A"], "ANY_OF", ["a"], false],
     [["a", "a"], "ANY_OF", ["a"], true],
-    ["[1,true]", "ANY_OF", ["1"], true],
-    ["[1,true]", "ANY_OF", ["true"], true],
+    ["[1,true]", "ANY_OF", ["1"], false],
+    ["[1,true]", "ANY_OF", ["true"], false],
+    ["[1,true]", "ANY_OF", ["[1,true]"], true],
   ] as const)(
     "evaluates array semantics for %j %s %j",
     (fieldValue, operator, values, expected) => {

@@ -373,23 +373,6 @@ export function hashInt(hashInput: string): number {
   return Math.floor((value / 0xfffff) * 100000);
 }
 
-function parseLegacyArray(value: string): string[] | undefined {
-  if (!value.trimStart().startsWith("[")) return undefined;
-
-  try {
-    const parsed: unknown = JSON.parse(value);
-    return Array.isArray(parsed) ? normalizeArray(parsed) : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function normalizeContextValue(
-  value: NormalizedContextValue,
-): NormalizedContextValue {
-  return typeof value === "string" ? (parseLegacyArray(value) ?? value) : value;
-}
-
 const ARRAY_OPERATORS = new Set<ContextFilterOperator>([
   "ANY_OF",
   "NOT_ANY_OF",
@@ -399,15 +382,13 @@ const ARRAY_OPERATORS = new Set<ContextFilterOperator>([
 
 /**
  * Evaluates a scalar or array field value against an operator and comparison values.
- * Legacy JSON-encoded arrays are interpreted the same way as native arrays.
  */
 export function evaluate(
-  fieldValue: NormalizedContextValue,
+  normalizedFieldValue: NormalizedContextValue,
   operator: ContextFilterOperator,
   values: string[],
   valueSet?: Set<string>,
 ): boolean {
-  const normalizedFieldValue = normalizeContextValue(fieldValue);
   const value = values[0];
 
   if (Array.isArray(normalizedFieldValue)) {
@@ -556,9 +537,7 @@ function evaluateRecursively(
         return false;
       }
 
-      const normalizedFieldValue = normalizeContextValue(
-        context[filter.field] ?? "",
-      );
+      const normalizedFieldValue = context[filter.field] ?? "";
       if (
         Array.isArray(normalizedFieldValue) &&
         !ARRAY_OPERATORS.has(filter.operator)
@@ -580,9 +559,7 @@ function evaluateRecursively(
         return false;
       }
 
-      const normalizedRolloutValue = normalizeContextValue(
-        context[filter.partialRolloutAttribute],
-      );
+      const normalizedRolloutValue = context[filter.partialRolloutAttribute];
       if (Array.isArray(normalizedRolloutValue)) {
         addUnsupportedArrayOperatorError(
           errors,
