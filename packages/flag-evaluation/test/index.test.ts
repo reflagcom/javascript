@@ -4,6 +4,7 @@ import {
   evaluate,
   evaluateFlagRules,
   EvaluationParams,
+  flattenContext,
   flattenJSON,
   hashInt,
   newEvaluator,
@@ -240,6 +241,14 @@ describe("evaluate flag targeting integration ", () => {
       reason: "no matched rules",
       flagKey: "flag",
       missingContextFields: ["company.id"],
+      errors: [
+        {
+          code: "MISSING_CONTEXT_FIELD",
+          field: "company.id",
+          message:
+            'Context field "company.id" is required to evaluate targeting rules.',
+        },
+      ],
       ruleEvaluationResults: [false],
     });
   });
@@ -267,6 +276,14 @@ describe("evaluate flag targeting integration ", () => {
       value: undefined,
       reason: "no matched rules",
       missingContextFields: ["happening.id"],
+      errors: [
+        {
+          code: "MISSING_CONTEXT_FIELD",
+          field: "happening.id",
+          message:
+            'Context field "happening.id" is required to evaluate targeting rules.',
+        },
+      ],
       ruleEvaluationResults: [false],
     });
   });
@@ -501,6 +518,246 @@ describe("evaluate flag targeting integration ", () => {
       expect(res.value ?? false).toEqual(expected);
     },
   );
+
+  describe("array-valued context", () => {
+    it("evaluates ANY_OF using array intersection", () => {
+      const res = evaluateFlagRules({
+        flagKey: "role-based-flag",
+        rules: [
+          {
+            value: true,
+            filter: {
+              type: "context",
+              field: "user.roles",
+              operator: "ANY_OF",
+              values: ["admin", "owner"],
+            },
+          },
+        ],
+        context: {
+          user: { roles: ["viewer", "admin"] },
+        },
+      });
+
+      expect(res).toEqual({
+        flagKey: "role-based-flag",
+        value: true,
+        context: { "user.roles": ["viewer", "admin"] },
+        ruleEvaluationResults: [true],
+        reason: "rule #0 matched",
+        missingContextFields: [],
+      });
+    });
+
+    it("keeps JSON-looking strings scalar", () => {
+      const evaluator = newEvaluator([
+        {
+          value: "matched",
+          filter: {
+            type: "context",
+            field: "user.roles",
+            operator: "ANY_OF",
+            values: ['["viewer","admin"]'],
+          },
+        },
+      ]);
+
+      expect(
+        evaluator({ user: { roles: '["viewer","admin"]' } }, "scalar").value,
+      ).toBe("matched");
+    });
+
+    it("does not apply percentage rollout to arrays", () => {
+      const res = evaluateFlagRules({
+        flagKey: "rollout",
+        rules: [
+          {
+            value: true,
+            filter: {
+              type: "rolloutPercentage",
+              key: "rollout",
+              partialRolloutAttribute: "user.ids",
+              partialRolloutThreshold: 100000,
+            },
+          },
+        ],
+        context: { user: { ids: ["u1"] } },
+      });
+
+      expect(res.value).toBeUndefined();
+      expect(res.missingContextFields).toEqual([]);
+      expect(res.errors).toEqual([
+        {
+          code: "UNSUPPORTED_ARRAY_OPERATOR",
+          field: "user.ids",
+          operator: "rolloutPercentage",
+          message:
+            'Percentage rollout does not support array-valued context field "user.ids".',
+        },
+      ]);
+    });
+
+    it("returns a non-fatal diagnostic for scalar-only operators", () => {
+      const res = evaluateFlagRules({
+        flagKey: "role-based-flag",
+        rules: [
+          {
+            value: true,
+            filter: {
+              type: "context",
+              field: "user.roles",
+              operator: "CONTAINS",
+              values: ["admin"],
+            },
+          },
+        ],
+        context: { user: { roles: ["admin"] } },
+      });
+
+      expect(res.value).toBeUndefined();
+      expect(res.ruleEvaluationResults).toEqual([false]);
+      expect(res.errors).toEqual([
+        {
+          code: "UNSUPPORTED_ARRAY_OPERATOR",
+          field: "user.roles",
+          operator: "CONTAINS",
+          message:
+            'Operator CONTAINS does not support array-valued context field "user.roles".',
+        },
+      ]);
+    });
+
+    it("fails the top-level rule when a nested condition produces an error", () => {
+      const res = evaluateFlagRules({
+        flagKey: "invalid-rules",
+        rules: [
+          {
+            value: "negated-array",
+            filter: {
+              type: "negation",
+              filter: {
+                type: "context",
+                field: "user.roles",
+                operator: "CONTAINS",
+                values: ["admin"],
+              },
+            },
+          },
+          {
+            value: "negated-missing",
+            filter: {
+              type: "negation",
+              filter: {
+                type: "context",
+                field: "user.plan",
+                operator: "IS",
+                values: ["pro"],
+              },
+            },
+          },
+          {
+            value: "matching-or",
+            filter: {
+              type: "group",
+              operator: "or",
+              filters: [
+                {
+                  type: "context",
+                  field: "user.teams",
+                  operator: "IS",
+                  values: ["platform"],
+                },
+                { type: "constant", value: true },
+              ],
+            },
+          },
+        ],
+        context: {
+          user: { roles: ["admin"], teams: ["platform"] },
+        },
+      });
+
+      expect(res.value).toBeUndefined();
+      expect(res.ruleEvaluationResults).toEqual([false, false, false]);
+      expect(res.errors?.map(({ code, field }) => ({ code, field }))).toEqual([
+        { code: "UNSUPPORTED_ARRAY_OPERATOR", field: "user.roles" },
+        { code: "MISSING_CONTEXT_FIELD", field: "user.plan" },
+        { code: "UNSUPPORTED_ARRAY_OPERATOR", field: "user.teams" },
+      ]);
+    });
+
+    it("does not report errors for short-circuited conditions", () => {
+      const res = evaluateFlagRules({
+        flagKey: "conditional-context",
+        rules: [
+          {
+            value: "admin",
+            filter: {
+              type: "group",
+              operator: "and",
+              filters: [
+                {
+                  type: "context",
+                  field: "user.role",
+                  operator: "SET",
+                },
+                {
+                  type: "context",
+                  field: "user.role",
+                  operator: "IS",
+                  values: ["admin"],
+                },
+              ],
+            },
+          },
+          {
+            value: "fallback",
+            filter: {
+              type: "group",
+              operator: "or",
+              filters: [
+                { type: "constant", value: true },
+                {
+                  type: "context",
+                  field: "user.department",
+                  operator: "IS",
+                  values: ["engineering"],
+                },
+              ],
+            },
+          },
+        ],
+        context: { user: {} },
+      });
+
+      expect(res.value).toBe("fallback");
+      expect(res.ruleEvaluationResults).toEqual([false, true]);
+      expect(res.errors).toBeUndefined();
+      expect(res.missingContextFields).toEqual([]);
+    });
+
+    it("does not report an array leaf as missing", () => {
+      const res = evaluateFlagRules({
+        flagKey: "role-based-flag",
+        rules: [
+          {
+            value: true,
+            filter: {
+              type: "context",
+              field: "user.roles",
+              operator: "ANY_OF",
+              values: ["owner"],
+            },
+          },
+        ],
+        context: { user: { roles: [] } },
+      });
+
+      expect(res.context).toEqual({ "user.roles": [] });
+      expect(res.missingContextFields).toEqual([]);
+      expect(res.value).toBeUndefined();
+    });
+  });
 
   describe("DATE_AFTER and DATE_BEFORE in flag rules", () => {
     it("should evaluate DATE_AFTER operator in flag rules", () => {
@@ -793,6 +1050,53 @@ describe("operator evaluation", () => {
     });
   }
 
+  it.each(["CONTAINS", "NOT_CONTAINS"] as const)(
+    "returns false for %s without comparison values",
+    (operator) => {
+      expect(evaluate("value", operator, [])).toBe(false);
+    },
+  );
+
+  it.each([
+    [["a", "b"], "ANY_OF", ["a"], true],
+    [["a", "b"], "ANY_OF", ["c"], false],
+    [["a", "b"], "ANY_OF", ["b", "c"], true],
+    [["a", "b"], "NOT_ANY_OF", ["c"], true],
+    [["a", "b"], "NOT_ANY_OF", ["a", "c"], false],
+    [[], "SET", [], false],
+    [[], "NOT_SET", [], true],
+    [[""], "SET", [], true],
+    [["A"], "ANY_OF", ["a"], false],
+    [["a", "a"], "ANY_OF", ["a"], true],
+    ["[1,true]", "ANY_OF", ["1"], false],
+    ["[1,true]", "ANY_OF", ["true"], false],
+    ["[1,true]", "ANY_OF", ["[1,true]"], true],
+  ] as const)(
+    "evaluates array semantics for %j %s %j",
+    (fieldValue, operator, values, expected) => {
+      expect(
+        evaluate(fieldValue as string | string[], operator, [...values]),
+      ).toBe(expected);
+    },
+  );
+
+  it.each([
+    "IS",
+    "IS_NOT",
+    "CONTAINS",
+    "NOT_CONTAINS",
+    "GT",
+    "LT",
+    "AFTER",
+    "BEFORE",
+    "DATE_AFTER",
+    "DATE_BEFORE",
+    "IS_TRUE",
+    "IS_FALSE",
+  ] as const)("does not apply scalar operator %s to arrays", (operator) => {
+    expect(evaluate(["a"], operator, ["a"])).toBe(false);
+  });
+
   describe("DATE_AFTER and DATE_BEFORE operators", () => {
     const dateTests = [
       // DATE_AFTER tests
@@ -913,6 +1217,68 @@ describe("rollout hash", () => {
       expect(res).toEqual(expected);
     });
   }
+});
+
+describe("flattenContext", () => {
+  it("preserves arrays as normalized leaf values", () => {
+    expect(
+      flattenContext({
+        user: {
+          id: "u1",
+          roles: ["admin", "editor"],
+          levels: [1, 2],
+          states: [true, false],
+          nullable: [null],
+        },
+      }),
+    ).toEqual({
+      "user.id": "u1",
+      "user.roles": ["admin", "editor"],
+      "user.levels": ["1", "2"],
+      "user.states": ["true", "false"],
+      "user.nullable": [""],
+    });
+  });
+
+  it("stores dangerous root keys without mutating the accumulator prototype", () => {
+    const flattened = flattenContext(
+      JSON.parse('{"__proto__":["safe"],"constructor":"value"}'),
+    );
+
+    expect(Object.getPrototypeOf(flattened)).toBeNull();
+    expect(flattened["__proto__"]).toEqual(["safe"]);
+    expect(flattened.constructor).toBe("value");
+  });
+
+  it("JSON-encodes composite array elements without traversing them", () => {
+    expect(
+      flattenContext({
+        other: {
+          values: [{ role: "admin" }, [1, true]],
+        },
+      }),
+    ).toEqual({
+      "other.values": ['{"role":"admin"}', "[1,true]"],
+    });
+  });
+
+  it("preserves nested scalar and empty-value behavior", () => {
+    expect(
+      flattenContext({
+        user: {
+          profile: { region: "eu" },
+          emptyObject: {},
+          emptyArray: [],
+          nil: null,
+        },
+      }),
+    ).toEqual({
+      "user.profile.region": "eu",
+      "user.emptyObject": "",
+      "user.emptyArray": [],
+      "user.nil": "",
+    });
+  });
 });
 
 describe("flattenJSON", () => {

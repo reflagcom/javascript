@@ -37,6 +37,12 @@ import {
 
 const BULK_ENDPOINT = "https://api.example.com/bulk";
 
+const missingContextFieldError = (field: string) => ({
+  code: "MISSING_CONTEXT_FIELD",
+  field,
+  message: `Context field "${field}" is required to evaluate targeting rules.`,
+});
+
 vi.mock("../src/rate-limiter", async (importOriginal) => {
   const original = (await importOriginal()) as any;
 
@@ -1729,9 +1735,140 @@ describe("ReflagClient", () => {
       expect(flag.isEnabled).toBe(false);
 
       expect(logger.warn).toHaveBeenCalledWith(
-        "flag targeting rules might not be correctly evaluated due to missing context fields.",
+        "flag targeting rules could not be fully evaluated.",
         {
-          flag2: ["attributeKey"],
+          flag2: [
+            {
+              code: "MISSING_CONTEXT_FIELD",
+              field: "attributeKey",
+              message:
+                'Context field "attributeKey" is required to evaluate targeting rules.',
+            },
+          ],
+        },
+      );
+
+      const sameErrorForAnotherUser = client.getFlag(
+        { ...context, user: { ...context.user, id: "another-user" } },
+        "flag2",
+      );
+      expect(sameErrorForAnotherUser.isEnabled).toBe(false);
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+    });
+
+    it("`isEnabled` warns about unsupported array operators", async () => {
+      const arrayDefinitions: FlagsAPIResponse = {
+        flagStateVersion: 2,
+        features: [
+          {
+            key: "array-flag",
+            description: "Array flag",
+            targeting: {
+              version: 1,
+              rules: [
+                {
+                  filter: {
+                    type: "context",
+                    field: "user.roles",
+                    operator: "CONTAINS",
+                    values: ["admin"],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      };
+      httpClient.get.mockResolvedValue({
+        ok: true,
+        status: 200,
+        body: { success: true, ...arrayDefinitions },
+      });
+
+      await client.initialize();
+      const flag = client.getFlag(
+        { user: { id: "user123", roles: ["admin"] } },
+        "array-flag",
+      );
+
+      expect(flag.isEnabled).toBe(false);
+      expect(logger.warn).toHaveBeenCalledWith(
+        "flag targeting rules could not be fully evaluated.",
+        {
+          "array-flag": [
+            {
+              code: "UNSUPPORTED_ARRAY_OPERATOR",
+              field: "user.roles",
+              operator: "CONTAINS",
+              message:
+                'Operator CONTAINS does not support array-valued context field "user.roles".',
+            },
+          ],
+        },
+      );
+
+      const sameErrorForAnotherUser = client.getFlag(
+        { user: { id: "another-user", roles: ["admin"] } },
+        "array-flag",
+      );
+      expect(sameErrorForAnotherUser.isEnabled).toBe(false);
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+    });
+
+    it("`config` warns about unsupported array operators", async () => {
+      const arrayConfigDefinitions: FlagsAPIResponse = {
+        flagStateVersion: 2,
+        features: [
+          {
+            key: "array-config",
+            description: "Array config",
+            targeting: {
+              version: 1,
+              rules: [{ filter: { type: "constant", value: true } }],
+            },
+            config: {
+              version: 1,
+              variants: [
+                {
+                  key: "admin",
+                  payload: { access: true },
+                  filter: {
+                    type: "context",
+                    field: "user.roles",
+                    operator: "CONTAINS",
+                    values: ["admin"],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      };
+      httpClient.get.mockResolvedValue({
+        ok: true,
+        status: 200,
+        body: { success: true, ...arrayConfigDefinitions },
+      });
+
+      await client.initialize();
+      const flag = client.getFlag(
+        { user: { id: "user123", roles: ["admin"] } },
+        "array-config",
+      );
+
+      expect(flag.config).toEqual({ key: undefined, payload: undefined });
+      expect(logger.warn).toHaveBeenCalledWith(
+        "flag targeting rules could not be fully evaluated.",
+        {
+          "array-config.config": [
+            {
+              code: "UNSUPPORTED_ARRAY_OPERATOR",
+              field: "user.roles",
+              operator: "CONTAINS",
+              message:
+                'Operator CONTAINS does not support array-valued context field "user.roles".',
+            },
+          ],
         },
       );
     });
@@ -2631,6 +2768,7 @@ describe("ReflagClient", () => {
             },
             ruleEvaluationResults: [false],
             missingContextFields: ["attributeKey"],
+            evaluationErrors: [missingContextFieldError("attributeKey")],
           },
         },
         flagStateVersion: 1,
@@ -2666,10 +2804,12 @@ describe("ReflagClient", () => {
               payload: undefined,
               targetingVersion: 1,
               missingContextFields: ["company.id"],
+              evaluationErrors: [missingContextFieldError("company.id")],
               ruleEvaluationResults: [false],
             },
             ruleEvaluationResults: [false],
             missingContextFields: ["company.id"],
+            evaluationErrors: [missingContextFieldError("company.id")],
           },
           flag2: {
             key: "flag2",
@@ -2684,6 +2824,7 @@ describe("ReflagClient", () => {
             },
             ruleEvaluationResults: [false],
             missingContextFields: ["company.id"],
+            evaluationErrors: [missingContextFieldError("company.id")],
           },
         },
         flagStateVersion: 1,
@@ -2737,6 +2878,7 @@ describe("ReflagClient", () => {
             },
             ruleEvaluationResults: [false],
             missingContextFields: ["attributeKey"],
+            evaluationErrors: [missingContextFieldError("attributeKey")],
           },
         },
         flagStateVersion: 1,
@@ -2766,10 +2908,12 @@ describe("ReflagClient", () => {
               payload: undefined,
               targetingVersion: 1,
               missingContextFields: ["company.id"],
+              evaluationErrors: [missingContextFieldError("company.id")],
               ruleEvaluationResults: [false],
             },
             ruleEvaluationResults: [false],
             missingContextFields: ["company.id"],
+            evaluationErrors: [missingContextFieldError("company.id")],
           },
           flag2: {
             key: "flag2",
@@ -2784,6 +2928,7 @@ describe("ReflagClient", () => {
             },
             ruleEvaluationResults: [false],
             missingContextFields: ["company.id"],
+            evaluationErrors: [missingContextFieldError("company.id")],
           },
         },
         flagStateVersion: 1,
@@ -3350,6 +3495,7 @@ describe("BoundReflagClient", () => {
           },
           ruleEvaluationResults: [false],
           missingContextFields: ["attributeKey"],
+          evaluationErrors: [missingContextFieldError("attributeKey")],
         },
       },
       flagStateVersion: 1,

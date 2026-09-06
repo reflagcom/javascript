@@ -1,6 +1,10 @@
 /* eslint-disable @typescript-eslint/no-empty-object-type */
 
-import { newEvaluator, RuleFilter } from "@reflag/flag-evaluation";
+import {
+  EvaluationError,
+  newEvaluator,
+  RuleFilter,
+} from "@reflag/flag-evaluation";
 
 /**
  * Describes the meta context associated with tracking.
@@ -86,8 +90,14 @@ export type RawFlagRemoteConfig = {
 
   /**
    * The missing fields in the evaluation context (optional).
+   * @deprecated Use `evaluationErrors` and check for `MISSING_CONTEXT_FIELD`.
    */
   missingContextFields?: string[];
+
+  /**
+   * Non-fatal diagnostics produced while evaluating targeting rules.
+   */
+  evaluationErrors?: EvaluationError[];
 };
 
 /**
@@ -121,8 +131,14 @@ export interface RawFlag {
 
   /**
    * The missing fields in the evaluation context (optional).
+   * @deprecated Use `evaluationErrors` and check for `MISSING_CONTEXT_FIELD`.
    */
   missingContextFields?: string[];
+
+  /**
+   * Non-fatal diagnostics produced while evaluating targeting rules.
+   */
+  evaluationErrors?: EvaluationError[];
 }
 
 /**

@@ -1,6 +1,7 @@
 import fs from "fs";
 
 import {
+  EvaluationError,
   EvaluationResult,
   flattenJSON,
   newEvaluator,
@@ -70,6 +71,19 @@ import {
 } from "./utils";
 
 const reflagConfigDefaultFile = "reflag.config.json";
+
+function evaluationErrorsRateLimitKey(errors: EvaluationError[]): string {
+  return errors
+    .map((error) =>
+      JSON.stringify([
+        error.code,
+        error.field,
+        "operator" in error ? error.operator : "",
+      ]),
+    )
+    .sort()
+    .join("\n");
+}
 
 type PartialBy<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
 type FlagOverrideLayer = {
@@ -1356,56 +1370,87 @@ export class ReflagClient {
   }
 
   /**
-   * Warns if a flag has targeting rules that require context fields that are missing.
+   * Warns if a flag or config evaluation produced diagnostics.
    *
-   * @param context - The context.
    * @param flag - The flag to check.
    */
-  private _warnMissingFlagContextFields(
-    context: Context,
-    flag: {
+  private _warnFlagEvaluationDiagnostics(flag: {
+    key: string;
+    missingContextFields?: string[];
+    evaluationErrors?: EvaluationError[];
+    config?: {
       key: string;
       missingContextFields?: string[];
-      config?: {
-        key: string;
-        missingContextFields?: string[];
-      };
-    },
-  ) {
-    const report: Record<string, string[]> = {};
+      evaluationErrors?: EvaluationError[];
+    };
+  }) {
+    const missingFieldsReport: Record<string, string[]> = {};
+    const errorReport: Record<string, EvaluationError[]> = {};
     const { config, ...flagData } = flag;
+    const evaluations = [
+      {
+        reportKey: flagData.key,
+        rateLimitKey: { flagKey: flagData.key },
+        missingContextFields: flagData.missingContextFields,
+        errors: flagData.evaluationErrors,
+      },
+      ...(config
+        ? [
+            {
+              reportKey: `${flagData.key}.config`,
+              rateLimitKey: { flagKey: flagData.key, configKey: config.key },
+              missingContextFields: config.missingContextFields,
+              errors: config.evaluationErrors,
+            },
+          ]
+        : []),
+    ];
 
-    if (
-      flagData.missingContextFields?.length &&
-      this.rateLimiter.isAllowed(
-        hashObject({
-          flagKey: flagData.key,
-          missingContextFields: flagData.missingContextFields,
-          context,
-        }),
-      )
-    ) {
-      report[flagData.key] = flagData.missingContextFields;
+    for (const evaluation of evaluations) {
+      if (
+        evaluation.missingContextFields?.length &&
+        !evaluation.errors?.some(
+          ({ code }) => code === "MISSING_CONTEXT_FIELD",
+        ) &&
+        this.rateLimiter.isAllowed(
+          hashObject({
+            ...evaluation.rateLimitKey,
+            missingContextFields: JSON.stringify(
+              [...evaluation.missingContextFields].sort(),
+            ),
+          }),
+        )
+      ) {
+        missingFieldsReport[evaluation.reportKey] =
+          evaluation.missingContextFields;
+      }
     }
 
-    if (
-      config?.missingContextFields?.length &&
-      this.rateLimiter.isAllowed(
-        hashObject({
-          flagKey: flagData.key,
-          configKey: config.key,
-          missingContextFields: config.missingContextFields,
-          context,
-        }),
-      )
-    ) {
-      report[`${flagData.key}.config`] = config.missingContextFields;
-    }
-
-    if (Object.keys(report).length > 0) {
+    if (Object.keys(missingFieldsReport).length > 0) {
       this.logger.warn(
         `flag targeting rules might not be correctly evaluated due to missing context fields.`,
-        report,
+        missingFieldsReport,
+      );
+    }
+
+    for (const evaluation of evaluations) {
+      if (
+        evaluation.errors?.length &&
+        this.rateLimiter.isAllowed(
+          hashObject({
+            ...evaluation.rateLimitKey,
+            evaluationErrors: evaluationErrorsRateLimitKey(evaluation.errors),
+          }),
+        )
+      ) {
+        errorReport[evaluation.reportKey] = evaluation.errors;
+      }
+    }
+
+    if (Object.keys(errorReport).length > 0) {
+      this.logger.warn(
+        "flag targeting rules could not be fully evaluated.",
+        errorReport,
       );
     }
   }
@@ -1461,6 +1506,7 @@ export class ReflagClient {
             value: undefined,
             ruleEvaluationResults: [],
             missingContextFields: [],
+            errors: undefined,
           } satisfies EvaluationResult<any>),
       }));
 
@@ -1470,6 +1516,9 @@ export class ReflagClient {
         isEnabled: res.enabledResult.value ?? false,
         ruleEvaluationResults: res.enabledResult.ruleEvaluationResults,
         missingContextFields: res.enabledResult.missingContextFields,
+        ...(res.enabledResult.errors?.length
+          ? { evaluationErrors: res.enabledResult.errors }
+          : {}),
         targetingVersion: res.targetingVersion,
         config: {
           key: res.configResult?.value?.key,
@@ -1477,6 +1526,9 @@ export class ReflagClient {
           targetingVersion: res.configVersion,
           ruleEvaluationResults: res.configResult?.ruleEvaluationResults,
           missingContextFields: res.configResult?.missingContextFields,
+          ...(res.configResult?.errors?.length
+            ? { evaluationErrors: res.configResult.errors }
+            : {}),
         },
       };
       return acc;
@@ -1532,7 +1584,7 @@ export class ReflagClient {
     return {
       get isEnabled() {
         if (enableTracking && enableChecks) {
-          client._warnMissingFlagContextFields(context, flag);
+          client._warnFlagEvaluationDiagnostics(flag);
 
           void client
             .sendFlagEvent({
@@ -1555,7 +1607,7 @@ export class ReflagClient {
       },
       get config() {
         if (enableTracking && enableChecks) {
-          client._warnMissingFlagContextFields(context, flag);
+          client._warnFlagEvaluationDiagnostics({ ...flag, config });
 
           void client
             .sendFlagEvent({
