@@ -1,6 +1,6 @@
 {
   "name": "@reflag/node-sdk",
-  "version": "1.7.2",
+  "version": "1.7.3",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -34,7 +34,7 @@
     "@aws-sdk/client-s3": "^3.888.0",
     "@googleapis/storage": "21.2.0",
     "@redis/client": "^5.11.0",
-    "@reflag/flag-evaluation": "1.1.0"
+    "@reflag/flag-evaluation": "1.1.1"
   },
   "devDependencies": {
     "@babel/core": "~7.29.6",
