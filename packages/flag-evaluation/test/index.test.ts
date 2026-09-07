@@ -8,6 +8,7 @@ import {
   flattenJSON,
   hashInt,
   newEvaluator,
+  Rule,
   unflattenJSON,
 } from "../src";
 
@@ -549,6 +550,69 @@ describe("evaluate flag targeting integration ", () => {
       });
     });
 
+    describe.each(["CONTAINS", "NOT_CONTAINS"] as const)(
+      "%s normalization",
+      (operator) => {
+        it.each(["admin", "2", "true", "", '{"level":3}', "[false]"])(
+          "matches normalized element %j without diagnostics",
+          (value) => {
+            const rules: Rule<string>[] = [
+              {
+                value: "matched",
+                filter: {
+                  type: "context",
+                  field: "user.roles",
+                  operator,
+                  values: [value],
+                },
+              },
+            ];
+            const context = {
+              user: { roles: ["admin", 2, true, null, { level: 3 }, [false]] },
+            };
+            const expected = operator === "CONTAINS";
+            for (const result of [
+              evaluateFlagRules({ flagKey: "array", rules, context }),
+              newEvaluator(rules)(context, "array"),
+            ]) {
+              expect(result.value).toBe(expected ? "matched" : undefined);
+              expect(result.ruleEvaluationResults).toEqual([expected]);
+              expect(result.errors).toBeUndefined();
+              expect(result.missingContextFields).toEqual([]);
+            }
+          },
+        );
+      },
+    );
+
+    it.each(["CONTAINS", "NOT_CONTAINS"] as const)(
+      "allows negation of array %s without treating it as an error",
+      (operator) => {
+        const result = evaluateFlagRules({
+          flagKey: "negated-membership",
+          rules: [
+            {
+              value: true,
+              filter: {
+                type: "negation",
+                filter: {
+                  type: "context",
+                  field: "user.roles",
+                  operator,
+                  values: ["admin"],
+                },
+              },
+            },
+          ],
+          context: { user: { roles: ["admin"] } },
+        });
+        expect(result.ruleEvaluationResults).toEqual([
+          operator === "NOT_CONTAINS",
+        ]);
+        expect(result.errors).toBeUndefined();
+      },
+    );
+
     it("keeps JSON-looking strings scalar", () => {
       const evaluator = newEvaluator([
         {
@@ -606,7 +670,7 @@ describe("evaluate flag targeting integration ", () => {
             filter: {
               type: "context",
               field: "user.roles",
-              operator: "CONTAINS",
+              operator: "IS",
               values: ["admin"],
             },
           },
@@ -620,9 +684,9 @@ describe("evaluate flag targeting integration ", () => {
         {
           code: "UNSUPPORTED_ARRAY_OPERATOR",
           field: "user.roles",
-          operator: "CONTAINS",
+          operator: "IS",
           message:
-            'Operator CONTAINS does not support array-valued context field "user.roles".',
+            'Operator IS does not support array-valued context field "user.roles".',
         },
       ]);
     });
@@ -638,7 +702,7 @@ describe("evaluate flag targeting integration ", () => {
               filter: {
                 type: "context",
                 field: "user.roles",
-                operator: "CONTAINS",
+                operator: "IS",
                 values: ["admin"],
               },
             },
@@ -1054,10 +1118,27 @@ describe("operator evaluation", () => {
     "returns false for %s without comparison values",
     (operator) => {
       expect(evaluate("value", operator, [])).toBe(false);
+      expect(evaluate(["value"], operator, [])).toBe(false);
+      expect(evaluate([], operator, [])).toBe(false);
     },
   );
 
   it.each([
+    [["a", "b"], "CONTAINS", ["a"], true],
+    [["a", "b"], "CONTAINS", ["c"], false],
+    [["a", "b"], "NOT_CONTAINS", ["c"], true],
+    [["a", "b"], "NOT_CONTAINS", ["a"], false],
+    [["admin"], "CONTAINS", ["adm"], false],
+    [["admin"], "NOT_CONTAINS", ["adm"], true],
+    [["Admin"], "CONTAINS", ["admin"], false],
+    [["Admin"], "NOT_CONTAINS", ["admin"], true],
+    [[], "CONTAINS", ["a"], false],
+    [[], "NOT_CONTAINS", ["a"], true],
+    [[""], "CONTAINS", [""], true],
+    [["a"], "CONTAINS", [""], false],
+    [["a", "a"], "CONTAINS", ["a"], true],
+    [["a"], "CONTAINS", ["b", "a"], false],
+    [["a"], "NOT_CONTAINS", ["b", "a"], true],
     [["a", "b"], "ANY_OF", ["a"], true],
     [["a", "b"], "ANY_OF", ["c"], false],
     [["a", "b"], "ANY_OF", ["b", "c"], true],
@@ -1083,8 +1164,6 @@ describe("operator evaluation", () => {
   it.each([
     "IS",
     "IS_NOT",
-    "CONTAINS",
-    "NOT_CONTAINS",
     "GT",
     "LT",
     "AFTER",

@@ -63,8 +63,8 @@ export type FilterTree<T extends FilterClass> =
  * - "IS_NOT": Specifies a negation of exact match.
  * - "ANY_OF": Checks if a value is present in a set of specified values.
  * - "NOT_ANY_OF": Checks if a value is not present in a set of specified values.
- * - "CONTAINS": Verifies if a value contains a specific substring or element.
- * - "NOT_CONTAINS": Verifies if a value does not contain a specific substring or element.
+ * - "CONTAINS": Case-insensitive substring match for strings; exact, case-sensitive element membership for arrays.
+ * - "NOT_CONTAINS": Negates substring matching for strings or element membership for arrays.
  * - "GT": Greater than comparison.
  * - "LT": Less than comparison.
  * - "AFTER": Compares if a value is after a specified point (e.g., time, rank).
@@ -374,6 +374,8 @@ export function hashInt(hashInput: string): number {
 }
 
 const ARRAY_OPERATORS = new Set<ContextFilterOperator>([
+  "CONTAINS",
+  "NOT_CONTAINS",
   "ANY_OF",
   "NOT_ANY_OF",
   "SET",
@@ -393,6 +395,14 @@ export function evaluate(
 
   if (Array.isArray(normalizedFieldValue)) {
     switch (operator) {
+      case "CONTAINS":
+        return (
+          typeof value === "string" && normalizedFieldValue.includes(value)
+        );
+      case "NOT_CONTAINS":
+        return (
+          typeof value === "string" && !normalizedFieldValue.includes(value)
+        );
       case "ANY_OF": {
         const candidates = valueSet ?? new Set(values);
         return normalizedFieldValue.some((entry) => candidates.has(entry));
@@ -406,7 +416,7 @@ export function evaluate(
       case "NOT_SET":
         return normalizedFieldValue.length === 0;
       default:
-        // Exact, textual, numeric, date, and boolean operators are scalar-only.
+        // Scalar equality, numeric, date, and boolean operators are scalar-only.
         // Do not accidentally stringify arrays for comparison.
         return false;
     }

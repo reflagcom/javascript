@@ -1756,6 +1756,62 @@ describe("ReflagClient", () => {
       expect(logger.warn).toHaveBeenCalledTimes(1);
     });
 
+    it.each(["CONTAINS", "NOT_CONTAINS"] as const)(
+      "evaluates array %s for targeting and config without warnings",
+      async (operator) => {
+        const filter = {
+          type: "context" as const,
+          field: "user.roles",
+          operator,
+          values: ["admin"],
+        };
+        const definitions: FlagsAPIResponse = {
+          flagStateVersion: 2,
+          features: [
+            {
+              key: "array-membership",
+              description: "Array membership",
+              targeting: { version: 1, rules: [{ filter }] },
+              config: {
+                version: 1,
+                variants: [
+                  { key: "matched", payload: { access: true }, filter },
+                ],
+              },
+            },
+          ],
+        };
+        httpClient.get.mockResolvedValue({
+          ok: true,
+          status: 200,
+          body: { success: true, ...definitions },
+        });
+        await client.initialize();
+
+        for (const [roles, contains] of [
+          [["admin", "editor"], true],
+          [["superadmin"], false],
+          [["Admin"], false],
+          [[], false],
+          // Scalars retain their case-insensitive substring semantics.
+          ["SUPERADMIN", true],
+        ] as const) {
+          const flag = client.getFlag(
+            { user: { id: "user123", roles } },
+            "array-membership",
+          );
+          const expected = operator === "CONTAINS" ? contains : !contains;
+          expect(flag.isEnabled).toBe(expected);
+          expect(flag.config).toEqual(
+            expected
+              ? { key: "matched", payload: { access: true } }
+              : { key: undefined, payload: undefined },
+          );
+        }
+        expect(logger.warn).not.toHaveBeenCalled();
+      },
+    );
+
     it("`isEnabled` warns about unsupported array operators", async () => {
       const arrayDefinitions: FlagsAPIResponse = {
         flagStateVersion: 2,
@@ -1770,7 +1826,7 @@ describe("ReflagClient", () => {
                   filter: {
                     type: "context",
                     field: "user.roles",
-                    operator: "CONTAINS",
+                    operator: "IS",
                     values: ["admin"],
                   },
                 },
@@ -1799,9 +1855,9 @@ describe("ReflagClient", () => {
             {
               code: "UNSUPPORTED_ARRAY_OPERATOR",
               field: "user.roles",
-              operator: "CONTAINS",
+              operator: "IS",
               message:
-                'Operator CONTAINS does not support array-valued context field "user.roles".',
+                'Operator IS does not support array-valued context field "user.roles".',
             },
           ],
         },
@@ -1835,7 +1891,7 @@ describe("ReflagClient", () => {
                   filter: {
                     type: "context",
                     field: "user.roles",
-                    operator: "CONTAINS",
+                    operator: "IS",
                     values: ["admin"],
                   },
                 },
@@ -1864,9 +1920,9 @@ describe("ReflagClient", () => {
             {
               code: "UNSUPPORTED_ARRAY_OPERATOR",
               field: "user.roles",
-              operator: "CONTAINS",
+              operator: "IS",
               message:
-                'Operator CONTAINS does not support array-valued context field "user.roles".',
+                'Operator IS does not support array-valued context field "user.roles".',
             },
           ],
         },
