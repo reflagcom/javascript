@@ -1756,7 +1756,7 @@ describe("ReflagClient", () => {
       expect(logger.warn).toHaveBeenCalledTimes(1);
     });
 
-    it.each(["CONTAINS", "NOT_CONTAINS"] as const)(
+    it.each(["CONTAINS", "NOT_CONTAINS", "IS", "IS_NOT"] as const)(
       "evaluates array %s for targeting and config without warnings",
       async (operator) => {
         const filter = {
@@ -1788,19 +1788,27 @@ describe("ReflagClient", () => {
         });
         await client.initialize();
 
-        for (const [roles, contains] of [
-          [["admin", "editor"], true],
-          [["superadmin"], false],
-          [["Admin"], false],
-          [[], false],
-          // Scalars retain their case-insensitive substring semantics.
-          ["SUPERADMIN", true],
+        for (const [roles, contains, equals] of [
+          [["admin"], true, true],
+          [["admin", "editor"], true, false],
+          [["admin", "admin"], true, false],
+          [["superadmin"], false, false],
+          [["Admin"], false, false],
+          [[], false, false],
+          // Scalars retain substring matching and exact equality respectively.
+          ["SUPERADMIN", true, false],
+          ["admin", true, true],
         ] as const) {
           const flag = client.getFlag(
             { user: { id: "user123", roles } },
             "array-membership",
           );
-          const expected = operator === "CONTAINS" ? contains : !contains;
+          const positiveMatch =
+            operator === "IS" || operator === "IS_NOT" ? equals : contains;
+          const expected =
+            operator === "CONTAINS" || operator === "IS"
+              ? positiveMatch
+              : !positiveMatch;
           expect(flag.isEnabled).toBe(expected);
           expect(flag.config).toEqual(
             expected
@@ -1826,7 +1834,7 @@ describe("ReflagClient", () => {
                   filter: {
                     type: "context",
                     field: "user.roles",
-                    operator: "IS",
+                    operator: "GT",
                     values: ["admin"],
                   },
                 },
@@ -1855,9 +1863,9 @@ describe("ReflagClient", () => {
             {
               code: "UNSUPPORTED_ARRAY_OPERATOR",
               field: "user.roles",
-              operator: "IS",
+              operator: "GT",
               message:
-                'Operator IS does not support array-valued context field "user.roles".',
+                'Operator GT does not support array-valued context field "user.roles".',
             },
           ],
         },
@@ -1891,7 +1899,7 @@ describe("ReflagClient", () => {
                   filter: {
                     type: "context",
                     field: "user.roles",
-                    operator: "IS",
+                    operator: "GT",
                     values: ["admin"],
                   },
                 },
@@ -1920,9 +1928,9 @@ describe("ReflagClient", () => {
             {
               code: "UNSUPPORTED_ARRAY_OPERATOR",
               field: "user.roles",
-              operator: "IS",
+              operator: "GT",
               message:
-                'Operator IS does not support array-valued context field "user.roles".',
+                'Operator GT does not support array-valued context field "user.roles".',
             },
           ],
         },

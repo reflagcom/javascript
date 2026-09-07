@@ -59,8 +59,8 @@ export type FilterTree<T extends FilterClass> =
  * set membership, and boolean evaluations.
  *
  * Possible values:
- * - "IS": Specifies exact match.
- * - "IS_NOT": Specifies a negation of exact match.
+ * - "IS": Exact scalar match, or an array containing exactly one matching element.
+ * - "IS_NOT": Negates scalar equality or singleton-array equality.
  * - "ANY_OF": Checks if a value is present in a set of specified values.
  * - "NOT_ANY_OF": Checks if a value is not present in a set of specified values.
  * - "CONTAINS": Case-insensitive substring match for strings; exact, case-sensitive element membership for arrays.
@@ -374,6 +374,8 @@ export function hashInt(hashInput: string): number {
 }
 
 const ARRAY_OPERATORS = new Set<ContextFilterOperator>([
+  "IS",
+  "IS_NOT",
   "CONTAINS",
   "NOT_CONTAINS",
   "ANY_OF",
@@ -395,6 +397,20 @@ export function evaluate(
 
   if (Array.isArray(normalizedFieldValue)) {
     switch (operator) {
+      case "IS":
+        return (
+          typeof value === "string" &&
+          normalizedFieldValue.length === 1 &&
+          normalizedFieldValue[0] === value
+        );
+      case "IS_NOT":
+        return (
+          typeof value === "string" &&
+          !(
+            normalizedFieldValue.length === 1 &&
+            normalizedFieldValue[0] === value
+          )
+        );
       case "CONTAINS":
         return (
           typeof value === "string" && normalizedFieldValue.includes(value)
@@ -416,7 +432,7 @@ export function evaluate(
       case "NOT_SET":
         return normalizedFieldValue.length === 0;
       default:
-        // Scalar equality, numeric, date, and boolean operators are scalar-only.
+        // Numeric, date, and boolean operators are scalar-only.
         // Do not accidentally stringify arrays for comparison.
         return false;
     }

@@ -613,6 +613,70 @@ describe("evaluate flag targeting integration ", () => {
       },
     );
 
+    describe.each(["IS", "IS_NOT"] as const)(
+      "%s singleton arrays",
+      (operator) => {
+        it.each([
+          { entries: [2], candidate: "2", equal: true },
+          { entries: [true], candidate: "true", equal: true },
+          { entries: [null], candidate: "", equal: true },
+          { entries: [{ level: 3 }], candidate: '{"level":3}', equal: true },
+          { entries: [[false]], candidate: "[false]", equal: true },
+          { entries: [2, 2], candidate: "2", equal: false },
+          { entries: [], candidate: "2", equal: false },
+        ])(
+          "evaluates $entries against $candidate without errors",
+          ({ entries, candidate, equal }) => {
+            const rules: Rule<boolean>[] = [
+              {
+                value: true,
+                filter: {
+                  type: "context",
+                  field: "user.roles",
+                  operator,
+                  values: [candidate],
+                },
+              },
+            ];
+            const context = { user: { roles: entries } };
+            for (const result of [
+              evaluateFlagRules({ flagKey: "singleton", rules, context }),
+              newEvaluator(rules)(context, "singleton"),
+            ]) {
+              expect(result.ruleEvaluationResults).toEqual([
+                operator === "IS" ? equal : !equal,
+              ]);
+              expect(result.errors).toBeUndefined();
+            }
+          },
+        );
+
+        it("fails closed for missing fields, even under negation", () => {
+          const result = evaluateFlagRules({
+            flagKey: "missing",
+            rules: [
+              {
+                value: true,
+                filter: {
+                  type: "negation",
+                  filter: {
+                    type: "context",
+                    field: "user.roles",
+                    operator,
+                    values: ["admin"],
+                  },
+                },
+              },
+            ],
+            context: { user: {} },
+          });
+          expect(result.ruleEvaluationResults).toEqual([false]);
+          expect(result.missingContextFields).toEqual(["user.roles"]);
+          expect(result.errors?.[0].code).toBe("MISSING_CONTEXT_FIELD");
+        });
+      },
+    );
+
     it("keeps JSON-looking strings scalar", () => {
       const evaluator = newEvaluator([
         {
@@ -670,7 +734,7 @@ describe("evaluate flag targeting integration ", () => {
             filter: {
               type: "context",
               field: "user.roles",
-              operator: "IS",
+              operator: "GT",
               values: ["admin"],
             },
           },
@@ -684,9 +748,9 @@ describe("evaluate flag targeting integration ", () => {
         {
           code: "UNSUPPORTED_ARRAY_OPERATOR",
           field: "user.roles",
-          operator: "IS",
+          operator: "GT",
           message:
-            'Operator IS does not support array-valued context field "user.roles".',
+            'Operator GT does not support array-valued context field "user.roles".',
         },
       ]);
     });
@@ -702,7 +766,7 @@ describe("evaluate flag targeting integration ", () => {
               filter: {
                 type: "context",
                 field: "user.roles",
-                operator: "IS",
+                operator: "GT",
                 values: ["admin"],
               },
             },
@@ -728,7 +792,7 @@ describe("evaluate flag targeting integration ", () => {
                 {
                   type: "context",
                   field: "user.teams",
-                  operator: "IS",
+                  operator: "GT",
                   values: ["platform"],
                 },
                 { type: "constant", value: true },
@@ -1124,6 +1188,25 @@ describe("operator evaluation", () => {
   );
 
   it.each([
+    [["a"], "IS", ["a"], true],
+    [["a"], "IS_NOT", ["a"], false],
+    [["a", "b"], "IS", ["a"], false],
+    [["a", "b"], "IS_NOT", ["a"], true],
+    [["a", "a"], "IS", ["a"], false],
+    [["a", "a"], "IS_NOT", ["a"], true],
+    [[], "IS", ["a"], false],
+    [[], "IS_NOT", ["a"], true],
+    [["A"], "IS", ["a"], false],
+    [["A"], "IS_NOT", ["a"], true],
+    [["admin"], "IS", ["adm"], false],
+    [[""], "IS", [""], true],
+    [[""], "IS_NOT", [""], false],
+    [["a"], "IS", ["b", "a"], false],
+    [["a"], "IS_NOT", ["b", "a"], true],
+    [["a"], "IS", [], false],
+    [["a"], "IS_NOT", [], false],
+    [[], "IS", [], false],
+    [[], "IS_NOT", [], false],
     [["a", "b"], "CONTAINS", ["a"], true],
     [["a", "b"], "CONTAINS", ["c"], false],
     [["a", "b"], "NOT_CONTAINS", ["c"], true],
@@ -1162,8 +1245,6 @@ describe("operator evaluation", () => {
   );
 
   it.each([
-    "IS",
-    "IS_NOT",
     "GT",
     "LT",
     "AFTER",
