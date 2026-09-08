@@ -214,27 +214,71 @@ const reflagClientBootstrappedStates = new WeakMap<
   BrowserBootstrappedState
 >();
 
+type ComparedContextPairs = WeakMap<object, WeakSet<object>>;
+
+function markContextPairCompared(
+  a: object,
+  b: object,
+  compared: ComparedContextPairs,
+): boolean {
+  const matches = compared.get(a);
+  if (matches?.has(b)) return true;
+  if (matches) matches.add(b);
+  else compared.set(a, new WeakSet([b]));
+  return false;
+}
+
+function contextValueEqual(
+  a: unknown,
+  b: unknown,
+  compared: ComparedContextPairs,
+): boolean {
+  if (a === b) return true;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    return (
+      Array.isArray(a) &&
+      Array.isArray(b) &&
+      a.length === b.length &&
+      (markContextPairCompared(a, b, compared) ||
+        a.every((value, index) => contextValueEqual(value, b[index], compared)))
+    );
+  }
+  if (!a || !b || typeof a !== "object" || typeof b !== "object") {
+    return false;
+  }
+  return contextPartEqual(
+    a as Record<string, unknown>,
+    b as Record<string, unknown>,
+    compared,
+  );
+}
+
 function contextPartEqual(
-  a?: Record<string, string | number | undefined>,
-  b?: Record<string, string | number | undefined>,
-) {
+  a: Record<string, unknown> | undefined,
+  b: Record<string, unknown> | undefined,
+  compared: ComparedContextPairs,
+): boolean {
   if (a === b) return true;
   if (!a || !b) return !a && !b;
+  if (markContextPairCompared(a, b, compared)) return true;
 
   const aKeys = Object.keys(a);
   const bKeys = Object.keys(b);
   if (aKeys.length !== bKeys.length) return false;
 
   return aKeys.every(
-    (key) => Object.prototype.hasOwnProperty.call(b, key) && a[key] === b[key],
+    (key) =>
+      Object.prototype.hasOwnProperty.call(b, key) &&
+      contextValueEqual(a[key], b[key], compared),
   );
 }
 
 function contextEqual(a: ReflagContext, b: ReflagContext) {
+  const compared: ComparedContextPairs = new WeakMap();
   return (
-    contextPartEqual(a.user, b.user) &&
-    contextPartEqual(a.company, b.company) &&
-    contextPartEqual(a.other, b.other)
+    contextPartEqual(a.user, b.user, compared) &&
+    contextPartEqual(a.company, b.company, compared) &&
+    contextPartEqual(a.other, b.other, compared)
   );
 }
 

@@ -110,9 +110,10 @@ describe("connection handling", () => {
     });
 
     const url = new URL(vi.mocked(window.EventSource).mock.calls[0][0]);
-    expect(url.searchParams.get("context")).toBe(
+    expect(url.searchParams.get("contextJson")).toBe(
       JSON.stringify({ user: { id: 23 } }),
     );
+    expect(url.searchParams.has("context")).toBe(false);
   });
 
   test("enables EventSource credentials when credentials is include", async () => {

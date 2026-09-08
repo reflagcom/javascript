@@ -158,14 +158,28 @@ describe("FlagsClient", () => {
     const paramsObj = Object.fromEntries(new URLSearchParams(params));
     expect(paramsObj).toEqual({
       "reflag-sdk-version": "browser-sdk/" + version,
-      "context.user.id": "123",
-      "context.company.id": "456",
-      "context.other.eventId": "big-conference1",
+      contextJson:
+        '{"company":{"id":"456"},"other":{"eventId":"big-conference1"},"user":{"id":"123"}}',
       publishableKey: "pk",
     });
 
     expect(path).toEqual("/features/evaluated");
     expect(timeoutMs).toEqual(5000);
+  });
+
+  test("sends array context as canonical JSON", async () => {
+    const { newFlagsClient, httpClient } = flagsClientFactory();
+    const flagsClient = newFlagsClient({
+      user: { id: "123", roles: ["admin", "editor"] },
+      other: { z: { second: 2, first: 1 }, a: true },
+    });
+
+    await flagsClient.initialize();
+
+    const { params } = vi.mocked(httpClient.get).mock.calls[0][0];
+    expect(new URLSearchParams(params).get("contextJson")).toBe(
+      '{"company":{"id":"456"},"other":{"a":true,"z":{"first":1,"second":2}},"user":{"id":"123","roles":["admin","editor"]}}',
+    );
   });
 
   test("uses waitForVersion when refreshing flags for a pushed version", async () => {
@@ -189,9 +203,8 @@ describe("FlagsClient", () => {
 
     expect(path).toEqual("/features/evaluated");
     expect(paramsObj).toMatchObject({
-      "context.user.id": "123",
-      "context.company.id": "456",
-      "context.other.eventId": "big-conference1",
+      contextJson:
+        '{"company":{"id":"456"},"other":{"eventId":"big-conference1"},"user":{"id":"123"}}',
       publishableKey: "pk",
       waitForVersion: "22",
     });
