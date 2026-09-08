@@ -1,5 +1,11 @@
 # @reflag/browser-sdk
 
+## 1.7.0
+
+### Minor Changes
+
+- 353d830: Send remote evaluation and browser live-update context as canonical `contextJson`, preserving array-valued context attributes. Browser and React SDK context types now accept JSON-compatible array and object values.
+
 ## 1.6.1
 
 ### Patch Changes
