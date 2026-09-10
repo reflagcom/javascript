@@ -1,6 +1,5 @@
 import { StorageAdapter } from "../storage";
-import type { EvaluationError } from "./flags";
-import { RawFlagOptIn, RawFlags } from "./flags";
+import { RawFlag, RawFlagOptIn, RawFlags } from "./flags";
 import { isValidFlagStateVersion } from "./flagStateVersion";
 
 const DEFAULT_STORAGE_KEY = "__reflag_fetched_flags";
@@ -29,7 +28,9 @@ function parseOptIn(optIn: any): RawFlagOptIn | null | undefined {
   };
 }
 
-function isEvaluationErrorArray(value: any): value is EvaluationError[] {
+function isEvaluationErrorArray(
+  value: any,
+): value is NonNullable<RawFlag["evaluationErrors"]> {
   return (
     Array.isArray(value) &&
     value.every(

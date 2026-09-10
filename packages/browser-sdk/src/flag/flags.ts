@@ -58,7 +58,7 @@ export type OptInFlag = RawFlagOptIn & {
 /**
  * A non-fatal diagnostic produced while evaluating targeting rules.
  */
-export type EvaluationError = {
+type EvaluationError = {
   code: string;
   field: string;
   operator?: string;
@@ -697,14 +697,7 @@ export class FlagsClient {
       if (this.enqueueBulkEvent) {
         this.enqueueBulkEvent({
           type: "feature-flag-event",
-          action: payload.action,
-          key: payload.key,
-          targetingVersion: payload.targetingVersion,
-          evalContext: payload.evalContext,
-          evalResult: payload.evalResult,
-          evalRuleResults: payload.evalRuleResults,
-          evalMissingFields: payload.evalMissingFields,
-          evalErrors: payload.evalErrors,
+          ...payload,
         }).catch((e: any) => {
           this.logger.warn(`failed to enqueue flag check event`, e);
         });

@@ -145,20 +145,7 @@ type BulkEvent =
       attributes?: Attributes;
       context?: TrackingMeta;
     }
-  | {
-      type: "feature-flag-event";
-      action: "check" | "check-config";
-      key: string;
-      targetingVersion?: number;
-      evalResult:
-        | boolean
-        | { key: string; payload: any }
-        | { key: undefined; payload: undefined };
-      evalContext?: Record<string, any>;
-      evalRuleResults?: boolean[];
-      evalMissingFields?: string[];
-      evalErrors?: EvaluationError[];
-    }
+  | ({ type: "feature-flag-event" } & FlagEvent)
   | {
       type: "event";
       event: string;
@@ -1321,14 +1308,7 @@ export class ReflagClient {
 
     await this.batchBuffer.add({
       type: "feature-flag-event",
-      action: event.action,
-      key: event.key,
-      targetingVersion: event.targetingVersion,
-      evalContext: event.evalContext,
-      evalResult: event.evalResult,
-      evalRuleResults: event.evalRuleResults,
-      evalMissingFields: event.evalMissingFields,
-      evalErrors: event.evalErrors,
+      ...event,
     });
   }
 

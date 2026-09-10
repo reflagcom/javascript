@@ -1,5 +1,5 @@
 import { BULK_QUEUE_FLUSH_DELAY_MS, BULK_QUEUE_MAX_SIZE } from "./config";
-import type { EvaluationError } from "./flag/flags";
+import type { CheckEvent } from "./flag/flags";
 import { Logger } from "./logger";
 import { logResponseError } from "./utils/responseError";
 
@@ -40,7 +40,7 @@ export type BulkEvent =
       evalContext?: Record<string, any>;
       evalRuleResults?: boolean[];
       evalMissingFields?: string[];
-      evalErrors?: EvaluationError[];
+      evalErrors?: CheckEvent["evaluationErrors"];
     }
   | {
       type: "prompt-event";
