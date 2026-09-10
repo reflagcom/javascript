@@ -362,10 +362,8 @@ For `createFlag` or `updateFlag`, pass `result.flagStateVersions[envId]` instead
 The version is a minimum: a successful refresh may receive a newer version that
 also includes subsequent changes.
 
-The Node SDK retains its graceful fallback behavior on refresh failures, so a
-resolved promise alone is not proof of successful synchronization. Offline mode
-does not refresh, and throttled calls in `in-request` mode (including `EdgeClient`)
-may resolve before the queued fetch runs.
+If the refresh fails, the Node SDK keeps its cached or fallback flags rather than
+throwing, so awaiting the call does not guarantee synchronization on failure.
 
 Keep Management API keys on the server.
 
