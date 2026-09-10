@@ -157,6 +157,7 @@ type BulkEvent =
       evalContext?: Record<string, any>;
       evalRuleResults?: boolean[];
       evalMissingFields?: string[];
+      evalErrors?: EvaluationError[];
     }
   | {
       type: "event";
@@ -1250,6 +1251,7 @@ export class ReflagClient {
    * @param event.evalContext - The evaluation context of the flag to send.
    * @param event.evalRuleResults - The evaluation rule results of the flag to send.
    * @param event.evalMissingFields - The evaluation missing fields of the flag to send.
+   * @param event.evalErrors - The non-fatal evaluation diagnostics of the flag to send.
    *
    * @throws An error if the event is invalid.
    *
@@ -1290,6 +1292,10 @@ export class ReflagClient {
         Array.isArray(event.evalMissingFields),
       "event missing fields must be an array",
     );
+    ok(
+      event.evalErrors === undefined || Array.isArray(event.evalErrors),
+      "event evaluation errors must be an array",
+    );
 
     const contextKey = new URLSearchParams(
       flattenJSON(event.evalContext || {}),
@@ -1322,6 +1328,7 @@ export class ReflagClient {
       evalResult: event.evalResult,
       evalRuleResults: event.evalRuleResults,
       evalMissingFields: event.evalMissingFields,
+      evalErrors: event.evalErrors,
     });
   }
 
@@ -1596,6 +1603,7 @@ export class ReflagClient {
               evalContext: context,
               evalRuleResults: flag.ruleEvaluationResults,
               evalMissingFields: flag.missingContextFields,
+              evalErrors: flag.evaluationErrors,
             })
             .catch((err) => {
               client.logger?.error(
@@ -1619,6 +1627,7 @@ export class ReflagClient {
               evalContext: context,
               evalRuleResults: config?.ruleEvaluationResults,
               evalMissingFields: config?.missingContextFields,
+              evalErrors: config?.evaluationErrors,
             })
             .catch((err) => {
               client.logger?.error(

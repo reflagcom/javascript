@@ -1417,6 +1417,7 @@ export class ReflagClient {
             version: f?.targetingVersion,
             ruleEvaluationResults: f?.ruleEvaluationResults,
             missingContextFields: f?.missingContextFields,
+            evaluationErrors: f?.evaluationErrors,
             value,
           })
           .catch(() => {
@@ -1432,6 +1433,7 @@ export class ReflagClient {
             version: f?.config?.version,
             ruleEvaluationResults: f?.config?.ruleEvaluationResults,
             missingContextFields: f?.config?.missingContextFields,
+            evaluationErrors: f?.config?.evaluationErrors,
             value: f?.config && {
               key: f.config.key,
               payload: f.config.payload,

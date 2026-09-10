@@ -1716,7 +1716,31 @@ describe("ReflagClient", () => {
           evalContext: context,
           evalRuleResults: [true],
           evalMissingFields: [],
+          evalErrors: undefined,
         },
+      ]);
+    });
+
+    it("`isEnabled` sends evaluation errors", async () => {
+      const context = {
+        company,
+        user,
+        other: otherContext,
+      };
+
+      await client.initialize();
+      expect(client.getFlag(context, "flag2").isEnabled).toBe(false);
+      await client.flush();
+
+      const checkEvents = httpClient.post.mock.calls
+        .flatMap((call) => call[2])
+        .filter((item) => item.action === "check");
+
+      expect(checkEvents).toEqual([
+        expect.objectContaining({
+          key: "flag2",
+          evalErrors: [missingContextFieldError("attributeKey")],
+        }),
       ]);
     });
 
@@ -1989,6 +2013,7 @@ describe("ReflagClient", () => {
           evalContext: context,
           evalRuleResults: [true],
           evalMissingFields: [],
+          evalErrors: undefined,
         },
       ]);
     });
@@ -2023,6 +2048,7 @@ describe("ReflagClient", () => {
           evalResult: false,
           evalRuleResults: undefined,
           evalMissingFields: undefined,
+          evalErrors: undefined,
         },
       ]);
     });

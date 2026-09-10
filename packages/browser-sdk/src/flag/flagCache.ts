@@ -1,4 +1,5 @@
 import { StorageAdapter } from "../storage";
+import type { EvaluationError } from "./flags";
 import { RawFlagOptIn, RawFlags } from "./flags";
 import { isValidFlagStateVersion } from "./flagStateVersion";
 
@@ -26,6 +27,21 @@ function parseOptIn(optIn: any): RawFlagOptIn | null | undefined {
     name: optIn.name,
     description: optIn.description,
   };
+}
+
+function isEvaluationErrorArray(value: any): value is EvaluationError[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (error) =>
+        isObject(error) &&
+        typeof error.code === "string" &&
+        typeof error.field === "string" &&
+        typeof error.message === "string" &&
+        (typeof error.operator === "undefined" ||
+          typeof error.operator === "string"),
+    )
+  );
 }
 
 interface cacheEntry {
@@ -57,6 +73,10 @@ export function parseAPIFlagsResponse(flagsInput: any): RawFlags | undefined {
         !Array.isArray(flag.missingContextFields)) ||
       (flag.ruleEvaluationResults &&
         !Array.isArray(flag.ruleEvaluationResults)) ||
+      (typeof flag.evaluationErrors !== "undefined" &&
+        !isEvaluationErrorArray(flag.evaluationErrors)) ||
+      (typeof flag.config?.evaluationErrors !== "undefined" &&
+        !isEvaluationErrorArray(flag.config.evaluationErrors)) ||
       (typeof flag.optInEnabled !== "undefined" &&
         typeof flag.optInEnabled !== "boolean") ||
       (typeof flag.optIn !== "undefined" && typeof optIn === "undefined")
@@ -71,6 +91,7 @@ export function parseAPIFlagsResponse(flagsInput: any): RawFlags | undefined {
       config: flag.config,
       missingContextFields: flag.missingContextFields,
       ruleEvaluationResults: flag.ruleEvaluationResults,
+      evaluationErrors: flag.evaluationErrors,
       ...(typeof flag.optInEnabled !== "undefined" && {
         optInEnabled: flag.optInEnabled,
       }),

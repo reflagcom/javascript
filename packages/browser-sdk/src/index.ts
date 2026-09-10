@@ -39,6 +39,7 @@ export type {
 } from "./feedback/ui/types";
 export type {
   CheckEvent,
+  EvaluationError,
   FallbackFlagOverride,
   FlagOverrides,
   OptInFlag,

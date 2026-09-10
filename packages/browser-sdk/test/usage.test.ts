@@ -498,6 +498,13 @@ describe(`sends "check" events `, () => {
           version: 1,
           missingContextFields: ["field1", "field2"],
           ruleEvaluationResults: [false, true],
+          evaluationErrors: [
+            {
+              code: "MISSING_CONTEXT_FIELD",
+              field: "field1",
+              message: 'Context field "field1" is required.',
+            },
+          ],
         },
         expect.any(Function),
       );
@@ -529,6 +536,13 @@ describe(`sends "check" events `, () => {
               evalResult: true,
               evalRuleResults: [false, true],
               evalMissingFields: ["field1", "field2"],
+              evalErrors: [
+                {
+                  code: "MISSING_CONTEXT_FIELD",
+                  field: "field1",
+                  message: 'Context field "field1" is required.',
+                },
+              ],
             }),
           ]),
         );
@@ -580,6 +594,14 @@ describe(`sends "check" events `, () => {
               },
               evalRuleResults: [true, false, false],
               evalMissingFields: ["field3"],
+              evalErrors: [
+                {
+                  code: "UNSUPPORTED_ARRAY_OPERATOR",
+                  field: "field3",
+                  operator: "IS",
+                  message: 'Operator "IS" does not support array values.',
+                },
+              ],
             }),
           ]),
         );

@@ -56,6 +56,16 @@ export type OptInFlag = RawFlagOptIn & {
 };
 
 /**
+ * A non-fatal diagnostic produced while evaluating targeting rules.
+ */
+export type EvaluationError = {
+  code: string;
+  field: string;
+  operator?: string;
+  message: string;
+};
+
+/**
  * A flag fetched from the server.
  */
 export type RawFlag = {
@@ -87,8 +97,14 @@ export type RawFlag = {
 
   /**
    * Missing context fields.
+   * @deprecated Use `evaluationErrors` and check for `MISSING_CONTEXT_FIELD`.
    */
   missingContextFields?: string[];
+
+  /**
+   * Non-fatal diagnostics produced while evaluating targeting rules.
+   */
+  evaluationErrors?: EvaluationError[];
 
   /**
    * Whether end-user opt-in is enabled for this flag.
@@ -126,8 +142,14 @@ export type RawFlag = {
 
     /**
      * The missing context fields.
+     * @deprecated Use `evaluationErrors` and check for `MISSING_CONTEXT_FIELD`.
      */
     missingContextFields?: string[];
+
+    /**
+     * Non-fatal diagnostics produced while evaluating targeting rules.
+     */
+    evaluationErrors?: EvaluationError[];
   };
 };
 
@@ -243,8 +265,14 @@ export interface CheckEvent {
 
   /**
    * Missing context fields.
+   * @deprecated Use `evaluationErrors` and check for `MISSING_CONTEXT_FIELD`.
    */
   missingContextFields?: string[];
+
+  /**
+   * Non-fatal diagnostics produced while evaluating targeting rules.
+   */
+  evaluationErrors?: EvaluationError[];
 }
 
 const storageOverridesKey = `__reflag_overrides`;
@@ -663,6 +691,7 @@ export class FlagsClient {
         evalResult: checkEvent.value,
         evalRuleResults: checkEvent.ruleEvaluationResults,
         evalMissingFields: checkEvent.missingContextFields,
+        evalErrors: checkEvent.evaluationErrors,
       };
 
       if (this.enqueueBulkEvent) {
@@ -675,6 +704,7 @@ export class FlagsClient {
           evalResult: payload.evalResult,
           evalRuleResults: payload.evalRuleResults,
           evalMissingFields: payload.evalMissingFields,
+          evalErrors: payload.evalErrors,
         }).catch((e: any) => {
           this.logger.warn(`failed to enqueue flag check event`, e);
         });

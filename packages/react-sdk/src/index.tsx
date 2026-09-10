@@ -15,6 +15,7 @@ import {
   BootstrappedState as BrowserBootstrappedState,
   CheckEvent,
   CompanyContext,
+  EvaluationError,
   HookArgs,
   InitOptions,
   Logger,
@@ -39,6 +40,7 @@ const useIsomorphicLayoutEffect =
 export type {
   CheckEvent,
   CompanyContext,
+  EvaluationError,
   SetOptInOptions,
   StorageAdapter,
   TrackEvent,

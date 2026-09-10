@@ -60,8 +60,14 @@ export type FlagEvent = {
 
   /**
    * The missing fields in the evaluation context (optional).
+   * @deprecated Use `evalErrors` and check for `MISSING_CONTEXT_FIELD`.
    **/
   evalMissingFields?: string[];
+
+  /**
+   * Non-fatal diagnostics produced while evaluating targeting rules (optional).
+   **/
+  evalErrors?: EvaluationError[];
 };
 
 /**
