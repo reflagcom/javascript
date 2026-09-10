@@ -6961,7 +6961,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@reflag/management-sdk@npm:0.0.4, @reflag/management-sdk@workspace:*, @reflag/management-sdk@workspace:packages/management-sdk":
+"@reflag/management-sdk@npm:0.1.0, @reflag/management-sdk@workspace:*, @reflag/management-sdk@workspace:packages/management-sdk":
   version: 0.0.0-use.local
   resolution: "@reflag/management-sdk@workspace:packages/management-sdk"
   dependencies:
@@ -7107,7 +7107,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@reflag/rest-api-sdk@workspace:packages/rest-api-sdk"
   dependencies:
-    "@reflag/management-sdk": "npm:0.0.4"
+    "@reflag/management-sdk": "npm:0.1.0"
   languageName: unknown
   linkType: soft
 
