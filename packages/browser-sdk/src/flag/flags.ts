@@ -56,16 +56,6 @@ export type OptInFlag = RawFlagOptIn & {
 };
 
 /**
- * A non-fatal diagnostic produced while evaluating targeting rules.
- */
-type EvaluationError = {
-  code: string;
-  field: string;
-  operator?: string;
-  message: string;
-};
-
-/**
  * A flag fetched from the server.
  */
 export type RawFlag = {
@@ -104,7 +94,12 @@ export type RawFlag = {
   /**
    * Non-fatal diagnostics produced while evaluating targeting rules.
    */
-  evaluationErrors?: EvaluationError[];
+  evaluationErrors?: Array<{
+    code: string;
+    field: string;
+    operator?: string;
+    message: string;
+  }>;
 
   /**
    * Whether end-user opt-in is enabled for this flag.
@@ -149,7 +144,7 @@ export type RawFlag = {
     /**
      * Non-fatal diagnostics produced while evaluating targeting rules.
      */
-    evaluationErrors?: EvaluationError[];
+    evaluationErrors?: RawFlag["evaluationErrors"];
   };
 };
 
@@ -272,7 +267,7 @@ export interface CheckEvent {
   /**
    * Non-fatal diagnostics produced while evaluating targeting rules.
    */
-  evaluationErrors?: EvaluationError[];
+  evaluationErrors?: RawFlag["evaluationErrors"];
 }
 
 const storageOverridesKey = `__reflag_overrides`;
