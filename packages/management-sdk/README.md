@@ -365,8 +365,6 @@ also includes subsequent changes.
 If the refresh fails, the Node SDK keeps its cached or fallback flags rather than
 throwing, so awaiting the call does not guarantee synchronization on failure.
 
-Keep Management API keys on the server.
-
 ## Error handling
 
 The SDK throws `ReflagApiError` for non-2xx API responses.
