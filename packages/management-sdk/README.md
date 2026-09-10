@@ -40,6 +40,7 @@ Core method groups:
 - Applications: `listApps`, `getApp`
 - Environments: `listEnvironments`, `getEnvironment`
 - Flags: `listFlags`, `createFlag`, `updateFlag`
+- User/company management: `upsertUser`, `deleteUser`, `upsertCompany`, `deleteCompany`
 - User/company evaluation: `getUserFlags`, `updateUserFlags`, `getCompanyFlags`, `updateCompanyFlags`
 
 ## Quick start
@@ -127,7 +128,8 @@ console.log(flags.data);
 
 ### Create and update a flag
 
-`createFlag` and `updateFlag` return `{ flag }` with the latest flag details.
+`createFlag` and `updateFlag` return the latest flag details together with
+`flagStateVersions`, keyed by environment ID.
 
 Use `null` to clear nullable fields like `description` or `ownerUserId` on update.
 
@@ -168,6 +170,41 @@ console.log(updated.flag);
 //   "rolledOutToEveryoneAt": "2026-03-10T12:00:00.000Z",
 //   "parentFlagId": "flag-parent-1"
 // }
+```
+
+### Create, update, and delete entities
+
+Use the entity management methods to synchronously manage users and companies in
+an environment. Entity attributes are merged with existing attributes.
+
+```typescript
+const company = await api.upsertCompany({
+  appId: "app-123",
+  envId: "env-456",
+  companyId: "company-1",
+  name: "Acme, Inc.",
+  attributes: { plan: "enterprise", seats: 50 },
+});
+
+const user = await api.upsertUser({
+  appId: "app-123",
+  envId: "env-456",
+  userId: "user-1",
+  name: "Jane Doe",
+  attributes: { role: "admin" },
+});
+
+await api.deleteUser({
+  appId: "app-123",
+  envId: "env-456",
+  userId: user.id,
+});
+await api.deleteCompany({
+  appId: "app-123",
+  envId: "env-456",
+  companyId: company.id,
+  deleteUsers: false,
+});
 ```
 
 ### Read user flags for an environment
@@ -292,6 +329,41 @@ console.log(updatedCompanyFlags.data);
 //   }
 // ]
 ```
+
+## Waiting for flag changes to reach an SDK
+
+Flag changes can take a few seconds to propagate to evaluation SDKs.
+`updateUserFlags` and `updateCompanyFlags` return a `flagStateVersion` identifying
+the environment version containing the completed change. `createFlag` and
+`updateFlag` return `flagStateVersions`, keyed by environment ID.
+
+With `@reflag/node-sdk`, pass this number to `client.refreshFlags(version)` before
+evaluating flags to request that version or newer, rather than waiting for the
+next automatic refresh. Use a client configured for the same app and environment.
+
+```typescript
+// Server-side: `api` is the Management SDK client and `client` is an
+// initialized @reflag/node-sdk ReflagClient.
+const { flagStateVersion } = await api.updateCompanyFlags({
+  appId: "app-123",
+  envId: "env-456",
+  companyId: "company-1",
+  updates: [{ flagKey: "new-checkout", specificTargetValue: true }],
+});
+
+await client.refreshFlags(flagStateVersion);
+const flag = client.getFlag("new-checkout", {
+  user: { id: "user-1" },
+  company: { id: "company-1" },
+});
+```
+
+For `createFlag` or `updateFlag`, pass `result.flagStateVersions[envId]` instead.
+The version is a minimum: a successful refresh may receive a newer version that
+also includes subsequent changes.
+
+If the refresh fails, the Node SDK keeps its cached or fallback flags rather than
+throwing, so awaiting the call does not guarantee synchronization on failure.
 
 ## Error handling
 

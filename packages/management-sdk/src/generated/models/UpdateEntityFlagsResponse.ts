@@ -22,10 +22,10 @@ import {
 } from './EntityFlag';
 
 /**
- * Response containing flags for an entity
- * @interface EntityFlagsResponse
+ * Updated entity flags and the environment flag-state version containing the change
+ * @interface UpdateEntityFlagsResponse
  */
-export interface EntityFlagsResponse {
+export interface UpdateEntityFlagsResponse {
     /**
      * List of flags with their enabled status
      * @type {Array<EntityFlag>}
@@ -46,24 +46,30 @@ export interface EntityFlagsResponse {
      * @type {number}
      */
     pageIndex: number;
+    /**
+     * Environment flag-state version containing the completed mutation
+     * @type {number}
+     */
+    flagStateVersion: number;
 }
 
 /**
- * Check if a given object implements the EntityFlagsResponse interface.
+ * Check if a given object implements the UpdateEntityFlagsResponse interface.
  */
-export function instanceOfEntityFlagsResponse(value: object): value is EntityFlagsResponse {
+export function instanceOfUpdateEntityFlagsResponse(value: object): value is UpdateEntityFlagsResponse {
     if (!('data' in value) || value['data'] === undefined) return false;
     if (!('totalCount' in value) || value['totalCount'] === undefined) return false;
     if (!('pageSize' in value) || value['pageSize'] === undefined) return false;
     if (!('pageIndex' in value) || value['pageIndex'] === undefined) return false;
+    if (!('flagStateVersion' in value) || value['flagStateVersion'] === undefined) return false;
     return true;
 }
 
-export function EntityFlagsResponseFromJSON(json: any): EntityFlagsResponse {
-    return EntityFlagsResponseFromJSONTyped(json, false);
+export function UpdateEntityFlagsResponseFromJSON(json: any): UpdateEntityFlagsResponse {
+    return UpdateEntityFlagsResponseFromJSONTyped(json, false);
 }
 
-export function EntityFlagsResponseFromJSONTyped(json: any, ignoreDiscriminator: boolean): EntityFlagsResponse {
+export function UpdateEntityFlagsResponseFromJSONTyped(json: any, ignoreDiscriminator: boolean): UpdateEntityFlagsResponse {
     if (json == null) {
         return json;
     }
@@ -73,14 +79,15 @@ export function EntityFlagsResponseFromJSONTyped(json: any, ignoreDiscriminator:
         'totalCount': json['totalCount'],
         'pageSize': json['pageSize'],
         'pageIndex': json['pageIndex'],
+        'flagStateVersion': json['flagStateVersion'],
     };
 }
 
-export function EntityFlagsResponseToJSON(json: any): EntityFlagsResponse {
-    return EntityFlagsResponseToJSONTyped(json, false);
+export function UpdateEntityFlagsResponseToJSON(json: any): UpdateEntityFlagsResponse {
+    return UpdateEntityFlagsResponseToJSONTyped(json, false);
 }
 
-export function EntityFlagsResponseToJSONTyped(value?: EntityFlagsResponse | null, ignoreDiscriminator: boolean = false): any {
+export function UpdateEntityFlagsResponseToJSONTyped(value?: UpdateEntityFlagsResponse | null, ignoreDiscriminator: boolean = false): any {
     if (value == null) {
         return value;
     }
@@ -91,6 +98,7 @@ export function EntityFlagsResponseToJSONTyped(value?: EntityFlagsResponse | nul
         'totalCount': value['totalCount'],
         'pageSize': value['pageSize'],
         'pageIndex': value['pageIndex'],
+        'flagStateVersion': value['flagStateVersion'],
     };
 }
 
