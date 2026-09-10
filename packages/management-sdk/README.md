@@ -367,10 +367,7 @@ resolved promise alone is not proof of successful synchronization. Offline mode
 does not refresh, and throttled calls in `in-request` mode (including `EdgeClient`)
 may resolve before the queued fetch runs.
 
-React's `useClient()` exposes the browser SDK client, but its public `refresh()`
-method currently takes no version argument. Neither SDK exposes a method named
-`refreshWaitFor`; version-targeted refresh is currently public only through the
-Node SDK's `refreshFlags(version)`. Keep Management API keys on the server.
+Keep Management API keys on the server.
 
 ## Error handling
 
