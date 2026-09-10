@@ -40,6 +40,7 @@ Core method groups:
 - Applications: `listApps`, `getApp`
 - Environments: `listEnvironments`, `getEnvironment`
 - Flags: `listFlags`, `createFlag`, `updateFlag`
+- User/company management: `upsertUser`, `deleteUser`, `upsertCompany`, `deleteCompany`
 - User/company evaluation: `getUserFlags`, `updateUserFlags`, `getCompanyFlags`, `updateCompanyFlags`
 
 ## Quick start
@@ -127,7 +128,8 @@ console.log(flags.data);
 
 ### Create and update a flag
 
-`createFlag` and `updateFlag` return `{ flag }` with the latest flag details.
+`createFlag` and `updateFlag` return the latest flag details together with
+`flagStateVersions`, keyed by environment ID.
 
 Use `null` to clear nullable fields like `description` or `ownerUserId` on update.
 
@@ -168,6 +170,41 @@ console.log(updated.flag);
 //   "rolledOutToEveryoneAt": "2026-03-10T12:00:00.000Z",
 //   "parentFlagId": "flag-parent-1"
 // }
+```
+
+### Create, update, and delete entities
+
+Use the entity management methods to synchronously manage users and companies in
+an environment. Entity attributes are merged with existing attributes.
+
+```typescript
+const company = await api.upsertCompany({
+  appId: "app-123",
+  envId: "env-456",
+  companyId: "company-1",
+  name: "Acme, Inc.",
+  attributes: { plan: "enterprise", seats: 50 },
+});
+
+const user = await api.upsertUser({
+  appId: "app-123",
+  envId: "env-456",
+  userId: "user-1",
+  name: "Jane Doe",
+  attributes: { role: "admin" },
+});
+
+await api.deleteUser({
+  appId: "app-123",
+  envId: "env-456",
+  userId: user.id,
+});
+await api.deleteCompany({
+  appId: "app-123",
+  envId: "env-456",
+  companyId: company.id,
+  deleteUsers: false,
+});
 ```
 
 ### Read user flags for an environment
