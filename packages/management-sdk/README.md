@@ -330,6 +330,48 @@ console.log(updatedCompanyFlags.data);
 // ]
 ```
 
+## Waiting for flag changes to reach an SDK
+
+Flag changes can take a few seconds to propagate to evaluation SDKs.
+`updateUserFlags` and `updateCompanyFlags` return a `flagStateVersion` identifying
+the environment version containing the completed change. `createFlag` and
+`updateFlag` return `flagStateVersions`, keyed by environment ID.
+
+With `@reflag/node-sdk`, pass this number to `client.refreshFlags(version)` before
+evaluating flags to request that version or newer, rather than waiting for the
+next automatic refresh. Use a client configured for the same app and environment.
+
+```typescript
+// Server-side: `api` is the Management SDK client and `client` is an
+// initialized @reflag/node-sdk ReflagClient.
+const { flagStateVersion } = await api.updateCompanyFlags({
+  appId: "app-123",
+  envId: "env-456",
+  companyId: "company-1",
+  updates: [{ flagKey: "new-checkout", specificTargetValue: true }],
+});
+
+await client.refreshFlags(flagStateVersion);
+const flag = client.getFlag("new-checkout", {
+  user: { id: "user-1" },
+  company: { id: "company-1" },
+});
+```
+
+For `createFlag` or `updateFlag`, pass `result.flagStateVersions[envId]` instead.
+The version is a minimum: a successful refresh may receive a newer version that
+also includes subsequent changes.
+
+The Node SDK retains its graceful fallback behavior on refresh failures, so a
+resolved promise alone is not proof of successful synchronization. Offline mode
+does not refresh, and throttled calls in `in-request` mode (including `EdgeClient`)
+may resolve before the queued fetch runs.
+
+React's `useClient()` exposes the browser SDK client, but its public `refresh()`
+method currently takes no version argument. Neither SDK exposes a method named
+`refreshWaitFor`; version-targeted refresh is currently public only through the
+Node SDK's `refreshFlags(version)`. Keep Management API keys on the server.
+
 ## Error handling
 
 The SDK throws `ReflagApiError` for non-2xx API responses.
