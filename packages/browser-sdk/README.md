@@ -212,29 +212,43 @@ If a flag has end-user opt-in enabled in Reflag, you can list the opt-in options
 
 ```ts
 const optInFlags = reflagClient.getOptInFlags();
-const isLoadingOptInFlags = reflagClient.getIsLoadingOptInFlags();
 // [{ key, name, description, isEnabled, userOptedIn, companyOptedIn, isOptedIn }]
+const isLoadingOptInFlags = reflagClient.getIsLoadingOptInFlags();
 
-await reflagClient.setOptIn("huddle", { optedIn: true });
-await reflagClient.setOptIn("huddle", { optedIn: false });
-
-await reflagClient.setOptIn("huddle", {
-  optedIn: true,
-  scope: "company",
-});
+try {
+  const response = await reflagClient.setOptIn("huddle", {
+    optedIn: true, // Use false to cancel this scope's opt-in.
+    scope: "user", // Use "company" to change the current company's opt-in.
+  });
+  if (!response?.ok) throw new Error("Opt-in request failed or was skipped");
+} catch (error) {
+  // Show an error in your UI; confirmation may fail after a remote change.
+  console.error("Could not update opt-in", error);
+}
 ```
 
 By default, `setOptIn()` changes the opt-in for the current user, so the current context must include a `user.id`. To manage the current company's opt-in instead, pass `scope: "company"`; the context must then include a `company.id`.
 
 User and company opt-ins are managed independently. Setting `optedIn` to `false` removes the opt-in only for the selected scope. For example, cancelling a user's opt-in does not change the company's opt-in for the same flag.
 
-`setOptIn` returns a promise so you can wait for the new membership state to be synchronized. It resolves after the latest flag state has been applied locally, the requested membership change has been confirmed, and `flagsUpdated` listeners have been notified.
+Opt-in is not an authorization boundary. Requests use a publishable key and caller-supplied context IDs; company scope does not verify company membership or administrator permissions. Hiding the button from non-admins does not prevent direct requests. For admin-only or sensitive access, enforce authorization in your backend and use server-controlled access rules instead of public end-user opt-in.
+
+`setOptIn` returns `Promise<Response | undefined>`:
+
+- An OK `Response` is returned after refreshed flag state confirms the membership change. `flagsUpdated` listeners are notified when flags change.
+- HTTP failures return a non-OK `Response` without refreshing flags. Check `response.ok`; `response.json()` can provide error details.
+- Offline mode, invalid arguments, or a missing scoped context ID return `undefined` without sending a request.
+- Network and confirmation failures reject the promise. A confirmation failure can happen after membership changed remotely.
+
+Always check `response?.ok` and catch rejections, as in the example.
 
 The `description` comes from the dedicated SDK-facing opt-in description configured in Reflag.
 
-For a bootstrapped client, the first `getOptInFlags()` or `getIsLoadingOptInFlags()` call starts one flags refresh. The list call returns the currently available list synchronously, and the loading getter returns `true` until the refresh succeeds or fails. Normal initialization already exposes loading through the client's state.
+For a bootstrapped client, the first `getOptInFlags()` or `getIsLoadingOptInFlags()` call requests a flags refresh only if opt-in metadata is missing. The list call returns the currently available list synchronously, and the loading getter returns `true` until that refresh succeeds or fails. Complete bootstrapped metadata is immediately available without an extra request. Normal initialization also exposes loading through the client's state.
 
 Listen for `optInFlagsLoadingUpdated` to update UI when this loading state changes. `flagsUpdated` is emitted when a successful refresh updates the list.
+
+A failed metadata refresh clears the loading state without exposing a separate error state. An empty list may mean unavailable data, not just no eligible flags. Calling the getters again does not retry the on-demand refresh for the same context. Call `reflagClient.refresh()` to retry manually, check for an `undefined` result, and track the retry's pending/error state in your UI.
 
 ## Remote config
 
@@ -333,7 +347,7 @@ The `bootstrappedState` object contains:
 
 If you want live flag updates to continue working after bootstrapping, use a recent `@reflag/node-sdk` so `getFlagsForBootstrap()` includes `flagStateVersion`.
 
-If a bootstrapped application requests opt-in flags, the browser SDK performs one flags refresh. Applications that do not request opt-in data do not make this request.
+If a bootstrapped application requests opt-in flags and its state lacks opt-in metadata, the browser SDK requests a flags refresh. Node SDK bootstrap data currently lacks this metadata. Complete metadata, or applications that do not request opt-in data, do not require this extra request.
 
 If you previously used `bootstrappedFlags`, migrate like this:
 
@@ -357,7 +371,7 @@ const client = new ReflagClient({
 ```
 
 > [!NOTE]
-> After bootstrapping, any live flag updates are fetched directly by the browser SDK from Reflag using the browser-visible context. If your bootstrapped snapshot depends on server-only or secret context that is not available in the browser, later live refreshes may differ. In that case, keep `enableLiveFlagUpdates` disabled.
+> After bootstrapping, on-demand opt-in metadata and live flag updates are fetched using the browser-visible context. If your snapshot depends on server-only or secret context, refreshed flags may differ. Disabling `enableLiveFlagUpdates` does not prevent the opt-in metadata refresh; only request opt-in data if browser-side re-evaluation is appropriate.
 
 This eliminates loading states and removes the initial render's dependency on the flags API.
 

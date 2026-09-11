@@ -602,11 +602,11 @@ function App({ bootstrapData }: AppProps) {
 > [!Note]
 > When using `ReflagBootstrappedProvider`, pass the entire object returned by `getFlagsForBootstrap()` directly as the `flags` prop. The context is extracted from `flags.context`, and `flags.flagStateVersion` is used when present.
 >
-> With `ReflagBootstrappedProvider`, `useOptInFlags()` triggers one flags refresh and returns `isLoading: true` (or suspends) until it settles. No refresh occurs unless the hook is used.
+> With `ReflagBootstrappedProvider`, `useOptInFlags()` requests a flags refresh only if the bootstrapped state lacks opt-in metadata. It returns `isLoading: true` (or suspends) until that refresh settles. Complete metadata is immediately available without this extra request.
 >
 > If you want live flag updates to continue working after bootstrapping, use a recent `@reflag/node-sdk` so `getFlagsForBootstrap()` includes `flagStateVersion`.
 >
-> The on-demand browser refresh and any later live flag updates use the browser-visible context. If your bootstrapped snapshot depends on server-only or secret context that is not available in the browser, refreshed flags may differ. In that case, keep `enableLiveFlagUpdates` disabled.
+> The on-demand browser refresh and any later live flag updates use the browser-visible context. If your bootstrapped snapshot depends on server-only or secret context that is not available in the browser, refreshed flags may differ. Disabling `enableLiveFlagUpdates` does not prevent the opt-in metadata refresh; only request opt-in data if browser-side re-evaluation is appropriate.
 
 ## Hooks
 
@@ -682,30 +682,57 @@ You can also opt in for a single call with `useFlag("huddle", { suspense: true }
 Use these hooks to build an end-user opt-in UI for flags where opt-in is enabled in Reflag.
 
 ```tsx
-import { useOptInFlags, useSetOptIn } from "@reflag/react-sdk";
+import { useState } from "react";
+import {
+  type OptInFlag,
+  useIsLoading,
+  useOptInFlags,
+  useSetOptIn,
+} from "@reflag/react-sdk";
 
 function OptInList() {
+  const isProviderLoading = useIsLoading();
   const { flags, isLoading } = useOptInFlags();
   const setOptIn = useSetOptIn();
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // This is only true with ReflagBootstrappedProvider while the SDK fetches
-  // opt-in metadata on first use.
-  if (isLoading) {
-    return <Spinner />;
+  async function updateOptIn(flag: OptInFlag) {
+    setError(null);
+    setIsUpdating(true);
+    try {
+      const response = await setOptIn(flag.key, { optedIn: !flag.userOptedIn });
+      if (!response?.ok) throw new Error("Opt-in request failed");
+    } catch {
+      setError(`Could not update ${flag.name}. Please try again.`);
+    } finally {
+      setIsUpdating(false);
+    }
+  }
+
+  if (isProviderLoading || isLoading) {
+    return <p>Loading opt-in flags…</p>;
   }
 
   if (flags.length === 0) {
-    return <p>No opt-in flags are available.</p>;
+    return <p>No opt-in flags to show. The list may also be unavailable.</p>;
   }
 
-  return flags.map((flag) => (
-    <button
-      key={flag.key}
-      onClick={() => setOptIn(flag.key, { optedIn: !flag.userOptedIn })}
-    >
-      {flag.userOptedIn ? "Cancel opt-in" : `Try ${flag.name}`}
-    </button>
-  ));
+  return (
+    <>
+      {flags.map((flag) => (
+        <button
+          type="button"
+          key={flag.key}
+          disabled={isUpdating}
+          onClick={() => updateOptIn(flag)}
+        >
+          {flag.userOptedIn ? "Cancel opt-in" : `Try ${flag.name}`}
+        </button>
+      ))}
+      {error && <p role="alert">{error}</p>}
+    </>
+  );
 }
 ```
 
@@ -713,9 +740,20 @@ By default, `useSetOptIn()` changes the opt-in for the current user, so the curr
 
 User and company opt-ins are managed independently. Setting `optedIn` to `false` removes the opt-in only for the selected scope. For example, cancelling a user's opt-in does not change the company's opt-in for the same flag.
 
-`setOptIn` returns a promise so you can wait for the new membership state to be synchronized. It resolves after the latest flag state has been applied, the requested membership change has been confirmed, and components using `useOptInFlags()` have been notified. React schedules the resulting render normally, so it may not yet be committed when the promise resolves.
+Opt-in is not an authorization boundary. Requests use a publishable key and caller-supplied context IDs; company scope does not verify company membership or administrator permissions. Hiding the button from non-admins does not prevent direct requests. For admin-only or sensitive access, enforce authorization in your backend and use server-controlled access rules instead of public end-user opt-in.
 
-`useOptInFlags()` returns `{ flags, isLoading }`. With `ReflagBootstrappedProvider`, the hook fetches opt-in metadata on first use and reports `isLoading: true` until the flags refresh succeeds or fails.
+`setOptIn` returns `Promise<Response | undefined>`:
+
+- An OK `Response` is returned after refreshed flag state confirms the membership change. Subscribers are notified when flags change; React may not have committed the render yet.
+- HTTP failures return a non-OK `Response` without refreshing flags. Check `response.ok`; `response.json()` can provide error details.
+- Offline mode, invalid arguments, or a missing scoped context ID return `undefined` without sending a request.
+- Network and confirmation failures reject the promise. A confirmation failure can happen after membership changed remotely.
+
+Always check `response?.ok` and catch rejections, as in the example.
+
+`useOptInFlags()` returns `{ flags, isLoading }`. With `ReflagBootstrappedProvider`, it fetches metadata on demand only when missing and reports `isLoading: true` until that refresh succeeds or fails. Node SDK bootstrap data currently lacks this metadata; complete bootstrapped metadata needs no extra request.
+
+The hook does not expose fetch errors or throw them to an error boundary. After a failed metadata refresh, an empty list can mean unavailable data rather than no eligible flags. The on-demand refresh is not automatically attempted again for the same context. Use `useClient().refresh()` to retry, check for an `undefined` result, and manage retry pending/error state separately. See the [opt-in guide](https://docs.reflag.com/guides/self-opt-in) for a complete example with a reload button.
 
 With a regular `ReflagProvider`, opt-in metadata arrives as part of the normal initial flags request, so `useOptInFlags().isLoading` remains `false`. Use the general `useIsLoading()` hook or the provider's `loadingComponent` for that initial loading state.
 
