@@ -1,14 +1,4 @@
-import { constants } from "os";
-
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  MockInstance,
-  vi,
-} from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { subscribe } from "../src/flusher";
 
@@ -25,16 +15,9 @@ describe("flusher", () => {
     .spyOn(process, "on")
     .mockImplementation((_, __) => process);
 
-  const mockProcessPrependListener = (
-    vi.spyOn(process, "prependListener") as unknown as MockInstance<
-      [event: NodeJS.Signals, listener: NodeJS.SignalsListener],
-      NodeJS.Process
-    >
-  ).mockImplementation((_, __) => process);
-
-  const mockListenerCount = vi
-    .spyOn(process, "listenerCount")
-    .mockReturnValue(0);
+  const mockProcessPrependListener = vi
+    .spyOn(process, "prependListener")
+    .mockImplementation((_, __) => process);
 
   function timedCallback(ms: number) {
     return vi.fn().mockImplementation(
@@ -45,12 +28,8 @@ describe("flusher", () => {
     );
   }
 
-  function getHandler(eventName: string, prepended = false) {
-    return prepended
-      ? mockProcessPrependListener.mock.calls.filter(
-          ([evt]) => evt === eventName,
-        )[0][1]
-      : mockProcessOn.mock.calls.filter(([evt]) => evt === eventName)[0][1];
+  function getHandler(eventName: string) {
+    return mockProcessOn.mock.calls.filter(([evt]) => evt === eventName)[0][1];
   }
 
   beforeEach(() => {
@@ -62,44 +41,14 @@ describe("flusher", () => {
     vi.resetAllMocks();
   });
 
-  describe("signal handling", () => {
-    const signals = ["SIGINT", "SIGTERM", "SIGHUP", "SIGBREAK"] as const;
+  it("should subscribe only to natural exit, without installing signal handlers", () => {
+    subscribe(vi.fn().mockResolvedValue(undefined));
 
-    describe.each(signals)("signal %s", (signal) => {
-      it("should handle signal with no existing listeners", async () => {
-        mockListenerCount.mockReturnValue(0);
-        const callback = vi.fn().mockResolvedValue(undefined);
-
-        subscribe(callback);
-        expect(mockProcessOn).toHaveBeenCalledWith(
-          signal,
-          expect.any(Function),
-        );
-
-        getHandler(signal)(signal);
-        await vi.runAllTimersAsync();
-
-        expect(callback).toHaveBeenCalledTimes(1);
-        expect(mockExit).toHaveBeenCalledWith(0x80 + constants.signals[signal]);
-      });
-
-      it("should prepend handler when listeners exist", async () => {
-        mockListenerCount.mockReturnValue(1);
-        const callback = vi.fn().mockResolvedValue(undefined);
-
-        subscribe(callback);
-
-        expect(mockProcessPrependListener).toHaveBeenCalledWith(
-          signal,
-          expect.any(Function),
-        );
-
-        getHandler(signal, true)(signal);
-
-        expect(callback).toHaveBeenCalledTimes(1);
-        expect(mockExit).not.toHaveBeenCalled();
-      });
-    });
+    expect(mockProcessOn.mock.calls.map(([event]) => event)).toEqual([
+      "beforeExit",
+      "exit",
+    ]);
+    expect(mockProcessPrependListener).not.toHaveBeenCalled();
   });
 
   describe("beforeExit handling", () => {
@@ -108,9 +57,10 @@ describe("flusher", () => {
 
       subscribe(callback);
 
-      getHandler("beforeExit")();
+      await getHandler("beforeExit")();
 
       expect(callback).toHaveBeenCalledTimes(1);
+      expect(mockExit).not.toHaveBeenCalled();
     });
 
     it("should not call callback multiple times", async () => {
@@ -149,14 +99,12 @@ describe("flusher", () => {
   });
 
   describe("exit state handling", () => {
-    it("should log error if exit occurs before flushing starts", () => {
+    it("should not report a failed flush when beforeExit never ran", () => {
       subscribe(timedCallback(0));
 
       getHandler("exit")();
 
-      expect(mockConsoleError).toHaveBeenCalledWith(
-        "[Reflag SDK] Failed to finalize the flushing of events on process exit.",
-      );
+      expect(mockConsoleError).not.toHaveBeenCalled();
     });
 
     it("should log error if exit occurs before flushing completes", async () => {
@@ -196,16 +144,15 @@ describe("flusher", () => {
     });
   });
 
-  it("should run the callback only once", async () => {
+  it("should not flush again when beforeExit fires after flushing completes", async () => {
     const callback = vi.fn().mockResolvedValue(undefined);
 
     subscribe(callback);
 
-    getHandler("SIGINT")("SIGINT");
-    getHandler("beforeExit")();
-
-    await vi.runAllTimersAsync();
+    await getHandler("beforeExit")();
+    await getHandler("beforeExit")();
 
     expect(callback).toHaveBeenCalledTimes(1);
+    expect(mockExit).not.toHaveBeenCalled();
   });
 });

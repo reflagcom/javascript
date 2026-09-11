@@ -4,7 +4,7 @@ Typed SDK for interacting with Reflag’s Management API.
 
 Use `@reflag/management-sdk` to programmatically manage feature flags such as listing flags, and enabling or disabling them for specific users or companies.
 
-For a practical example of what you can build, see the [Customer Admin Panel](https://github.com/reflagcom/javascript/blob/main/packages/rest-api-sdk/examples/customer-admin-panel/README.md) example app.
+For a practical example of what you can build, see the [Customer Admin Panel](https://github.com/reflagcom/javascript/blob/main/packages/management-sdk/examples/customer-admin-panel/README.md) example app.
 
 ## Installation
 
@@ -206,6 +206,36 @@ await api.deleteCompany({
   deleteUsers: false,
 });
 ```
+
+### Create a user and immediately enable a flag
+
+Use `upsertUser` when the user must be available to a targeting request immediately,
+rather than relying on asynchronous runtime tracking ingestion. Await the upsert
+before enabling the flag. The flag must already exist, and the Management API key
+needs both `write:entities` and `write:flag:targeting` scopes.
+
+```typescript
+const scope = { appId: "app-123", envId: "env-456" };
+const userId = "user-123";
+
+await api.upsertUser({ ...scope, userId, name: "Jane Doe" });
+
+const { flagStateVersion } = await api.updateUserFlags({
+  ...scope,
+  userId,
+  updates: [{ flagKey: "new-checkout", specificTargetValue: true }],
+});
+
+// Optional: evaluate immediately using an initialized Node SDK client
+// configured for the same app and environment.
+await client.refreshFlags(flagStateVersion);
+const flag = client.getFlag("new-checkout", { user: { id: userId } });
+```
+
+The upsert makes the user available to the Management API. Refreshing the Node SDK
+requests the flag configuration containing the targeting change or newer; see
+[Waiting for flag changes to reach an SDK](#waiting-for-flag-changes-to-reach-an-sdk).
+The same sequence works for companies using `upsertCompany` and `updateCompanyFlags`.
 
 ### Read user flags for an environment
 
