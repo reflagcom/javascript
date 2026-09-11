@@ -986,8 +986,8 @@ these functions.
 ReflagClient employs a batching technique to minimize the number of calls that are sent to
 Reflag's servers.
 
-By default, the SDK automatically subscribes to process exit signals and attempts to flush
-any pending events. This behavior is controlled by the `flushOnExit` option in the client configuration:
+By default, the SDK attempts to flush pending events when the Node.js event loop empties
+(the `beforeExit` event). This behavior is controlled by the `flushOnExit` option in the client configuration:
 
 ```typescript
 const client = new ReflagClient({
@@ -996,6 +996,16 @@ const client = new ReflagClient({
   },
 });
 ```
+
+The SDK does not install signal handlers or call `process.exit()`. Your application retains
+control of its shutdown sequence, regardless of when it registers its signal handlers.
+
+Node.js does not emit `beforeExit` for unhandled termination signals (such as `SIGTERM` or
+`SIGINT`) or explicit `process.exit()` calls. For these shutdown paths, **await `client.flush()`
+in your application's existing graceful shutdown hook**, after stopping incoming work and
+waiting for in-flight requests or jobs to finish, and before exiting. This ensures events
+produced during shutdown are included. Automatic flushing is best-effort and does not replace
+an application-managed shutdown hook.
 
 ## Tracking custom events and setting custom attributes
 

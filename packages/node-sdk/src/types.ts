@@ -612,7 +612,10 @@ export type BatchBufferOptions<T> = {
   intervalMs?: number;
 
   /**
-   * Whether to flush the buffer on exit.
+   * Whether to flush the buffer on natural process exit (`beforeExit`).
+   * This does not install signal handlers. For signal-driven shutdown or an
+   * explicit `process.exit()`, await `client.flush()` in your application's
+   * shutdown hook before exiting.
    *
    * @defaultValue `true`
    */
