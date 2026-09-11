@@ -29,6 +29,13 @@ import { server } from "./mocks/server";
 
 const KEY = "123";
 
+const clientNotInitializedError = {
+  code: "CLIENT_NOT_INITIALIZED",
+  field: "",
+  message:
+    "ReflagClient was not initialized before this flag was evaluated. Call initialize() before evaluating flags.",
+};
+
 vi.mock("../src/sse");
 vi.mock("../src/feedback/promptStorage", () => {
   return {
@@ -449,7 +456,63 @@ describe(`sends "check" events `, () => {
       });
     });
 
-    it(`does not send check events when offline`, async () => {
+    it("adds diagnostics when flags are evaluated before initialization", () => {
+      const sendCheckEventSpy = vi.spyOn(
+        FlagsClient.prototype,
+        "sendCheckEvent",
+      );
+      const client = new ReflagClient({ publishableKey: KEY });
+
+      const flag = client.getFlag("flagA");
+      expect(flag.isEnabled).toBe(false);
+      expect(flag.config).toEqual({ key: undefined, payload: undefined });
+
+      expect(sendCheckEventSpy).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          action: "check-is-enabled",
+          evaluationErrors: [clientNotInitializedError],
+        }),
+        expect.any(Function),
+      );
+      expect(sendCheckEventSpy).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          action: "check-config",
+          evaluationErrors: [clientNotInitializedError],
+        }),
+        expect.any(Function),
+      );
+    });
+
+    it("does not add initialization diagnostics to bootstrapped evaluations", () => {
+      const sendCheckEventSpy = vi.spyOn(
+        FlagsClient.prototype,
+        "sendCheckEvent",
+      );
+      const client = new ReflagClient({
+        publishableKey: KEY,
+        bootstrappedState: {
+          context: {},
+          flags: {
+            flagA: { key: "flagA", isEnabled: true },
+          },
+        },
+      });
+
+      expect(client.getFlag("flagA").isEnabled).toBe(true);
+
+      expect(sendCheckEventSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ evaluationErrors: undefined }),
+        expect.any(Function),
+      );
+    });
+
+    it(`does not send check events or add initialization diagnostics when offline`, () => {
+      const sendCheckEventSpy = vi.spyOn(
+        FlagsClient.prototype,
+        "sendCheckEvent",
+      );
       const postSpy = vi.spyOn(HttpClient.prototype, "post");
 
       const client = new ReflagClient({
@@ -458,11 +521,14 @@ describe(`sends "check" events `, () => {
         company: { id: "cid" },
         offline: true,
       });
-      await client.initialize();
 
       const flagA = client.getFlag("flagA");
       expect(flagA.isEnabled).toBe(false);
 
+      expect(sendCheckEventSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ evaluationErrors: undefined }),
+        expect.any(Function),
+      );
       expect(postSpy).not.toHaveBeenCalled();
     });
 
@@ -498,6 +564,7 @@ describe(`sends "check" events `, () => {
           version: 1,
           missingContextFields: ["field1", "field2"],
           ruleEvaluationResults: [false, true],
+          evaluationErrors: flagsResult.flagA.evaluationErrors,
         },
         expect.any(Function),
       );
@@ -529,6 +596,7 @@ describe(`sends "check" events `, () => {
               evalResult: true,
               evalRuleResults: [false, true],
               evalMissingFields: ["field1", "field2"],
+              evalErrors: flagsResult.flagA.evaluationErrors,
             }),
           ]),
         );
@@ -580,6 +648,7 @@ describe(`sends "check" events `, () => {
               },
               evalRuleResults: [true, false, false],
               evalMissingFields: ["field3"],
+              evalErrors: flagsResult.flagB.config?.evaluationErrors,
             }),
           ]),
         );

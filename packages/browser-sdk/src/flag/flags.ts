@@ -87,8 +87,19 @@ export type RawFlag = {
 
   /**
    * Missing context fields.
+   * @deprecated Use `evaluationErrors` and check for `MISSING_CONTEXT_FIELD`.
    */
   missingContextFields?: string[];
+
+  /**
+   * Non-fatal diagnostics produced while evaluating targeting rules.
+   */
+  evaluationErrors?: Array<{
+    code: string;
+    field: string;
+    operator?: string;
+    message: string;
+  }>;
 
   /**
    * Whether end-user opt-in is enabled for this flag.
@@ -126,8 +137,14 @@ export type RawFlag = {
 
     /**
      * The missing context fields.
+     * @deprecated Use `evaluationErrors` and check for `MISSING_CONTEXT_FIELD`.
      */
     missingContextFields?: string[];
+
+    /**
+     * Non-fatal diagnostics produced while evaluating targeting rules.
+     */
+    evaluationErrors?: RawFlag["evaluationErrors"];
   };
 };
 
@@ -243,8 +260,14 @@ export interface CheckEvent {
 
   /**
    * Missing context fields.
+   * @deprecated Use `evaluationErrors` and check for `MISSING_CONTEXT_FIELD`.
    */
   missingContextFields?: string[];
+
+  /**
+   * Non-fatal diagnostics produced while evaluating the flag.
+   */
+  evaluationErrors?: RawFlag["evaluationErrors"];
 }
 
 const storageOverridesKey = `__reflag_overrides`;
@@ -663,18 +686,13 @@ export class FlagsClient {
         evalResult: checkEvent.value,
         evalRuleResults: checkEvent.ruleEvaluationResults,
         evalMissingFields: checkEvent.missingContextFields,
+        evalErrors: checkEvent.evaluationErrors,
       };
 
       if (this.enqueueBulkEvent) {
         this.enqueueBulkEvent({
           type: "feature-flag-event",
-          action: payload.action,
-          key: payload.key,
-          targetingVersion: payload.targetingVersion,
-          evalContext: payload.evalContext,
-          evalResult: payload.evalResult,
-          evalRuleResults: payload.evalRuleResults,
-          evalMissingFields: payload.evalMissingFields,
+          ...payload,
         }).catch((e: any) => {
           this.logger.warn(`failed to enqueue flag check event`, e);
         });

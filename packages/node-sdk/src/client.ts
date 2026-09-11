@@ -86,6 +86,22 @@ function evaluationErrorsRateLimitKey(errors: EvaluationError[]): string {
     .join("\n");
 }
 
+const CLIENT_NOT_INITIALIZED_EVALUATION_ERROR = {
+  code: "CLIENT_NOT_INITIALIZED",
+  field: "",
+  message:
+    "ReflagClient was not initialized before this flag was evaluated. Call initialize() before evaluating flags.",
+} as const;
+
+function withClientInitializationDiagnostic(
+  errors: FlagEvent["evalErrors"],
+  evaluatedBeforeInitialization: boolean,
+): FlagEvent["evalErrors"] {
+  return evaluatedBeforeInitialization
+    ? [...(errors ?? []), CLIENT_NOT_INITIALIZED_EVALUATION_ERROR]
+    : errors;
+}
+
 type PartialBy<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
 type FlagOverrideLayer = {
   id: number;
@@ -145,19 +161,7 @@ type BulkEvent =
       attributes?: Attributes;
       context?: TrackingMeta;
     }
-  | {
-      type: "feature-flag-event";
-      action: "check" | "check-config";
-      key: string;
-      targetingVersion?: number;
-      evalResult:
-        | boolean
-        | { key: string; payload: any }
-        | { key: undefined; payload: undefined };
-      evalContext?: Record<string, any>;
-      evalRuleResults?: boolean[];
-      evalMissingFields?: string[];
-    }
+  | ({ type: "feature-flag-event" } & FlagEvent)
   | {
       type: "event";
       event: string;
@@ -1253,6 +1257,7 @@ export class ReflagClient {
    * @param event.evalContext - The evaluation context of the flag to send.
    * @param event.evalRuleResults - The evaluation rule results of the flag to send.
    * @param event.evalMissingFields - The evaluation missing fields of the flag to send.
+   * @param event.evalErrors - The non-fatal evaluation diagnostics of the flag to send.
    *
    * @throws An error if the event is invalid.
    *
@@ -1293,6 +1298,10 @@ export class ReflagClient {
         Array.isArray(event.evalMissingFields),
       "event missing fields must be an array",
     );
+    ok(
+      event.evalErrors === undefined || Array.isArray(event.evalErrors),
+      "event evaluation errors must be an array",
+    );
 
     const contextKey = new URLSearchParams(
       flattenJSON(event.evalContext || {}),
@@ -1318,13 +1327,7 @@ export class ReflagClient {
 
     await this.batchBuffer.add({
       type: "feature-flag-event",
-      action: event.action,
-      key: event.key,
-      targetingVersion: event.targetingVersion,
-      evalContext: event.evalContext,
-      evalResult: event.evalResult,
-      evalRuleResults: event.evalRuleResults,
-      evalMissingFields: event.evalMissingFields,
+      ...event,
     });
   }
 
@@ -1470,7 +1473,7 @@ export class ReflagClient {
   ): RawFlags | RawFlag | undefined {
     checkContextWithTracking(options);
 
-    if (!this.initializationFinished) {
+    if (!this.initializationFinished && !this._config.offline) {
       this.logger.error("getFlag(s): ReflagClient is not initialized yet.");
     }
 
@@ -1584,6 +1587,16 @@ export class ReflagClient {
     const simplifiedConfig = config
       ? { key: config.key, payload: config.payload }
       : { key: undefined, payload: undefined };
+    const evaluatedBeforeInitialization =
+      !this.initializationFinished && !this._config.offline;
+    const flagEvaluationErrors = withClientInitializationDiagnostic(
+      flag.evaluationErrors,
+      evaluatedBeforeInitialization,
+    );
+    const configEvaluationErrors = withClientInitializationDiagnostic(
+      config?.evaluationErrors,
+      evaluatedBeforeInitialization,
+    );
 
     return {
       get isEnabled() {
@@ -1599,6 +1612,7 @@ export class ReflagClient {
               evalContext: context,
               evalRuleResults: flag.ruleEvaluationResults,
               evalMissingFields: flag.missingContextFields,
+              evalErrors: flagEvaluationErrors,
             })
             .catch((err) => {
               client.logger?.error(
@@ -1622,6 +1636,7 @@ export class ReflagClient {
               evalContext: context,
               evalRuleResults: config?.ruleEvaluationResults,
               evalMissingFields: config?.missingContextFields,
+              evalErrors: configEvaluationErrors,
             })
             .catch((err) => {
               client.logger?.error(
