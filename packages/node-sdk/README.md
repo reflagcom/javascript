@@ -997,9 +997,6 @@ const client = new ReflagClient({
 });
 ```
 
-The SDK does not install signal handlers or call `process.exit()`. Your application retains
-control of its shutdown sequence, regardless of when it registers its signal handlers.
-
 Node.js does not emit `beforeExit` for unhandled termination signals (such as `SIGTERM` or
 `SIGINT`) or explicit `process.exit()` calls. For these shutdown paths, **await `client.flush()`
 in your application's existing graceful shutdown hook**, after stopping incoming work and
