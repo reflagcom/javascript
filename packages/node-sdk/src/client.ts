@@ -86,6 +86,22 @@ function evaluationErrorsRateLimitKey(errors: EvaluationError[]): string {
     .join("\n");
 }
 
+const CLIENT_NOT_INITIALIZED_EVALUATION_ERROR = {
+  code: "CLIENT_NOT_INITIALIZED",
+  field: "",
+  message:
+    "ReflagClient was not initialized before this flag was evaluated. Call initialize() before evaluating flags.",
+} as const;
+
+function withClientInitializationDiagnostic(
+  errors: FlagEvent["evalErrors"],
+  evaluatedBeforeInitialization: boolean,
+): FlagEvent["evalErrors"] {
+  return evaluatedBeforeInitialization
+    ? [...(errors ?? []), CLIENT_NOT_INITIALIZED_EVALUATION_ERROR]
+    : errors;
+}
+
 type PartialBy<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
 type FlagOverrideLayer = {
   id: number;
@@ -1454,7 +1470,7 @@ export class ReflagClient {
   ): RawFlags | RawFlag | undefined {
     checkContextWithTracking(options);
 
-    if (!this.initializationFinished) {
+    if (!this.initializationFinished && !this._config.offline) {
       this.logger.error("getFlag(s): ReflagClient is not initialized yet.");
     }
 
@@ -1568,6 +1584,16 @@ export class ReflagClient {
     const simplifiedConfig = config
       ? { key: config.key, payload: config.payload }
       : { key: undefined, payload: undefined };
+    const evaluatedBeforeInitialization =
+      !this.initializationFinished && !this._config.offline;
+    const flagEvaluationErrors = withClientInitializationDiagnostic(
+      flag.evaluationErrors,
+      evaluatedBeforeInitialization,
+    );
+    const configEvaluationErrors = withClientInitializationDiagnostic(
+      config?.evaluationErrors,
+      evaluatedBeforeInitialization,
+    );
 
     return {
       get isEnabled() {
@@ -1583,7 +1609,7 @@ export class ReflagClient {
               evalContext: context,
               evalRuleResults: flag.ruleEvaluationResults,
               evalMissingFields: flag.missingContextFields,
-              evalErrors: flag.evaluationErrors,
+              evalErrors: flagEvaluationErrors,
             })
             .catch((err) => {
               client.logger?.error(
@@ -1607,7 +1633,7 @@ export class ReflagClient {
               evalContext: context,
               evalRuleResults: config?.ruleEvaluationResults,
               evalMissingFields: config?.missingContextFields,
-              evalErrors: config?.evaluationErrors,
+              evalErrors: configEvaluationErrors,
             })
             .catch((err) => {
               client.logger?.error(

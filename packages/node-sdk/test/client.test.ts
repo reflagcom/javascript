@@ -43,6 +43,13 @@ const missingContextFieldError = (field: string) => ({
   message: `Context field "${field}" is required to evaluate targeting rules.`,
 });
 
+const clientNotInitializedError = {
+  code: "CLIENT_NOT_INITIALIZED",
+  field: "",
+  message:
+    "ReflagClient was not initialized before this flag was evaluated. Call initialize() before evaluating flags.",
+};
+
 vi.mock("../src/rate-limiter", async (importOriginal) => {
   const original = (await importOriginal()) as any;
 
@@ -1572,6 +1579,49 @@ describe("ReflagClient", () => {
         },
         track: expect.any(Function),
       });
+    });
+
+    it("sends diagnostics when flags are evaluated before initialization", async () => {
+      const context = {
+        company,
+        user,
+        other: otherContext,
+      };
+
+      const flag = client.getFlag(context, "key");
+      expect(flag.isEnabled).toBe(true);
+      expect(flag.config).toEqual({ key: undefined, payload: undefined });
+      await client.flush();
+
+      const checkEvents = httpClient.post.mock.calls
+        .flatMap((call) => call[2])
+        .filter((item) => item.type === "feature-flag-event");
+
+      expect(checkEvents).toEqual([
+        expect.objectContaining({
+          action: "check",
+          evalErrors: [clientNotInitializedError],
+        }),
+        expect.objectContaining({
+          action: "check-config",
+          evalErrors: [clientNotInitializedError],
+        }),
+      ]);
+    });
+
+    it("does not add initialization diagnostics when offline", () => {
+      const offlineClient = new ReflagClient({
+        ...validOptions,
+        offline: true,
+      });
+      const sendFlagEvent = vi.spyOn(offlineClient as any, "sendFlagEvent");
+
+      expect(offlineClient.getFlag({}, "flag").isEnabled).toBe(false);
+
+      expect(sendFlagEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ evalErrors: undefined }),
+      );
+      expect(logger.error).not.toHaveBeenCalled();
     });
 
     it("evaluates percentage rollouts using user.id", async () => {

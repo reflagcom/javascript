@@ -402,6 +402,22 @@ const defaultConfig: Config = {
   bootstrapped: false,
 };
 
+const CLIENT_NOT_INITIALIZED_EVALUATION_ERROR = {
+  code: "CLIENT_NOT_INITIALIZED",
+  field: "",
+  message:
+    "ReflagClient was not initialized before this flag was evaluated. Call initialize() before evaluating flags.",
+} as const;
+
+function withClientInitializationDiagnostic(
+  errors: CheckEvent["evaluationErrors"],
+  evaluatedBeforeInitialization: boolean,
+): CheckEvent["evaluationErrors"] {
+  return evaluatedBeforeInitialization
+    ? [...(errors ?? []), CLIENT_NOT_INITIALIZED_EVALUATION_ERROR]
+    : errors;
+}
+
 /**
  * A remotely managed configuration value for a flag.
  */
@@ -485,6 +501,7 @@ function shouldShowToolbar(opts: InitOptions) {
  */
 export class ReflagClient {
   private state: State = "idle";
+  private initializationFinished = false;
   private contextUpdateLoading = false;
   private readonly publishableKey: string;
   private context: ReflagContext;
@@ -723,6 +740,7 @@ export class ReflagClient {
         "ms" +
         (this.config.offline ? " (offline mode)" : ""),
     );
+    this.initializationFinished = true;
     this.setState("initialized");
   }
 
@@ -1397,6 +1415,10 @@ export class ReflagClient {
    */
   getFlag(flagKey: string): Flag {
     const f = this.getFlags()[flagKey];
+    const evaluatedBeforeInitialization =
+      !this.initializationFinished &&
+      !this.config.offline &&
+      !this.config.bootstrapped;
 
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this;
@@ -1417,7 +1439,10 @@ export class ReflagClient {
             version: f?.targetingVersion,
             ruleEvaluationResults: f?.ruleEvaluationResults,
             missingContextFields: f?.missingContextFields,
-            evaluationErrors: f?.evaluationErrors,
+            evaluationErrors: withClientInitializationDiagnostic(
+              f?.evaluationErrors,
+              evaluatedBeforeInitialization,
+            ),
             value,
           })
           .catch(() => {
@@ -1433,7 +1458,10 @@ export class ReflagClient {
             version: f?.config?.version,
             ruleEvaluationResults: f?.config?.ruleEvaluationResults,
             missingContextFields: f?.config?.missingContextFields,
-            evaluationErrors: f?.config?.evaluationErrors,
+            evaluationErrors: withClientInitializationDiagnostic(
+              f?.config?.evaluationErrors,
+              evaluatedBeforeInitialization,
+            ),
             value: f?.config && {
               key: f.config.key,
               payload: f.config.payload,

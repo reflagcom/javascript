@@ -5,4 +5,4 @@
 "@reflag/vue-sdk": patch
 ---
 
-Include non-fatal flag evaluation diagnostics in check events sent by the Node, browser, React, and Vue SDKs.
+Include non-fatal flag evaluation diagnostics in check events sent by the Node, browser, React, and Vue SDKs, including when flags are evaluated before client initialization.

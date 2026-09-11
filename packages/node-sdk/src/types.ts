@@ -65,9 +65,14 @@ export type FlagEvent = {
   evalMissingFields?: string[];
 
   /**
-   * Non-fatal diagnostics produced while evaluating targeting rules (optional).
+   * Non-fatal diagnostics produced while evaluating the flag (optional).
    **/
-  evalErrors?: EvaluationError[];
+  evalErrors?: Array<{
+    code: string;
+    field: string;
+    operator?: string;
+    message: string;
+  }>;
 };
 
 /**

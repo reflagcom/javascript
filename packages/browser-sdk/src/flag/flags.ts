@@ -265,7 +265,7 @@ export interface CheckEvent {
   missingContextFields?: string[];
 
   /**
-   * Non-fatal diagnostics produced while evaluating targeting rules.
+   * Non-fatal diagnostics produced while evaluating the flag.
    */
   evaluationErrors?: RawFlag["evaluationErrors"];
 }
