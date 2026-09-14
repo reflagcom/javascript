@@ -1,4 +1,4 @@
-# Reflag Vue SDK (beta)
+# Reflag Vue SDK
 
 Vue client side library for [Reflag.com](https://reflag.com)
 
