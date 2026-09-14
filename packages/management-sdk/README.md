@@ -1,4 +1,4 @@
-# @reflag/management-sdk (beta)
+# @reflag/management-sdk
 
 Typed SDK for interacting with Reflag’s Management API.
 
