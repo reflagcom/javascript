@@ -1,5 +1,15 @@
 # @reflag/node-sdk
 
+## 1.8.1
+
+### Patch Changes
+
+- c69ee92: Stop installing process signal handlers and forcing process termination after flushing. This prevents the SDK from interrupting application-managed graceful shutdown, including handlers registered after SDK initialization.
+
+  `batchOptions.flushOnExit` now only flushes automatically on natural event-loop shutdown (`beforeExit`). Applications must await `client.flush()` in their own shutdown hooks to flush before signal-driven termination or an explicit `process.exit()`.
+
+- df37a58: Include non-fatal flag evaluation diagnostics in check events sent by the Node, browser, React, and Vue SDKs, including when flags are evaluated before client initialization.
+
 ## 1.8.0
 
 ### Minor Changes
