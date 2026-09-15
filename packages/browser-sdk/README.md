@@ -232,7 +232,9 @@ By default, `setOptIn()` changes the opt-in for the current user, so the current
 
 User and company opt-ins are managed independently. Setting `optedIn` to `false` removes the opt-in only for the selected scope. For example, cancelling a user's opt-in does not change the company's opt-in for the same flag.
 
-Returns a `Response`, or `undefined` if skipped due to invalid input, offline mode etc. Check `response?.ok` for success.
+`setOptIn` returns a promise so you can wait for the new membership state to be synchronized. On success, it resolves after the refreshed flag state has been applied locally, the requested membership change has been confirmed, and `flagsUpdated` listeners have been notified when flags change.
+
+The promise resolves to a `Response`, or `undefined` if skipped due to invalid input, offline mode etc. Check `response?.ok` for success.
 
 The `description` comes from the dedicated SDK-facing opt-in description configured in Reflag.
 
