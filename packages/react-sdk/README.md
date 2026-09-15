@@ -602,7 +602,7 @@ function App({ bootstrapData }: AppProps) {
 > [!Note]
 > When using `ReflagBootstrappedProvider`, pass the entire object returned by `getFlagsForBootstrap()` directly as the `flags` prop. The context is extracted from `flags.context`, and `flags.flagStateVersion` is used when present.
 >
-> With `ReflagBootstrappedProvider`, `useOptInFlags()` requests a flags refresh only if the bootstrapped state lacks opt-in metadata. It returns `isLoading: true` (or suspends) until that refresh settles. Complete metadata is immediately available without this extra request.
+> With `ReflagBootstrappedProvider`, `useOptInFlags()` requests a flags refresh on first use. It returns `isLoading: true` (or suspends) until that refresh settles.
 >
 > If you want live flag updates to continue working after bootstrapping, use a recent `@reflag/node-sdk` so `getFlagsForBootstrap()` includes `flagStateVersion`.
 >
@@ -727,7 +727,7 @@ User and company opt-ins are managed independently. Setting `optedIn` to `false`
 
 The promise resolves to a `Response`, or `undefined` if skipped due to invalid input, offline mode etc. Check `response?.ok` for success.
 
-`useOptInFlags()` returns `{ flags, isLoading }`. With `ReflagBootstrappedProvider`, it fetches metadata on demand only when missing and reports `isLoading: true` until that refresh succeeds or fails. Node SDK bootstrap data currently lacks this metadata; complete bootstrapped metadata needs no extra request.
+`useOptInFlags()` returns `{ flags, isLoading }`. With `ReflagBootstrappedProvider`, it fetches opt-in metadata on first use and reports `isLoading: true` until that refresh succeeds or fails.
 
 If fetching opt-in metadata fails, loading ends without exposing an error. Call `client.refresh()` on the client returned by `useClient()` to retry.
 

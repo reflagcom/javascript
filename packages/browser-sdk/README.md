@@ -237,7 +237,7 @@ The promise resolves to a `Response`, or `undefined` if skipped due to invalid i
 
 The `description` comes from the dedicated SDK-facing opt-in description configured in Reflag.
 
-For a bootstrapped client, the first `getOptInFlags()` or `getIsLoadingOptInFlags()` call requests a flags refresh only if opt-in metadata is missing. The list call returns the currently available list synchronously, and the loading getter returns `true` until that refresh succeeds or fails. Complete bootstrapped metadata is immediately available without an extra request. Normal initialization also exposes loading through the client's state.
+When using bootstrapped flags, the first `getOptInFlags()` or `getIsLoadingOptInFlags()` call requests a flags refresh. The list call returns the currently available list synchronously, and the loading getter returns `true` until that refresh succeeds or fails. Normal initialization also exposes loading through the client's state.
 
 Listen for `optInFlagsLoadingUpdated` to update UI when this loading state changes. `flagsUpdated` is emitted when a successful refresh updates the list.
 
