@@ -43,6 +43,13 @@ const missingContextFieldError = (field: string) => ({
   message: `Context field "${field}" is required to evaluate targeting rules.`,
 });
 
+const clientNotInitializedError = {
+  code: "CLIENT_NOT_INITIALIZED",
+  field: "",
+  message:
+    "ReflagClient was not initialized before this flag was evaluated. Call initialize() before evaluating flags.",
+};
+
 vi.mock("../src/rate-limiter", async (importOriginal) => {
   const original = (await importOriginal()) as any;
 
@@ -1574,6 +1581,49 @@ describe("ReflagClient", () => {
       });
     });
 
+    it("sends diagnostics when flags are evaluated before initialization", async () => {
+      const context = {
+        company,
+        user,
+        other: otherContext,
+      };
+
+      const flag = client.getFlag(context, "key");
+      expect(flag.isEnabled).toBe(true);
+      expect(flag.config).toEqual({ key: undefined, payload: undefined });
+      await client.flush();
+
+      const checkEvents = httpClient.post.mock.calls
+        .flatMap((call) => call[2])
+        .filter((item) => item.type === "feature-flag-event");
+
+      expect(checkEvents).toEqual([
+        expect.objectContaining({
+          action: "check",
+          evalErrors: [clientNotInitializedError],
+        }),
+        expect.objectContaining({
+          action: "check-config",
+          evalErrors: [clientNotInitializedError],
+        }),
+      ]);
+    });
+
+    it("does not add initialization diagnostics when offline", () => {
+      const offlineClient = new ReflagClient({
+        ...validOptions,
+        offline: true,
+      });
+      const sendFlagEvent = vi.spyOn(offlineClient as any, "sendFlagEvent");
+
+      expect(offlineClient.getFlag({}, "flag").isEnabled).toBe(false);
+
+      expect(sendFlagEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ evalErrors: undefined }),
+      );
+      expect(logger.error).not.toHaveBeenCalled();
+    });
+
     it("evaluates percentage rollouts using user.id", async () => {
       const userRolloutDefinitions: FlagsAPIResponse = {
         flagStateVersion: 2,
@@ -1716,7 +1766,31 @@ describe("ReflagClient", () => {
           evalContext: context,
           evalRuleResults: [true],
           evalMissingFields: [],
+          evalErrors: undefined,
         },
+      ]);
+    });
+
+    it("`isEnabled` sends evaluation errors", async () => {
+      const context = {
+        company,
+        user,
+        other: otherContext,
+      };
+
+      await client.initialize();
+      expect(client.getFlag(context, "flag2").isEnabled).toBe(false);
+      await client.flush();
+
+      const checkEvents = httpClient.post.mock.calls
+        .flatMap((call) => call[2])
+        .filter((item) => item.action === "check");
+
+      expect(checkEvents).toEqual([
+        expect.objectContaining({
+          key: "flag2",
+          evalErrors: [missingContextFieldError("attributeKey")],
+        }),
       ]);
     });
 
@@ -1989,6 +2063,7 @@ describe("ReflagClient", () => {
           evalContext: context,
           evalRuleResults: [true],
           evalMissingFields: [],
+          evalErrors: undefined,
         },
       ]);
     });
@@ -2023,6 +2098,7 @@ describe("ReflagClient", () => {
           evalResult: false,
           evalRuleResults: undefined,
           evalMissingFields: undefined,
+          evalErrors: undefined,
         },
       ]);
     });

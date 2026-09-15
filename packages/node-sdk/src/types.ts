@@ -60,8 +60,19 @@ export type FlagEvent = {
 
   /**
    * The missing fields in the evaluation context (optional).
+   * @deprecated Use `evalErrors` and check for `MISSING_CONTEXT_FIELD`.
    **/
   evalMissingFields?: string[];
+
+  /**
+   * Non-fatal diagnostics produced while evaluating the flag (optional).
+   **/
+  evalErrors?: Array<{
+    code: string;
+    field: string;
+    operator?: string;
+    message: string;
+  }>;
 };
 
 /**

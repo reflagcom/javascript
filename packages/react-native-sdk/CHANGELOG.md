@@ -1,5 +1,12 @@
 # @reflag/react-native-sdk
 
+## 0.3.4
+
+### Patch Changes
+
+- Updated dependencies [df37a58]
+  - @reflag/react-sdk@1.7.1
+
 ## 0.3.3
 
 ### Patch Changes

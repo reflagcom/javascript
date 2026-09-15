@@ -14,6 +14,13 @@ export const flagResponse = {
       config: undefined,
       ruleEvaluationResults: [false, true],
       missingContextFields: ["field1", "field2"],
+      evaluationErrors: [
+        {
+          code: "MISSING_CONTEXT_FIELD",
+          field: "field1",
+          message: 'Context field "field1" is required.',
+        },
+      ],
     },
     flagB: {
       isEnabled: true,
@@ -25,6 +32,14 @@ export const flagResponse = {
         payload: { model: "gpt-something", temperature: 0.5 },
         ruleEvaluationResults: [true, false, false],
         missingContextFields: ["field3"],
+        evaluationErrors: [
+          {
+            code: "UNSUPPORTED_ARRAY_OPERATOR",
+            field: "field3",
+            operator: "IS",
+            message: 'Operator "IS" does not support array values.',
+          },
+        ],
       },
     },
   },

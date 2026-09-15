@@ -50,6 +50,19 @@ describe("parseAPIFlagsResponse", () => {
   test("rejects malformed flag entries without throwing", () => {
     expect(parseAPIFlagsResponse({ flagA: null })).toBeUndefined();
   });
+
+  test("rejects malformed evaluation errors", () => {
+    expect(
+      parseAPIFlagsResponse({
+        flagA: {
+          isEnabled: true,
+          key: "flagA",
+          targetingVersion: 1,
+          evaluationErrors: [{ code: "MISSING_CONTEXT_FIELD" }],
+        },
+      }),
+    ).toBeUndefined();
+  });
 });
 
 describe("cache", () => {
