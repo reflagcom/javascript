@@ -28,6 +28,7 @@ do
     sed -r "$SEDCOMMAND" "$file" > "$file.fixed"
     rm "$file"
     mv "$file.fixed" "$file"
+    node ./scripts/fix-opt-in-docs.mjs "$file"
   fi
 
   # Create a temporary file for processing

@@ -421,7 +421,7 @@ describe("ReflagClient", () => {
       expect(loadingUpdated).toHaveBeenLastCalledWith(false);
     });
 
-    it("stops loading opt-in flags when the metadata refresh fails", async () => {
+    it("stops loading after a metadata failure and allows a manual retry", async () => {
       server.use(
         http.get("https://front.reflag.com/features/evaluated", () =>
           HttpResponse.json({ success: false }, { status: 500 }),
@@ -449,6 +449,26 @@ describe("ReflagClient", () => {
       });
       expect(httpClientGet).toHaveBeenCalledTimes(1);
       expect(client.getOptInFlags()).toEqual([]);
+      expect(client.getIsLoadingOptInFlags()).toBe(false);
+      expect(httpClientGet).toHaveBeenCalledTimes(1);
+
+      server.use(
+        http.get("https://front.reflag.com/features/evaluated", () =>
+          HttpResponse.json({ success: true, features: optInFlags(false) }),
+        ),
+      );
+      const flagsUpdated = vi.fn();
+      client.on("flagsUpdated", flagsUpdated);
+
+      const refreshed = await client.refresh();
+
+      expect(refreshed).toBeDefined();
+      expect(httpClientGet).toHaveBeenCalledTimes(2);
+      expect(client.getIsLoadingOptInFlags()).toBe(false);
+      expect(client.getOptInFlags()).toEqual([
+        expect.objectContaining({ key: "optInFlag", userOptedIn: false }),
+      ]);
+      expect(flagsUpdated).toHaveBeenCalledTimes(1);
     });
 
     it("keeps opt-in loading tied to the newest context fetch", async () => {
@@ -723,6 +743,50 @@ describe("ReflagClient", () => {
         },
       ]);
       expect(flagsUpdated).toHaveBeenCalledTimes(1);
+    });
+
+    it("returns readable HTTP errors without refreshing or changing flags", async () => {
+      const errorBody = {
+        success: false,
+        error: {
+          code: "OPT_IN_NOT_ALLOWED",
+          message: "Opt-in is not enabled for this flag",
+        },
+      };
+      server.use(
+        http.post("https://front.reflag.com/flags/opt-in", () =>
+          HttpResponse.json(errorBody, { status: 403 }),
+        ),
+      );
+      client = new ReflagClient({
+        publishableKey: "test-key-opt-in-http-error",
+        user: { id: "user1" },
+        enableTracking: false,
+        feedback: { enableAutoFeedback: false },
+        bootstrappedFlags: optInFlags(false),
+      });
+      await client.initialize();
+      const flagsUpdated = vi.fn();
+      client.on("flagsUpdated", flagsUpdated);
+      const logError = vi.spyOn(client.logger, "error");
+
+      const response = await client.setOptIn("optInFlag", { optedIn: true });
+
+      expect(response?.ok).toBe(false);
+      expect(response?.status).toBe(403);
+      expect(response?.bodyUsed).toBe(false);
+      await expect(response!.json()).resolves.toEqual(errorBody);
+      expect(httpClientGet).not.toHaveBeenCalled();
+      expect(flagsUpdated).not.toHaveBeenCalled();
+      expect(client.getOptInFlags()[0].userOptedIn).toBe(false);
+      expect(logError).toHaveBeenCalledWith(
+        expect.stringContaining("OPT_IN_NOT_ALLOWED"),
+        expect.objectContaining({
+          apiErrorCode: "OPT_IN_NOT_ALLOWED",
+          status: 403,
+        }),
+      );
+      logError.mockRestore();
     });
 
     it("cancels opt-in and refreshes flags at the returned state version", async () => {
