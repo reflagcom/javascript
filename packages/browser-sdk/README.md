@@ -213,7 +213,6 @@ If a flag has end-user opt-in enabled in Reflag, you can list the opt-in options
 ```ts
 const optInFlags = reflagClient.getOptInFlags();
 // [{ key, name, description, isEnabled, userOptedIn, companyOptedIn, isOptedIn }]
-const isLoadingOptInFlags = reflagClient.getIsLoadingOptInFlags();
 
 try {
   const response = await reflagClient.setOptIn("huddle", {
