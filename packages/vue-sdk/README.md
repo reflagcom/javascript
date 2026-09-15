@@ -293,7 +293,7 @@ const bootstrappedFlags = client.getFlagsForBootstrap(context);
 If the `flags` prop is not provided or is undefined, the provider will not initialize the client and will render in a non-loading state.
 
 > [!NOTE]
-> The on-demand browser refresh and any later live flag updates use the browser-visible context. If your bootstrapped snapshot depends on server-only or secret context that is not available in the browser, refreshed flags may differ. Disabling `enableLiveFlagUpdates` does not prevent the opt-in metadata refresh; only request opt-in data if browser-side re-evaluation is appropriate.
+> Opt-in metadata refreshes use browser-visible context, even when live updates are disabled. Results may differ from bootstrapped flags evaluated with server-only context.
 
 ## `<ReflagClientProvider>` component
 
@@ -399,7 +399,6 @@ Use these composables to build an end-user opt-in UI for flags where opt-in is e
 
 ```vue
 <script setup lang="ts">
-import { ref } from "vue";
 import {
   type OptInFlag,
   useIsLoading,
@@ -410,39 +409,32 @@ import {
 const isProviderLoading = useIsLoading();
 const { flags: optInFlags, isLoading } = useOptInFlags();
 const setOptIn = useSetOptIn();
-const isUpdating = ref(false);
-const error = ref<string | null>(null);
 
-async function updateOptIn(flag: OptInFlag) {
-  error.value = null;
-  isUpdating.value = true;
+async function toggleOptIn(flag: OptInFlag) {
   try {
-    const response = await setOptIn(flag.key, { optedIn: !flag.userOptedIn });
-    if (!response?.ok) throw new Error("Opt-in request failed");
-  } catch {
-    error.value = `Could not update ${flag.name}. Please try again.`;
-  } finally {
-    isUpdating.value = false;
+    const response = await setOptIn(flag.key, {
+      optedIn: !flag.userOptedIn,
+    });
+    if (!response?.ok) {
+      console.error("Could not update opt-in");
+    }
+  } catch (error) {
+    console.error("Could not update opt-in", error);
   }
 }
 </script>
 
 <template>
-  <p v-if="isProviderLoading || isLoading">Loading opt-in flags...</p>
-  <p v-else-if="optInFlags.length === 0">
-    No opt-in flags to show. The list may also be unavailable.
-  </p>
+  <p v-if="isProviderLoading || isLoading">Loading…</p>
   <template v-else>
     <button
       v-for="flag in optInFlags"
       type="button"
       :key="flag.key"
-      :disabled="isUpdating"
-      @click="updateOptIn(flag)"
+      @click="toggleOptIn(flag)"
     >
       {{ flag.userOptedIn ? "Cancel opt-in" : `Try ${flag.name}` }}
     </button>
-    <p v-if="error" role="alert">{{ error }}</p>
   </template>
 </template>
 ```
@@ -451,20 +443,11 @@ By default, `useSetOptIn()` changes the opt-in for the current user, so the curr
 
 User and company opt-ins are managed independently. Setting `optedIn` to `false` removes the opt-in only for the selected scope. For example, cancelling a user's opt-in does not change the company's opt-in for the same flag.
 
-Opt-in is not an authorization boundary. Requests use a publishable key and caller-supplied context IDs; company scope does not verify company membership or administrator permissions. Hiding the button from non-admins does not prevent direct requests. For admin-only or sensitive access, enforce authorization in your backend and use server-controlled access rules instead of public end-user opt-in.
-
-`setOptIn` returns `Promise<Response | undefined>`:
-
-- An OK `Response` is returned after refreshed flag state confirms the membership change. Subscribers are notified when flags change; Vue may not have committed the render yet.
-- HTTP failures return a non-OK `Response` without refreshing flags. Check `response.ok`; `response.json()` can provide error details.
-- Offline mode, invalid arguments, or a missing scoped context ID return `undefined` without sending a request.
-- Network and confirmation failures reject the promise. A confirmation failure can happen after membership changed remotely.
-
-Always check `response?.ok` and catch rejections, as in the example.
+Returns a `Response`, or `undefined` if skipped due to invalid input, offline mode etc. Check `response?.ok` for success.
 
 `useOptInFlags()` returns `{ flags, isLoading }`, where both values are computed refs. With `ReflagBootstrappedProvider`, it fetches metadata on demand only when missing and reports `isLoading: true` until that refresh succeeds or fails. Node SDK bootstrap data currently lacks this metadata; complete bootstrapped metadata needs no extra request.
 
-The composable does not expose fetch errors. After a failed metadata refresh, an empty list can mean unavailable data rather than no eligible flags. The on-demand refresh is not automatically attempted again for the same context. Use the client returned by `useClient()` and call `client.refresh()` to retry, check for an `undefined` result, and manage retry pending/error state separately.
+If fetching opt-in metadata fails, loading ends without exposing an error. Call `client.refresh()` on the client returned by `useClient()` to retry.
 
 With a regular `ReflagProvider`, opt-in metadata arrives as part of the normal initial flags request, so `useOptInFlags().isLoading` remains `false`. Use the general `useIsLoading()` composable or the provider's loading slot for that initial loading state.
 

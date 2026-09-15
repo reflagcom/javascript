@@ -132,10 +132,8 @@ export function useFlag<TKey extends FlagKey>(key: TKey): TypedFlags[TKey] {
  * with the initial flags; use {@link useIsLoading} for their loading state.
  * Complete bootstrapped opt-in metadata needs no extra request.
  *
- * Fetch failures end loading without exposing an error, so an empty list can
- * also mean unavailable data. Re-rendering does not retry a failed on-demand
- * fetch for the same context. Call the client returned by {@link useClient}'s
- * `refresh()` method to retry and manage the retry's pending/error state yourself.
+ * If fetching opt-in metadata fails, loading ends without exposing an error.
+ * Call `refresh()` on the client returned by {@link useClient} to retry.
  */
 export function useOptInFlags(): UseOptInFlagsResult {
   const client = useClient();

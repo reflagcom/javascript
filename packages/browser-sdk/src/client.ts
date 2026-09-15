@@ -1260,9 +1260,6 @@ export class ReflagClient {
    * refreshing flags. Offline mode, invalid arguments, or missing scoped context
    * return undefined. Network and confirmation failures reject the promise;
    * a confirmation failure may occur after membership changed remotely.
-   *
-   * Context IDs are supplied by the caller, not authenticated user identities.
-   * Company scope does not enforce application roles or admin permissions.
    */
   async setOptIn(
     flagKey: string,

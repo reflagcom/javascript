@@ -780,10 +780,8 @@ export function useFlag<TKey extends FlagKey>(
  * When suspense is enabled for the provider or this hook, it suspends instead
  * of returning a loading result. A Suspense boundary alone does not enable it.
  *
- * Fetch failures end loading without exposing an error, so an empty list can
- * also mean unavailable data. Re-rendering does not retry a failed on-demand
- * fetch for the same context. Call the client returned by {@link useClient}'s
- * `refresh()` method to retry and manage the retry's pending/error state yourself.
+ * If fetching opt-in metadata fails, loading ends without exposing an error.
+ * Call `refresh()` on the client returned by {@link useClient} to retry.
  */
 export function useOptInFlags(
   options: UseOptInFlagsOptions = {},

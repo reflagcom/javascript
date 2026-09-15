@@ -220,9 +220,10 @@ try {
     optedIn: true, // Use false to cancel this scope's opt-in.
     scope: "user", // Use "company" to change the current company's opt-in.
   });
-  if (!response?.ok) throw new Error("Opt-in request failed or was skipped");
+  if (!response?.ok) {
+    console.error("Could not update opt-in");
+  }
 } catch (error) {
-  // Show an error in your UI; confirmation may fail after a remote change.
   console.error("Could not update opt-in", error);
 }
 ```
@@ -231,16 +232,7 @@ By default, `setOptIn()` changes the opt-in for the current user, so the current
 
 User and company opt-ins are managed independently. Setting `optedIn` to `false` removes the opt-in only for the selected scope. For example, cancelling a user's opt-in does not change the company's opt-in for the same flag.
 
-Opt-in is not an authorization boundary. Requests use a publishable key and caller-supplied context IDs; company scope does not verify company membership or administrator permissions. Hiding the button from non-admins does not prevent direct requests. For admin-only or sensitive access, enforce authorization in your backend and use server-controlled access rules instead of public end-user opt-in.
-
-`setOptIn` returns `Promise<Response | undefined>`:
-
-- An OK `Response` is returned after refreshed flag state confirms the membership change. `flagsUpdated` listeners are notified when flags change.
-- HTTP failures return a non-OK `Response` without refreshing flags. Check `response.ok`; `response.json()` can provide error details.
-- Offline mode, invalid arguments, or a missing scoped context ID return `undefined` without sending a request.
-- Network and confirmation failures reject the promise. A confirmation failure can happen after membership changed remotely.
-
-Always check `response?.ok` and catch rejections, as in the example.
+Returns a `Response`, or `undefined` if skipped due to invalid input, offline mode etc. Check `response?.ok` for success.
 
 The `description` comes from the dedicated SDK-facing opt-in description configured in Reflag.
 
@@ -248,7 +240,7 @@ For a bootstrapped client, the first `getOptInFlags()` or `getIsLoadingOptInFlag
 
 Listen for `optInFlagsLoadingUpdated` to update UI when this loading state changes. `flagsUpdated` is emitted when a successful refresh updates the list.
 
-A failed metadata refresh clears the loading state without exposing a separate error state. An empty list may mean unavailable data, not just no eligible flags. Calling the getters again does not retry the on-demand refresh for the same context. Call `reflagClient.refresh()` to retry manually, check for an `undefined` result, and track the retry's pending/error state in your UI.
+If fetching opt-in metadata fails, loading ends without exposing an error. Call `reflagClient.refresh()` to retry.
 
 ## Remote config
 
@@ -371,7 +363,7 @@ const client = new ReflagClient({
 ```
 
 > [!NOTE]
-> After bootstrapping, on-demand opt-in metadata and live flag updates are fetched using the browser-visible context. If your snapshot depends on server-only or secret context, refreshed flags may differ. Disabling `enableLiveFlagUpdates` does not prevent the opt-in metadata refresh; only request opt-in data if browser-side re-evaluation is appropriate.
+> Opt-in metadata refreshes use browser-visible context, even when live updates are disabled. Results may differ from bootstrapped flags evaluated with server-only context.
 
 This eliminates loading states and removes the initial render's dependency on the flags API.
 
