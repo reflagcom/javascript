@@ -1,5 +1,5 @@
 import { Client, OpenFeature } from "@openfeature/web-sdk";
-import { beforeEach, describe, expect, it, Mock, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ReflagClient } from "@reflag/browser-sdk";
 
@@ -30,8 +30,14 @@ describe("ReflagBrowserSDKProvider", () => {
     stop: vi.fn(),
   };
 
-  const mockReflagClient = ReflagClient as Mock;
-  mockReflagClient.mockReturnValue(reflagClientMock);
+  const mockReflagClient = vi.mocked(ReflagClient);
+  mockReflagClient.mockImplementation(
+    class {
+      constructor() {
+        return reflagClientMock;
+      }
+    } as unknown as typeof ReflagClient,
+  );
 
   beforeEach(async () => {
     await OpenFeature.clearProviders();

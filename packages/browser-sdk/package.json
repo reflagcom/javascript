@@ -50,7 +50,7 @@
     "@reflag/tsconfig": "0.0.2",
     "@types/js-cookie": "^3.0.6",
     "@types/node": "^22.12.0",
-    "@vitest/coverage-v8": "^2.0.4",
+    "@vitest/coverage-v8": "4.1.11",
     "c8": "~10.1.3",
     "http-server": "^14.1.1",
     "jsdom": "^24.1.0",
@@ -63,7 +63,7 @@
     "vite": "^6.4.2",
     "vite-plugin-dts": "^4.0.0-beta.1",
     "vite-plugin-static-copy": "^2.3.2",
-    "vitest": "^3.2.6"
+    "vitest": "^4.1.11"
   },
   "packageManager": "yarn@4.1.1"
 }
