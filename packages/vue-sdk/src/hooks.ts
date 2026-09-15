@@ -130,7 +130,6 @@ export function useFlag<TKey extends FlagKey>(key: TKey): TypedFlags[TKey] {
  * The loading state is only used with `ReflagBootstrappedProvider` while
  * opt-in metadata is fetched on demand. Regular providers load opt-in metadata
  * with the initial flags; use {@link useIsLoading} for their loading state.
- * Complete bootstrapped opt-in metadata needs no extra request.
  *
  * If fetching opt-in metadata fails, loading ends without exposing an error.
  * Call `refresh()` on the client returned by {@link useClient} to retry.

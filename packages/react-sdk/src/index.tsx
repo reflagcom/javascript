@@ -776,7 +776,6 @@ export function useFlag<TKey extends FlagKey>(
  * The loading state is only used with `ReflagBootstrappedProvider` while
  * opt-in metadata is fetched on demand. Regular providers load opt-in metadata
  * with the initial flags; use {@link useIsLoading} for their loading state.
- * Complete bootstrapped opt-in metadata needs no extra request.
  * When suspense is enabled for the provider or this hook, it suspends instead
  * of returning a loading result. A Suspense boundary alone does not enable it.
  *
