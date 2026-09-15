@@ -340,7 +340,7 @@ The `bootstrappedState` object contains:
 
 If you want live flag updates to continue working after bootstrapping, use a recent `@reflag/node-sdk` so `getFlagsForBootstrap()` includes `flagStateVersion`.
 
-If a bootstrapped application requests opt-in flags and its state lacks opt-in metadata, the browser SDK requests a flags refresh. Node SDK bootstrap data currently lacks this metadata. Complete metadata, or applications that do not request opt-in data, do not require this extra request.
+If a bootstrapped application requests opt-in flags, the browser SDK performs one flags refresh. Applications that do not request opt-in data do not make this request.
 
 If you previously used `bootstrappedFlags`, migrate like this:
 
