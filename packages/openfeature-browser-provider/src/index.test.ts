@@ -1,5 +1,5 @@
 import { Client, OpenFeature } from "@openfeature/web-sdk";
-import { beforeEach, describe, expect, it, Mock, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ReflagClient } from "@reflag/browser-sdk";
 
