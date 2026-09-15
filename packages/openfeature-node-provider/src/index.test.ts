@@ -46,7 +46,13 @@ describe("ReflagNodeProvider", () => {
   let provider: ReflagNodeProvider;
 
   const mockReflagClient = ReflagClient as Mock;
-  mockReflagClient.mockReturnValue(reflagClientMock);
+  mockReflagClient.mockImplementation(
+    class {
+      constructor() {
+        return reflagClientMock;
+      }
+    },
+  );
 
   let mockTranslatorFn: Mock;
 

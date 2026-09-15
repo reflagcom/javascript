@@ -31,7 +31,13 @@ describe("ReflagBrowserSDKProvider", () => {
   };
 
   const mockReflagClient = ReflagClient as Mock;
-  mockReflagClient.mockReturnValue(reflagClientMock);
+  mockReflagClient.mockImplementation(
+    class {
+      constructor() {
+        return reflagClientMock;
+      }
+    },
+  );
 
   beforeEach(async () => {
     await OpenFeature.clearProviders();
