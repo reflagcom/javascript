@@ -45,13 +45,13 @@ beforeEach(() => {
 describe("ReflagNodeProvider", () => {
   let provider: ReflagNodeProvider;
 
-  const mockReflagClient = ReflagClient as Mock;
+  const mockReflagClient = vi.mocked(ReflagClient);
   mockReflagClient.mockImplementation(
     class {
       constructor() {
         return reflagClientMock;
       }
-    },
+    } as unknown as typeof ReflagClient,
   );
 
   let mockTranslatorFn: Mock;

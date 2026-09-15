@@ -13,13 +13,16 @@ function createSSEChannel(
   return new AblySSEChannel(channels, sseHost, callback, testLogger);
 }
 
-function mockEventSource(methods: Partial<EventSource>) {
+function mockEventSource(methods: {
+  addEventListener: (event: string, callback: (event: Event) => void) => void;
+  close?: () => void;
+}) {
   vi.mocked(window.EventSource).mockImplementation(
     class {
       constructor() {
         Object.assign(this, methods);
       }
-    } as typeof EventSource,
+    } as unknown as typeof EventSource,
   );
 }
 

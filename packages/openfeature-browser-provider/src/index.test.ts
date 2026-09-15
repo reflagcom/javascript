@@ -30,13 +30,13 @@ describe("ReflagBrowserSDKProvider", () => {
     stop: vi.fn(),
   };
 
-  const mockReflagClient = ReflagClient as Mock;
+  const mockReflagClient = vi.mocked(ReflagClient);
   mockReflagClient.mockImplementation(
     class {
       constructor() {
         return reflagClientMock;
       }
-    },
+    } as unknown as typeof ReflagClient,
   );
 
   beforeEach(async () => {
