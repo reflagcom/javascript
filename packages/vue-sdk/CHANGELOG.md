@@ -1,5 +1,12 @@
 # @reflag/vue-sdk
 
+## 1.5.5
+
+### Patch Changes
+
+- Updated dependencies [4649418]
+  - @reflag/browser-sdk@1.7.2
+
 ## 1.5.4
 
 ### Patch Changes
