@@ -1,0 +1,29 @@
+version: 2
+updates:
+  # All Yarn workspaces share this lockfile. Do not add workspace directories:
+  # manifest-only updates there fail the root immutable installation.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    # Keep automated updates security-only, without adding routine version PRs.
+    open-pull-requests-limit: 0
+    groups:
+      vitest:
+        applies-to: security-updates
+        patterns:
+          - vitest
+          - "@vitest/*"
+
+  # These examples are standalone projects with their own lockfiles.
+  - package-ecosystem: npm
+    directory: /packages/node-sdk/examples/cloudflare-worker
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+
+  - package-ecosystem: npm
+    directory: /packages/openfeature-node-provider/example
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
