@@ -259,7 +259,7 @@ You'll typically generate the `bootstrappedFlags` object on your server using th
 
 If you want live flag updates to continue working after bootstrapping, use a recent `@reflag/node-sdk` so `getFlagsForBootstrap()` includes `flagStateVersion`.
 
-With `ReflagBootstrappedProvider`, `useOptInFlags()` triggers one flags refresh and reports `isLoading: true` until it settles. No refresh occurs unless the composable is used.
+With `ReflagBootstrappedProvider`, `useOptInFlags()` requests a flags refresh on first use. It reports `isLoading: true` until that refresh settles.
 
 Here's an example using the Node.js SDK:
 
@@ -293,7 +293,9 @@ const bootstrappedFlags = client.getFlagsForBootstrap(context);
 If the `flags` prop is not provided or is undefined, the provider will not initialize the client and will render in a non-loading state.
 
 > [!NOTE]
-> The on-demand browser refresh and any later live flag updates use the browser-visible context. If your bootstrapped snapshot depends on server-only or secret context that is not available in the browser, refreshed flags may differ. In that case, keep `enableLiveFlagUpdates` disabled.
+> After bootstrapping, any live flag updates are fetched directly by the browser SDK from Reflag using the browser-visible context. If your bootstrapped snapshot depends on server-only or secret context that is not available in the browser, later live refreshes may differ. In that case, keep `enableLiveFlagUpdates` disabled.
+>
+> Requesting opt-in flags also triggers a browser-side refresh, even when `enableLiveFlagUpdates` is disabled.
 
 ## `<ReflagClientProvider>` component
 
@@ -399,20 +401,39 @@ Use these composables to build an end-user opt-in UI for flags where opt-in is e
 
 ```vue
 <script setup lang="ts">
-import { useOptInFlags, useSetOptIn } from "@reflag/vue-sdk";
+import {
+  type OptInFlag,
+  useIsLoading,
+  useOptInFlags,
+  useSetOptIn,
+} from "@reflag/vue-sdk";
 
+const isProviderLoading = useIsLoading();
 const { flags: optInFlags, isLoading } = useOptInFlags();
 const setOptIn = useSetOptIn();
+
+async function toggleOptIn(flag: OptInFlag) {
+  try {
+    const response = await setOptIn(flag.key, {
+      optedIn: !flag.userOptedIn,
+    });
+    if (!response?.ok) {
+      console.error("Could not update opt-in");
+    }
+  } catch (error) {
+    console.error("Could not update opt-in", error);
+  }
+}
 </script>
 
 <template>
-  <p v-if="isLoading">Loading opt-in flags...</p>
-  <p v-else-if="optInFlags.length === 0">No opt-in flags are available.</p>
+  <p v-if="isProviderLoading || isLoading">Loading…</p>
   <template v-else>
     <button
       v-for="flag in optInFlags"
+      type="button"
       :key="flag.key"
-      @click="setOptIn(flag.key, { optedIn: !flag.userOptedIn })"
+      @click="toggleOptIn(flag)"
     >
       {{ flag.userOptedIn ? "Cancel opt-in" : `Try ${flag.name}` }}
     </button>
@@ -424,9 +445,13 @@ By default, `useSetOptIn()` changes the opt-in for the current user, so the curr
 
 User and company opt-ins are managed independently. Setting `optedIn` to `false` removes the opt-in only for the selected scope. For example, cancelling a user's opt-in does not change the company's opt-in for the same flag.
 
-`setOptIn` returns a promise so you can wait for the new membership state to be synchronized. It resolves after the latest flag state has been applied, the requested membership change has been confirmed, and components using `useOptInFlags()` have been notified. Vue schedules the resulting render normally, so it may not yet be committed when the promise resolves.
+`setOptIn` returns a promise so you can wait for the new membership state to be synchronized. On success, it resolves after the refreshed flag state has been applied locally, the requested membership change has been confirmed, and subscribers have been notified when flags change. Vue may not have committed the resulting render yet.
 
-`useOptInFlags()` returns `{ flags, isLoading }`, where both values are computed refs. With `ReflagBootstrappedProvider`, the composable fetches opt-in metadata on first use and reports `isLoading: true` until the flags refresh succeeds or fails.
+The promise resolves to a `Response`, or `undefined` if skipped due to invalid input, offline mode etc. Check `response?.ok` for success.
+
+`useOptInFlags()` returns `{ flags, isLoading }`, where both values are computed refs. With `ReflagBootstrappedProvider`, it fetches opt-in metadata on first use and reports `isLoading: true` until that refresh succeeds or fails.
+
+If fetching opt-in metadata fails, loading ends without exposing an error. Call `client.refresh()` on the client returned by `useClient()` to retry.
 
 With a regular `ReflagProvider`, opt-in metadata arrives as part of the normal initial flags request, so `useOptInFlags().isLoading` remains `false`. Use the general `useIsLoading()` composable or the provider's loading slot for that initial loading state.
 
