@@ -293,7 +293,9 @@ const bootstrappedFlags = client.getFlagsForBootstrap(context);
 If the `flags` prop is not provided or is undefined, the provider will not initialize the client and will render in a non-loading state.
 
 > [!NOTE]
-> Opt-in metadata refreshes use browser-visible context, even when live updates are disabled. Results may differ from bootstrapped flags evaluated with server-only context.
+> After bootstrapping, any live flag updates are fetched directly by the browser SDK from Reflag using the browser-visible context. If your bootstrapped snapshot depends on server-only or secret context that is not available in the browser, later live refreshes may differ. In that case, keep `enableLiveFlagUpdates` disabled.
+>
+> Requesting opt-in flags also triggers a browser-side refresh, even when `enableLiveFlagUpdates` is disabled.
 
 ## `<ReflagClientProvider>` component
 

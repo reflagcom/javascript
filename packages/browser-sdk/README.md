@@ -364,7 +364,9 @@ const client = new ReflagClient({
 ```
 
 > [!NOTE]
-> Opt-in metadata refreshes use browser-visible context, even when live updates are disabled. Results may differ from bootstrapped flags evaluated with server-only context.
+> After bootstrapping, any live flag updates are fetched directly by the browser SDK from Reflag using the browser-visible context. If your bootstrapped snapshot depends on server-only or secret context that is not available in the browser, later live refreshes may differ. In that case, keep `enableLiveFlagUpdates` disabled.
+>
+> Requesting opt-in flags also triggers a browser-side refresh, even when `enableLiveFlagUpdates` is disabled.
 
 This eliminates loading states and removes the initial render's dependency on the flags API.
 
