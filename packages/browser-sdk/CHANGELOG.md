@@ -1,5 +1,11 @@
 # @reflag/browser-sdk
 
+## 1.7.2
+
+### Patch Changes
+
+- 4649418: Preserve the response body returned by `setOptIn()` on HTTP errors so callers can read error details. Clarify opt-in loading, retry, and mutation result handling in the SDK documentation.
+
 ## 1.7.1
 
 ### Patch Changes
