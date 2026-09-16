@@ -1,79 +1,5 @@
 import { sha256 } from "js-sha256";
 
-/**
- * Represents a filter class with a specific type property.
- *
- * This type is intended to define the structure for objects
- * that classify or categorize based on a particular filter type.
- *
- * Properties:
- * - type: Specifies the classification type as a string.
- */
-export type FilterClass = {
-  type: string;
-};
-
-/**
- * Represents a group of filters that can be combined with a logical operator.
- *
- * @template T The type of filter class that defines the criteria within the filter group.
- * @property type The fixed type indicator for this filter structure, always "group".
- * @property operator The logical operator used to combine the filters in the group. It can be either "and" (all conditions must pass) or "or" (at least one condition must pass).
- * @property filters An array of filter trees containing individual filters or nested groups of filters.
- */
-export type FilterGroup<T extends FilterClass> = {
-  type: "group";
-  operator: "and" | "or";
-  filters: FilterTree<T>[];
-};
-
-/**
- * Represents a filter negation structure for use within filtering systems.
- *
- * A `FilterNegation` is used to encapsulate a negation operation,
- * which negates the conditions defined in the provided `filter`.
- *
- * @template T - A generic type that extends FilterClass, indicating the type of the filter.
- * @property type - Specifies the type of this filter operation as "negation".
- * @property filter - A `FilterTree` structure of type `T` that defines the filter conditions to be negated.
- */
-export type FilterNegation<T extends FilterClass> = {
-  type: "negation";
-  filter: FilterTree<T>;
-};
-
-/**
- * Represents a tree structure for filters that can be composed of filter groups,
- * filter negations, or individual filter instances of a specified type.
- *
- * @template T - A type that extends the `FilterClass`.
- */
-export type FilterTree<T extends FilterClass> =
-  | FilterGroup<T>
-  | FilterNegation<T>
-  | T;
-
-/**
- * Represents a set of predefined operators that can be used to filter a specific context.
- * These operators can express various conditions, including equality checks, comparison,
- * set membership, and boolean evaluations.
- *
- * Possible values:
- * - "IS": Exact scalar match, or an array containing exactly one matching element.
- * - "IS_NOT": Negates scalar equality or singleton-array equality.
- * - "ANY_OF": Checks if a value is present in a set of specified values.
- * - "NOT_ANY_OF": Checks if a value is not present in a set of specified values.
- * - "CONTAINS": Case-insensitive substring match for strings; exact, case-sensitive element membership for arrays.
- * - "NOT_CONTAINS": Negates substring matching for strings or element membership for arrays.
- * - "GT": Greater than comparison.
- * - "LT": Less than comparison.
- * - "AFTER": Compares if a value is after a specified point (e.g., time, rank).
- * - "BEFORE": Compares if a value is before a specified point (e.g., time, rank).
- * - "SET": Checks if a value is set or exists.
- * - "NOT_SET": Checks if a value is not set or does not exist.
- * - "IS_TRUE": Checks if a boolean value is true.
- * - "IS_FALSE": Checks if a boolean value is false.
- */
 export type ContextFilterOperator =
   | "IS"
   | "IS_NOT"
@@ -92,47 +18,14 @@ export type ContextFilterOperator =
   | "IS_TRUE"
   | "IS_FALSE";
 
-/**
- * Represents a filter configuration used to filter data based on specific context.
- *
- * This interface defines the structure of a context filter, containing a field,
- * an operator, and optional values to control the filtering behavior.
- *
- * The `type` property must always have the value "context" to classify filters
- * of this type.
- *
- * The `field` property specifies the name of the context field to filter.
- *
- * The `operator` property defines the filtering operation to perform on the
- * specified field (e.g., equals, contains, etc.).
- *
- * The optional `values` property is an array of strings that lists the values
- * to be used in conjunction with the operator for filtering.
- *
- * This interface is typically utilized in contexts where data needs to be
- * dynamically filtered based on specific criteria derived from contextual
- * attributes.
- */
 export interface ContextFilter {
   type: "context";
   field: string;
   operator: ContextFilterOperator;
   values?: string[];
-  valueSet?: Set<string>;
 }
 
-/**
- * Represents a filter configuration to enable percentage-based rollout of a flag or functionality.
- *
- * This type defines the necessary parameters to control access to a flag
- * by evaluating a specific attribute and applying it against a defined percentage threshold.
- *
- * Properties:
- * - `type` - Indicates the type of the filter. For this filter type, it will always be "rolloutPercentage".
- * - `key` - A unique key or identifier that distinguishes this rollout filter.
- * - `partialRolloutAttribute` - Specifies the attribute used to evaluate eligibility for the rollout.
- * - `partialRolloutThreshold` - A numeric value representing the upper-bound threshold (0-100000) for the percentage-based rollout.
- */
+/** Retained for boolean cohort compatibility, including the original hash keys. */
 export type PercentageRolloutFilter = {
   type: "rolloutPercentage";
   key: string;
@@ -140,598 +33,50 @@ export type PercentageRolloutFilter = {
   partialRolloutThreshold: number;
 };
 
-/**
- * Represents a constant filter configuration.
- *
- * The ConstantFilter type is used to define a filter configuration with a fixed,
- * immutable value. It always evaluates to the specified boolean `value`.
- *
- * @property {string} type - Indicates the type of filter, which is always "constant".
- * @property {boolean} value - The fixed boolean value for the filter.
- */
-export type ConstantFilter = {
-  type: "constant";
-  value: boolean;
+export type ConstantFilter = { type: "constant"; value: boolean };
+export type FilterClass = { type: string };
+export type FilterGroup<T extends FilterClass> = {
+  type: "group";
+  operator: "and" | "or";
+  filters: FilterTree<T>[];
 };
-
-/**
- * A composite type for representing a rule-based filter system.
- *
- * This type is constructed using a `FilterTree` structure that consists of
- * nested filters of the following types:
- * - `ContextFilter`: A filter that evaluates based on specified context criteria.
- * - `PercentageRolloutFilter`: A filter that performs a percentage-based rollout.
- * - `ConstantFilter`: A filter that evaluates based on fixed conditions or constants.
- *
- * `RuleFilter` is typically used in scenarios where a hierarchical filtering mechanism
- * is needed to determine outcomes based on multiple layered conditions.
- */
+export type FilterNegation<T extends FilterClass> = {
+  type: "negation";
+  filter: FilterTree<T>;
+};
+export type FilterTree<T extends FilterClass> =
+  | FilterGroup<T>
+  | FilterNegation<T>
+  | T;
 export type RuleFilter = FilterTree<
   ContextFilter | PercentageRolloutFilter | ConstantFilter
 >;
-
-/**
- * Represents a value that can be used in a rule configuration.
- *
- * RuleValue can take on different types, allowing flexibility based on the
- * specific rule's requirements. This can include:
- * - A boolean value: to represent true/false conditions.
- * - A string: typically used for textual or keyword-based rules.
- * - A number: for numerical rules or thresholds.
- * - An object: for more complex rule definitions or configurations.
- *
- * This type is useful for accommodating various rule structures in applications
- * that work with dynamic or user-defined regulations.
- */
-type RuleValue = boolean | string | number | object;
-
-/**
- * Represents a rule that defines a filtering criterion and an associated value.
- *
- * @template T - Specifies the type of the associated value that extends RuleValue.
- * @property {RuleFilter} filter - The filtering criterion used by the rule.
- * @property {T} value - The value associated with the rule.
- */
-export interface Rule<T extends RuleValue> {
-  filter: RuleFilter;
-  value: T;
-}
 
 export type NormalizedContextValue = string | string[];
 export type FlattenedContext = Record<string, NormalizedContextValue>;
 
 export type EvaluationError =
-  | {
-      code: "MISSING_CONTEXT_FIELD";
-      field: string;
-      message: string;
-    }
+  | { code: "MISSING_CONTEXT_FIELD"; field: string; message: string }
   | {
       code: "UNSUPPORTED_ARRAY_OPERATOR";
       field: string;
-      operator: ContextFilterOperator | "rolloutPercentage";
+      operator:
+        | ContextFilterOperator
+        | "rolloutPercentage"
+        | "percentageDistribution";
       message: string;
-    };
-
-function normalizeArrayElement(value: unknown): string | undefined {
-  if (value === undefined) return undefined;
-  if (value === null) return "";
-  if (typeof value !== "object") return String(value);
-
-  // Composite array elements are outside the targeting model. Keep their
-  // behavior explicit by comparing their JSON encoding.
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return undefined;
-  }
-}
-
-function normalizeArray(value: unknown[]): string[] {
-  return value.flatMap((entry) => {
-    const normalized = normalizeArrayElement(entry);
-    return normalized === undefined ? [] : [normalized];
-  });
-}
-
-/**
- * Flattens context for evaluation while preserving arrays as leaf values.
- * Primitive array elements use the same string coercion as scalar values;
- * composite elements are JSON encoded.
- */
-export function flattenContext(data: object): FlattenedContext {
-  const result = Object.create(null) as FlattenedContext;
-
-  function recurse(value: unknown, prop: string): void {
-    if (value === undefined) return;
-
-    if (value === null) {
-      result[prop] = "";
-    } else if (Array.isArray(value)) {
-      result[prop] = normalizeArray(value);
-    } else if (typeof value !== "object") {
-      result[prop] = String(value);
-    } else {
-      const entries = Object.entries(value);
-      if (entries.length === 0) {
-        result[prop] = "";
-        return;
-      }
-
-      for (const [key, entry] of entries) {
-        recurse(entry, prop ? `${prop}.${key}` : key);
-      }
     }
-  }
-
-  if (Object.keys(data).length > 0) recurse(data, "");
-  return result;
-}
-
-/**
- * Flattens a nested JSON object into a single-level object, with keys indicating the nesting levels.
- * Keys in the resulting object are represented in a dot notation to reflect the nesting structure of the original data.
- *
- * @param {object} data - The nested JSON object to be flattened.
- * @return {Record<string, string>} A flattened JSON object with "stringified" keys and values.
- */
-export function flattenJSON(data: object): Record<string, string> {
-  const result: Record<string, string> = {};
-
-  if (Object.keys(data).length === 0) {
-    return result;
-  }
-
-  function recurse(value: any, prop: string) {
-    if (value === undefined) {
-      return;
+  | {
+      code: "INVALID_COMPARISON";
+      field: string;
+      operator: ContextFilterOperator;
+      message: string;
     }
-
-    if (value === null) {
-      result[prop] = "";
-    } else if (typeof value !== "object") {
-      result[prop] = String(value);
-    } else if (Array.isArray(value)) {
-      if (value.length === 0) {
-        result[prop] = "";
-      }
-
-      for (let i = 0; i < value.length; i++) {
-        recurse(value[i], prop ? prop + "." + i : "" + i);
-      }
-    } else {
-      let isEmpty = true;
-
-      for (const p in value) {
-        isEmpty = false;
-        recurse(value[p], prop ? prop + "." + p : p);
-      }
-
-      if (isEmpty) {
-        result[prop] = "";
-      }
-    }
-  }
-
-  recurse(data, "");
-  return result;
-}
-
-/**
- * Converts a flattened JSON object with dot-separated keys into a nested JSON object.
- *
- * @param {Record<string, any>} data - The flattened JSON object where keys are dot-separated representing nested levels.
- * @return {Record<string, any>} The unflattened JSON object with nested structure restored.
- */
-export function unflattenJSON(data: Record<string, any>): Record<string, any> {
-  const result: Record<string, any> = {};
-  // Traversing these properties on a plain object can reach Object.prototype.
-  const unsafePathSegments = new Set(["__proto__", "constructor", "prototype"]);
-
-  for (const i of Object.keys(data)) {
-    const keys = i.split(".");
-
-    if (keys.some((key) => unsafePathSegments.has(key))) {
-      continue;
-    }
-
-    keys.reduce((acc, key, index) => {
-      if (index === keys.length - 1) {
-        if (typeof acc === "object") {
-          acc[key] = data[i];
-        }
-      } else if (!acc[key]) {
-        acc[key] = {};
-      }
-
-      return acc[key];
-    }, result);
-  }
-
-  return result;
-}
-
-/**
- * Generates a hashed integer based on the input string. The method extracts 20 bits from the hash,
- * scales it to a range between 0 and 100000, and returns the resultant integer.
- *
- * @param {string} hashInput - The input string used to generate the hash.
- * @return {number} A number between 0 and 100000 derived from the hash of the input string.
- */
-export function hashInt(hashInput: string): number {
-  // 1. hash the key and the partial rollout attribute
-  // 2. take 20 bits from the hash and divide by 2^20 - 1 to get a number between 0 and 1
-  // 3. multiply by 100000 to get a number between 0 and 100000 and compare it to the threshold
-  //
-  // we only need 20 bits to get to 100000 because 2^20 is 1048576
-  const value =
-    new DataView(sha256.create().update(hashInput).arrayBuffer()).getUint32(
-      0,
-      true,
-    ) & 0xfffff;
-
-  return Math.floor((value / 0xfffff) * 100000);
-}
-
-const ARRAY_OPERATORS = new Set<ContextFilterOperator>([
-  "IS",
-  "IS_NOT",
-  "CONTAINS",
-  "NOT_CONTAINS",
-  "ANY_OF",
-  "NOT_ANY_OF",
-  "SET",
-  "NOT_SET",
-]);
-
-/**
- * Evaluates a scalar or array field value against an operator and comparison values.
- */
-export function evaluate(
-  normalizedFieldValue: NormalizedContextValue,
-  operator: ContextFilterOperator,
-  values: string[],
-  valueSet?: Set<string>,
-): boolean {
-  const value = values[0];
-
-  if (Array.isArray(normalizedFieldValue)) {
-    switch (operator) {
-      case "IS":
-        return (
-          typeof value === "string" &&
-          normalizedFieldValue.length === 1 &&
-          normalizedFieldValue[0] === value
-        );
-      case "IS_NOT":
-        return (
-          typeof value === "string" &&
-          !(
-            normalizedFieldValue.length === 1 &&
-            normalizedFieldValue[0] === value
-          )
-        );
-      case "CONTAINS":
-        return (
-          typeof value === "string" && normalizedFieldValue.includes(value)
-        );
-      case "NOT_CONTAINS":
-        return (
-          typeof value === "string" && !normalizedFieldValue.includes(value)
-        );
-      case "ANY_OF": {
-        const candidates = valueSet ?? new Set(values);
-        return normalizedFieldValue.some((entry) => candidates.has(entry));
-      }
-      case "NOT_ANY_OF": {
-        const candidates = valueSet ?? new Set(values);
-        return !normalizedFieldValue.some((entry) => candidates.has(entry));
-      }
-      case "SET":
-        return normalizedFieldValue.length > 0;
-      case "NOT_SET":
-        return normalizedFieldValue.length === 0;
-      default:
-        // Numeric, date, and boolean operators are scalar-only.
-        // Do not accidentally stringify arrays for comparison.
-        return false;
-    }
-  }
-
-  switch (operator) {
-    case "CONTAINS":
-      return (
-        typeof value === "string" &&
-        normalizedFieldValue.toLowerCase().includes(value.toLowerCase())
-      );
-    case "NOT_CONTAINS":
-      return (
-        typeof value === "string" &&
-        !normalizedFieldValue.toLowerCase().includes(value.toLowerCase())
-      );
-    case "GT":
-      if (isNaN(Number(normalizedFieldValue)) || isNaN(Number(value))) {
-        // TODO: return error instead? used logger previously
-        console.error(
-          `GT operator requires numeric values: ${normalizedFieldValue}, ${value}`,
-        );
-        return false;
-      }
-      return Number(normalizedFieldValue) > Number(value);
-    case "LT":
-      if (isNaN(Number(normalizedFieldValue)) || isNaN(Number(value))) {
-        console.error(
-          `LT operator requires numeric values: ${normalizedFieldValue}, ${value}`,
-        );
-        return false;
-      }
-      return Number(normalizedFieldValue) < Number(value);
-    case "AFTER":
-    case "BEFORE": {
-      // more/less than `value` days ago
-      const daysAgo = new Date();
-      daysAgo.setDate(daysAgo.getDate() - Number(value));
-      const fieldValueDate = new Date(normalizedFieldValue).getTime();
-
-      return operator === "AFTER"
-        ? fieldValueDate > daysAgo.getTime()
-        : fieldValueDate < daysAgo.getTime();
-    }
-    case "DATE_AFTER":
-    case "DATE_BEFORE": {
-      const fieldValueDate = new Date(normalizedFieldValue).getTime();
-      const valueDate = new Date(value).getTime();
-      if (isNaN(fieldValueDate) || isNaN(valueDate)) {
-        console.error(
-          `${operator} operator requires valid date values: ${normalizedFieldValue}, ${value}`,
-        );
-        return false;
-      }
-      return operator === "DATE_AFTER"
-        ? fieldValueDate >= valueDate
-        : fieldValueDate <= valueDate;
-    }
-    case "SET":
-      return normalizedFieldValue !== "";
-    case "NOT_SET":
-      return normalizedFieldValue === "";
-    case "IS":
-      return normalizedFieldValue === value;
-    case "IS_NOT":
-      return normalizedFieldValue !== value;
-    case "ANY_OF":
-      return valueSet
-        ? valueSet.has(normalizedFieldValue)
-        : values.includes(normalizedFieldValue);
-    case "NOT_ANY_OF":
-      return valueSet
-        ? !valueSet.has(normalizedFieldValue)
-        : !values.includes(normalizedFieldValue);
-    case "IS_TRUE":
-      return normalizedFieldValue == "true";
-    case "IS_FALSE":
-      return normalizedFieldValue == "false";
-    default:
-      console.error(`unknown operator: ${operator}`);
-      return false;
-  }
-}
-
-function addUnsupportedArrayOperatorError(
-  errors: Map<string, EvaluationError>,
-  field: string,
-  operator: ContextFilterOperator | "rolloutPercentage",
-): void {
-  const message =
-    operator === "rolloutPercentage"
-      ? `Percentage rollout does not support array-valued context field "${field}".`
-      : `Operator ${operator} does not support array-valued context field "${field}".`;
-  errors.set(`${field}:${operator}`, {
-    code: "UNSUPPORTED_ARRAY_OPERATOR",
-    field,
-    operator,
-    message,
-  });
-}
-
-function addMissingContextFieldError(
-  errors: Map<string, EvaluationError>,
-  field: string,
-): void {
-  errors.set(`missing:${field}`, {
-    code: "MISSING_CONTEXT_FIELD",
-    field,
-    message: `Context field "${field}" is required to evaluate targeting rules.`,
-  });
-}
-
-function evaluateRecursively(
-  filter: RuleFilter,
-  context: FlattenedContext,
-  errors: Map<string, EvaluationError>,
-): boolean {
-  switch (filter.type) {
-    case "constant":
-      return filter.value;
-    case "context": {
-      if (
-        !(filter.field in context) &&
-        filter.operator !== "SET" &&
-        filter.operator !== "NOT_SET"
-      ) {
-        addMissingContextFieldError(errors, filter.field);
-        return false;
-      }
-
-      const normalizedFieldValue = context[filter.field] ?? "";
-      if (
-        Array.isArray(normalizedFieldValue) &&
-        !ARRAY_OPERATORS.has(filter.operator)
-      ) {
-        addUnsupportedArrayOperatorError(errors, filter.field, filter.operator);
-        return false;
-      }
-
-      return evaluate(
-        normalizedFieldValue,
-        filter.operator,
-        filter.values || [],
-        filter.valueSet,
-      );
-    }
-    case "rolloutPercentage": {
-      if (!(filter.partialRolloutAttribute in context)) {
-        addMissingContextFieldError(errors, filter.partialRolloutAttribute);
-        return false;
-      }
-
-      const normalizedRolloutValue = context[filter.partialRolloutAttribute];
-      if (Array.isArray(normalizedRolloutValue)) {
-        addUnsupportedArrayOperatorError(
-          errors,
-          filter.partialRolloutAttribute,
-          "rolloutPercentage",
-        );
-        return false;
-      }
-
-      const hashVal = hashInt(`${filter.key}.${normalizedRolloutValue}`);
-      return hashVal < filter.partialRolloutThreshold;
-    }
-    case "group": {
-      for (const child of filter.filters) {
-        const matched = evaluateRecursively(child, context, errors);
-        if (filter.operator === "and" && !matched) return false;
-        if (filter.operator === "or" && matched) return true;
-      }
-      return filter.operator === "and";
-    }
-    case "negation":
-      return !evaluateRecursively(filter.filter, context, errors);
-    default:
-      return false;
-  }
-}
-
-/**
- * Represents the parameters required for evaluating rules against a specific flag in a given context.
- *
- * @template T - The type of the rule value used in evaluation.
- *
- * @property {string} flagKey - The key that identifies the specific flag to be evaluated.
- * @property {Rule<T>[]} rules - An array of rules used for evaluation.
- * @property {Record<string, unknown>} context - The contextual data used during the evaluation process.
- */
-export interface EvaluationParams<T extends RuleValue> {
-  flagKey: string;
-  rules: Rule<T>[];
-  context: Record<string, unknown>;
-}
-
-/**
- * Represents the result of an evaluation process for a specific flag and its associated rules.
- *
- * @template T - The type of the rule value being evaluated.
- *
- * @property {string} flagKey - The unique key identifying the flag being evaluated.
- * @property {T | undefined} value - The resolved value of the flag, if the evaluation is successful.
- * @property {Record<string, any>} context - The normalized contextual information used during evaluation.
- * @property {boolean[]} ruleEvaluationResults - Array indicating the success or failure of each rule evaluated.
- * @property {string} [reason] - Optional field providing additional explanation regarding the evaluation result.
- * @property {string[]} [missingContextFields] - Legacy array of context fields that were required but not provided during evaluation.
- * @property {EvaluationError[]} [errors] - Non-fatal diagnostics for rules that could not be evaluated.
- */
-export interface EvaluationResult<T extends RuleValue> {
-  flagKey: string;
-  value: T | undefined;
-  context: Record<string, any>;
-  ruleEvaluationResults: boolean[];
-  reason?: string;
-  /** @deprecated Use `errors` and check for `MISSING_CONTEXT_FIELD`. */
-  missingContextFields?: string[];
-  errors?: EvaluationError[];
-}
-
-export function evaluateFlagRules<T extends RuleValue>({
-  context,
-  flagKey,
-  rules,
-}: EvaluationParams<T>): EvaluationResult<T> {
-  const flatContext = flattenContext(context);
-  const evaluationErrors = new Map<string, EvaluationError>();
-
-  const ruleEvaluationResults = rules.map((rule) => {
-    const ruleErrors = new Map<string, EvaluationError>();
-    const matched = evaluateRecursively(rule.filter, flatContext, ruleErrors);
-    for (const [key, error] of ruleErrors) evaluationErrors.set(key, error);
-
-    // An invalid condition must fail the entire rule, even when wrapped in a
-    // negation or combined with another condition that would otherwise match.
-    return ruleErrors.size === 0 && matched;
-  });
-
-  const errors = Array.from(evaluationErrors.values());
-  const missingContextFields = errors.flatMap((error) =>
-    error.code === "MISSING_CONTEXT_FIELD" ? [error.field] : [],
-  );
-
-  const firstMatchedRuleIndex = ruleEvaluationResults.findIndex(Boolean);
-  const firstMatchedRule =
-    firstMatchedRuleIndex > -1 ? rules[firstMatchedRuleIndex] : undefined;
-  return {
-    value: firstMatchedRule?.value,
-    flagKey,
-    context: flatContext,
-    ruleEvaluationResults,
-    reason:
-      firstMatchedRuleIndex > -1
-        ? `rule #${firstMatchedRuleIndex} matched`
-        : "no matched rules",
-    missingContextFields,
-    ...(errors.length > 0 ? { errors } : {}),
-  };
-}
-
-function prepareFilter(filter: RuleFilter): RuleFilter {
-  if (filter.type === "group") {
-    return { ...filter, filters: filter.filters.map(prepareFilter) };
-  }
-  if (filter.type === "negation") {
-    return { ...filter, filter: prepareFilter(filter.filter) };
-  }
-  if (
-    filter.type === "context" &&
-    (filter.operator === "ANY_OF" || filter.operator === "NOT_ANY_OF")
-  ) {
-    // The Set owns the candidate references; don't retain the source array in
-    // the prepared filter as well. Keep an empty array to avoid per-check []s.
-    return { ...filter, values: [], valueSet: new Set(filter.values ?? []) };
-  }
-  return { ...filter };
-}
-
-export function newEvaluator<T extends RuleValue>(rules: Rule<T>[]) {
-  const translatedRules = rules.map((rule) => ({
-    ...rule,
-    filter: prepareFilter(rule.filter),
-  }));
-
-  return function evaluateOptimized(
-    context: Record<string, unknown>,
-    flagKey: string,
-  ) {
-    return evaluateFlagRules({
-      context,
-      flagKey,
-      rules: translatedRules,
-    });
-  };
-}
+  | { code: "INVALID_FLAG_DEFINITION"; message: string };
 
 export type VariantDestination =
   | { type: "variant"; variantKey: string }
   | { type: "nextRule" };
-
 export type RuleResult =
   | { type: "variant"; variantKey: string }
   | {
@@ -743,13 +88,11 @@ export type RuleResult =
         destination: VariantDestination;
       }>;
     };
-
 export type CompiledRule = {
   id: string;
   filter: RuleFilter;
   result: RuleResult;
 };
-
 export type CompiledFlag<T = any> = {
   key: string;
   sourceVersionId: string;
@@ -757,187 +100,411 @@ export type CompiledFlag<T = any> = {
   rules: CompiledRule[];
 };
 
-export type VariantEvaluationError =
-  | EvaluationError
-  | { code: "INVALID_FLAG_DEFINITION"; message: string }
-  | {
-      code: "UNSUPPORTED_ARRAY_OPERATOR";
-      field: string;
-      operator: "percentageDistribution";
-      message: string;
-    };
-
-export type VariantEvaluationResult<T = any> = {
-  flagKey: string;
-  sourceVersionId: string;
-  value: T | undefined;
-  variantKey?: string;
-  matchedRuleId?: string;
+export type RuleEvaluationResult = {
+  ruleId: string;
+  matched: boolean;
   allocationIndex?: number;
-  context: FlattenedContext;
-  ruleResults: Array<{
-    ruleId: string;
-    matched: boolean;
-    allocationIndex?: number;
-    destination?: VariantDestination;
-  }>;
-  errors: VariantEvaluationError[];
+  destination?: VariantDestination;
 };
 
-type PreparedRule = CompiledRule & {
-  thresholds?: number[];
-  allocationError?: string;
+/** A resolved variant can contain any T, including undefined. */
+export type EvaluationResult<T = any> = {
+  flagKey: string;
+  sourceVersionId: string;
+  context: FlattenedContext;
+  ruleResults: RuleEvaluationResult[];
+  errors: EvaluationError[];
+} & (
+  | {
+      resolved: true;
+      value: T;
+      variantKey: string;
+      matchedRuleId: string;
+      allocationIndex?: number;
+    }
+  | {
+      resolved: false;
+      value: undefined;
+      variantKey?: never;
+      matchedRuleId?: never;
+      allocationIndex?: never;
+    }
+);
+
+function normalizeArrayElement(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return "";
+  if (typeof value !== "object") return String(value);
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return undefined;
+  }
+}
+
+/** Flatten nested context, preserving arrays as normalized leaf values. */
+export function flattenContext(data: object): FlattenedContext {
+  const result = Object.create(null) as FlattenedContext;
+  function recurse(value: unknown, prop: string): void {
+    if (value === undefined) return;
+    if (value === null) {
+      result[prop] = "";
+    } else if (Array.isArray(value)) {
+      result[prop] = value.flatMap((entry) => {
+        const normalized = normalizeArrayElement(entry);
+        return normalized === undefined ? [] : [normalized];
+      });
+    } else if (typeof value !== "object") {
+      result[prop] = String(value);
+    } else {
+      const entries = Object.entries(value);
+      if (!entries.length) {
+        result[prop] = "";
+        return;
+      }
+      for (const [key, entry] of entries)
+        recurse(entry, prop ? `${prop}.${key}` : key);
+    }
+  }
+  if (Object.keys(data).length) recurse(data, "");
+  return result;
+}
+
+/** The original SHA-256 cohort hash, with an inclusive range of 0..100000. */
+export function hashInt(hashInput: string): number {
+  const value =
+    new DataView(sha256.create().update(hashInput).arrayBuffer()).getUint32(
+      0,
+      true,
+    ) & 0xfffff;
+  return Math.floor((value / 0xfffff) * 100000);
+}
+
+// Prepared lookup structures never appear in the public/wire filter types.
+type PreparedContextFilter = ContextFilter & { valueSet?: Set<string> };
+type PreparedFilter = FilterTree<
+  PreparedContextFilter | PercentageRolloutFilter | ConstantFilter
+>;
+type Distribution = Extract<RuleResult, { type: "percentageDistribution" }>;
+type PreparedDistribution = Omit<Distribution, "allocations"> & {
+  allocations: Array<{ upperBound: number; destination: VariantDestination }>;
+  error?: string;
+};
+type PreparedRule = {
+  id: string;
+  filter: PreparedFilter;
+  result: Exclude<RuleResult, Distribution> | PreparedDistribution;
 };
 type PreparedFlag<T> = Omit<CompiledFlag<T>, "rules"> & {
   rules: PreparedRule[];
 };
 
-function prepareVariantRule(rule: CompiledRule): PreparedRule {
-  const prepared: PreparedRule = {
-    ...rule,
-    filter: prepareFilter(rule.filter),
-    result: { ...rule.result },
-  };
-  if (rule.result.type !== "percentageDistribution") return prepared;
-
-  let total = 0;
-  let valid = rule.result.allocations.length > 0;
-  const thresholds: number[] = [];
-  for (const { percentage } of rule.result.allocations) {
-    const units = Math.round(percentage * 1000);
-    valid &&=
-      Number.isFinite(percentage) &&
-      percentage >= 0 &&
-      percentage <= 100 &&
-      Math.abs(percentage * 1000 - units) <= 1e-8;
-    total += units;
-    thresholds.push(total);
+function prepareFilter(filter: RuleFilter): PreparedFilter {
+  if (filter.type === "group")
+    return { ...filter, filters: filter.filters.map(prepareFilter) };
+  if (filter.type === "negation")
+    return { ...filter, filter: prepareFilter(filter.filter) };
+  if (
+    filter.type === "context" &&
+    (filter.operator === "ANY_OF" || filter.operator === "NOT_ANY_OF")
+  ) {
+    // Keep only the Set's candidate references, not the source array as well.
+    return { ...filter, values: [], valueSet: new Set(filter.values ?? []) };
   }
-  if (!valid || total !== 100000) {
-    prepared.allocationError = `Invalid percentage allocations in rule ${rule.id}`;
-  }
-  prepared.thresholds = thresholds;
-  prepared.result = {
-    ...rule.result,
-    allocations: rule.result.allocations.map((allocation) => ({
-      ...allocation,
-      destination: { ...allocation.destination },
-    })),
-  };
-  return prepared;
+  return { ...filter };
 }
 
-/** Prepare once per definition refresh, then reuse across evaluation contexts.
- * ANY_OF/NOT_ANY_OF candidates become Sets, including inside negations/groups.
- * Percentage validation and cumulative threshold construction happen only here.
- */
-export function newFlagEvaluator<T>(flag: CompiledFlag<T>) {
+function prepareRule(rule: CompiledRule): PreparedRule {
+  const filter = prepareFilter(rule.filter);
+  if (rule.result.type === "variant")
+    return { id: rule.id, filter, result: { ...rule.result } };
+  let total = 0;
+  let valid = rule.result.allocations.length > 0;
+  const allocations = rule.result.allocations.map(
+    ({ percentage, destination }) => {
+      const units = Math.round(percentage * 1000);
+      valid &&=
+        Number.isFinite(percentage) &&
+        percentage >= 0 &&
+        percentage <= 100 &&
+        Math.abs(percentage * 1000 - units) <= 1e-8;
+      total += units;
+      return { upperBound: total, destination: { ...destination } };
+    },
+  );
+  return {
+    id: rule.id,
+    filter,
+    result: {
+      ...rule.result,
+      allocations,
+      ...(!valid || total !== 100000
+        ? { error: `Invalid percentage allocations in rule ${rule.id}` }
+        : {}),
+    },
+  };
+}
+
+function missingField(
+  errors: Map<string, EvaluationError>,
+  field: string,
+): void {
+  errors.set(`missing:${field}`, {
+    code: "MISSING_CONTEXT_FIELD",
+    field,
+    message: `Context field "${field}" is required to evaluate targeting rules.`,
+  });
+}
+
+function unsupportedArray(
+  errors: Map<string, EvaluationError>,
+  field: string,
+  operator:
+    | ContextFilterOperator
+    | "rolloutPercentage"
+    | "percentageDistribution",
+): void {
+  errors.set(`array:${field}:${operator}`, {
+    code: "UNSUPPORTED_ARRAY_OPERATOR",
+    field,
+    operator,
+    message: `Operator ${operator} does not support array-valued context field "${field}".`,
+  });
+}
+
+function invalidComparison(
+  errors: Map<string, EvaluationError>,
+  filter: ContextFilter,
+): false {
+  errors.set(`comparison:${filter.field}:${filter.operator}`, {
+    code: "INVALID_COMPARISON",
+    field: filter.field,
+    operator: filter.operator,
+    // Do not log or embed context values; they may contain sensitive data.
+    message: `Operator ${filter.operator} requires valid comparison values for context field "${filter.field}".`,
+  });
+  return false;
+}
+
+function invalidDefinition(
+  errors: Map<string, EvaluationError>,
+  message: string,
+): void {
+  errors.set("invalid", { code: "INVALID_FLAG_DEFINITION", message });
+}
+
+function compare(
+  fieldValue: NormalizedContextValue,
+  filter: PreparedContextFilter,
+  errors: Map<string, EvaluationError>,
+): boolean {
+  const { operator, valueSet } = filter;
+  const value = filter.values?.[0];
+  if (operator === "ANY_OF" || operator === "NOT_ANY_OF") {
+    // Always prepared at definition load, including within groups/negations.
+    const matches = Array.isArray(fieldValue)
+      ? fieldValue.some((entry) => valueSet!.has(entry))
+      : valueSet!.has(fieldValue);
+    return operator === "ANY_OF" ? matches : !matches;
+  }
+  if (Array.isArray(fieldValue)) {
+    switch (operator) {
+      case "IS":
+        return (
+          typeof value === "string" &&
+          fieldValue.length === 1 &&
+          fieldValue[0] === value
+        );
+      case "IS_NOT":
+        return (
+          typeof value === "string" &&
+          !(fieldValue.length === 1 && fieldValue[0] === value)
+        );
+      case "CONTAINS":
+        return typeof value === "string" && fieldValue.includes(value);
+      case "NOT_CONTAINS":
+        return typeof value === "string" && !fieldValue.includes(value);
+      case "SET":
+        return fieldValue.length > 0;
+      case "NOT_SET":
+        return fieldValue.length === 0;
+      default:
+        unsupportedArray(errors, filter.field, operator);
+        return false;
+    }
+  }
+  switch (operator) {
+    case "CONTAINS":
+      return (
+        typeof value === "string" &&
+        fieldValue.toLowerCase().includes(value.toLowerCase())
+      );
+    case "NOT_CONTAINS":
+      return (
+        typeof value === "string" &&
+        !fieldValue.toLowerCase().includes(value.toLowerCase())
+      );
+    case "GT":
+    case "LT": {
+      const left = Number(fieldValue),
+        right = Number(value);
+      if (!Number.isFinite(left) || !Number.isFinite(right))
+        return invalidComparison(errors, filter);
+      return operator === "GT" ? left > right : left < right;
+    }
+    case "AFTER":
+    case "BEFORE": {
+      const daysAgo = new Date();
+      const days = Number(value);
+      daysAgo.setDate(daysAgo.getDate() - days);
+      const timestamp = new Date(fieldValue).getTime();
+      if (
+        !Number.isFinite(days) ||
+        Number.isNaN(timestamp) ||
+        Number.isNaN(daysAgo.getTime())
+      ) {
+        return invalidComparison(errors, filter);
+      }
+      return operator === "AFTER"
+        ? timestamp > daysAgo.getTime()
+        : timestamp < daysAgo.getTime();
+    }
+    case "DATE_AFTER":
+    case "DATE_BEFORE": {
+      const left = new Date(fieldValue).getTime();
+      const right = value === undefined ? NaN : new Date(value).getTime();
+      if (Number.isNaN(left) || Number.isNaN(right))
+        return invalidComparison(errors, filter);
+      return operator === "DATE_AFTER" ? left >= right : left <= right;
+    }
+    case "SET":
+      return fieldValue !== "";
+    case "NOT_SET":
+      return fieldValue === "";
+    case "IS":
+      return fieldValue === value;
+    case "IS_NOT":
+      return fieldValue !== value;
+    case "IS_TRUE":
+      return fieldValue === "true";
+    case "IS_FALSE":
+      return fieldValue === "false";
+    default:
+      return invalidComparison(errors, filter);
+  }
+}
+
+function evaluateFilter(
+  filter: PreparedFilter,
+  context: FlattenedContext,
+  errors: Map<string, EvaluationError>,
+): boolean {
+  switch (filter.type) {
+    case "constant":
+      return filter.value;
+    case "context":
+      if (
+        !(filter.field in context) &&
+        filter.operator !== "SET" &&
+        filter.operator !== "NOT_SET"
+      ) {
+        missingField(errors, filter.field);
+        return false;
+      }
+      return compare(context[filter.field] ?? "", filter, errors);
+    case "rolloutPercentage": {
+      if (!(filter.partialRolloutAttribute in context)) {
+        missingField(errors, filter.partialRolloutAttribute);
+        return false;
+      }
+      const value = context[filter.partialRolloutAttribute];
+      if (Array.isArray(value)) {
+        unsupportedArray(
+          errors,
+          filter.partialRolloutAttribute,
+          "rolloutPercentage",
+        );
+        return false;
+      }
+      return hashInt(`${filter.key}.${value}`) < filter.partialRolloutThreshold;
+    }
+    case "group":
+      for (const child of filter.filters) {
+        const matched = evaluateFilter(child, context, errors);
+        if (filter.operator === "and" && !matched) return false;
+        if (filter.operator === "or" && matched) return true;
+      }
+      return filter.operator === "and";
+    case "negation":
+      return !evaluateFilter(filter.filter, context, errors);
+    default:
+      invalidDefinition(errors, "Unsupported filter type");
+      return false;
+  }
+}
+
+/** Prepare once on definition refresh, then reuse for all evaluation contexts. */
+export function newEvaluator<T>(
+  flag: CompiledFlag<T>,
+): (context: Record<string, unknown>) => EvaluationResult<T> {
   const prepared: PreparedFlag<T> = {
     ...flag,
     variants: { ...flag.variants },
-    rules: flag.rules.map(prepareVariantRule),
+    rules: flag.rules.map(prepareRule),
   };
-  return (context: Record<string, unknown>): VariantEvaluationResult<T> =>
-    evaluatePreparedFlag(prepared, context);
-}
-
-/** One-shot protocol-v2 evaluation. For repeated checks use newFlagEvaluator. */
-export function evaluateFlag<T>(
-  flag: CompiledFlag<T>,
-  context: Record<string, unknown>,
-): VariantEvaluationResult<T> {
-  return newFlagEvaluator(flag)(context);
-}
-
-function finishVariantEvaluation<T>(
-  result: VariantEvaluationResult<T>,
-  errors: Map<string, VariantEvaluationError>,
-): VariantEvaluationResult<T> {
-  if (errors.size) result.errors = Array.from(errors.values());
-  return result;
-}
-
-function invalidVariantDefinition<T>(
-  result: VariantEvaluationResult<T>,
-  errors: Map<string, VariantEvaluationError>,
-  message: string,
-): VariantEvaluationResult<T> {
-  errors.set("invalid", { code: "INVALID_FLAG_DEFINITION", message });
-  return finishVariantEvaluation(result, errors);
+  return (context) => evaluatePreparedFlag(prepared, context);
 }
 
 function evaluatePreparedFlag<T>(
   flag: PreparedFlag<T>,
   context: Record<string, unknown>,
-): VariantEvaluationResult<T> {
+): EvaluationResult<T> {
   const flatContext = flattenContext(context);
-  const errors = new Map<string, VariantEvaluationError>();
-  // Reuse scratch diagnostics across rules instead of allocating one Map per rule.
+  const errors = new Map<string, EvaluationError>();
   const filterErrors = new Map<string, EvaluationError>();
-  const result: VariantEvaluationResult<T> = {
-    flagKey: flag.key,
-    sourceVersionId: flag.sourceVersionId,
-    value: undefined,
-    context: flatContext,
-    ruleResults: [],
-    errors: [],
-  };
+  const ruleResults: RuleEvaluationResult[] = [];
   for (const rule of flag.rules) {
     filterErrors.clear();
-    const matched = evaluateRecursively(rule.filter, flatContext, filterErrors);
+    const matched = evaluateFilter(rule.filter, flatContext, filterErrors);
     for (const [key, error] of filterErrors) errors.set(key, error);
-    const ruleResult: VariantEvaluationResult<T>["ruleResults"][number] = {
+    const ruleResult: RuleEvaluationResult = {
       ruleId: rule.id,
-      matched: matched && filterErrors.size === 0,
+      matched: matched && !filterErrors.size,
     };
-    result.ruleResults.push(ruleResult);
+    ruleResults.push(ruleResult);
     if (!ruleResult.matched) continue;
 
     let destination: VariantDestination;
     if (rule.result.type === "percentageDistribution") {
       const distribution = rule.result;
-      if (rule.allocationError) {
-        return invalidVariantDefinition(result, errors, rule.allocationError);
+      if (distribution.error) {
+        invalidDefinition(errors, distribution.error);
+        break;
       }
-      if (
-        !Object.prototype.hasOwnProperty.call(
-          flatContext,
+      if (!(distribution.attribute in flatContext)) {
+        missingField(errors, distribution.attribute);
+        continue;
+      }
+      const value = flatContext[distribution.attribute];
+      if (Array.isArray(value)) {
+        unsupportedArray(
+          errors,
           distribution.attribute,
-        )
-      ) {
-        errors.set(`missing:${distribution.attribute}`, {
-          code: "MISSING_CONTEXT_FIELD",
-          field: distribution.attribute,
-          message: `Context field "${distribution.attribute}" is required to evaluate targeting rules.`,
-        });
+          "percentageDistribution",
+        );
         continue;
       }
-      const attributeValue = flatContext[distribution.attribute];
-      if (Array.isArray(attributeValue)) {
-        errors.set(`array:${distribution.attribute}:percentageDistribution`, {
-          code: "UNSUPPORTED_ARRAY_OPERATOR",
-          field: distribution.attribute,
-          operator: "percentageDistribution",
-          message: `Context field "${distribution.attribute}" must be scalar for percentage distribution.`,
-        });
-        continue;
-      }
-      // Only the inclusive endpoint is clamped. This also keeps trailing 0%
-      // allocations empty, without moving any other company's bucket.
-      const bucket = Math.min(
-        hashInt(`${distribution.key}.${attributeValue}`),
-        99999,
-      );
-      const thresholds = rule.thresholds!;
-      let allocationIndex = 0;
+      // Preserve every bucket except the inclusive endpoint; 0% stays empty.
+      const bucket = Math.min(hashInt(`${distribution.key}.${value}`), 99999);
+      const { allocations } = distribution;
+      let index = 0;
       while (
-        allocationIndex < thresholds.length - 1 &&
-        bucket >= thresholds[allocationIndex]
-      ) {
-        allocationIndex++;
-      }
-      ruleResult.allocationIndex = allocationIndex;
-      destination = distribution.allocations[allocationIndex].destination;
+        index < allocations.length - 1 &&
+        bucket >= allocations[index].upperBound
+      )
+        index++;
+      ruleResult.allocationIndex = index;
+      destination = allocations[index].destination;
     } else {
       destination = rule.result;
     }
@@ -949,23 +516,37 @@ function evaluatePreparedFlag<T>(
         destination.variantKey,
       )
     ) {
-      return invalidVariantDefinition(
-        result,
+      invalidDefinition(
         errors,
         `Unknown variant ${destination.variantKey} in rule ${rule.id}`,
       );
+      break;
     }
-    result.value = flag.variants[destination.variantKey];
-    result.variantKey = destination.variantKey;
-    result.matchedRuleId = rule.id;
-    if (ruleResult.allocationIndex !== undefined) {
-      result.allocationIndex = ruleResult.allocationIndex;
-    }
-    return finishVariantEvaluation(result, errors);
+    return {
+      resolved: true,
+      flagKey: flag.key,
+      sourceVersionId: flag.sourceVersionId,
+      context: flatContext,
+      ruleResults,
+      errors: Array.from(errors.values()),
+      value: flag.variants[destination.variantKey],
+      variantKey: destination.variantKey,
+      matchedRuleId: rule.id,
+      allocationIndex: ruleResult.allocationIndex,
+    };
   }
-  return invalidVariantDefinition(
-    result,
-    errors,
-    "No rule selected a variant; a catch-all default is required",
-  );
+  if (!errors.has("invalid"))
+    invalidDefinition(
+      errors,
+      "No rule selected a variant; a catch-all default is required",
+    );
+  return {
+    resolved: false,
+    value: undefined,
+    flagKey: flag.key,
+    sourceVersionId: flag.sourceVersionId,
+    context: flatContext,
+    ruleResults,
+    errors: Array.from(errors.values()),
+  };
 }

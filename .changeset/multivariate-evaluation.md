@@ -2,13 +2,13 @@
 "@reflag/flag-evaluation": major
 ---
 
-Add protocol-v2 `CompiledFlag` evaluation via `evaluateFlag(flag, context)`:
+Introduce a v2-only compiled-variant evaluator:
 
-- Preserve variant value types through generic `CompiledFlag<T>` and evaluation results (default `any`), without imposing JSON constraints in the evaluator.
-- Evaluate rules sequentially with fixed variants, percentage distributions, and explicit fallthrough.
-- Preserve the existing hash function and legacy rollout filters; assign the inclusive maximum distribution bucket to the final nonzero allocation.
-- Return source version, selected variant, matched rule, allocation, and per-rule diagnostics for exposure events and debugging.
+- `newEvaluator(flag)` prepares a compiled flag once and returns a reusable context evaluator. Remove the v1 value-rule APIs and the one-shot `evaluateFlag` wrapper.
+- Preserve arbitrary variant value types through `CompiledFlag<T>` and `EvaluationResult<T>` (default `any`). `resolved: true | false` distinguishes a selected value, including `undefined`, from failure. Successful results require the variant key and matched rule ID.
+- Keep membership Sets and prepared percentage bounds private. `ANY_OF` / `NOT_ANY_OF` use cached Set lookups, including under groups and negations; percentage distributions use precomputed bounds and a simple scan.
+- Evaluate rules sequentially with explicit fallthrough and source-version/rule/allocation diagnostics.
+- Return structured `INVALID_COMPARISON` errors for invalid numeric/date comparisons instead of logging context values. Invalid conditions cannot match through negation.
+- Retain the original hash function and threshold rollout filter for boolean cohort compatibility. The inclusive maximum distribution bucket selects the last nonzero allocation.
 
-Use `newFlagEvaluator(flag)` for repeated checks: it prepares hash-set membership lookups and validated cumulative percentage thresholds once, including filters nested under groups and negations. Evaluations reuse those structures, scan precomputed percentage thresholds, and reuse per-rule diagnostic scratch storage.
-
-Existing `evaluateFlagRules` and `newEvaluator` exports remain available for legacy consumers. SDK adoption of `/flags` and variant-valued public APIs is a separate change.
+The runtime exports are `newEvaluator`, `flattenContext`, and `hashInt`. Removed APIs include `evaluateFlagRules`, `newFlagEvaluator`, `evaluateFlag`, the scalar `evaluate` helper, and the legacy `flattenJSON` / `unflattenJSON` helpers. SDK adoption of `/flags` and variant-valued public APIs is a separate change; unchanged consumers must stay on evaluator 1.x.

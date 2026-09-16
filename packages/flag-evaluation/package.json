@@ -30,6 +30,7 @@
     "js-sha256": "0.11.0"
   },
   "devDependencies": {
+    "@reflag/flag-evaluation-v1": "npm:@reflag/flag-evaluation@1.1.1",
     "@reflag/tsconfig": "^0.0.2",
     "@types/node": "^22.12.0",
     "ts-node": "^10.9.2",

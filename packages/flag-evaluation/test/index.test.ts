@@ -1,1191 +1,110 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
-  evaluate,
-  evaluateFlagRules,
-  EvaluationParams,
+  ContextFilterOperator,
   flattenContext,
-  flattenJSON,
   hashInt,
   newEvaluator,
-  Rule,
-  unflattenJSON,
+  RuleFilter,
 } from "../src";
 
-const flag = {
-  flagKey: "flag",
-  rules: [
-    {
-      value: true,
-      filter: {
-        type: "group",
-        operator: "and",
-        filters: [
-          {
-            type: "context",
-            field: "company.id",
-            operator: "IS",
-            values: ["company1"],
-          },
-          {
-            type: "rolloutPercentage",
-            key: "flag",
-            partialRolloutAttribute: "company.id",
-            partialRolloutThreshold: 100000,
-          },
-        ],
-      },
-    },
-  ],
-} satisfies Omit<EvaluationParams<true>, "context">;
-
-describe("evaluate flag targeting integration ", () => {
-  it("evaluates all kinds of filters", async () => {
-    const res = evaluateFlagRules({
-      flagKey: "flag",
-      rules: [
-        {
-          value: true,
-          filter: {
-            type: "group",
-            operator: "and",
-            filters: [
-              {
-                type: "context",
-                field: "company.id",
-                operator: "IS",
-                values: ["company1"],
-              },
-              {
-                type: "rolloutPercentage",
-                key: "flag",
-                partialRolloutAttribute: "company.id",
-                partialRolloutThreshold: 99999,
-              },
-              {
-                type: "group",
-                operator: "or",
-                filters: [
-                  {
-                    type: "context",
-                    field: "company.id",
-                    operator: "IS",
-                    values: ["company2"],
-                  },
-                  {
-                    type: "negation",
-                    filter: {
-                      type: "context",
-                      field: "company.id",
-                      operator: "IS",
-                      values: ["company3"],
-                    },
-                  },
-                ],
-              },
-              {
-                type: "negation",
-                filter: {
-                  type: "constant",
-                  value: false,
-                },
-              },
-            ],
-          },
-        },
-      ],
-      context: {
-        "company.id": "company1",
-      },
-    });
-
-    expect(res).toEqual({
-      value: true,
-      context: {
-        "company.id": "company1",
-      },
-      flagKey: "flag",
-      missingContextFields: [],
-      reason: "rule #0 matched",
-      ruleEvaluationResults: [true],
-    });
-  });
-
-  it("evaluates flag when there's no matching rule", async () => {
-    const res = evaluateFlagRules({
-      ...flag,
-      context: {
-        company: {
-          id: "wrong value",
-        },
-      },
-    });
-
-    expect(res).toEqual({
-      value: undefined,
-      context: {
-        "company.id": "wrong value",
-      },
-      flagKey: "flag",
-      missingContextFields: [],
-      reason: "no matched rules",
-      ruleEvaluationResults: [false],
-    });
-  });
-
-  it("evaluates targeting when there's a matching rule", async () => {
-    const context = {
-      company: {
-        id: "company1",
-      },
-    };
-
-    const res = evaluateFlagRules({
-      ...flag,
-      context,
-    });
-
-    expect(res).toEqual({
-      value: true,
-      context: {
-        "company.id": "company1",
-      },
-      flagKey: "flag",
-      missingContextFields: [],
-      reason: "rule #0 matched",
-      ruleEvaluationResults: [true],
-    });
-  });
-
-  it("evaluates flag with missing values", async () => {
-    const res = evaluateFlagRules({
-      flagKey: "flag",
-      rules: [
-        {
-          value: { custom: "value" },
-          filter: {
-            type: "group",
-            operator: "and",
-            filters: [
-              {
-                type: "context",
-                field: "some_field",
-                operator: "IS",
-                values: [""],
-              },
-              {
-                type: "rolloutPercentage",
-                key: "flag",
-                partialRolloutAttribute: "some_field",
-                partialRolloutThreshold: 99000,
-              },
-            ],
-          },
-        },
-      ],
-      context: {
-        some_field: "",
-      },
-    });
-
-    expect(res).toEqual({
-      context: {
-        some_field: "",
-      },
-      value: { custom: "value" },
-      flagKey: "flag",
-      missingContextFields: [],
-      reason: "rule #0 matched",
-      ruleEvaluationResults: [true],
-    });
-  });
-
-  it("evaluates percentage rollouts using user.id", () => {
-    const userRollout = {
-      flagKey: "test-flag",
-      rules: [
-        {
-          value: true,
-          filter: {
-            type: "rolloutPercentage" as const,
-            key: "test-flag",
-            partialRolloutAttribute: "user.id",
-            partialRolloutThreshold: 50000,
-          },
-        },
-      ],
-    };
-
-    expect(
-      evaluateFlagRules({
-        ...userRollout,
-        context: { user: { id: "user-1" } },
-      }).value,
-    ).toBe(true);
-    expect(
-      evaluateFlagRules({
-        ...userRollout,
-        context: { user: { id: "user-2" } },
-      }).value,
-    ).toBeUndefined();
-  });
-
-  it("returns list of missing context keys ", async () => {
-    const res = evaluateFlagRules({
-      ...flag,
-      context: {},
-    });
-
-    expect(res).toEqual({
-      context: {},
-      value: undefined,
-      reason: "no matched rules",
-      flagKey: "flag",
-      missingContextFields: ["company.id"],
-      errors: [
-        {
-          code: "MISSING_CONTEXT_FIELD",
-          field: "company.id",
-          message:
-            'Context field "company.id" is required to evaluate targeting rules.',
-        },
-      ],
-      ruleEvaluationResults: [false],
-    });
-  });
-
-  it("fails evaluation and includes key in missing keys when rollout attribute is missing from context", async () => {
-    const res = evaluateFlagRules({
-      flagKey: "flag-1",
-      rules: [
-        {
-          value: 123,
-          filter: {
-            type: "rolloutPercentage" as const,
-            key: "flag-1",
-            partialRolloutAttribute: "happening.id",
-            partialRolloutThreshold: 50000,
-          },
-        },
-      ],
-      context: {},
-    });
-
-    expect(res).toEqual({
-      flagKey: "flag-1",
-      context: {},
-      value: undefined,
-      reason: "no matched rules",
-      missingContextFields: ["happening.id"],
-      errors: [
-        {
-          code: "MISSING_CONTEXT_FIELD",
-          field: "happening.id",
-          message:
-            'Context field "happening.id" is required to evaluate targeting rules.',
-        },
-      ],
-      ruleEvaluationResults: [false],
-    });
-  });
-
-  it("evaluates optimized rule evaluations correctly", async () => {
-    const res = newEvaluator([
+function evaluateFilter(filter: RuleFilter, context: Record<string, unknown>) {
+  return newEvaluator({
+    key: "filter",
+    sourceVersionId: "version-1",
+    variants: { yes: true, no: false },
+    rules: [
+      { id: "target", filter, result: { type: "variant", variantKey: "yes" } },
       {
-        value: true,
-        filter: {
-          type: "group",
-          operator: "and",
-          filters: [
-            {
-              type: "context",
-              field: "company.id",
-              operator: "IS",
-              values: ["company1"],
-            },
-            {
-              type: "rolloutPercentage",
-              key: "flag",
-              partialRolloutAttribute: "company.id",
-              partialRolloutThreshold: 99999,
-            },
-            {
-              type: "group",
-              operator: "or",
-              filters: [
-                {
-                  type: "context",
-                  field: "company.id",
-                  operator: "ANY_OF",
-                  values: ["company2"],
-                },
-                {
-                  type: "negation",
-                  filter: {
-                    type: "context",
-                    field: "company.id",
-                    operator: "IS",
-                    values: ["company3"],
-                  },
-                },
-              ],
-            },
-            {
-              type: "negation",
-              filter: {
-                type: "constant",
-                value: false,
-              },
-            },
-          ],
-        },
+        id: "default",
+        filter: { type: "constant", value: true },
+        result: { type: "variant", variantKey: "no" },
       },
-    ])(
-      {
-        "company.id": "company1",
-      },
-      "flag",
-    );
+    ],
+  })(context);
+}
+function evaluate(
+  value: string | string[],
+  operator: ContextFilterOperator,
+  values: string[],
+) {
+  return evaluateFilter(
+    { type: "context", field: "value", operator, values },
+    { value },
+  ).value;
+}
 
-    expect(res).toEqual({
-      value: true,
-      context: {
-        "company.id": "company1",
-      },
-      flagKey: "flag",
-      missingContextFields: [],
-      reason: "rule #0 matched",
-      ruleEvaluationResults: [true],
-    });
-  });
-
-  describe("SET and NOT_SET operators", () => {
-    it("should handle `SET` operator with missing field value", () => {
-      const res = evaluateFlagRules({
-        flagKey: "test_flag",
-        rules: [
-          {
-            value: true,
-            filter: {
-              type: "context",
-              field: "user.name",
-              operator: "SET",
-              values: [],
-            },
-          },
-        ],
-        context: {},
-      });
-
-      expect(res).toEqual({
-        flagKey: "test_flag",
-        value: undefined,
-        context: {},
-        ruleEvaluationResults: [false],
-        reason: "no matched rules",
-        missingContextFields: [],
-      });
-    });
-
-    it("should handle `NOT_SET` operator with missing field value", () => {
-      const res = evaluateFlagRules({
-        flagKey: "test_flag",
-        rules: [
-          {
-            value: true,
-            filter: {
-              type: "context",
-              field: "user.name",
-              operator: "NOT_SET",
-              values: [],
-            },
-          },
-        ],
-        context: {},
-      });
-
-      expect(res).toEqual({
-        flagKey: "test_flag",
-        value: true,
-        context: {},
-        ruleEvaluationResults: [true],
-        reason: "rule #0 matched",
-        missingContextFields: [],
-      });
-    });
-
-    it("should handle `SET` operator with empty string field value", () => {
-      const res = evaluateFlagRules({
-        flagKey: "test_flag",
-        rules: [
-          {
-            value: true,
-            filter: {
-              type: "context",
-              field: "user.name",
-              operator: "SET",
-              values: [],
-            },
-          },
-        ],
-        context: {
-          user: {
-            name: "",
-          },
-        },
-      });
-
-      expect(res).toEqual({
-        flagKey: "test_flag",
-        value: undefined,
-        context: {
-          "user.name": "",
-        },
-        ruleEvaluationResults: [false],
-        reason: "no matched rules",
-        missingContextFields: [],
-      });
-    });
-
-    it("should handle `NOT_SET` operator with empty string field value", () => {
-      const res = evaluateFlagRules({
-        flagKey: "test_flag",
-        rules: [
-          {
-            value: true,
-            filter: {
-              type: "context",
-              field: "user.name",
-              operator: "NOT_SET",
-              values: [],
-            },
-          },
-        ],
-        context: {
-          user: {
-            name: "",
-          },
-        },
-      });
-
-      expect(res).toEqual({
-        flagKey: "test_flag",
-        value: true,
-        context: {
-          "user.name": "",
-        },
-        ruleEvaluationResults: [true],
-        reason: "rule #0 matched",
-        missingContextFields: [],
-      });
-    });
-  });
-
-  it.each([
-    {
-      context: { "company.id": "company1" },
-      expected: true,
-    },
-    {
-      context: { "company.id": "company2" },
-      expected: true,
-    },
-    {
-      context: { "company.id": "company3" },
-      expected: false,
-    },
-  ])(
-    "%#: evaluates optimized rule evaluations correctly",
-    async ({ context, expected }) => {
-      const evaluator = newEvaluator([
-        {
-          value: true,
-          filter: {
-            type: "group",
-            operator: "and",
-            filters: [
-              {
-                type: "context",
-                field: "company.id",
-                operator: "ANY_OF",
-                values: ["company1", "company2"],
-              },
-            ],
-          },
-        },
-      ]);
-
-      const res = evaluator(context, "flag-1");
-      expect(res.value ?? false).toEqual(expected);
-    },
-  );
-
-  describe("array-valued context", () => {
-    it("evaluates ANY_OF using array intersection", () => {
-      const res = evaluateFlagRules({
-        flagKey: "role-based-flag",
-        rules: [
-          {
-            value: true,
-            filter: {
-              type: "context",
-              field: "user.roles",
-              operator: "ANY_OF",
-              values: ["admin", "owner"],
-            },
-          },
-        ],
-        context: {
-          user: { roles: ["viewer", "admin"] },
-        },
-      });
-
-      expect(res).toEqual({
-        flagKey: "role-based-flag",
-        value: true,
-        context: { "user.roles": ["viewer", "admin"] },
-        ruleEvaluationResults: [true],
-        reason: "rule #0 matched",
-        missingContextFields: [],
-      });
-    });
-
-    describe.each(["CONTAINS", "NOT_CONTAINS"] as const)(
-      "%s normalization",
-      (operator) => {
-        it.each(["admin", "2", "true", "", '{"level":3}', "[false]"])(
-          "matches normalized element %j without diagnostics",
-          (value) => {
-            const rules: Rule<string>[] = [
-              {
-                value: "matched",
-                filter: {
-                  type: "context",
-                  field: "user.roles",
-                  operator,
-                  values: [value],
-                },
-              },
-            ];
-            const context = {
-              user: { roles: ["admin", 2, true, null, { level: 3 }, [false]] },
-            };
-            const expected = operator === "CONTAINS";
-            for (const result of [
-              evaluateFlagRules({ flagKey: "array", rules, context }),
-              newEvaluator(rules)(context, "array"),
-            ]) {
-              expect(result.value).toBe(expected ? "matched" : undefined);
-              expect(result.ruleEvaluationResults).toEqual([expected]);
-              expect(result.errors).toBeUndefined();
-              expect(result.missingContextFields).toEqual([]);
-            }
-          },
-        );
-      },
-    );
-
-    it.each(["CONTAINS", "NOT_CONTAINS"] as const)(
-      "allows negation of array %s without treating it as an error",
-      (operator) => {
-        const result = evaluateFlagRules({
-          flagKey: "negated-membership",
-          rules: [
-            {
-              value: true,
-              filter: {
-                type: "negation",
-                filter: {
-                  type: "context",
-                  field: "user.roles",
-                  operator,
-                  values: ["admin"],
-                },
-              },
-            },
-          ],
-          context: { user: { roles: ["admin"] } },
-        });
-        expect(result.ruleEvaluationResults).toEqual([
-          operator === "NOT_CONTAINS",
-        ]);
-        expect(result.errors).toBeUndefined();
-      },
-    );
-
-    describe.each(["IS", "IS_NOT"] as const)(
-      "%s singleton arrays",
-      (operator) => {
-        it.each([
-          { entries: [2], candidate: "2", equal: true },
-          { entries: [true], candidate: "true", equal: true },
-          { entries: [null], candidate: "", equal: true },
-          { entries: [{ level: 3 }], candidate: '{"level":3}', equal: true },
-          { entries: [[false]], candidate: "[false]", equal: true },
-          { entries: [2, 2], candidate: "2", equal: false },
-          { entries: [], candidate: "2", equal: false },
-        ])(
-          "evaluates $entries against $candidate without errors",
-          ({ entries, candidate, equal }) => {
-            const rules: Rule<boolean>[] = [
-              {
-                value: true,
-                filter: {
-                  type: "context",
-                  field: "user.roles",
-                  operator,
-                  values: [candidate],
-                },
-              },
-            ];
-            const context = { user: { roles: entries } };
-            for (const result of [
-              evaluateFlagRules({ flagKey: "singleton", rules, context }),
-              newEvaluator(rules)(context, "singleton"),
-            ]) {
-              expect(result.ruleEvaluationResults).toEqual([
-                operator === "IS" ? equal : !equal,
-              ]);
-              expect(result.errors).toBeUndefined();
-            }
-          },
-        );
-
-        it("fails closed for missing fields, even under negation", () => {
-          const result = evaluateFlagRules({
-            flagKey: "missing",
-            rules: [
-              {
-                value: true,
-                filter: {
-                  type: "negation",
-                  filter: {
-                    type: "context",
-                    field: "user.roles",
-                    operator,
-                    values: ["admin"],
-                  },
-                },
-              },
-            ],
-            context: { user: {} },
-          });
-          expect(result.ruleEvaluationResults).toEqual([false]);
-          expect(result.missingContextFields).toEqual(["user.roles"]);
-          expect(result.errors?.[0].code).toBe("MISSING_CONTEXT_FIELD");
-        });
-      },
-    );
-
-    it("keeps JSON-looking strings scalar", () => {
-      const evaluator = newEvaluator([
-        {
-          value: "matched",
-          filter: {
-            type: "context",
-            field: "user.roles",
-            operator: "ANY_OF",
-            values: ['["viewer","admin"]'],
-          },
-        },
-      ]);
-
-      expect(
-        evaluator({ user: { roles: '["viewer","admin"]' } }, "scalar").value,
-      ).toBe("matched");
-    });
-
-    it("does not apply percentage rollout to arrays", () => {
-      const res = evaluateFlagRules({
-        flagKey: "rollout",
-        rules: [
-          {
-            value: true,
-            filter: {
-              type: "rolloutPercentage",
-              key: "rollout",
-              partialRolloutAttribute: "user.ids",
-              partialRolloutThreshold: 100000,
-            },
-          },
-        ],
-        context: { user: { ids: ["u1"] } },
-      });
-
-      expect(res.value).toBeUndefined();
-      expect(res.missingContextFields).toEqual([]);
-      expect(res.errors).toEqual([
-        {
-          code: "UNSUPPORTED_ARRAY_OPERATOR",
-          field: "user.ids",
-          operator: "rolloutPercentage",
-          message:
-            'Percentage rollout does not support array-valued context field "user.ids".',
-        },
-      ]);
-    });
-
-    it("returns a non-fatal diagnostic for scalar-only operators", () => {
-      const res = evaluateFlagRules({
-        flagKey: "role-based-flag",
-        rules: [
-          {
-            value: true,
-            filter: {
-              type: "context",
-              field: "user.roles",
-              operator: "GT",
-              values: ["admin"],
-            },
-          },
-        ],
-        context: { user: { roles: ["admin"] } },
-      });
-
-      expect(res.value).toBeUndefined();
-      expect(res.ruleEvaluationResults).toEqual([false]);
-      expect(res.errors).toEqual([
-        {
-          code: "UNSUPPORTED_ARRAY_OPERATOR",
-          field: "user.roles",
-          operator: "GT",
-          message:
-            'Operator GT does not support array-valued context field "user.roles".',
-        },
-      ]);
-    });
-
-    it("fails the top-level rule when a nested condition produces an error", () => {
-      const res = evaluateFlagRules({
-        flagKey: "invalid-rules",
-        rules: [
-          {
-            value: "negated-array",
-            filter: {
-              type: "negation",
-              filter: {
-                type: "context",
-                field: "user.roles",
-                operator: "GT",
-                values: ["admin"],
-              },
-            },
-          },
-          {
-            value: "negated-missing",
-            filter: {
-              type: "negation",
-              filter: {
-                type: "context",
-                field: "user.plan",
-                operator: "IS",
-                values: ["pro"],
-              },
-            },
-          },
-          {
-            value: "matching-or",
-            filter: {
-              type: "group",
-              operator: "or",
-              filters: [
-                {
-                  type: "context",
-                  field: "user.teams",
-                  operator: "GT",
-                  values: ["platform"],
-                },
-                { type: "constant", value: true },
-              ],
-            },
-          },
-        ],
-        context: {
-          user: { roles: ["admin"], teams: ["platform"] },
-        },
-      });
-
-      expect(res.value).toBeUndefined();
-      expect(res.ruleEvaluationResults).toEqual([false, false, false]);
-      expect(res.errors?.map(({ code, field }) => ({ code, field }))).toEqual([
-        { code: "UNSUPPORTED_ARRAY_OPERATOR", field: "user.roles" },
-        { code: "MISSING_CONTEXT_FIELD", field: "user.plan" },
-        { code: "UNSUPPORTED_ARRAY_OPERATOR", field: "user.teams" },
-      ]);
-    });
-
-    it("does not report errors for short-circuited conditions", () => {
-      const res = evaluateFlagRules({
-        flagKey: "conditional-context",
-        rules: [
-          {
-            value: "admin",
-            filter: {
-              type: "group",
-              operator: "and",
-              filters: [
-                {
-                  type: "context",
-                  field: "user.role",
-                  operator: "SET",
-                },
-                {
-                  type: "context",
-                  field: "user.role",
-                  operator: "IS",
-                  values: ["admin"],
-                },
-              ],
-            },
-          },
-          {
-            value: "fallback",
-            filter: {
-              type: "group",
-              operator: "or",
-              filters: [
-                { type: "constant", value: true },
-                {
-                  type: "context",
-                  field: "user.department",
-                  operator: "IS",
-                  values: ["engineering"],
-                },
-              ],
-            },
-          },
-        ],
-        context: { user: {} },
-      });
-
-      expect(res.value).toBe("fallback");
-      expect(res.ruleEvaluationResults).toEqual([false, true]);
-      expect(res.errors).toBeUndefined();
-      expect(res.missingContextFields).toEqual([]);
-    });
-
-    it("does not report an array leaf as missing", () => {
-      const res = evaluateFlagRules({
-        flagKey: "role-based-flag",
-        rules: [
-          {
-            value: true,
-            filter: {
-              type: "context",
-              field: "user.roles",
-              operator: "ANY_OF",
-              values: ["owner"],
-            },
-          },
-        ],
-        context: { user: { roles: [] } },
-      });
-
-      expect(res.context).toEqual({ "user.roles": [] });
-      expect(res.missingContextFields).toEqual([]);
-      expect(res.value).toBeUndefined();
-    });
-  });
-
-  describe("DATE_AFTER and DATE_BEFORE in flag rules", () => {
-    it("should evaluate DATE_AFTER operator in flag rules", () => {
-      const res = evaluateFlagRules({
-        flagKey: "time_based_flag",
-        rules: [
-          {
-            value: "enabled",
-            filter: {
-              type: "context",
-              field: "user.createdAt",
-              operator: "DATE_AFTER",
-              values: ["2024-01-01"],
-            },
-          },
-        ],
-        context: {
-          user: {
-            createdAt: "2024-06-15",
-          },
-        },
-      });
-
-      expect(res).toEqual({
-        flagKey: "time_based_flag",
-        value: "enabled",
-        context: {
-          "user.createdAt": "2024-06-15",
-        },
-        ruleEvaluationResults: [true],
-        reason: "rule #0 matched",
-        missingContextFields: [],
-      });
-    });
-
-    it("should evaluate DATE_BEFORE operator in flag rules", () => {
-      const res = evaluateFlagRules({
-        flagKey: "legacy_flag",
-        rules: [
-          {
-            value: "enabled",
-            filter: {
-              type: "context",
-              field: "user.lastLogin",
-              operator: "DATE_BEFORE",
-              values: ["2024-12-31"],
-            },
-          },
-        ],
-        context: {
-          user: {
-            lastLogin: "2024-01-15",
-          },
-        },
-      });
-
-      expect(res).toEqual({
-        flagKey: "legacy_flag",
-        value: "enabled",
-        context: {
-          "user.lastLogin": "2024-01-15",
-        },
-        ruleEvaluationResults: [true],
-        reason: "rule #0 matched",
-        missingContextFields: [],
-      });
-    });
-
-    it("should handle complex rules with DATE_AFTER and DATE_BEFORE in groups", () => {
-      const res = evaluateFlagRules({
-        flagKey: "time_window_flag",
-        rules: [
-          {
-            value: "active",
-            filter: {
-              type: "group",
-              operator: "and",
-              filters: [
-                {
-                  type: "context",
-                  field: "event.startDate",
-                  operator: "DATE_AFTER",
-                  values: ["2024-01-01"],
-                },
-                {
-                  type: "context",
-                  field: "event.endDate",
-                  operator: "DATE_BEFORE",
-                  values: ["2024-12-31"],
-                },
-              ],
-            },
-          },
-        ],
-        context: {
-          event: {
-            startDate: "2024-06-01",
-            endDate: "2024-11-30",
-          },
-        },
-      });
-
-      expect(res).toEqual({
-        flagKey: "time_window_flag",
-        value: "active",
-        context: {
-          "event.startDate": "2024-06-01",
-          "event.endDate": "2024-11-30",
-        },
-        ruleEvaluationResults: [true],
-        reason: "rule #0 matched",
-        missingContextFields: [],
-      });
-    });
-
-    it("should fail when DATE_AFTER condition is not met", () => {
-      const res = evaluateFlagRules({
-        flagKey: "future_flag",
-        rules: [
-          {
-            value: "enabled",
-            filter: {
-              type: "context",
-              field: "user.signupDate",
-              operator: "DATE_AFTER",
-              values: ["2024-12-01"],
-            },
-          },
-        ],
-        context: {
-          user: {
-            signupDate: "2024-01-15", // Too early
-          },
-        },
-      });
-
-      expect(res).toEqual({
-        flagKey: "future_flag",
-        value: undefined,
-        context: {
-          "user.signupDate": "2024-01-15",
-        },
-        ruleEvaluationResults: [false],
-        reason: "no matched rules",
-        missingContextFields: [],
-      });
-    });
-
-    it("should fail when DATE_BEFORE condition is not met", () => {
-      const res = evaluateFlagRules({
-        flagKey: "past_flag",
-        rules: [
-          {
-            value: "enabled",
-            filter: {
-              type: "context",
-              field: "user.lastActivity",
-              operator: "DATE_BEFORE",
-              values: ["2024-01-01"],
-            },
-          },
-        ],
-        context: {
-          user: {
-            lastActivity: "2024-06-15", // Too late
-          },
-        },
-      });
-
-      expect(res).toEqual({
-        flagKey: "past_flag",
-        value: undefined,
-        context: {
-          "user.lastActivity": "2024-06-15",
-        },
-        ruleEvaluationResults: [false],
-        reason: "no matched rules",
-        missingContextFields: [],
-      });
-    });
-
-    it("should work with optimized evaluator", () => {
-      const evaluator = newEvaluator([
-        {
-          value: "time_sensitive",
-          filter: {
-            type: "group",
-            operator: "and",
-            filters: [
-              {
-                type: "context",
-                field: "user.subscriptionDate",
-                operator: "DATE_AFTER",
-                values: ["2024-01-01"],
-              },
-              {
-                type: "context",
-                field: "user.trialEndDate",
-                operator: "DATE_BEFORE",
-                values: ["2024-12-31"],
-              },
-            ],
-          },
-        },
-      ]);
-
-      const res = evaluator(
-        {
-          user: {
-            subscriptionDate: "2024-03-15",
-            trialEndDate: "2024-09-30",
-          },
-        },
-        "subscription_flag",
-      );
-
-      expect(res).toEqual({
-        flagKey: "subscription_flag",
-        value: "time_sensitive",
-        context: {
-          "user.subscriptionDate": "2024-03-15",
-          "user.trialEndDate": "2024-09-30",
-        },
-        ruleEvaluationResults: [true],
-        reason: "rule #0 matched",
-        missingContextFields: [],
-      });
-    });
-  });
-});
-
-describe("operator evaluation", () => {
+describe("operator evaluation through the v2 API", () => {
   beforeAll(() => {
     vi.useFakeTimers().setSystemTime(new Date("2024-01-10"));
   });
-
   afterAll(() => {
     vi.useRealTimers();
   });
-
-  const tests = [
+  it.each([
     ["value", "IS", "value", true],
-    ["value", "IS", "wrong value", false],
+    ["value", "IS", "wrong", false],
     ["value", "IS_NOT", "value", false],
-    ["value", "IS_NOT", "wrong value", true],
-
+    ["value", "IS_NOT", "wrong", true],
     ["value", "ANY_OF", "value", true],
     ["value", "ANY_OF", "nope", false],
     ["value", "NOT_ANY_OF", "value", false],
     ["value", "NOT_ANY_OF", "nope", true],
-
     ["value", "IS_TRUE", "", false],
+    ["true", "IS_TRUE", "", true],
     ["value", "IS_FALSE", "", false],
-
+    ["false", "IS_FALSE", "", true],
     ["value", "SET", "", true],
     ["", "SET", "", false],
     ["value", "NOT_SET", "", false],
     ["", "NOT_SET", "", true],
-
-    // non numeric values should return false
     ["value", "GT", "value", false],
     ["value", "GT", "0", false],
     ["1", "GT", "0", true],
     ["2", "GT", "10", false],
     ["10", "GT", "2", true],
-
     ["value", "LT", "value", false],
     ["value", "LT", "0", false],
     ["0", "LT", "1", true],
     ["2", "LT", "10", true],
     ["10", "LT", "2", false],
-
     ["start VALUE end", "CONTAINS", "value", true],
     ["alue", "CONTAINS", "value", false],
     ["start VALUE end", "NOT_CONTAINS", "value", false],
     ["alue", "NOT_CONTAINS", "value", true],
-
-    // today is 2024-01-10
-    // 2024-01-10 - 5 days = 2024-01-05
-    ["2024-01-15", "BEFORE", "5", false], // 2024-01-15 is before 2024-01-05 = false
-    ["2024-01-15", "AFTER", "5", true], // 2024-01-15 is after  2024-01-05 = true
-    ["2024-01-01", "BEFORE", "5", true], // 2024-01-01 is before 2024-01-05 = true
-    ["2024-01-01", "AFTER", "5", false], // 2024-01-01 is after 2024-01-05 = false
-  ] as const;
-
-  for (const [value, op, filterValue, expected] of tests) {
-    it(`evaluates '${value}' ${op} 2024-01-10 minus ${filterValue} days = ${expected}`, () => {
-      const res = evaluate(value, op, [filterValue]);
-      expect(res).toEqual(expected);
-    });
-  }
-
-  it.each(["CONTAINS", "NOT_CONTAINS"] as const)(
-    "returns false for %s without comparison values",
-    (operator) => {
-      expect(evaluate("value", operator, [])).toBe(false);
-      expect(evaluate(["value"], operator, [])).toBe(false);
-      expect(evaluate([], operator, [])).toBe(false);
-    },
-  );
+    ["2024-01-15", "BEFORE", "5", false],
+    ["2024-01-15", "AFTER", "5", true],
+    ["2024-01-01", "BEFORE", "5", true],
+    ["2024-01-01", "AFTER", "5", false],
+    ["2024-01-15", "DATE_AFTER", "2024-01-10", true],
+    ["2024-01-10", "DATE_AFTER", "2024-01-10", true],
+    ["2024-01-05", "DATE_AFTER", "2024-01-10", false],
+    ["2024-12-31", "DATE_AFTER", "2024-01-01", true],
+    ["2023-01-01", "DATE_AFTER", "2024-01-01", false],
+    ["2024-01-05", "DATE_BEFORE", "2024-01-10", true],
+    ["2024-01-10", "DATE_BEFORE", "2024-01-10", true],
+    ["2024-01-15", "DATE_BEFORE", "2024-01-10", false],
+    ["2023-01-01", "DATE_BEFORE", "2024-01-01", true],
+    ["2024-12-31", "DATE_BEFORE", "2024-01-01", false],
+    ["2024-01-10T10:30:00Z", "DATE_AFTER", "2024-01-10T10:00:00Z", true],
+    ["2024-01-10T09:30:00Z", "DATE_BEFORE", "2024-01-10T10:00:00Z", true],
+    [
+      "2024-01-10T10:30:00.123Z",
+      "DATE_AFTER",
+      "2024-01-10T10:00:00.000Z",
+      true,
+    ],
+    [
+      "2024-01-10T09:30:00.123Z",
+      "DATE_BEFORE",
+      "2024-01-10T10:00:00.000Z",
+      true,
+    ],
+    ["01/15/2024", "DATE_AFTER", "01/10/2024", true],
+    ["01/05/2024", "DATE_BEFORE", "01/10/2024", true],
+  ] as const)("%s %s %s = %s", (value, operator, comparison, expected) => {
+    expect(evaluate(value, operator, [comparison])).toBe(expected);
+  });
 
   it.each([
     [["a"], "IS", ["a"], true],
@@ -1236,11 +155,71 @@ describe("operator evaluation", () => {
     ["[1,true]", "ANY_OF", ["true"], false],
     ["[1,true]", "ANY_OF", ["[1,true]"], true],
   ] as const)(
-    "evaluates array semantics for %j %s %j",
-    (fieldValue, operator, values, expected) => {
-      expect(
-        evaluate(fieldValue as string | string[], operator, [...values]),
-      ).toBe(expected);
+    "array semantics: %j %s %j",
+    (value, operator, values, expected) => {
+      expect(evaluate(value as string | string[], operator, [...values])).toBe(
+        expected,
+      );
+    },
+  );
+
+  it.each(["CONTAINS", "NOT_CONTAINS"] as const)(
+    "%s without values remains false",
+    (operator) => {
+      for (const value of ["value", ["value"], []])
+        expect(evaluate(value, operator, [])).toBe(false);
+    },
+  );
+});
+
+describe("invalid conditions", () => {
+  it.each([
+    "GT",
+    "LT",
+    "AFTER",
+    "BEFORE",
+    "DATE_AFTER",
+    "DATE_BEFORE",
+  ] as const)(
+    "%s reports invalid operands, even under negation/OR, without logging values",
+    (operator) => {
+      const log = vi.spyOn(console, "error");
+      try {
+        for (const [fieldValue, values] of [
+          ["sensitive-invalid-value", ["1"]],
+          ["2024-01-01", ["sensitive-invalid-value"]],
+          ["Infinity", ["1"]],
+          ["1", []],
+        ] as const) {
+          const filter: RuleFilter = {
+            type: "context",
+            field: "value",
+            operator,
+            values: [...values],
+          };
+          for (const wrapper of [
+            filter,
+            { type: "negation", filter } as const,
+            {
+              type: "group",
+              operator: "or",
+              filters: [filter, { type: "constant", value: true }],
+            } as RuleFilter,
+          ]) {
+            const result = evaluateFilter(wrapper, { value: fieldValue });
+            expect(result.value).toBe(false);
+            expect(result.errors).toMatchObject([
+              { code: "INVALID_COMPARISON", field: "value", operator },
+            ]);
+            expect(JSON.stringify(result.errors)).not.toContain(
+              "sensitive-invalid-value",
+            );
+          }
+        }
+        expect(log).not.toHaveBeenCalled();
+      } finally {
+        log.mockRestore();
+      }
     },
   );
 
@@ -1253,72 +232,113 @@ describe("operator evaluation", () => {
     "DATE_BEFORE",
     "IS_TRUE",
     "IS_FALSE",
-  ] as const)("does not apply scalar operator %s to arrays", (operator) => {
-    expect(evaluate(["a"], operator, ["a"])).toBe(false);
+  ] as const)(
+    "%s never matches an array, including under negation",
+    (operator) => {
+      const filter: RuleFilter = {
+        type: "context",
+        field: "value",
+        operator,
+        values: ["a"],
+      };
+      for (const wrapper of [filter, { type: "negation", filter } as const]) {
+        const result = evaluateFilter(wrapper, { value: ["a"] });
+        expect(result.value).toBe(false);
+        expect(result.errors).toMatchObject([
+          { code: "UNSUPPORTED_ARRAY_OPERATOR", field: "value", operator },
+        ]);
+      }
+    },
+  );
+
+  it("fails repeated invalid rules even when the error is already recorded", () => {
+    const filter: RuleFilter = {
+      type: "negation",
+      filter: {
+        type: "context",
+        field: "missing",
+        operator: "IS",
+        values: ["x"],
+      },
+    };
+    const result = newEvaluator({
+      key: "test",
+      sourceVersionId: "v1",
+      variants: { yes: true, no: false },
+      rules: [
+        { id: "one", filter, result: { type: "variant", variantKey: "yes" } },
+        { id: "two", filter, result: { type: "variant", variantKey: "yes" } },
+        {
+          id: "default",
+          filter: { type: "constant", value: true },
+          result: { type: "variant", variantKey: "no" },
+        },
+      ],
+    })({});
+    expect(result.value).toBe(false);
+    expect(result.errors).toHaveLength(1);
+    expect(result.ruleResults.map(({ matched }) => matched)).toEqual([
+      false,
+      false,
+      true,
+    ]);
   });
 
-  describe("DATE_AFTER and DATE_BEFORE operators", () => {
-    const dateTests = [
-      // DATE_AFTER tests
-      ["2024-01-15", "DATE_AFTER", "2024-01-10", true], // After
-      ["2024-01-10", "DATE_AFTER", "2024-01-10", true], // Same date (>=)
-      ["2024-01-05", "DATE_AFTER", "2024-01-10", false], // Before
-      ["2024-12-31", "DATE_AFTER", "2024-01-01", true], // Much later
-      ["2023-01-01", "DATE_AFTER", "2024-01-01", false], // Much earlier
+  it("does not report errors for short-circuited filter branches", () => {
+    const result = evaluateFilter(
+      {
+        type: "group",
+        operator: "or",
+        filters: [
+          { type: "constant", value: true },
+          {
+            type: "context",
+            field: "missing",
+            operator: "GT",
+            values: ["bad"],
+          },
+        ],
+      },
+      {},
+    );
+    expect(result.value).toBe(true);
+    expect(result.errors).toEqual([]);
+  });
 
-      // DATE_BEFORE tests
-      ["2024-01-05", "DATE_BEFORE", "2024-01-10", true], // Before
-      ["2024-01-10", "DATE_BEFORE", "2024-01-10", true], // Same date (<=)
-      ["2024-01-15", "DATE_BEFORE", "2024-01-10", false], // After
-      ["2023-01-01", "DATE_BEFORE", "2024-01-01", true], // Much earlier
-      ["2024-12-31", "DATE_BEFORE", "2024-01-01", false], // Much later
+  it.each(["SET", "NOT_SET"] as const)(
+    "allows %s on missing fields",
+    (operator) => {
+      const result = evaluateFilter(
+        { type: "context", field: "missing", operator },
+        {},
+      );
+      expect(result.errors).toEqual([]);
+      expect(result.value).toBe(operator === "NOT_SET");
+    },
+  );
 
-      // Edge cases with different date formats
-      ["2024-01-10T10:30:00Z", "DATE_AFTER", "2024-01-10T10:00:00Z", true], // ISO format with time
-      ["2024-01-10T09:30:00Z", "DATE_BEFORE", "2024-01-10T10:00:00Z", true], // ISO format with time
-      [
-        "2024-01-10T10:30:00.123Z",
-        "DATE_AFTER",
-        "2024-01-10T10:00:00.000Z",
-        true,
-      ], // ISO format with time and milliseconds
-      [
-        "2024-01-10T09:30:00.123Z",
-        "DATE_BEFORE",
-        "2024-01-10T10:00:00.000Z",
-        true,
-      ], // ISO format with time and milliseconds
-      ["01/15/2024", "DATE_AFTER", "01/10/2024", true], // US format
-      ["01/05/2024", "DATE_BEFORE", "01/10/2024", true], // US format
-    ] as const;
-
-    for (const [fieldValue, operator, filterValue, expected] of dateTests) {
-      it(`evaluates '${fieldValue}' ${operator} '${filterValue}' = ${expected}`, () => {
-        const res = evaluate(fieldValue, operator, [filterValue]);
-        expect(res).toEqual(expected);
-      });
-    }
-
-    it("handles invalid date formats gracefully", () => {
-      // Invalid dates should result in NaN comparisons and return false
-      expect(evaluate("invalid-date", "DATE_AFTER", ["2024-01-10"])).toBe(
-        false,
-      );
-      expect(evaluate("2024-01-10", "DATE_AFTER", ["invalid-date"])).toBe(
-        false,
-      );
-      expect(evaluate("invalid-date", "DATE_BEFORE", ["2024-01-10"])).toBe(
-        false,
-      );
-      expect(evaluate("2024-01-10", "DATE_BEFORE", ["invalid-date"])).toBe(
-        false,
-      );
-    });
+  it("rejects array-valued legacy rollout context even under negation", () => {
+    const result = evaluateFilter(
+      {
+        type: "negation",
+        filter: {
+          type: "rolloutPercentage",
+          key: "key",
+          partialRolloutAttribute: "company.id",
+          partialRolloutThreshold: 50000,
+        },
+      },
+      { company: { id: ["a", "b"] } },
+    );
+    expect(result.value).toBe(false);
+    expect(result.errors).toMatchObject([
+      { code: "UNSUPPORTED_ARRAY_OPERATOR", operator: "rolloutPercentage" },
+    ]);
   });
 });
 
-describe("rollout hash", () => {
-  const tests = [
+describe("stable rollout hash", () => {
+  it.each([
     ["EEuoT8KShb", 38026],
     ["h7BOkvks5W", 81440],
     ["IZeSn3LCfJ", 80149],
@@ -1369,59 +389,39 @@ describe("rollout hash", () => {
     ["0WEJv16LYd", 94865],
     ["dxV85hJ5t3", 96945],
     ["00d1uypkKy", 38988],
-  ] as const;
-
-  for (const [input, expected] of tests) {
-    it(`evaluates '${input}' = ${expected}`, () => {
-      const res = hashInt(input);
-      expect(res).toEqual(expected);
-    });
-  }
+  ] as const)("%s → %i", (input, expected) => {
+    expect(hashInt(input)).toBe(expected);
+  });
 });
 
 describe("flattenContext", () => {
-  it("preserves arrays as normalized leaf values", () => {
+  it("preserves arrays and normalizes primitive and composite entries", () => {
     expect(
       flattenContext({
         user: {
-          id: "u1",
           roles: ["admin", "editor"],
           levels: [1, 2],
           states: [true, false],
           nullable: [null],
+          mixed: [{ role: "admin" }, [1, true]],
         },
       }),
     ).toEqual({
-      "user.id": "u1",
       "user.roles": ["admin", "editor"],
       "user.levels": ["1", "2"],
       "user.states": ["true", "false"],
       "user.nullable": [""],
+      "user.mixed": ['{"role":"admin"}', "[1,true]"],
     });
   });
-
-  it("stores dangerous root keys without mutating the accumulator prototype", () => {
+  it("uses a null prototype for dangerous context keys", () => {
     const flattened = flattenContext(
       JSON.parse('{"__proto__":["safe"],"constructor":"value"}'),
     );
-
     expect(Object.getPrototypeOf(flattened)).toBeNull();
     expect(flattened["__proto__"]).toEqual(["safe"]);
     expect(flattened.constructor).toBe("value");
   });
-
-  it("JSON-encodes composite array elements without traversing them", () => {
-    expect(
-      flattenContext({
-        other: {
-          values: [{ role: "admin" }, [1, true]],
-        },
-      }),
-    ).toEqual({
-      "other.values": ['{"role":"admin"}', "[1,true]"],
-    });
-  });
-
   it("preserves nested scalar and empty-value behavior", () => {
     expect(
       flattenContext({
@@ -1430,6 +430,7 @@ describe("flattenContext", () => {
           emptyObject: {},
           emptyArray: [],
           nil: null,
+          omitted: undefined,
         },
       }),
     ).toEqual({
@@ -1438,418 +439,6 @@ describe("flattenContext", () => {
       "user.emptyArray": [],
       "user.nil": "",
     });
-  });
-});
-
-describe("flattenJSON", () => {
-  it("should handle an empty object correctly", () => {
-    const input = {};
-    const output = flattenJSON(input);
-
-    expect(output).toEqual({});
-  });
-
-  it("should flatten a simple object", () => {
-    const input = {
-      a: {
-        b: "value",
-      },
-    };
-
-    const output = flattenJSON(input);
-
-    expect(output).toEqual({
-      "a.b": "value",
-    });
-  });
-
-  it("should flatten nested objects", () => {
-    const input = {
-      a: {
-        b: {
-          c: {
-            d: "value",
-          },
-        },
-      },
-    };
-
-    const output = flattenJSON(input);
-
-    expect(output).toEqual({
-      "a.b.c.d": "value",
-    });
-  });
-
-  it("should handle mixed data types", () => {
-    const input = {
-      a: {
-        b: "string",
-        c: 123,
-        d: true,
-      },
-    };
-
-    const output = flattenJSON(input);
-
-    expect(output).toEqual({
-      "a.b": "string",
-      "a.c": "123",
-      "a.d": "true",
-    });
-  });
-
-  it("should flatten arrays", () => {
-    const input = {
-      a: ["value1", "value2", "value3"],
-    };
-
-    const output = flattenJSON(input);
-
-    expect(output).toEqual({
-      "a.0": "value1",
-      "a.1": "value2",
-      "a.2": "value3",
-    });
-  });
-
-  it("should handle empty arrays", () => {
-    const input = {
-      a: [],
-    };
-
-    const output = flattenJSON(input);
-
-    expect(output).toEqual({
-      a: "",
-    });
-  });
-
-  it("should correctly flatten mixed structures involving arrays and objects", () => {
-    const input = {
-      a: {
-        b: ["value1", { nested: "value2" }, "value3"],
-      },
-    };
-
-    const output = flattenJSON(input);
-
-    expect(output).toEqual({
-      "a.b.0": "value1",
-      "a.b.1.nested": "value2",
-      "a.b.2": "value3",
-    });
-  });
-
-  it("should flatten deeply nested objects", () => {
-    const input = {
-      level1: {
-        level2: {
-          level3: {
-            key: "value",
-            anotherKey: "anotherValue",
-          },
-        },
-        singleKey: "test",
-      },
-    };
-
-    const output = flattenJSON(input);
-
-    expect(output).toEqual({
-      "level1.level2.level3.key": "value",
-      "level1.level2.level3.anotherKey": "anotherValue",
-      "level1.singleKey": "test",
-    });
-  });
-
-  it("should handle objects with empty values", () => {
-    const input = {
-      a: {
-        b: "",
-      },
-    };
-
-    const output = flattenJSON(input);
-
-    expect(output).toEqual({
-      "a.b": "",
-    });
-  });
-
-  it("should handle null values", () => {
-    const input = {
-      a: null,
-      b: {
-        c: null,
-      },
-    };
-
-    const output = flattenJSON(input);
-
-    expect(output).toEqual({
-      a: "",
-      "b.c": "",
-    });
-  });
-
-  it("should skip undefined values", () => {
-    const input = {
-      a: "value",
-      b: undefined,
-      c: {
-        d: undefined,
-        e: "another value",
-      },
-    };
-
-    const output = flattenJSON(input);
-
-    expect(output).toEqual({
-      a: "value",
-      "c.e": "another value",
-    });
-  });
-
-  it("should handle empty nested objects", () => {
-    const input = {
-      a: {},
-      b: {
-        c: {},
-        d: "value",
-      },
-    };
-
-    const output = flattenJSON(input);
-
-    expect(output).toEqual({
-      a: "",
-      "b.c": "",
-      "b.d": "value",
-    });
-  });
-
-  it("should handle top-level primitive values", () => {
-    const input = {
-      a: "simple",
-      b: 42,
-      c: true,
-      d: false,
-    };
-
-    const output = flattenJSON(input);
-
-    expect(output).toEqual({
-      a: "simple",
-      b: "42",
-      c: "true",
-      d: "false",
-    });
-  });
-
-  it("should handle arrays with null and undefined values", () => {
-    const input = {
-      a: ["value1", null, undefined, "value4"],
-    };
-
-    const output = flattenJSON(input);
-
-    expect(output).toEqual({
-      "a.0": "value1",
-      "a.1": "",
-      "a.3": "value4",
-    });
-  });
-
-  it("should handle deeply nested empty structures", () => {
-    const input = {
-      a: {
-        b: {
-          c: {},
-          d: [],
-        },
-      },
-    };
-
-    const output = flattenJSON(input);
-
-    expect(output).toEqual({
-      "a.b.c": "",
-      "a.b.d": "",
-    });
-  });
-
-  it("should handle keys with special characters", () => {
-    const input = {
-      "key.with.dots": "value1",
-      "key-with-dashes": "value2",
-      "key with spaces": "value3",
-    };
-
-    const output = flattenJSON(input);
-
-    expect(output).toEqual({
-      "key.with.dots": "value1",
-      "key-with-dashes": "value2",
-      "key with spaces": "value3",
-    });
-  });
-
-  it("should handle edge case numbers and booleans", () => {
-    const input = {
-      zero: 0,
-      negativeNumber: -42,
-      float: 3.14,
-      infinity: Infinity,
-      negativeInfinity: -Infinity,
-      nan: NaN,
-      falseValue: false,
-    };
-
-    const output = flattenJSON(input);
-
-    expect(output).toEqual({
-      zero: "0",
-      negativeNumber: "-42",
-      float: "3.14",
-      infinity: "Infinity",
-      negativeInfinity: "-Infinity",
-      nan: "NaN",
-      falseValue: "false",
-    });
-  });
-});
-
-describe("unflattenJSON", () => {
-  it("should handle an empty object correctly", () => {
-    const input = {};
-    const output = unflattenJSON(input);
-
-    expect(output).toEqual({});
-  });
-
-  it("should prevent prototype pollution", () => {
-    const unexpectedProperties = [
-      "unexpectedConstructorPathProperty",
-      "unexpectedProtoPathProperty",
-    ];
-
-    for (const property of unexpectedProperties) {
-      delete Object.prototype[property];
-    }
-
-    try {
-      const output = unflattenJSON({
-        "constructor.prototype.unexpectedConstructorPathProperty": "value",
-        "__proto__.unexpectedProtoPathProperty": "value",
-      });
-
-      expect(output).toEqual({});
-      for (const property of unexpectedProperties) {
-        expect(
-          Object.prototype.hasOwnProperty.call(Object.prototype, property),
-        ).toBe(false);
-      }
-    } finally {
-      for (const property of unexpectedProperties) {
-        delete Object.prototype[property];
-      }
-    }
-  });
-
-  it("should convert a flat object with one level deep keys to a nested object", () => {
-    const input = {
-      "a.b.c": "value",
-      "x.y": "anotherValue",
-    };
-
-    const output = unflattenJSON(input);
-
-    expect(output).toEqual({
-      a: {
-        b: { c: "value" },
-      },
-      x: {
-        y: "anotherValue",
-      },
-    });
-  });
-
-  it("should not handle arrays properly", () => {
-    const input = {
-      "arr.0": "first",
-      "arr.1": "second",
-      "arr.2": "third",
-    };
-
-    const output = unflattenJSON(input);
-
-    expect(output).toEqual({
-      arr: {
-        "0": "first",
-        "1": "second",
-        "2": "third",
-      },
-    });
-  });
-
-  it("should handle mixed data types in flat JSON", () => {
-    const input = {
-      "a.b": "string",
-      "a.c": 123,
-      "a.d": true,
-    };
-
-    const output = unflattenJSON(input);
-
-    expect(output).toEqual({
-      a: {
-        b: "string",
-        c: 123,
-        d: true,
-      },
-    });
-  });
-
-  it("should correctly handle scenarios with overlapping keys (ignore)", () => {
-    const input = {
-      "a.b": "value1",
-      "a.b.c": "value2",
-    };
-
-    const output = unflattenJSON(input);
-    expect(output).toEqual({ a: { b: "value1" } });
-  });
-
-  it("should unflatten nested objects correctly", () => {
-    const input = {
-      "level1.level2.level3": "deepValue",
-      "level1.level2.key": 10,
-      "level1.singleKey": "test",
-    };
-
-    const output = unflattenJSON(input);
-
-    expect(output).toEqual({
-      level1: {
-        level2: {
-          level3: "deepValue",
-          key: 10,
-        },
-        singleKey: "test",
-      },
-    });
-  });
-
-  it("should handle a scenario where a key is an empty string", () => {
-    const input = {
-      "": "rootValue",
-    };
-
-    const output = unflattenJSON(input);
-
-    expect(output).toEqual({
-      "": "rootValue",
-    });
+    expect(flattenContext({})).toEqual({});
   });
 });
