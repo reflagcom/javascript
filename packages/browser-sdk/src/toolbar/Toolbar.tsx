@@ -68,7 +68,7 @@ export default function Toolbar({
 
   useEffect(() => {
     updateFlags();
-    reflagClient.on("flagsUpdated", updateFlags);
+    return reflagClient.on("flagsUpdated", updateFlags);
   }, [reflagClient, updateFlags]);
 
   const [search, setSearch] = useState<string | null>(null);
