@@ -734,3 +734,179 @@ export function newEvaluator<T extends RuleValue>(rules: Rule<T>[]) {
     });
   };
 }
+
+export type JsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+
+export type VariantDestination =
+  | { type: "variant"; variantKey: string }
+  | { type: "nextRule" };
+
+export type RuleResult =
+  | { type: "variant"; variantKey: string }
+  | {
+      type: "percentageDistribution";
+      key: string;
+      attribute: string;
+      allocations: Array<{
+        percentage: number;
+        destination: VariantDestination;
+      }>;
+    };
+
+export type CompiledRule = {
+  id: string;
+  filter: RuleFilter;
+  result: RuleResult;
+};
+
+export type CompiledFlag = {
+  key: string;
+  sourceVersionId: string;
+  variants: Record<string, JsonValue>;
+  rules: CompiledRule[];
+};
+
+export type VariantEvaluationError =
+  | EvaluationError
+  | { code: "INVALID_FLAG_DEFINITION"; message: string }
+  | {
+      code: "UNSUPPORTED_ARRAY_OPERATOR";
+      field: string;
+      operator: "percentageDistribution";
+      message: string;
+    };
+
+export type VariantEvaluationResult = {
+  flagKey: string;
+  sourceVersionId: string;
+  value: JsonValue | undefined;
+  variantKey?: string;
+  matchedRuleId?: string;
+  allocationIndex?: number;
+  context: FlattenedContext;
+  ruleResults: Array<{
+    ruleId: string;
+    matched: boolean;
+    allocationIndex?: number;
+    destination?: VariantDestination;
+  }>;
+  errors: VariantEvaluationError[];
+};
+
+/** Evaluate protocol-v2 rules sequentially, stopping at the first selected variant.
+ * Legacy evaluateFlagRules/newEvaluator retain their existing behavior.
+ */
+export function evaluateFlag(
+  flag: CompiledFlag,
+  context: Record<string, unknown>,
+): VariantEvaluationResult {
+  const flatContext = flattenContext(context);
+  const errors = new Map<string, VariantEvaluationError>();
+  const result: VariantEvaluationResult = {
+    flagKey: flag.key,
+    sourceVersionId: flag.sourceVersionId,
+    value: undefined,
+    context: flatContext,
+    ruleResults: [],
+    errors: [],
+  };
+  const finish = () => ({ ...result, errors: Array.from(errors.values()) });
+  const invalid = (message: string) => {
+    errors.set("invalid", { code: "INVALID_FLAG_DEFINITION", message });
+    return finish();
+  };
+
+  for (const rule of flag.rules) {
+    const filterErrors = new Map<string, EvaluationError>();
+    const matched = evaluateRecursively(rule.filter, flatContext, filterErrors);
+    for (const [key, error] of filterErrors) errors.set(key, error);
+    const ruleResult: VariantEvaluationResult["ruleResults"][number] = {
+      ruleId: rule.id,
+      matched: matched && filterErrors.size === 0,
+    };
+    result.ruleResults.push(ruleResult);
+    if (!ruleResult.matched) continue;
+
+    let destination: VariantDestination;
+    if (rule.result.type === "percentageDistribution") {
+      const distribution = rule.result;
+      const units = distribution.allocations.map(({ percentage }) =>
+        Math.round(percentage * 1000),
+      );
+      if (
+        !units.length ||
+        distribution.allocations.some(
+          ({ percentage }, index) =>
+            !Number.isFinite(percentage) ||
+            percentage < 0 ||
+            percentage > 100 ||
+            Math.abs(percentage * 1000 - units[index]) > 1e-8,
+        ) ||
+        units.reduce((total, percentage) => total + percentage, 0) !== 100000
+      ) {
+        return invalid(`Invalid percentage allocations in rule ${rule.id}`);
+      }
+      if (
+        !Object.prototype.hasOwnProperty.call(
+          flatContext,
+          distribution.attribute,
+        )
+      ) {
+        errors.set(`missing:${distribution.attribute}`, {
+          code: "MISSING_CONTEXT_FIELD",
+          field: distribution.attribute,
+          message: `Context field "${distribution.attribute}" is required to evaluate targeting rules.`,
+        });
+        continue;
+      }
+      const attributeValue = flatContext[distribution.attribute];
+      if (Array.isArray(attributeValue)) {
+        errors.set(`array:${distribution.attribute}:percentageDistribution`, {
+          code: "UNSUPPORTED_ARRAY_OPERATOR",
+          field: distribution.attribute,
+          operator: "percentageDistribution",
+          message: `Context field "${distribution.attribute}" must be scalar for percentage distribution.`,
+        });
+        continue;
+      }
+      const bucket = hashInt(`${distribution.key}.${attributeValue}`);
+      let threshold = 0;
+      const allocationIndex = units.findIndex((percentage, index) => {
+        threshold += percentage;
+        // The legacy hash range includes 100000; only this endpoint needs
+        // special treatment, leaving every other company's bucket unchanged.
+        return bucket < threshold || index === units.length - 1;
+      });
+      ruleResult.allocationIndex = allocationIndex;
+      destination = distribution.allocations[allocationIndex].destination;
+    } else {
+      destination = rule.result;
+    }
+    ruleResult.destination = destination;
+    if (destination.type === "nextRule") continue;
+    if (
+      !Object.prototype.hasOwnProperty.call(
+        flag.variants,
+        destination.variantKey,
+      )
+    ) {
+      return invalid(
+        `Unknown variant ${destination.variantKey} in rule ${rule.id}`,
+      );
+    }
+    result.value = flag.variants[destination.variantKey];
+    result.variantKey = destination.variantKey;
+    result.matchedRuleId = rule.id;
+    if (ruleResult.allocationIndex !== undefined) {
+      result.allocationIndex = ruleResult.allocationIndex;
+    }
+    return finish();
+  }
+  return invalid("No rule selected a variant; a catch-all default is required");
+}
