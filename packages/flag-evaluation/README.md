@@ -55,10 +55,9 @@ The hash and `rolloutPercentage` filter remain to preserve boolean cohorts.
 Consumers of the old `/features` protocol must continue using the published 1.x
 package. In this monorepo, the unchanged Node SDK uses the explicitly pinned
 `@reflag/flag-evaluation-v1` npm alias, so Changesets does not advance its evaluator
-dependency to v2. A root Yarn resolution forces the published v1 tarball before
-Changesets bumps this workspace from 1.x to 2.x; otherwise Yarn can transparently
-link the alias back to the workspace. The alias is also
-used as a test/benchmark reference, not as a runtime dependency of evaluator v2.
+dependency to v2. The distinct v2 prerelease version also prevents Yarn workspace
+linking and TypeScript package-identity collisions with v1. The alias is used as a
+test/benchmark reference, not as a runtime dependency of evaluator v2.
 
 ## Performance checks
 
