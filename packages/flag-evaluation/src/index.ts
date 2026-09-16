@@ -599,11 +599,12 @@ function evaluateRecursively(
       return hashVal < filter.partialRolloutThreshold;
     }
     case "group": {
-      const evaluateChild = (child: RuleFilter) =>
-        evaluateRecursively(child, context, errors);
-      return filter.operator === "and"
-        ? filter.filters.every(evaluateChild)
-        : filter.filters.some(evaluateChild);
+      for (const child of filter.filters) {
+        const matched = evaluateRecursively(child, context, errors);
+        if (filter.operator === "and" && !matched) return false;
+        if (filter.operator === "or" && matched) return true;
+      }
+      return filter.operator === "and";
     }
     case "negation":
       return !evaluateRecursively(filter.filter, context, errors);
@@ -691,37 +692,29 @@ export function evaluateFlagRules<T extends RuleValue>({
   };
 }
 
-export function newEvaluator<T extends RuleValue>(rules: Rule<T>[]) {
-  function translateRule(rule: RuleFilter): RuleFilter {
-    if (rule.type === "group") {
-      return {
-        ...rule,
-        filters: rule.filters.map(translateRule),
-      };
-    }
-
-    if (
-      rule.type === "context" &&
-      (rule.operator === "ANY_OF" || rule.operator === "NOT_ANY_OF")
-    ) {
-      return {
-        ...rule,
-        valueSet: new Set(rule.values ?? []),
-      };
-    }
-
-    return { ...rule };
+function prepareFilter(filter: RuleFilter): RuleFilter {
+  if (filter.type === "group") {
+    return { ...filter, filters: filter.filters.map(prepareFilter) };
   }
+  if (filter.type === "negation") {
+    return { ...filter, filter: prepareFilter(filter.filter) };
+  }
+  if (
+    filter.type === "context" &&
+    (filter.operator === "ANY_OF" || filter.operator === "NOT_ANY_OF")
+  ) {
+    // The Set owns the candidate references; don't retain the source array in
+    // the prepared filter as well. Keep an empty array to avoid per-check []s.
+    return { ...filter, values: [], valueSet: new Set(filter.values ?? []) };
+  }
+  return { ...filter };
+}
 
-  const translatedRules = rules.map((rule) => {
-    const { filter } = rule;
-    const translatedFilter = translateRule(filter);
-
-    return {
-      ...rule,
-      filter: translatedFilter,
-    };
-  });
+export function newEvaluator<T extends RuleValue>(rules: Rule<T>[]) {
+  const translatedRules = rules.map((rule) => ({
+    ...rule,
+    filter: prepareFilter(rule.filter),
+  }));
 
   return function evaluateOptimized(
     context: Record<string, unknown>,
@@ -799,15 +792,94 @@ export type VariantEvaluationResult = {
   errors: VariantEvaluationError[];
 };
 
-/** Evaluate protocol-v2 rules sequentially, stopping at the first selected variant.
- * Legacy evaluateFlagRules/newEvaluator retain their existing behavior.
+type PreparedRule = CompiledRule & {
+  thresholds?: number[];
+  allocationError?: string;
+};
+type PreparedFlag = Omit<CompiledFlag, "rules"> & { rules: PreparedRule[] };
+
+function prepareVariantRule(rule: CompiledRule): PreparedRule {
+  const prepared: PreparedRule = {
+    ...rule,
+    filter: prepareFilter(rule.filter),
+    result: { ...rule.result },
+  };
+  if (rule.result.type !== "percentageDistribution") return prepared;
+
+  let total = 0;
+  let valid = rule.result.allocations.length > 0;
+  const thresholds: number[] = [];
+  for (const { percentage } of rule.result.allocations) {
+    const units = Math.round(percentage * 1000);
+    valid &&=
+      Number.isFinite(percentage) &&
+      percentage >= 0 &&
+      percentage <= 100 &&
+      Math.abs(percentage * 1000 - units) <= 1e-8;
+    total += units;
+    thresholds.push(total);
+  }
+  if (!valid || total !== 100000) {
+    prepared.allocationError = `Invalid percentage allocations in rule ${rule.id}`;
+  }
+  prepared.thresholds = thresholds;
+  prepared.result = {
+    ...rule.result,
+    allocations: rule.result.allocations.map((allocation) => ({
+      ...allocation,
+      destination: { ...allocation.destination },
+    })),
+  };
+  return prepared;
+}
+
+/** Prepare once per definition refresh, then reuse across evaluation contexts.
+ * ANY_OF/NOT_ANY_OF candidates become Sets, including inside negations/groups.
+ * Percentage validation and cumulative threshold construction happen only here.
  */
+export function newFlagEvaluator(flag: CompiledFlag) {
+  const prepared: PreparedFlag = {
+    ...flag,
+    variants: { ...flag.variants },
+    rules: flag.rules.map(prepareVariantRule),
+  };
+  return (context: Record<string, unknown>): VariantEvaluationResult =>
+    evaluatePreparedFlag(prepared, context);
+}
+
+/** One-shot protocol-v2 evaluation. For repeated checks use newFlagEvaluator. */
 export function evaluateFlag(
   flag: CompiledFlag,
   context: Record<string, unknown>,
 ): VariantEvaluationResult {
+  return newFlagEvaluator(flag)(context);
+}
+
+function finishVariantEvaluation(
+  result: VariantEvaluationResult,
+  errors: Map<string, VariantEvaluationError>,
+): VariantEvaluationResult {
+  if (errors.size) result.errors = Array.from(errors.values());
+  return result;
+}
+
+function invalidVariantDefinition(
+  result: VariantEvaluationResult,
+  errors: Map<string, VariantEvaluationError>,
+  message: string,
+): VariantEvaluationResult {
+  errors.set("invalid", { code: "INVALID_FLAG_DEFINITION", message });
+  return finishVariantEvaluation(result, errors);
+}
+
+function evaluatePreparedFlag(
+  flag: PreparedFlag,
+  context: Record<string, unknown>,
+): VariantEvaluationResult {
   const flatContext = flattenContext(context);
   const errors = new Map<string, VariantEvaluationError>();
+  // Reuse scratch diagnostics across rules instead of allocating one Map per rule.
+  const filterErrors = new Map<string, EvaluationError>();
   const result: VariantEvaluationResult = {
     flagKey: flag.key,
     sourceVersionId: flag.sourceVersionId,
@@ -816,14 +888,8 @@ export function evaluateFlag(
     ruleResults: [],
     errors: [],
   };
-  const finish = () => ({ ...result, errors: Array.from(errors.values()) });
-  const invalid = (message: string) => {
-    errors.set("invalid", { code: "INVALID_FLAG_DEFINITION", message });
-    return finish();
-  };
-
   for (const rule of flag.rules) {
-    const filterErrors = new Map<string, EvaluationError>();
+    filterErrors.clear();
     const matched = evaluateRecursively(rule.filter, flatContext, filterErrors);
     for (const [key, error] of filterErrors) errors.set(key, error);
     const ruleResult: VariantEvaluationResult["ruleResults"][number] = {
@@ -836,21 +902,8 @@ export function evaluateFlag(
     let destination: VariantDestination;
     if (rule.result.type === "percentageDistribution") {
       const distribution = rule.result;
-      const units = distribution.allocations.map(({ percentage }) =>
-        Math.round(percentage * 1000),
-      );
-      if (
-        !units.length ||
-        distribution.allocations.some(
-          ({ percentage }, index) =>
-            !Number.isFinite(percentage) ||
-            percentage < 0 ||
-            percentage > 100 ||
-            Math.abs(percentage * 1000 - units[index]) > 1e-8,
-        ) ||
-        units.reduce((total, percentage) => total + percentage, 0) !== 100000
-      ) {
-        return invalid(`Invalid percentage allocations in rule ${rule.id}`);
+      if (rule.allocationError) {
+        return invalidVariantDefinition(result, errors, rule.allocationError);
       }
       if (
         !Object.prototype.hasOwnProperty.call(
@@ -875,20 +928,27 @@ export function evaluateFlag(
         });
         continue;
       }
-      const bucket = hashInt(`${distribution.key}.${attributeValue}`);
-      let threshold = 0;
-      const allocationIndex = units.findIndex((percentage, index) => {
-        threshold += percentage;
-        // The legacy hash range includes 100000; only this endpoint needs
-        // special treatment, leaving every other company's bucket unchanged.
-        return bucket < threshold || index === units.length - 1;
-      });
+      // Only the inclusive endpoint is clamped. This also keeps trailing 0%
+      // allocations empty, without moving any other company's bucket.
+      const bucket = Math.min(
+        hashInt(`${distribution.key}.${attributeValue}`),
+        99999,
+      );
+      const thresholds = rule.thresholds!;
+      let low = 0;
+      let high = thresholds.length - 1;
+      while (low < high) {
+        const mid = (low + high) >>> 1;
+        if (bucket < thresholds[mid]) high = mid;
+        else low = mid + 1;
+      }
+      const allocationIndex = low;
       ruleResult.allocationIndex = allocationIndex;
       destination = distribution.allocations[allocationIndex].destination;
     } else {
       destination = rule.result;
     }
-    ruleResult.destination = destination;
+    ruleResult.destination = { ...destination };
     if (destination.type === "nextRule") continue;
     if (
       !Object.prototype.hasOwnProperty.call(
@@ -896,7 +956,9 @@ export function evaluateFlag(
         destination.variantKey,
       )
     ) {
-      return invalid(
+      return invalidVariantDefinition(
+        result,
+        errors,
         `Unknown variant ${destination.variantKey} in rule ${rule.id}`,
       );
     }
@@ -906,7 +968,11 @@ export function evaluateFlag(
     if (ruleResult.allocationIndex !== undefined) {
       result.allocationIndex = ruleResult.allocationIndex;
     }
-    return finish();
+    return finishVariantEvaluation(result, errors);
   }
-  return invalid("No rule selected a variant; a catch-all default is required");
+  return invalidVariantDefinition(
+    result,
+    errors,
+    "No rule selected a variant; a catch-all default is required",
+  );
 }

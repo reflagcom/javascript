@@ -1,11 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   CompiledFlag,
+  ContextFilter,
   evaluateFlag,
   evaluateFlagRules,
   hashInt,
   JsonValue,
+  newEvaluator,
+  newFlagEvaluator,
   RuleResult,
 } from "../src";
 
@@ -337,5 +340,203 @@ describe("protocol-v2 evaluation", () => {
       );
       expect(result.value).toBe(legacy.value ?? false);
     }
+  });
+});
+
+describe("prepared protocol-v2 evaluator", () => {
+  describe.each(["ANY_OF", "NOT_ANY_OF"] as const)("%s", (operator) => {
+    it.each(["plain", "group", "negation"] as const)(
+      "uses cached Set lookups for %s filters",
+      (shape) => {
+        const values = Array.from(
+          { length: 10000 },
+          (_, i) => `candidate-${i}`,
+        );
+        // Element 0 is read by the shared scalar comparison helper. Watching
+        // element 1 distinguishes list traversal/rebuilding from constant work.
+        const readCandidate = vi.fn(() => "candidate-1");
+        Object.defineProperty(values, 1, { get: readCandidate });
+        const leaf: ContextFilter = {
+          type: "context",
+          field: "company.id",
+          operator,
+          values,
+        };
+        const definition = flag({ type: "variant", variantKey: "quality" });
+        definition.rules[0].filter =
+          shape === "plain"
+            ? leaf
+            : shape === "group"
+              ? { type: "group", operator: "and", filters: [leaf] }
+              : {
+                  type: "negation",
+                  filter: { type: "group", operator: "and", filters: [leaf] },
+                };
+        const prepared = newFlagEvaluator(definition);
+        expect(readCandidate).toHaveBeenCalled();
+        readCandidate.mockClear();
+        const lookups = vi.spyOn(Set.prototype, "has");
+        const traversal = vi
+          .spyOn(values, "includes")
+          .mockImplementation(() => {
+            throw new Error(
+              "Candidate array must not be scanned during evaluation",
+            );
+          });
+        let results: ReturnType<typeof prepared>[];
+        let lookupCount: number;
+        try {
+          results = [
+            prepared({ company: { id: "candidate-9999" } }),
+            prepared({ company: { id: ["missing", "candidate-9999"] } }),
+          ];
+          lookupCount = lookups.mock.calls.filter(
+            ([key]) => key === "candidate-9999" || key === "missing",
+          ).length;
+        } finally {
+          lookups.mockRestore();
+          traversal.mockRestore();
+        }
+        expect(lookupCount).toBe(3);
+        expect(readCandidate).not.toHaveBeenCalled();
+        expect(leaf.valueSet).toBeUndefined();
+        const matches = (operator === "ANY_OF") !== (shape === "negation");
+        expect(results.map(({ variantKey }) => variantKey)).toEqual([
+          matches ? "quality" : "control",
+          matches ? "quality" : "control",
+        ]);
+      },
+    );
+  });
+
+  it("also prepares lookups under negation for legacy newEvaluator", () => {
+    const values = ["acme"];
+    const prepared = newEvaluator([
+      {
+        value: true,
+        filter: {
+          type: "negation",
+          filter: {
+            type: "context",
+            field: "company.id",
+            operator: "ANY_OF",
+            values,
+          },
+        },
+      },
+    ]);
+    const traversal = vi.spyOn(values, "includes").mockImplementation(() => {
+      throw new Error("Unexpected traversal");
+    });
+    try {
+      expect(prepared({ company: { id: "other" } }, "legacy").value).toBe(true);
+    } finally {
+      traversal.mockRestore();
+    }
+  });
+
+  it("does not reread or validate percentages on repeated evaluations", () => {
+    const distribution = split();
+    if (distribution.type !== "percentageDistribution")
+      throw new Error("Expected split");
+    const percentageReads = vi.fn(() => 60);
+    Object.defineProperty(distribution.allocations[0], "percentage", {
+      get: percentageReads,
+    });
+    const prepared = newFlagEvaluator(flag(distribution));
+    expect(percentageReads).toHaveBeenCalled();
+    percentageReads.mockClear();
+    for (let i = 0; i < 10; i++) {
+      expect(
+        prepared({ company: { id: "company-6295" } }).allocationIndex,
+      ).toBe(0);
+      expect(
+        prepared({ company: { id: "company-27366" } }).allocationIndex,
+      ).toBe(1);
+    }
+    expect(percentageReads).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "company-6295",
+    "company-20422",
+    "company-27366",
+    "company-161395",
+    "company-1208267",
+  ])(
+    "preserves allocation boundaries for %s while skipping zero-weight entries",
+    (id) => {
+      const distribution = split();
+      if (distribution.type !== "percentageDistribution")
+        throw new Error("Expected split");
+      distribution.allocations.unshift({
+        percentage: 0,
+        destination: { type: "variant", variantKey: "list" },
+      });
+      distribution.allocations.splice(2, 0, {
+        percentage: 0,
+        destination: { type: "variant", variantKey: "list" },
+      });
+      distribution.allocations.push({
+        percentage: 0,
+        destination: { type: "variant", variantKey: "list" },
+      });
+      const prepared = newFlagEvaluator(flag(distribution));
+      const expectedIndex = hashInt(`split.${id}`) < 60000 ? 1 : 3;
+      expect(prepared({ company: { id } }).allocationIndex).toBe(expectedIndex);
+    },
+  );
+
+  it("matches cumulative allocation semantics across 50 variants", () => {
+    const definition: CompiledFlag = {
+      key: "many",
+      sourceVersionId: "v1",
+      variants: Object.fromEntries(
+        Array.from({ length: 50 }, (_, i) => [`v${i}`, i]),
+      ),
+      rules: [
+        {
+          id: "split",
+          filter: { type: "constant", value: true },
+          result: {
+            type: "percentageDistribution",
+            key: "split",
+            attribute: "company.id",
+            allocations: Array.from({ length: 50 }, (_, i) => ({
+              percentage: 2,
+              destination: { type: "variant", variantKey: `v${i}` },
+            })),
+          },
+        },
+      ],
+    };
+    const prepared = newFlagEvaluator(definition);
+    for (let i = 0; i < 200; i++) {
+      const id = `company-${i}`;
+      const index = Math.min(Math.floor(hashInt(`split.${id}`) / 2000), 49);
+      expect(prepared({ company: { id } })).toMatchObject({
+        allocationIndex: index,
+        variantKey: `v${index}`,
+        value: index,
+        errors: [],
+      });
+    }
+  });
+
+  it("isolates diagnostics and returned destinations between contexts", () => {
+    const definition = flag(split());
+    const prepared = newFlagEvaluator(definition);
+    const missing = prepared({});
+    expect(missing.errors).toHaveLength(1);
+    const selected = prepared({ company: { id: "company-6295" } });
+    expect(selected.errors).toEqual([]);
+    const destination = selected.ruleResults[0].destination!;
+    if (destination.type === "variant") destination.variantKey = "control";
+    const again = prepared({ company: { id: "company-6295" } });
+    expect(again.variantKey).toBe("quality");
+    expect(missing.errors).toHaveLength(1);
+    expect(again).toEqual(
+      evaluateFlag(definition, { company: { id: "company-6295" } }),
+    );
   });
 });
