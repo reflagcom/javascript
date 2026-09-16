@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import {
   CompiledFlag,
@@ -6,7 +6,6 @@ import {
   evaluateFlag,
   evaluateFlagRules,
   hashInt,
-  JsonValue,
   newEvaluator,
   newFlagEvaluator,
   RuleResult,
@@ -49,18 +48,51 @@ function split(): RuleResult {
 }
 
 describe("protocol-v2 evaluation", () => {
+  it("preserves explicit boolean and nullable value types in both APIs", () => {
+    const booleanFlag: CompiledFlag<boolean> = {
+      ...flag({ type: "variant", variantKey: "quality" }),
+      variants: { quality: true, control: false },
+    };
+    expectTypeOf(evaluateFlag(booleanFlag, {}).value).toEqualTypeOf<
+      boolean | undefined
+    >();
+    expectTypeOf(newFlagEvaluator(booleanFlag)({}).value).toEqualTypeOf<
+      boolean | undefined
+    >();
+
+    const nullableFlag: CompiledFlag<number | null> = {
+      ...booleanFlag,
+      variants: { quality: null, control: 0 },
+    };
+    const result = newFlagEvaluator(nullableFlag)({});
+    expectTypeOf(result.value).toEqualTypeOf<number | null | undefined>();
+    expect(result.value).toBeNull();
+  });
+
+  it("infers non-JSON value types and returns the selected value unchanged", () => {
+    const value = new Date("2026-01-01T00:00:00Z");
+    const definition = {
+      ...flag({ type: "variant", variantKey: "quality" }),
+      variants: { quality: value },
+    };
+    const result = evaluateFlag(definition, {});
+    const preparedResult = newFlagEvaluator(definition)({});
+    expectTypeOf(result.value).toEqualTypeOf<Date | undefined>();
+    expectTypeOf(preparedResult.value).toEqualTypeOf<Date | undefined>();
+    expect(result.value).toBe(value);
+    expect(preparedResult.value).toBe(value);
+
+    const callback = () => "hello";
+    const callbackFlag = { ...definition, variants: { quality: callback } };
+    const selected = newFlagEvaluator(callbackFlag)({}).value;
+    expectTypeOf(selected).toEqualTypeOf<typeof callback | undefined>();
+    expect(selected).toBe(callback);
+  });
+
   it.each(
-    (
-      [
-        null,
-        false,
-        true,
-        0,
-        "",
-        [1, false],
-        { model: "large" },
-      ] satisfies JsonValue[]
-    ).map((value) => ({ value })),
+    [null, false, true, 0, "", [1, false], { model: "large" }].map((value) => ({
+      value,
+    })),
   )(
     "returns JSON value $value without treating it as an unresolved result",
     ({ value }) => {

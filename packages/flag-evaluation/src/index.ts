@@ -728,14 +728,6 @@ export function newEvaluator<T extends RuleValue>(rules: Rule<T>[]) {
   };
 }
 
-export type JsonValue =
-  | null
-  | boolean
-  | number
-  | string
-  | JsonValue[]
-  | { [key: string]: JsonValue };
-
 export type VariantDestination =
   | { type: "variant"; variantKey: string }
   | { type: "nextRule" };
@@ -758,10 +750,10 @@ export type CompiledRule = {
   result: RuleResult;
 };
 
-export type CompiledFlag = {
+export type CompiledFlag<T = any> = {
   key: string;
   sourceVersionId: string;
-  variants: Record<string, JsonValue>;
+  variants: Record<string, T>;
   rules: CompiledRule[];
 };
 
@@ -775,10 +767,10 @@ export type VariantEvaluationError =
       message: string;
     };
 
-export type VariantEvaluationResult = {
+export type VariantEvaluationResult<T = any> = {
   flagKey: string;
   sourceVersionId: string;
-  value: JsonValue | undefined;
+  value: T | undefined;
   variantKey?: string;
   matchedRuleId?: string;
   allocationIndex?: number;
@@ -796,7 +788,9 @@ type PreparedRule = CompiledRule & {
   thresholds?: number[];
   allocationError?: string;
 };
-type PreparedFlag = Omit<CompiledFlag, "rules"> & { rules: PreparedRule[] };
+type PreparedFlag<T> = Omit<CompiledFlag<T>, "rules"> & {
+  rules: PreparedRule[];
+};
 
 function prepareVariantRule(rule: CompiledRule): PreparedRule {
   const prepared: PreparedRule = {
@@ -837,50 +831,50 @@ function prepareVariantRule(rule: CompiledRule): PreparedRule {
  * ANY_OF/NOT_ANY_OF candidates become Sets, including inside negations/groups.
  * Percentage validation and cumulative threshold construction happen only here.
  */
-export function newFlagEvaluator(flag: CompiledFlag) {
-  const prepared: PreparedFlag = {
+export function newFlagEvaluator<T>(flag: CompiledFlag<T>) {
+  const prepared: PreparedFlag<T> = {
     ...flag,
     variants: { ...flag.variants },
     rules: flag.rules.map(prepareVariantRule),
   };
-  return (context: Record<string, unknown>): VariantEvaluationResult =>
+  return (context: Record<string, unknown>): VariantEvaluationResult<T> =>
     evaluatePreparedFlag(prepared, context);
 }
 
 /** One-shot protocol-v2 evaluation. For repeated checks use newFlagEvaluator. */
-export function evaluateFlag(
-  flag: CompiledFlag,
+export function evaluateFlag<T>(
+  flag: CompiledFlag<T>,
   context: Record<string, unknown>,
-): VariantEvaluationResult {
+): VariantEvaluationResult<T> {
   return newFlagEvaluator(flag)(context);
 }
 
-function finishVariantEvaluation(
-  result: VariantEvaluationResult,
+function finishVariantEvaluation<T>(
+  result: VariantEvaluationResult<T>,
   errors: Map<string, VariantEvaluationError>,
-): VariantEvaluationResult {
+): VariantEvaluationResult<T> {
   if (errors.size) result.errors = Array.from(errors.values());
   return result;
 }
 
-function invalidVariantDefinition(
-  result: VariantEvaluationResult,
+function invalidVariantDefinition<T>(
+  result: VariantEvaluationResult<T>,
   errors: Map<string, VariantEvaluationError>,
   message: string,
-): VariantEvaluationResult {
+): VariantEvaluationResult<T> {
   errors.set("invalid", { code: "INVALID_FLAG_DEFINITION", message });
   return finishVariantEvaluation(result, errors);
 }
 
-function evaluatePreparedFlag(
-  flag: PreparedFlag,
+function evaluatePreparedFlag<T>(
+  flag: PreparedFlag<T>,
   context: Record<string, unknown>,
-): VariantEvaluationResult {
+): VariantEvaluationResult<T> {
   const flatContext = flattenContext(context);
   const errors = new Map<string, VariantEvaluationError>();
   // Reuse scratch diagnostics across rules instead of allocating one Map per rule.
   const filterErrors = new Map<string, EvaluationError>();
-  const result: VariantEvaluationResult = {
+  const result: VariantEvaluationResult<T> = {
     flagKey: flag.key,
     sourceVersionId: flag.sourceVersionId,
     value: undefined,
@@ -892,7 +886,7 @@ function evaluatePreparedFlag(
     filterErrors.clear();
     const matched = evaluateRecursively(rule.filter, flatContext, filterErrors);
     for (const [key, error] of filterErrors) errors.set(key, error);
-    const ruleResult: VariantEvaluationResult["ruleResults"][number] = {
+    const ruleResult: VariantEvaluationResult<T>["ruleResults"][number] = {
       ruleId: rule.id,
       matched: matched && filterErrors.size === 0,
     };

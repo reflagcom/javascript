@@ -11,14 +11,18 @@ import { newFlagEvaluator } from "@reflag/flag-evaluation";
 const evaluate = newFlagEvaluator(compiledFlag);
 const result = evaluate({ company: { id: "acme" }, user: { id: "alice" } });
 
-// Selected JSON value; null is a valid value, undefined means unresolved.
+// Selected value (T | undefined); null is a valid value.
 console.log(result.value);
 // Metadata for diagnostics/exposure events, not the public SDK getFlag result.
 console.log(result.sourceVersionId, result.variantKey, result.matchedRuleId);
 ```
 
+`CompiledFlag<T = any>` and `VariantEvaluationResult<T = any>` preserve the
+caller's value type. Both evaluator functions infer `T` from the flag; it can be
+any type. JSON validation belongs at the API/persistence boundary, not here.
+
 Rebuild the evaluator when the compiled definition changes. Treat definitions and
-returned JSON values as immutable. Each evaluation has independent diagnostics.
+returned values as immutable. Each evaluation has independent diagnostics.
 
 - `ANY_OF` / `NOT_ANY_OF` candidate lists are converted to `Set`s at preparation,
   including inside groups and negations. Scalar checks use hash lookups. An
