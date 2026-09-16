@@ -935,14 +935,13 @@ function evaluatePreparedFlag(
         99999,
       );
       const thresholds = rule.thresholds!;
-      let low = 0;
-      let high = thresholds.length - 1;
-      while (low < high) {
-        const mid = (low + high) >>> 1;
-        if (bucket < thresholds[mid]) high = mid;
-        else low = mid + 1;
+      let allocationIndex = 0;
+      while (
+        allocationIndex < thresholds.length - 1 &&
+        bucket >= thresholds[allocationIndex]
+      ) {
+        allocationIndex++;
       }
-      const allocationIndex = low;
       ruleResult.allocationIndex = allocationIndex;
       destination = distribution.allocations[allocationIndex].destination;
     } else {

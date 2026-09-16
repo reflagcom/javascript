@@ -25,7 +25,7 @@ returned JSON values as immutable. Each evaluation has independent diagnostics.
   array-valued context requires one lookup per examined context element, not a
   traversal of the candidate list.
 - Percentage validation and cumulative integer thresholds are computed once.
-  Checks hash the company/context attribute and binary-search the thresholds.
+  Checks hash the company/context attribute and scan the precomputed thresholds.
   The inclusive maximum hash maps to the last nonzero allocation; 0% allocations
   never receive traffic.
 - Rules stop at the first selected variant. `nextRule` continues evaluation.
