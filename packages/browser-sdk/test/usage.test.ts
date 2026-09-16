@@ -37,9 +37,6 @@ const clientNotInitializedError = {
 };
 
 vi.mock("../src/sse");
-// These tests cover SDK usage, not toolbar rendering. Avoid scheduling Preact
-// renders that can outlive the test's browser environment.
-vi.mock("../src/toolbar", () => ({ showToolbarToggle: vi.fn() }));
 vi.mock("../src/feedback/promptStorage", () => {
   return {
     markPromptMessageCompleted: vi.fn(),

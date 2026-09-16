@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll } from "vitest";
 
+import { cleanupUi } from "./test/cleanupUi";
 import { server } from "./test/mocks/server.js";
 
 beforeAll(() => {
@@ -11,6 +12,7 @@ beforeAll(() => {
 });
 
 afterEach(() => {
+  cleanupUi();
   server.resetHandlers();
 });
 
