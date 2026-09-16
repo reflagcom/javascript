@@ -11,4 +11,4 @@ Introduce a v2-only compiled-variant evaluator:
 - Return structured `INVALID_COMPARISON` errors for invalid numeric/date comparisons instead of logging context values. Invalid conditions cannot match through negation.
 - Retain the original hash function and threshold rollout filter for boolean cohort compatibility. The inclusive maximum distribution bucket selects the last nonzero allocation.
 
-The runtime exports are `newEvaluator`, `flattenContext`, and `hashInt`. Removed APIs include `evaluateFlagRules`, `newFlagEvaluator`, `evaluateFlag`, the scalar `evaluate` helper, and the legacy `flattenJSON` / `unflattenJSON` helpers. SDK adoption of `/flags` and variant-valued public APIs is a separate change; unchanged consumers must stay on evaluator 1.x.
+The runtime exports are `newEvaluator`, `flattenContext`, and `hashInt`. Removed APIs include `evaluateFlagRules`, `newFlagEvaluator`, `evaluateFlag`, the scalar `evaluate` helper, and the legacy `flattenJSON` / `unflattenJSON` helpers.
