@@ -16,6 +16,7 @@
   },
   "scripts": {
     "build": "tsc --project tsconfig.build.json",
+    "prepack": "yarn build",
     "test": "vitest",
     "test:ci": "vitest --reporter=default --reporter=junit --outputFile=junit.xml",
     "lint": "oxlint .",
