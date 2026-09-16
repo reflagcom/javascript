@@ -1,5 +1,11 @@
 # @reflag/react-native-sdk
 
+## 0.3.5
+
+### Patch Changes
+
+- @reflag/react-sdk@1.7.2
+
 ## 0.3.4
 
 ### Patch Changes
