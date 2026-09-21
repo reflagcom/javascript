@@ -1,5 +1,11 @@
 # @reflag/browser-sdk
 
+## 1.7.3
+
+### Patch Changes
+
+- e8a0e10: Unsubscribe toolbar flag listeners when the toolbar is unmounted or switches clients.
+
 ## 1.7.2
 
 ### Patch Changes
