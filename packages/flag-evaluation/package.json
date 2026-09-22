@@ -1,6 +1,6 @@
 {
   "name": "@reflag/flag-evaluation",
-  "version": "1.1.1",
+  "version": "2.0.0-next.0",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -16,6 +16,7 @@
   },
   "scripts": {
     "build": "tsc --project tsconfig.build.json",
+    "prepack": "yarn build",
     "test": "vitest",
     "test:ci": "vitest --reporter=default --reporter=junit --outputFile=junit.xml",
     "lint": "oxlint .",
@@ -30,6 +31,7 @@
     "js-sha256": "0.11.0"
   },
   "devDependencies": {
+    "@reflag/flag-evaluation-v1": "npm:@reflag/flag-evaluation@1.1.1",
     "@reflag/tsconfig": "^0.0.2",
     "@types/node": "^22.12.0",
     "ts-node": "^10.9.2",
