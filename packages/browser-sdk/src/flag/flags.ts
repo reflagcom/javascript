@@ -298,6 +298,7 @@ export class FlagsClient {
   private initialized = false;
   private bootstrapped = false;
   private initializationComplete = false;
+  private flagStateAvailable = false;
 
   private rateLimiter: RateLimiter;
   private readonly logger: Logger;
@@ -425,6 +426,10 @@ export class FlagsClient {
     return this.fetchedFlags;
   }
 
+  hasFlagState(): boolean {
+    return this.flagStateAvailable;
+  }
+
   requestOptInFlags() {
     this.optInFlagsRequested = true;
 
@@ -545,6 +550,8 @@ export class FlagsClient {
     triggerEvent = true,
     flagStateVersion?: number,
   ) {
+    // Mark the state available before notifying consumers from updateFlags().
+    this.flagStateAvailable = true;
     // Create a new fetched flags object making sure to clone the flags
     this.fetchedFlags = { ...fetchedFlags };
     this.fetchedFlagStateVersion = flagStateVersion;
