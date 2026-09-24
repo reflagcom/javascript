@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
+  ContextFilterOperator,
   evaluate,
   evaluateFlagRules,
   EvaluationParams,
@@ -884,6 +885,161 @@ describe("evaluate flag targeting integration ", () => {
       expect(res.context).toEqual({ "user.roles": [] });
       expect(res.missingContextFields).toEqual([]);
       expect(res.value).toBeUndefined();
+    });
+  });
+
+  describe("invalid scalar operator values", () => {
+    it("returns diagnostics for invalid numeric context and targeting values", () => {
+      const rules: Rule<boolean>[] = [
+        {
+          value: true,
+          filter: {
+            type: "context",
+            field: "user.age",
+            operator: "GT",
+            values: ["not-numeric"],
+          },
+        },
+      ];
+      const context = { user: { age: "also-not-numeric" } };
+
+      for (const result of [
+        evaluateFlagRules({ flagKey: "numeric", rules, context }),
+        newEvaluator(rules)(context, "numeric"),
+      ]) {
+        expect(result.value).toBeUndefined();
+        expect(result.ruleEvaluationResults).toEqual([false]);
+        expect(result.errors).toEqual([
+          {
+            code: "INVALID_CONTEXT_VALUE",
+            field: "user.age",
+            operator: "GT",
+            message:
+              'Context field "user.age" must be numeric for operator "GT".',
+          },
+          {
+            code: "INVALID_TARGETING_VALUE",
+            field: "user.age",
+            operator: "GT",
+            message:
+              'Targeting value for operator "GT" and context field "user.age" must be numeric.',
+          },
+        ]);
+      }
+    });
+
+    it("returns diagnostics for invalid date context and targeting values", () => {
+      const rules: Rule<boolean>[] = [
+        {
+          value: true,
+          filter: {
+            type: "context",
+            field: "user.createdAt",
+            operator: "DATE_AFTER",
+            values: ["not-a-date"],
+          },
+        },
+      ];
+      const context = { user: { createdAt: "also-not-a-date" } };
+
+      for (const result of [
+        evaluateFlagRules({ flagKey: "date", rules, context }),
+        newEvaluator(rules)(context, "date"),
+      ]) {
+        expect(result.errors).toEqual([
+          {
+            code: "INVALID_CONTEXT_VALUE",
+            field: "user.createdAt",
+            operator: "DATE_AFTER",
+            message:
+              'Context field "user.createdAt" must be a valid date for operator "DATE_AFTER".',
+          },
+          {
+            code: "INVALID_TARGETING_VALUE",
+            field: "user.createdAt",
+            operator: "DATE_AFTER",
+            message:
+              'Targeting value for operator "DATE_AFTER" and context field "user.createdAt" must be a valid date.',
+          },
+        ]);
+      }
+    });
+
+    it("returns a diagnostic for an invalid relative-date offset", () => {
+      const rules: Rule<boolean>[] = [
+        {
+          value: true,
+          filter: {
+            type: "context",
+            field: "user.createdAt",
+            operator: "AFTER",
+            values: ["not-a-day-offset"],
+          },
+        },
+      ];
+      const result = evaluateFlagRules({
+        flagKey: "relative-date",
+        rules,
+        context: { user: { createdAt: "2024-01-10" } },
+      });
+
+      expect(result.errors).toEqual([
+        {
+          code: "INVALID_TARGETING_VALUE",
+          field: "user.createdAt",
+          operator: "AFTER",
+          message:
+            'Targeting value for operator "AFTER" and context field "user.createdAt" must be a numeric day offset.',
+        },
+      ]);
+    });
+
+    it("returns a diagnostic for an unknown operator", () => {
+      const rules: Rule<boolean>[] = [
+        {
+          value: true,
+          filter: {
+            type: "context",
+            field: "user.role",
+            operator: "UNKNOWN" as ContextFilterOperator,
+            values: ["admin"],
+          },
+        },
+      ];
+      const result = evaluateFlagRules({
+        flagKey: "unknown-operator",
+        rules,
+        context: { user: { role: "admin" } },
+      });
+
+      expect(result.errors).toEqual([
+        {
+          code: "UNKNOWN_OPERATOR",
+          field: "user.role",
+          operator: "UNKNOWN",
+          message:
+            'Unknown targeting operator "UNKNOWN" for context field "user.role".',
+        },
+      ]);
+    });
+
+    it("does not write invalid evaluations directly to the console", () => {
+      const consoleError = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => undefined);
+
+      try {
+        expect(evaluate("not-numeric", "GT", ["also-not-numeric"])).toBe(false);
+        expect(evaluate("not-a-date", "DATE_AFTER", ["also-not-a-date"])).toBe(
+          false,
+        );
+        expect(
+          evaluate("value", "UNKNOWN" as ContextFilterOperator, ["target"]),
+        ).toBe(false);
+        expect(consoleError).not.toHaveBeenCalled();
+      } finally {
+        consoleError.mockRestore();
+      }
     });
   });
 
