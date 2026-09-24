@@ -555,7 +555,7 @@ describe("evaluate flag targeting integration ", () => {
       "%s normalization",
       (operator) => {
         it.each(["admin", "2", "true", "", '{"level":3}', "[false]"])(
-          "matches normalized element %j without diagnostics",
+          "matches normalized element %j without errors",
           (value) => {
             const rules: Rule<string>[] = [
               {
@@ -726,7 +726,7 @@ describe("evaluate flag targeting integration ", () => {
       ]);
     });
 
-    it("returns a non-fatal diagnostic for scalar-only operators", () => {
+    it("returns a non-fatal error for scalar-only operators", () => {
       const res = evaluateFlagRules({
         flagKey: "role-based-flag",
         rules: [
@@ -889,7 +889,7 @@ describe("evaluate flag targeting integration ", () => {
   });
 
   describe("invalid scalar operator values", () => {
-    it("returns diagnostics for invalid numeric context and targeting values", () => {
+    it("returns errors for invalid numeric context and targeting values", () => {
       const rules: Rule<boolean>[] = [
         {
           value: true,
@@ -958,7 +958,7 @@ describe("evaluate flag targeting integration ", () => {
       },
     );
 
-    it("returns diagnostics for invalid date context and targeting values", () => {
+    it("returns errors for invalid date context and targeting values", () => {
       const rules: Rule<boolean>[] = [
         {
           value: true,
@@ -995,7 +995,7 @@ describe("evaluate flag targeting integration ", () => {
       }
     });
 
-    it("returns a diagnostic for an invalid relative-date offset", () => {
+    it("returns an error for an invalid relative-date offset", () => {
       const rules: Rule<boolean>[] = [
         {
           value: true,
@@ -1024,7 +1024,7 @@ describe("evaluate flag targeting integration ", () => {
       ]);
     });
 
-    it("returns a diagnostic for an unknown operator", () => {
+    it("returns an error for an unknown operator", () => {
       const rules: Rule<boolean>[] = [
         {
           value: true,

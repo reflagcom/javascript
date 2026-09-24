@@ -752,7 +752,7 @@ export interface EvaluationParams<T extends RuleValue> {
  * @property {boolean[]} ruleEvaluationResults - Array indicating the success or failure of each rule evaluated.
  * @property {string} [reason] - Optional field providing additional explanation regarding the evaluation result.
  * @property {string[]} [missingContextFields] - Legacy array of context fields that were required but not provided during evaluation.
- * @property {EvaluationError[]} [errors] - Non-fatal diagnostics for rules that could not be evaluated.
+ * @property {EvaluationError[]} [errors] - Non-fatal errors for rules that could not be evaluated.
  */
 export interface EvaluationResult<T extends RuleValue> {
   flagKey: string;

@@ -47,7 +47,7 @@ const clientNotInitializedError = {
   code: "CLIENT_NOT_INITIALIZED",
   field: "",
   message:
-    "ReflagClient was not initialized before this flag was evaluated. Call initialize() before evaluating flags.",
+    "Flag was evaluated before the initial flag state was available. Await initialize() or wait for SDK loading to complete before evaluating flags.",
 };
 
 vi.mock("../src/rate-limiter", async (importOriginal) => {
@@ -1581,7 +1581,7 @@ describe("ReflagClient", () => {
       });
     });
 
-    it("sends diagnostics when flags are evaluated before initialization", async () => {
+    it("sends errors when flags are evaluated before initialization", async () => {
       const context = {
         company,
         user,
@@ -1609,7 +1609,7 @@ describe("ReflagClient", () => {
       ]);
     });
 
-    it("does not add initialization diagnostics when offline", () => {
+    it("does not add initialization errors when offline", () => {
       const offlineClient = new ReflagClient({
         ...validOptions,
         offline: true,

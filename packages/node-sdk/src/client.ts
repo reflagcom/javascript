@@ -90,10 +90,10 @@ const CLIENT_NOT_INITIALIZED_EVALUATION_ERROR = {
   code: "CLIENT_NOT_INITIALIZED",
   field: "",
   message:
-    "ReflagClient was not initialized before this flag was evaluated. Call initialize() before evaluating flags.",
+    "Flag was evaluated before the initial flag state was available. Await initialize() or wait for SDK loading to complete before evaluating flags.",
 } as const;
 
-function withClientInitializationDiagnostic(
+function withClientInitializationError(
   errors: FlagEvent["evalErrors"],
   evaluatedBeforeInitialization: boolean,
 ): FlagEvent["evalErrors"] {
@@ -1257,7 +1257,7 @@ export class ReflagClient {
    * @param event.evalContext - The evaluation context of the flag to send.
    * @param event.evalRuleResults - The evaluation rule results of the flag to send.
    * @param event.evalMissingFields - The evaluation missing fields of the flag to send.
-   * @param event.evalErrors - The non-fatal evaluation diagnostics of the flag to send.
+   * @param event.evalErrors - The non-fatal evaluation errors of the flag to send.
    *
    * @throws An error if the event is invalid.
    *
@@ -1377,11 +1377,11 @@ export class ReflagClient {
   }
 
   /**
-   * Warns if a flag or config evaluation produced diagnostics.
+   * Warns if a flag or config evaluation produced errors.
    *
    * @param flag - The flag to check.
    */
-  private _warnFlagEvaluationDiagnostics(flag: {
+  private _warnFlagEvaluationErrors(flag: {
     key: string;
     missingContextFields?: string[];
     evaluationErrors?: EvaluationError[];
@@ -1474,7 +1474,7 @@ export class ReflagClient {
     checkContextWithTracking(options);
 
     if (!this.initializationFinished && !this._config.offline) {
-      this.logger.error("getFlag(s): ReflagClient is not initialized yet.");
+      this.logger.error(CLIENT_NOT_INITIALIZED_EVALUATION_ERROR.message);
     }
 
     void this.syncContext(options);
@@ -1589,11 +1589,11 @@ export class ReflagClient {
       : { key: undefined, payload: undefined };
     const evaluatedBeforeInitialization =
       !this.initializationFinished && !this._config.offline;
-    const flagEvaluationErrors = withClientInitializationDiagnostic(
+    const flagEvaluationErrors = withClientInitializationError(
       flag.evaluationErrors,
       evaluatedBeforeInitialization,
     );
-    const configEvaluationErrors = withClientInitializationDiagnostic(
+    const configEvaluationErrors = withClientInitializationError(
       config?.evaluationErrors,
       evaluatedBeforeInitialization,
     );
@@ -1601,7 +1601,7 @@ export class ReflagClient {
     return {
       get isEnabled() {
         if (enableTracking && enableChecks) {
-          client._warnFlagEvaluationDiagnostics(flag);
+          client._warnFlagEvaluationErrors(flag);
 
           void client
             .sendFlagEvent({
@@ -1625,7 +1625,7 @@ export class ReflagClient {
       },
       get config() {
         if (enableTracking && enableChecks) {
-          client._warnFlagEvaluationDiagnostics({ ...flag, config });
+          client._warnFlagEvaluationErrors({ ...flag, config });
 
           void client
             .sendFlagEvent({

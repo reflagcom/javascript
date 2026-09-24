@@ -33,7 +33,7 @@ const clientNotInitializedError = {
   code: "CLIENT_NOT_INITIALIZED",
   field: "",
   message:
-    "ReflagClient was not initialized before this flag was evaluated. Call initialize() before evaluating flags.",
+    "Flag was evaluated before the initial flag state was available. Await initialize() or wait for SDK loading to complete before evaluating flags.",
 };
 
 vi.mock("../src/sse");
@@ -456,7 +456,7 @@ describe(`sends "check" events `, () => {
       });
     });
 
-    it("adds diagnostics when flags are evaluated before initialization", () => {
+    it("adds errors when flags are evaluated before initialization", () => {
       const sendCheckEventSpy = vi.spyOn(
         FlagsClient.prototype,
         "sendCheckEvent",
@@ -485,7 +485,7 @@ describe(`sends "check" events `, () => {
       );
     });
 
-    it("does not add initialization diagnostics to bootstrapped evaluations", () => {
+    it("does not add initialization errors to bootstrapped evaluations", () => {
       const sendCheckEventSpy = vi.spyOn(
         FlagsClient.prototype,
         "sendCheckEvent",
@@ -508,7 +508,7 @@ describe(`sends "check" events `, () => {
       );
     });
 
-    it(`does not send check events or add initialization diagnostics when offline`, () => {
+    it(`does not send check events or add initialization errors when offline`, () => {
       const sendCheckEventSpy = vi.spyOn(
         FlagsClient.prototype,
         "sendCheckEvent",
