@@ -473,14 +473,8 @@ export function evaluate(
         !normalizedFieldValue.toLowerCase().includes(value.toLowerCase())
       );
     case "GT":
-      if (isNaN(Number(normalizedFieldValue)) || isNaN(Number(value))) {
-        return false;
-      }
       return Number(normalizedFieldValue) > Number(value);
     case "LT":
-      if (isNaN(Number(normalizedFieldValue)) || isNaN(Number(value))) {
-        return false;
-      }
       return Number(normalizedFieldValue) < Number(value);
     case "AFTER":
     case "BEFORE": {
@@ -497,9 +491,6 @@ export function evaluate(
     case "DATE_BEFORE": {
       const fieldValueDate = new Date(normalizedFieldValue).getTime();
       const valueDate = new Date(value).getTime();
-      if (isNaN(fieldValueDate) || isNaN(valueDate)) {
-        return false;
-      }
       return operator === "DATE_AFTER"
         ? fieldValueDate >= valueDate
         : fieldValueDate <= valueDate;
