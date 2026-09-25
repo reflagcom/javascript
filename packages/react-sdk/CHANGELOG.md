@@ -1,5 +1,12 @@
 # @reflag/react-sdk
 
+## 1.7.4
+
+### Patch Changes
+
+- Updated dependencies [0840683]
+  - @reflag/browser-sdk@1.7.4
+
 ## 1.7.3
 
 ### Patch Changes
