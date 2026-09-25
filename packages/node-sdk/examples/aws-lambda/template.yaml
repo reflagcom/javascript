@@ -1,0 +1,23 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Temporary Node SDK Lambda lifecycle probe (no public endpoint)
+Resources:
+  Probe:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: build/
+      Handler: handler.handler
+      Runtime: nodejs22.x
+      Timeout: 30
+      MemorySize: 256
+      ReservedConcurrentExecutions: 1
+      Policies:
+        - AWSLambdaBasicExecutionRole
+  ProbeLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${Probe}
+      RetentionInDays: 1
+Outputs:
+  FunctionName:
+    Value: !Ref Probe
