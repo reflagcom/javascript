@@ -501,7 +501,6 @@ function shouldShowToolbar(opts: InitOptions) {
  */
 export class ReflagClient {
   private state: State = "idle";
-  private initializationFinished = false;
   private contextUpdateLoading = false;
   private readonly publishableKey: string;
   private context: ReflagContext;
@@ -740,7 +739,6 @@ export class ReflagClient {
         "ms" +
         (this.config.offline ? " (offline mode)" : ""),
     );
-    this.initializationFinished = true;
     this.setState("initialized");
   }
 
@@ -1422,9 +1420,7 @@ export class ReflagClient {
   getFlag(flagKey: string): Flag {
     const f = this.getFlags()[flagKey];
     const evaluatedBeforeInitialization =
-      !this.initializationFinished &&
-      !this.config.offline &&
-      !this.config.bootstrapped;
+      !this.flagsClient.hasFlagState() && !this.config.offline;
 
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this;

@@ -485,6 +485,35 @@ describe(`sends "check" events `, () => {
       );
     });
 
+    it("does not add initialization diagnostics once flag state is available", async () => {
+      const sendCheckEventSpy = vi.spyOn(
+        FlagsClient.prototype,
+        "sendCheckEvent",
+      );
+      const client = new ReflagClient({ publishableKey: KEY });
+      const evaluatedDuringInitialization = vi.fn();
+
+      client.on("flagsUpdated", () => {
+        expect(client.getState()).toBe("initializing");
+        expect(client.getFlag("flagA").isEnabled).toBe(true);
+        evaluatedDuringInitialization();
+      });
+
+      await client.initialize();
+
+      expect(evaluatedDuringInitialization).toHaveBeenCalledOnce();
+      expect(sendCheckEventSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: "check-is-enabled",
+          key: "flagA",
+          value: true,
+          version: 1,
+          evaluationErrors: flagsResult.flagA.evaluationErrors,
+        }),
+        expect.any(Function),
+      );
+    });
+
     it("does not add initialization diagnostics to bootstrapped evaluations", () => {
       const sendCheckEventSpy = vi.spyOn(
         FlagsClient.prototype,
