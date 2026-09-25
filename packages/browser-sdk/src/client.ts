@@ -406,10 +406,10 @@ const CLIENT_NOT_INITIALIZED_EVALUATION_ERROR = {
   code: "CLIENT_NOT_INITIALIZED",
   field: "",
   message:
-    "ReflagClient was not initialized before this flag was evaluated. Call initialize() before evaluating flags.",
+    "Flag was evaluated before the initial flag state was available. Await initialize() or wait for SDK loading to complete before evaluating flags.",
 } as const;
 
-function withClientInitializationDiagnostic(
+function withClientInitializationError(
   errors: CheckEvent["evaluationErrors"],
   evaluatedBeforeInitialization: boolean,
 ): CheckEvent["evaluationErrors"] {
@@ -1445,7 +1445,7 @@ export class ReflagClient {
             version: f?.targetingVersion,
             ruleEvaluationResults: f?.ruleEvaluationResults,
             missingContextFields: f?.missingContextFields,
-            evaluationErrors: withClientInitializationDiagnostic(
+            evaluationErrors: withClientInitializationError(
               f?.evaluationErrors,
               evaluatedBeforeInitialization,
             ),
@@ -1464,7 +1464,7 @@ export class ReflagClient {
             version: f?.config?.version,
             ruleEvaluationResults: f?.config?.ruleEvaluationResults,
             missingContextFields: f?.config?.missingContextFields,
-            evaluationErrors: withClientInitializationDiagnostic(
+            evaluationErrors: withClientInitializationError(
               f?.config?.evaluationErrors,
               evaluatedBeforeInitialization,
             ),

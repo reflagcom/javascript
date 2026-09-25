@@ -92,7 +92,7 @@ export type RawFlag = {
   missingContextFields?: string[];
 
   /**
-   * Non-fatal diagnostics produced while evaluating targeting rules.
+   * Non-fatal errors produced while evaluating targeting rules.
    */
   evaluationErrors?: Array<{
     code: string;
@@ -142,7 +142,7 @@ export type RawFlag = {
     missingContextFields?: string[];
 
     /**
-     * Non-fatal diagnostics produced while evaluating targeting rules.
+     * Non-fatal errors produced while evaluating targeting rules.
      */
     evaluationErrors?: RawFlag["evaluationErrors"];
   };
@@ -265,7 +265,7 @@ export interface CheckEvent {
   missingContextFields?: string[];
 
   /**
-   * Non-fatal diagnostics produced while evaluating the flag.
+   * Non-fatal errors produced while evaluating the flag.
    */
   evaluationErrors?: RawFlag["evaluationErrors"];
 }

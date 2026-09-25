@@ -65,7 +65,7 @@ export type FlagEvent = {
   evalMissingFields?: string[];
 
   /**
-   * Non-fatal diagnostics produced while evaluating the flag (optional).
+   * Non-fatal errors produced while evaluating the flag (optional).
    **/
   evalErrors?: Array<{
     code: string;
@@ -106,7 +106,7 @@ export type RawFlagRemoteConfig = {
   missingContextFields?: string[];
 
   /**
-   * Non-fatal diagnostics produced while evaluating targeting rules.
+   * Non-fatal errors produced while evaluating targeting rules.
    */
   evaluationErrors?: EvaluationError[];
 };
@@ -147,7 +147,7 @@ export interface RawFlag {
   missingContextFields?: string[];
 
   /**
-   * Non-fatal diagnostics produced while evaluating targeting rules.
+   * Non-fatal errors produced while evaluating targeting rules.
    */
   evaluationErrors?: EvaluationError[];
 }
