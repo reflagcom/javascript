@@ -74,23 +74,26 @@ export type FilterTree<T extends FilterClass> =
  * - "IS_TRUE": Checks if a boolean value is true.
  * - "IS_FALSE": Checks if a boolean value is false.
  */
-export type ContextFilterOperator =
-  | "IS"
-  | "IS_NOT"
-  | "ANY_OF"
-  | "NOT_ANY_OF"
-  | "CONTAINS"
-  | "NOT_CONTAINS"
-  | "GT"
-  | "LT"
-  | "AFTER"
-  | "BEFORE"
-  | "DATE_AFTER"
-  | "DATE_BEFORE"
-  | "SET"
-  | "NOT_SET"
-  | "IS_TRUE"
-  | "IS_FALSE";
+const CONTEXT_FILTER_OPERATORS = [
+  "IS",
+  "IS_NOT",
+  "ANY_OF",
+  "NOT_ANY_OF",
+  "CONTAINS",
+  "NOT_CONTAINS",
+  "GT",
+  "LT",
+  "AFTER",
+  "BEFORE",
+  "DATE_AFTER",
+  "DATE_BEFORE",
+  "SET",
+  "NOT_SET",
+  "IS_TRUE",
+  "IS_FALSE",
+] as const;
+
+export type ContextFilterOperator = (typeof CONTEXT_FILTER_OPERATORS)[number];
 
 /**
  * Represents a filter configuration used to filter data based on specific context.
@@ -210,6 +213,24 @@ export type EvaluationError =
       code: "UNSUPPORTED_ARRAY_OPERATOR";
       field: string;
       operator: ContextFilterOperator | "rolloutPercentage";
+      message: string;
+    }
+  | {
+      code: "INVALID_CONTEXT_VALUE";
+      field: string;
+      operator: ContextFilterOperator;
+      message: string;
+    }
+  | {
+      code: "INVALID_TARGETING_VALUE";
+      field: string;
+      operator: ContextFilterOperator;
+      message: string;
+    }
+  | {
+      code: "UNKNOWN_OPERATOR";
+      field: string;
+      operator: string;
       message: string;
     };
 
@@ -373,6 +394,8 @@ export function hashInt(hashInput: string): number {
   return Math.floor((value / 0xfffff) * 100000);
 }
 
+const CONTEXT_FILTER_OPERATOR_SET = new Set<string>(CONTEXT_FILTER_OPERATORS);
+
 const ARRAY_OPERATORS = new Set<ContextFilterOperator>([
   "IS",
   "IS_NOT",
@@ -450,21 +473,8 @@ export function evaluate(
         !normalizedFieldValue.toLowerCase().includes(value.toLowerCase())
       );
     case "GT":
-      if (isNaN(Number(normalizedFieldValue)) || isNaN(Number(value))) {
-        // TODO: return error instead? used logger previously
-        console.error(
-          `GT operator requires numeric values: ${normalizedFieldValue}, ${value}`,
-        );
-        return false;
-      }
       return Number(normalizedFieldValue) > Number(value);
     case "LT":
-      if (isNaN(Number(normalizedFieldValue)) || isNaN(Number(value))) {
-        console.error(
-          `LT operator requires numeric values: ${normalizedFieldValue}, ${value}`,
-        );
-        return false;
-      }
       return Number(normalizedFieldValue) < Number(value);
     case "AFTER":
     case "BEFORE": {
@@ -481,12 +491,6 @@ export function evaluate(
     case "DATE_BEFORE": {
       const fieldValueDate = new Date(normalizedFieldValue).getTime();
       const valueDate = new Date(value).getTime();
-      if (isNaN(fieldValueDate) || isNaN(valueDate)) {
-        console.error(
-          `${operator} operator requires valid date values: ${normalizedFieldValue}, ${value}`,
-        );
-        return false;
-      }
       return operator === "DATE_AFTER"
         ? fieldValueDate >= valueDate
         : fieldValueDate <= valueDate;
@@ -512,7 +516,6 @@ export function evaluate(
     case "IS_FALSE":
       return normalizedFieldValue == "false";
     default:
-      console.error(`unknown operator: ${operator}`);
       return false;
   }
 }
@@ -545,6 +548,104 @@ function addMissingContextFieldError(
   });
 }
 
+type ExpectedValue = "numeric" | "a valid date" | "a numeric day offset";
+
+function isExpectedValue(value: string | undefined, expected: ExpectedValue) {
+  return expected === "a valid date"
+    ? !isNaN(new Date(value ?? "").getTime())
+    : !isNaN(Number(value));
+}
+
+function addInvalidContextValueError(
+  errors: Map<string, EvaluationError>,
+  field: string,
+  operator: ContextFilterOperator,
+  expected: ExpectedValue,
+): void {
+  errors.set(`invalid-context:${field}:${operator}`, {
+    code: "INVALID_CONTEXT_VALUE",
+    field,
+    operator,
+    message: `Context field "${field}" must be ${expected} for operator "${operator}".`,
+  });
+}
+
+function addInvalidTargetingValueError(
+  errors: Map<string, EvaluationError>,
+  field: string,
+  operator: ContextFilterOperator,
+  expected: ExpectedValue,
+): void {
+  errors.set(`invalid-targeting:${field}:${operator}`, {
+    code: "INVALID_TARGETING_VALUE",
+    field,
+    operator,
+    message: `Targeting value for operator "${operator}" and context field "${field}" must be ${expected}.`,
+  });
+}
+
+function addUnknownOperatorError(
+  errors: Map<string, EvaluationError>,
+  field: string,
+  operator: string,
+): void {
+  errors.set(`unknown-operator:${field}:${operator}`, {
+    code: "UNKNOWN_OPERATOR",
+    field,
+    operator,
+    message: `Unknown targeting operator "${operator}" for context field "${field}".`,
+  });
+}
+
+function hasValidOperatorValues(
+  filter: ContextFilter,
+  normalizedFieldValue: string,
+  errors: Map<string, EvaluationError>,
+): boolean {
+  let contextExpected: ExpectedValue | undefined;
+  let targetingExpected: ExpectedValue | undefined;
+
+  switch (filter.operator) {
+    case "GT":
+    case "LT":
+      contextExpected = targetingExpected = "numeric";
+      break;
+    case "AFTER":
+    case "BEFORE":
+      contextExpected = "a valid date";
+      targetingExpected = "a numeric day offset";
+      break;
+    case "DATE_AFTER":
+    case "DATE_BEFORE":
+      contextExpected = targetingExpected = "a valid date";
+      break;
+    default:
+      return true;
+  }
+
+  const contextValid = isExpectedValue(normalizedFieldValue, contextExpected);
+  const targetingValid = isExpectedValue(filter.values?.[0], targetingExpected);
+
+  if (!contextValid) {
+    addInvalidContextValueError(
+      errors,
+      filter.field,
+      filter.operator,
+      contextExpected,
+    );
+  }
+  if (!targetingValid) {
+    addInvalidTargetingValueError(
+      errors,
+      filter.field,
+      filter.operator,
+      targetingExpected,
+    );
+  }
+
+  return contextValid && targetingValid;
+}
+
 function evaluateRecursively(
   filter: RuleFilter,
   context: FlattenedContext,
@@ -554,6 +655,12 @@ function evaluateRecursively(
     case "constant":
       return filter.value;
     case "context": {
+      const operator = String(filter.operator);
+      if (!CONTEXT_FILTER_OPERATOR_SET.has(operator)) {
+        addUnknownOperatorError(errors, filter.field, operator);
+        return false;
+      }
+
       if (
         !(filter.field in context) &&
         filter.operator !== "SET" &&
@@ -569,6 +676,13 @@ function evaluateRecursively(
         !ARRAY_OPERATORS.has(filter.operator)
       ) {
         addUnsupportedArrayOperatorError(errors, filter.field, filter.operator);
+        return false;
+      }
+
+      if (
+        !Array.isArray(normalizedFieldValue) &&
+        !hasValidOperatorValues(filter, normalizedFieldValue, errors)
+      ) {
         return false;
       }
 
