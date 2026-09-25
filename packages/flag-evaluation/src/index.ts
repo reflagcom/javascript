@@ -553,7 +553,7 @@ type ExpectedValue = "numeric" | "a valid date" | "a numeric day offset";
 function isExpectedValue(value: string | undefined, expected: ExpectedValue) {
   return expected === "a valid date"
     ? !isNaN(new Date(value ?? "").getTime())
-    : Number.isFinite(Number(value));
+    : !isNaN(Number(value));
 }
 
 function addInvalidContextValueError(

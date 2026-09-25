@@ -928,6 +928,36 @@ describe("evaluate flag targeting integration ", () => {
       }
     });
 
+    it.each([
+      ["Infinity", "GT", "1"],
+      ["1", "LT", "Infinity"],
+    ] as const)(
+      "preserves numeric evaluation semantics for %s %s %s",
+      (contextValue, operator, targetingValue) => {
+        const rules: Rule<boolean>[] = [
+          {
+            value: true,
+            filter: {
+              type: "context",
+              field: "value",
+              operator,
+              values: [targetingValue],
+            },
+          },
+        ];
+        const context = { value: contextValue };
+
+        expect(evaluate(contextValue, operator, [targetingValue])).toBe(true);
+        for (const result of [
+          evaluateFlagRules({ flagKey: "numeric", rules, context }),
+          newEvaluator(rules)(context, "numeric"),
+        ]) {
+          expect(result.value).toBe(true);
+          expect(result.errors).toBeUndefined();
+        }
+      },
+    );
+
     it("returns diagnostics for invalid date context and targeting values", () => {
       const rules: Rule<boolean>[] = [
         {
