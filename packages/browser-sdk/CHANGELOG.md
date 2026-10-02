@@ -1,5 +1,11 @@
 # @reflag/browser-sdk
 
+## 1.7.4
+
+### Patch Changes
+
+- 0840683: Avoid reporting `CLIENT_NOT_INITIALIZED` when a flag is evaluated from the initial flag state while client initialization is completing.
+
 ## 1.7.3
 
 ### Patch Changes

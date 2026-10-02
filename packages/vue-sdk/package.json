@@ -1,6 +1,6 @@
 {
   "name": "@reflag/vue-sdk",
-  "version": "1.5.6",
+  "version": "1.5.7",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -38,7 +38,7 @@
     "fmt:fix": "oxfmt --write ."
   },
   "dependencies": {
-    "@reflag/browser-sdk": "1.7.3"
+    "@reflag/browser-sdk": "1.7.4"
   },
   "devDependencies": {
     "@reflag/tsconfig": "^0.0.2",

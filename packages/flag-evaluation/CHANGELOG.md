@@ -1,5 +1,11 @@
 # @reflag/flag-evaluation
 
+## 1.1.2
+
+### Patch Changes
+
+- aa47838: Return structured diagnostics for invalid numeric and date operands and unknown targeting operators instead of writing evaluation failures directly to the console.
+
 ## 1.1.1
 
 ### Patch Changes
