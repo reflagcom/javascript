@@ -1,5 +1,12 @@
 # @reflag/node-sdk
 
+## 1.8.2
+
+### Patch Changes
+
+- Updated dependencies [aa47838]
+  - @reflag/flag-evaluation@1.1.2
+
 ## 1.8.1
 
 ### Patch Changes
