@@ -468,6 +468,44 @@ The SDK caches flag definitions in memory for fast performance. The first reques
 
 `EdgeClient` uses `flagsSyncMode: "in-request"`. Refresh fetch starts are throttled to at most once per second, and Cloudflare Workers cannot rely on delayed timer callbacks to run follow-up refreshes later. That means `refreshFlags()` calls made during the throttle window only mark a refresh as pending, so the call itself may resolve before the fetch runs. The queued refresh runs on the next request/access or `refreshFlags()` call after the throttle window expires.
 
+## AWS Lambda
+
+Like Workers, Lambda cannot reliably finish background work after an invocation.
+Unlike Workers' `ctx.waitUntil()`, an async Lambda handler must **await** flushing
+before returning. Keep the client outside the handler for warm cache reuse, disable
+periodic work, and flush in `finally`, including when application code throws:
+
+```typescript
+import { ReflagClient } from "@reflag/node-sdk";
+
+const reflag = new ReflagClient({
+  flagsSyncMode: "in-request",
+  batchOptions: { intervalMs: 0, flushOnExit: false },
+});
+
+export const handler = async () => {
+  try {
+    await reflag.initialize();
+    const { isEnabled } = reflag.getFlag(
+      { user: { id: "user-id" }, company: { id: "company-id" } },
+      "my-flag",
+    );
+    return { statusCode: 200, body: JSON.stringify({ isEnabled }) };
+  } finally {
+    await reflag.flush();
+  }
+};
+```
+
+Process-exit hooks do not run when Lambda freezes an execution environment.
+Setting `callbackWaitsForEmptyEventLoop` is not a substitute for awaiting `flush()`.
+Allow enough invocation time for application work, initialization/refresh and
+flushing (bulk HTTP requests have a 10-second timeout). Flushing waits for delivery
+attempts; failed batches are logged and discarded, not retried.
+
+See [examples/aws-lambda](https://github.com/reflagcom/javascript/tree/main/packages/node-sdk/examples/aws-lambda)
+for a deployable lifecycle probe and warm/cold invocation testing instructions.
+
 ## Error Handling
 
 The SDK is designed to fail gracefully and never throw exceptions to the caller. Instead, it logs errors and provides
