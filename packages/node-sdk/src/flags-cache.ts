@@ -2,14 +2,14 @@ import type { CachedFlagDefinition, Logger } from "./types";
 
 const DEFAULT_MIN_REFRESH_INTERVAL_MS = 1000;
 
-type FlagsCacheRefreshResult =
-  | {
-      definitions: CachedFlagDefinition[];
-      flagStateVersion?: number;
-      etag?: string | Promise<string | undefined>;
-      notModified?: false;
-    }
-  | { notModified: true };
+/** ETags belong to their snapshot, even when persistence publishes them later. */
+export type FlagsCacheSnapshot = {
+  readonly definitions: CachedFlagDefinition[];
+  readonly flagStateVersion?: number;
+  etag?: string;
+};
+
+type FlagsCacheRefreshResult = FlagsCacheSnapshot | { notModified: true };
 
 type CancelScheduledRefresh = () => void;
 
@@ -40,9 +40,7 @@ type FlagsCacheOptions = {
  * keep the pending refresh queued until the next caller touches the cache.
  */
 export class FlagsCache {
-  private value: CachedFlagDefinition[] | undefined;
-  private flagStateVersion: number | undefined;
-  private etag: string | undefined;
+  private snapshot: FlagsCacheSnapshot | undefined;
   private refreshPromise: Promise<void> | undefined;
   private scheduledRefresh: ScheduledRefresh | undefined;
   private lastRefreshAt: number | undefined;
@@ -69,26 +67,26 @@ export class FlagsCache {
   }
 
   public get() {
-    return this.value;
+    return this.snapshot?.definitions;
   }
 
   public getFlagStateVersion() {
-    return this.flagStateVersion;
+    return this.snapshot?.flagStateVersion;
   }
 
   public getETag() {
-    return this.etag;
+    return this.snapshot?.etag;
   }
 
   public async refresh(waitForVersion?: number) {
     if (this.destroyed) {
-      return this.value;
+      return this.get();
     }
 
     this.queueRefresh(waitForVersion);
     this.ensureRefreshStartedOrScheduled();
     await this.waitForQueuedWork();
-    return this.value;
+    return this.get();
   }
 
   public async waitRefresh() {
@@ -97,9 +95,7 @@ export class FlagsCache {
 
   public destroy() {
     this.destroyed = true;
-    this.value = undefined;
-    this.flagStateVersion = undefined;
-    this.etag = undefined;
+    this.snapshot = undefined;
     this.refreshPromise = undefined;
     this.cancelScheduledRefresh();
     this.pendingFullRefresh = false;
@@ -117,10 +113,8 @@ export class FlagsCache {
   // can wait for.
   private queueRefresh(waitForVersion?: number) {
     if (waitForVersion !== undefined) {
-      if (
-        this.flagStateVersion !== undefined &&
-        this.flagStateVersion >= waitForVersion
-      ) {
+      const currentVersion = this.getFlagStateVersion();
+      if (currentVersion !== undefined && currentVersion >= waitForVersion) {
         return;
       }
 
@@ -159,14 +153,12 @@ export class FlagsCache {
   }
 
   private shouldApplyRefreshResult(flagStateVersion?: number) {
+    const currentVersion = this.getFlagStateVersion();
     if (flagStateVersion === undefined) {
-      return this.flagStateVersion === undefined;
+      return currentVersion === undefined;
     }
 
-    return (
-      this.flagStateVersion === undefined ||
-      flagStateVersion >= this.flagStateVersion
-    );
+    return currentVersion === undefined || flagStateVersion >= currentVersion;
   }
 
   private clearSatisfiedPendingVersion(seenFlagStateVersion?: number) {
@@ -175,7 +167,7 @@ export class FlagsCache {
     }
 
     const latestKnownVersion = Math.max(
-      this.flagStateVersion ?? -1,
+      this.getFlagStateVersion() ?? -1,
       seenFlagStateVersion ?? -1,
     );
 
@@ -269,12 +261,8 @@ export class FlagsCache {
       return;
     }
 
-    if (result.notModified) {
-      if (
-        this.value === undefined ||
-        !this.etag ||
-        waitForVersion !== undefined
-      ) {
+    if ("notModified" in result) {
+      if (!this.snapshot?.etag || waitForVersion !== undefined) {
         return;
       }
 
@@ -289,19 +277,7 @@ export class FlagsCache {
       return;
     }
 
-    this.value = result.definitions;
-    this.flagStateVersion = result.flagStateVersion;
-    this.etag = undefined;
-    void Promise.resolve(result.etag).then(
-      (etag) => {
-        // A late save must not attach its validator to a newer snapshot
-        // or restore it after destruction.
-        if (this.value === result.definitions) {
-          this.etag = etag;
-        }
-      },
-      (error) => this.logger?.error("flag definition ETag unavailable", error),
-    );
+    this.snapshot = result;
     this.lastRefreshAt = Date.now();
     this.logger?.info("refreshed flag definitions");
   }

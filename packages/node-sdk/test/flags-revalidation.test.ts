@@ -185,6 +185,43 @@ describe("flag-definition revalidation", () => {
     expect(client["flagsCache"].getETag()).toBe(etag);
   });
 
+  it("keeps late fallback saves scoped to their original snapshots", async () => {
+    let completeFirstSave!: () => void;
+    let completeSecondSave!: () => void;
+    const provider = {
+      load: vi.fn(),
+      save: vi
+        .fn()
+        .mockReturnValueOnce(
+          new Promise<void>((resolve) => {
+            completeFirstSave = resolve;
+          }),
+        )
+        .mockReturnValueOnce(
+          new Promise<void>((resolve) => {
+            completeSecondSave = resolve;
+          }),
+        ),
+    };
+    httpClient.get
+      .mockResolvedValueOnce(modified())
+      .mockResolvedValueOnce(modified(2, '"v2"'));
+    const client = createClient({ flagsFallbackProvider: provider });
+    await client.initialize();
+    await refresh(client);
+
+    completeFirstSave();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(client["flagsCache"].getFlagStateVersion()).toBe(2);
+    expect(client["flagsCache"].getETag()).toBeUndefined();
+
+    client.destroy();
+    completeSecondSave();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(client["flagsCache"].get()).toBeUndefined();
+    expect(client["flagsCache"].getETag()).toBeUndefined();
+  });
+
   it("revalidates an empty flag snapshot", async () => {
     httpClient.get
       .mockResolvedValueOnce({

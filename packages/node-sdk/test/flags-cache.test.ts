@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { FlagsCache } from "../src/flags-cache";
+import { FlagsCache, type FlagsCacheSnapshot } from "../src/flags-cache";
 
 function createDefinitions(key: string) {
   return [{ key }] as any;
@@ -141,16 +141,16 @@ describe("FlagsCache", () => {
   ])(
     "does not replace a newer validator when an older save %s",
     async (_, etag) => {
-      const savedETag = createDeferred<string | undefined>();
+      const definitions = createDefinitions("unchanged");
+      const older: FlagsCacheSnapshot = {
+        definitions,
+        flagStateVersion: 1,
+      };
       const fetchFlags = vi
         .fn()
+        .mockResolvedValueOnce(older)
         .mockResolvedValueOnce({
-          definitions: createDefinitions("older"),
-          flagStateVersion: 1,
-          etag: savedETag.promise,
-        })
-        .mockResolvedValueOnce({
-          definitions: createDefinitions("newer"),
+          definitions,
           flagStateVersion: 2,
           etag: '"newer"',
         });
@@ -158,25 +158,22 @@ describe("FlagsCache", () => {
       await cache.refresh();
       expect(cache.getETag()).toBeUndefined();
       await cache.refresh();
-      savedETag.resolve(etag);
-      await savedETag.promise;
+      older.etag = etag;
 
       expect(cache.getFlagStateVersion()).toBe(2);
       expect(cache.getETag()).toBe('"newer"');
     },
   );
 
-  it("does not restore a deferred validator after destruction", async () => {
-    const savedETag = createDeferred<string | undefined>();
-    const cache = new FlagsCache(async () => ({
+  it("does not restore a late validator after destruction", async () => {
+    const snapshot: FlagsCacheSnapshot = {
       definitions: createDefinitions("first"),
       flagStateVersion: 1,
-      etag: savedETag.promise,
-    }));
+    };
+    const cache = new FlagsCache(async () => snapshot);
     await cache.refresh();
     cache.destroy();
-    savedETag.resolve('"first"');
-    await savedETag.promise;
+    snapshot.etag = '"first"';
 
     expect(cache.get()).toBeUndefined();
     expect(cache.getETag()).toBeUndefined();

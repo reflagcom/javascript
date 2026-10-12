@@ -20,7 +20,7 @@ import {
   SDK_VERSION_HEADER_NAME,
 } from "./config";
 import fetchClient, { withRetry } from "./fetch-http-client";
-import { FlagsCache } from "./flags-cache";
+import { FlagsCache, type FlagsCacheSnapshot } from "./flags-cache";
 import {
   createFlagsSyncController,
   FlagsSyncController,
@@ -568,17 +568,20 @@ export class ReflagClient {
           return undefined;
         }
 
-        const responseETag = response?.etag;
-        const saved = this.saveFlagsFallbackDefinitions(res.features);
-        this.canLoadFlagsFallbackProvider = false;
-        return {
+        const snapshot: FlagsCacheSnapshot = {
           definitions: compileFlagDefinitions(res.features),
           flagStateVersion,
-          // Publish definitions immediately, but only enable conditional
-          // refreshes after persistence succeeds. A failed save leaves the
-          // next ordinary refresh unconditional so it naturally tries again.
-          etag: saved.then((success) => (success ? responseETag : undefined)),
         };
+        const responseETag = response?.etag;
+        // Keep flags available while saving. Late saves only update their own
+        // snapshot, never the replacement snapshot in the cache.
+        void this.saveFlagsFallbackDefinitions(res.features).then((saved) => {
+          if (saved) {
+            snapshot.etag = responseETag;
+          }
+        });
+        this.canLoadFlagsFallbackProvider = false;
+        return snapshot;
       },
       {
         logger: this.logger,
