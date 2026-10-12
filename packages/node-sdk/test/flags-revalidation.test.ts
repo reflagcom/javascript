@@ -448,6 +448,21 @@ describe("flag-definition revalidation", () => {
     expect(client["flagsCache"].getLastRefreshAt()).toBeUndefined();
   });
 
+  it("performs only one unexpected-304 recovery across ordinary retries", async () => {
+    httpClient.get.mockResolvedValue(notModified);
+    const client = createClient({ flagsFetchRetries: 2 });
+    const initialized = client.initialize();
+    await vi.advanceTimersByTimeAsync(10000);
+    await initialized;
+
+    expect(httpClient.get).toHaveBeenCalledTimes(4);
+    for (const [, headers] of httpClient.get.mock.calls) {
+      expect(headers).not.toHaveProperty("If-None-Match");
+    }
+    expect(client["flagsCache"].get()).toBeUndefined();
+    expect(client["flagsCache"].getLastRefreshAt()).toBeUndefined();
+  });
+
   it("fetches unconditionally after loading fallback definitions", async () => {
     const provider = {
       load: vi.fn().mockResolvedValue({

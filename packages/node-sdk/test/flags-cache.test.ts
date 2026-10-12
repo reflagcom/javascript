@@ -47,6 +47,7 @@ describe("FlagsCache", () => {
 
     void cache.refresh(21);
     void cache.refresh(22);
+    void cache.refresh();
 
     firstRefresh.resolve({
       definitions: createDefinitions("first"),
@@ -59,6 +60,7 @@ describe("FlagsCache", () => {
     });
 
     await refreshPromise;
+    expect(fetchFlags).toHaveBeenCalledTimes(2);
     expect(cache.get()).toEqual(createDefinitions("newest"));
   });
 

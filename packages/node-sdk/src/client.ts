@@ -572,14 +572,11 @@ export class ReflagClient {
           definitions: compileFlagDefinitions(res.features),
           flagStateVersion,
         };
-        const responseETag = response?.etag;
-        // Keep flags available while saving. Late saves only update their own
-        // snapshot, never the replacement snapshot in the cache.
-        void this.saveFlagsFallbackDefinitions(res.features).then((saved) => {
-          if (saved) {
-            snapshot.etag = responseETag;
-          }
-        });
+        void this.saveFlagsFallbackDefinitions(
+          res.features,
+          snapshot,
+          response?.etag,
+        );
         this.canLoadFlagsFallbackProvider = false;
         return snapshot;
       },
@@ -649,24 +646,27 @@ export class ReflagClient {
     }
   }
 
-  private async saveFlagsFallbackDefinitions(flags: FlagAPIResponse[]) {
-    const provider = this._config.flagsFallbackProvider;
-    if (!provider) {
-      return true;
-    }
-
+  private async saveFlagsFallbackDefinitions(
+    flags: FlagAPIResponse[],
+    snapshot: FlagsCacheSnapshot,
+    etag?: string,
+  ) {
     try {
-      await provider.save(
-        this._config.flagsFallbackProviderContext,
-        createFlagsFallbackSnapshot(flags),
-      );
-      return true;
+      const provider = this._config.flagsFallbackProvider;
+      if (provider) {
+        await provider.save(
+          this._config.flagsFallbackProviderContext,
+          createFlagsFallbackSnapshot(flags),
+        );
+      }
+      // Enable revalidation only after saving. A late save updates only its
+      // own snapshot, never a replacement or destroyed cache.
+      snapshot.etag = etag;
     } catch (error) {
       this.logger.error(
         "flagsFallbackProvider: failed to save flag definitions",
         error,
       );
-      return false;
     }
   }
 
@@ -1204,16 +1204,6 @@ export class ReflagClient {
    * @returns The response from the server.
    * @throws An error if the path is invalid.
    **/
-  private async get<TResponse>(path: string, retries: number = 3) {
-    const response = await this.getResponse<TResponse>(path, retries);
-    if (!response?.body) {
-      return undefined;
-    }
-
-    const { success: _, ...result } = response.body;
-    return result as TResponse;
-  }
-
   private async getResponse<TResponse>(
     path: string,
     retries: number = 3,
@@ -1227,7 +1217,7 @@ export class ReflagClient {
       const headers = etag
         ? { ...this._config.headers, "If-None-Match": etag }
         : this._config.headers;
-      let recoveredNotModified = false;
+      let recoveryAvailable = Boolean(revalidation && !etag);
       const request = async (requestHeaders: Record<string, string>) => {
         const response = await this.httpClient.get<
           TResponse & { success: boolean }
@@ -1239,17 +1229,15 @@ export class ReflagClient {
       return await withRetry(
         async () => {
           let response = await request(headers);
-          if (response.status === 304 && revalidation) {
-            if (etag) {
-              return response;
-            }
+          if (response.status === 304 && etag) {
+            return response;
+          }
 
-            // An unconditional request should not receive a 304. Recover
-            // once before falling back to normal error handling.
-            if (!recoveredNotModified) {
-              recoveredNotModified = true;
-              response = await request(this._config.headers);
-            }
+          // An unconditional definition request should not receive a 304.
+          // Recover once before falling back to normal error handling.
+          if (response.status === 304 && recoveryAvailable) {
+            recoveryAvailable = false;
+            response = await request(this._config.headers);
           }
 
           if (
@@ -1767,9 +1755,10 @@ export class ReflagClient {
     }
 
     const query = params.toString();
-    const res = await this.get<EvaluatedFlagsAPIResponse>(
+    const response = await this.getResponse<EvaluatedFlagsAPIResponse>(
       `features/evaluated${query ? `?${query}` : ""}`,
     );
+    const res = response?.body;
 
     if (key) {
       const flag = res?.features[key];

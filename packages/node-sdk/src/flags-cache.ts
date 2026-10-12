@@ -47,8 +47,7 @@ export class FlagsCache {
   private lastRefreshStartedAt: number | undefined;
   private destroyed = false;
 
-  private pendingFullRefresh = false;
-  private pendingWaitForVersion: number | undefined;
+  private pendingRefresh: { waitForVersion?: number } | undefined;
 
   private readonly logger?: Logger;
   private readonly minRefreshIntervalMs: number;
@@ -98,8 +97,7 @@ export class FlagsCache {
     this.snapshot = undefined;
     this.refreshPromise = undefined;
     this.cancelScheduledRefresh();
-    this.pendingFullRefresh = false;
-    this.pendingWaitForVersion = undefined;
+    this.pendingRefresh = undefined;
     this.lastRefreshAt = undefined;
     this.lastRefreshStartedAt = undefined;
   }
@@ -118,38 +116,17 @@ export class FlagsCache {
         return;
       }
 
-      this.pendingWaitForVersion =
-        this.pendingWaitForVersion === undefined
-          ? waitForVersion
-          : Math.max(this.pendingWaitForVersion, waitForVersion);
-      this.pendingFullRefresh = false;
+      const pendingVersion = this.pendingRefresh?.waitForVersion;
+      this.pendingRefresh = {
+        waitForVersion:
+          pendingVersion === undefined
+            ? waitForVersion
+            : Math.max(pendingVersion, waitForVersion),
+      };
       return;
     }
 
-    if (this.pendingWaitForVersion !== undefined) {
-      return;
-    }
-
-    this.pendingFullRefresh = true;
-  }
-
-  private hasPendingRefresh() {
-    return this.pendingWaitForVersion !== undefined || this.pendingFullRefresh;
-  }
-
-  private takeNextRefreshRequest() {
-    if (this.pendingWaitForVersion !== undefined) {
-      const waitForVersion = this.pendingWaitForVersion;
-      this.pendingWaitForVersion = undefined;
-      return { waitForVersion };
-    }
-
-    if (!this.pendingFullRefresh) {
-      return undefined;
-    }
-
-    this.pendingFullRefresh = false;
-    return { waitForVersion: undefined };
+    this.pendingRefresh ??= {};
   }
 
   private shouldApplyRefreshResult(flagStateVersion?: number) {
@@ -162,7 +139,8 @@ export class FlagsCache {
   }
 
   private clearSatisfiedPendingVersion(seenFlagStateVersion?: number) {
-    if (this.pendingWaitForVersion === undefined) {
+    const pendingVersion = this.pendingRefresh?.waitForVersion;
+    if (pendingVersion === undefined) {
       return;
     }
 
@@ -171,8 +149,8 @@ export class FlagsCache {
       seenFlagStateVersion ?? -1,
     );
 
-    if (latestKnownVersion >= this.pendingWaitForVersion) {
-      this.pendingWaitForVersion = undefined;
+    if (latestKnownVersion >= pendingVersion) {
+      this.pendingRefresh = undefined;
     }
   }
 
@@ -226,7 +204,7 @@ export class FlagsCache {
   }
 
   private ensureRefreshStartedOrScheduled() {
-    if (this.destroyed || this.refreshPromise || !this.hasPendingRefresh()) {
+    if (this.destroyed || this.refreshPromise || !this.pendingRefresh) {
       return;
     }
 
@@ -241,11 +219,12 @@ export class FlagsCache {
   }
 
   private startNextRefresh() {
-    const request = this.takeNextRefreshRequest();
+    const request = this.pendingRefresh;
     if (!request) {
       return;
     }
 
+    this.pendingRefresh = undefined;
     this.lastRefreshStartedAt = Date.now();
     this.refreshPromise = this.fetchAndApplyRefresh(
       request.waitForVersion,
