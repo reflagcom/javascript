@@ -2,10 +2,14 @@ import type { CachedFlagDefinition, Logger } from "./types";
 
 const DEFAULT_MIN_REFRESH_INTERVAL_MS = 1000;
 
-type FlagsCacheRefreshResult = {
-  definitions: CachedFlagDefinition[];
-  flagStateVersion?: number;
-};
+type FlagsCacheRefreshResult =
+  | {
+      definitions: CachedFlagDefinition[];
+      flagStateVersion?: number;
+      etag?: string;
+      notModified?: false;
+    }
+  | { notModified: true };
 
 type CancelScheduledRefresh = () => void;
 
@@ -38,6 +42,7 @@ type FlagsCacheOptions = {
 export class FlagsCache {
   private value: CachedFlagDefinition[] | undefined;
   private flagStateVersion: number | undefined;
+  private etag: string | undefined;
   private refreshPromise: Promise<void> | undefined;
   private scheduledRefresh: ScheduledRefresh | undefined;
   private lastRefreshAt: number | undefined;
@@ -71,6 +76,10 @@ export class FlagsCache {
     return this.flagStateVersion;
   }
 
+  public getETag() {
+    return this.etag;
+  }
+
   public async refresh(waitForVersion?: number) {
     if (this.destroyed) {
       return this.value;
@@ -90,6 +99,7 @@ export class FlagsCache {
     this.destroyed = true;
     this.value = undefined;
     this.flagStateVersion = undefined;
+    this.etag = undefined;
     this.refreshPromise = undefined;
     this.cancelScheduledRefresh();
     this.pendingFullRefresh = false;
@@ -259,6 +269,21 @@ export class FlagsCache {
       return;
     }
 
+    if (result.notModified) {
+      if (
+        this.value === undefined ||
+        !this.etag ||
+        waitForVersion !== undefined
+      ) {
+        return;
+      }
+
+      this.clearSatisfiedPendingVersion();
+      this.lastRefreshAt = Date.now();
+      this.logger?.debug("flag definitions unchanged");
+      return;
+    }
+
     this.clearSatisfiedPendingVersion(result.flagStateVersion);
 
     if (!this.shouldApplyRefreshResult(result.flagStateVersion)) {
@@ -267,6 +292,7 @@ export class FlagsCache {
 
     this.value = result.definitions;
     this.flagStateVersion = result.flagStateVersion;
+    this.etag = result.etag;
     this.lastRefreshAt = Date.now();
     this.logger?.info("refreshed flag definitions");
   }

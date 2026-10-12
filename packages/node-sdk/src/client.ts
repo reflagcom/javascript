@@ -536,10 +536,20 @@ export class ReflagClient {
             ? "features"
             : `features?waitForVersion=${encodeURIComponent(String(waitForVersion))}`;
 
-        const res = await this.get<FlagsAPIResponse>(
+        // A 304 cannot prove that a newer requested version was reached.
+        // Keep version-targeted fetches unconditional.
+        const etag =
+          waitForVersion === undefined ? this.flagsCache.getETag() : undefined;
+        const response = await this.getResponse<FlagsAPIResponse>(
           path,
           this._config.flagsFetchRetries,
+          { etag, recoverUnexpectedNotModified: true },
         );
+        if (response?.status === 304) {
+          return { notModified: true };
+        }
+
+        const res = response?.body;
         const flagStateVersion = res?.flagStateVersion;
         if (
           !isObject(res) ||
@@ -559,6 +569,9 @@ export class ReflagClient {
         return {
           definitions: compileFlagDefinitions(res.features),
           flagStateVersion,
+          etag: Object.entries(response?.headers ?? {}).find(
+            ([name]) => name.toLowerCase() === "etag",
+          )?.[1],
         };
       },
       {
@@ -1181,17 +1194,56 @@ export class ReflagClient {
    * @throws An error if the path is invalid.
    **/
   private async get<TResponse>(path: string, retries: number = 3) {
+    const response = await this.getResponse<TResponse>(path, retries);
+    if (!response?.body) {
+      return undefined;
+    }
+
+    const { success: _, ...result } = response.body;
+    return result as TResponse;
+  }
+
+  private async getResponse<TResponse>(
+    path: string,
+    retries: number = 3,
+    options: {
+      etag?: string;
+      recoverUnexpectedNotModified?: boolean;
+    } = {},
+  ) {
     ok(typeof path === "string" && path.length > 0, "path must be a string");
 
     try {
       const url = this.buildUrl(path);
+      const headers = options.etag
+        ? { ...this._config.headers, "If-None-Match": options.etag }
+        : this._config.headers;
+      let recoveredNotModified = false;
+      const request = async (requestHeaders: Record<string, string>) => {
+        const response = await this.httpClient.get<
+          TResponse & { success: boolean }
+        >(url, requestHeaders, this._config.fetchTimeoutMs);
+        this.logger.debug(`get request to "${url}"`, response);
+        return response;
+      };
+
       return await withRetry(
         async () => {
-          const response = await this.httpClient.get<
-            TResponse & { success: boolean }
-          >(url, this._config.headers, this._config.fetchTimeoutMs);
+          let response = await request(headers);
+          if (response.status === 304 && options.etag) {
+            return response;
+          }
 
-          this.logger.debug(`get request to "${url}"`, response);
+          // An unconditional request should not receive a 304. Try once more
+          // without a validator before falling back to normal error handling.
+          if (
+            response.status === 304 &&
+            options.recoverUnexpectedNotModified &&
+            !recoveredNotModified
+          ) {
+            recoveredNotModified = true;
+            response = await request(this._config.headers);
+          }
 
           if (
             !response.ok ||
@@ -1202,8 +1254,7 @@ export class ReflagClient {
               `invalid response received from server for "${url}": ${JSON.stringify(response.body)}`,
             );
           }
-          const { success: _, ...result } = response.body;
-          return result as TResponse;
+          return response;
         },
         (error) => {
           this.logger.warn("failed to fetch flags, will retry", error);

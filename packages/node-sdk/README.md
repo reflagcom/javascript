@@ -180,7 +180,16 @@ This behavior is built in and does not currently require configuration.
 
 Flag definitions include the rules needed to determine which flags should be enabled and which config values should be applied to any given user/company.
 Flag definitions are automatically fetched when calling `initialize()`.
-They are then cached and refreshed in the background.
+They are then cached and refreshed in the background. Ordinary refreshes use
+ETags to avoid downloading unchanged definitions. A `304 Not Modified` response
+keeps the cached definitions and resets their freshness without recompiling
+rules or writing a new fallback snapshot. Initial fetches and refreshes with a
+`waitForVersion` target remain unconditional.
+
+Custom HTTP clients can enable this optimization by returning the ETag in
+`HttpClientResponse.headers` and returning 304 responses with `body: undefined`.
+Clients that omit response headers continue using full fetches.
+
 It's also possible to get the currently in use flag definitions:
 
 ```typescript
