@@ -137,6 +137,53 @@ describe("FlagsCache", () => {
     expect(cache.getETag()).toBe('"v2"');
   });
 
+  it.each([
+    ["succeeds", '"old"'],
+    ["fails", undefined],
+  ])(
+    "does not replace a newer validator when an older save %s",
+    async (_, etag) => {
+      const savedETag = createDeferred<string | undefined>();
+      const fetchFlags = vi
+        .fn()
+        .mockResolvedValueOnce({
+          definitions: createDefinitions("older"),
+          flagStateVersion: 1,
+          etag: savedETag.promise,
+        })
+        .mockResolvedValueOnce({
+          definitions: createDefinitions("newer"),
+          flagStateVersion: 2,
+          etag: '"newer"',
+        });
+      const cache = new FlagsCache(fetchFlags, { minRefreshIntervalMs: 0 });
+      await cache.refresh();
+      expect(cache.getETag()).toBeUndefined();
+      await cache.refresh();
+      savedETag.resolve(etag);
+      await savedETag.promise;
+
+      expect(cache.getFlagStateVersion()).toBe(2);
+      expect(cache.getETag()).toBe('"newer"');
+    },
+  );
+
+  it("does not restore a deferred validator after destruction", async () => {
+    const savedETag = createDeferred<string | undefined>();
+    const cache = new FlagsCache(async () => ({
+      definitions: createDefinitions("first"),
+      flagStateVersion: 1,
+      etag: savedETag.promise,
+    }));
+    await cache.refresh();
+    cache.destroy();
+    savedETag.resolve('"first"');
+    await savedETag.promise;
+
+    expect(cache.get()).toBeUndefined();
+    expect(cache.getETag()).toBeUndefined();
+  });
+
   it("does not apply a refresh or validator after destruction", async () => {
     const response = createDeferred<any>();
     const cache = new FlagsCache(() => response.promise);

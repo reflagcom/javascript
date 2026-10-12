@@ -184,7 +184,10 @@ They are then cached and refreshed in the background. Ordinary refreshes use
 ETags to avoid downloading unchanged definitions. A `304 Not Modified` response
 keeps the cached definitions and resets their freshness without recompiling
 rules or writing a new fallback snapshot. Initial fetches and refreshes with a
-`waitForVersion` target remain unconditional.
+`waitForVersion` target remain unconditional. When a fallback provider is
+configured, the SDK retains the ETag only after the snapshot is saved
+successfully. A failed or pending save keeps ordinary refreshes unconditional
+so persistence can recover, without delaying flag availability.
 
 Custom HTTP clients can enable this optimization by returning the ETag in
 `HttpClientResponse.headers` and returning 304 responses with `body: undefined`.

@@ -564,14 +564,18 @@ export class ReflagClient {
             : undefined;
         }
 
-        void this.saveFlagsFallbackDefinitions(res.features);
+        const responseETag = Object.entries(response?.headers ?? {}).find(
+          ([name]) => name.toLowerCase() === "etag",
+        )?.[1];
+        const saved = this.saveFlagsFallbackDefinitions(res.features);
         this.canLoadFlagsFallbackProvider = false;
         return {
           definitions: compileFlagDefinitions(res.features),
           flagStateVersion,
-          etag: Object.entries(response?.headers ?? {}).find(
-            ([name]) => name.toLowerCase() === "etag",
-          )?.[1],
+          // Publish definitions immediately, but only enable conditional
+          // refreshes after persistence succeeds. A failed save leaves the
+          // next ordinary refresh unconditional so it naturally tries again.
+          etag: saved.then((success) => (success ? responseETag : undefined)),
         };
       },
       {
@@ -643,7 +647,7 @@ export class ReflagClient {
   private async saveFlagsFallbackDefinitions(flags: FlagAPIResponse[]) {
     const provider = this._config.flagsFallbackProvider;
     if (!provider) {
-      return;
+      return true;
     }
 
     try {
@@ -651,11 +655,13 @@ export class ReflagClient {
         this._config.flagsFallbackProviderContext,
         createFlagsFallbackSnapshot(flags),
       );
+      return true;
     } catch (error) {
       this.logger.error(
         "flagsFallbackProvider: failed to save flag definitions",
         error,
       );
+      return false;
     }
   }
 

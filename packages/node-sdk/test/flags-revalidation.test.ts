@@ -138,6 +138,53 @@ describe("flag-definition revalidation", () => {
     expect(provider.save).toHaveBeenCalledTimes(2);
   });
 
+  it("leaves the ETag unset after a failed save so the next refresh naturally retries persistence", async () => {
+    const error = new Error("temporary storage failure");
+    const provider = {
+      load: vi.fn(),
+      save: vi.fn().mockRejectedValueOnce(error).mockResolvedValue(undefined),
+    };
+    httpClient.get.mockImplementation(async (_url, headers) =>
+      headers["If-None-Match"] ? notModified : modified(),
+    );
+    const client = createClient({ flagsFallbackProvider: provider });
+    await client.initialize();
+
+    expect(client.getFlag({}, "flag").isEnabled).toBe(true);
+    expect(client["flagsCache"].getETag()).toBeUndefined();
+    expect(provider.save).toHaveBeenCalledTimes(1);
+    expect(logger.error).toHaveBeenCalledWith(
+      "flagsFallbackProvider: failed to save flag definitions",
+      error,
+    );
+    await refresh(client);
+
+    expect(requestHeaders(2)).not.toHaveProperty("If-None-Match");
+    expect(provider.save).toHaveBeenCalledTimes(2);
+    expect(client["flagsCache"].getETag()).toBe(etag);
+    await refresh(client);
+
+    expect(requestHeaders(3)["If-None-Match"]).toBe(etag);
+    expect(provider.save).toHaveBeenCalledTimes(2);
+  });
+
+  it("publishes live definitions without waiting for a pending fallback save", async () => {
+    let completeSave!: () => void;
+    const save = new Promise<void>((resolve) => {
+      completeSave = resolve;
+    });
+    const provider = { load: vi.fn(), save: vi.fn().mockReturnValue(save) };
+    httpClient.get.mockResolvedValue(modified());
+    const client = createClient({ flagsFallbackProvider: provider });
+    await client.initialize();
+
+    expect(client.getFlag({}, "flag").isEnabled).toBe(true);
+    expect(client["flagsCache"].getETag()).toBeUndefined();
+    completeSave();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(client["flagsCache"].getETag()).toBe(etag);
+  });
+
   it("revalidates an empty flag snapshot", async () => {
     httpClient.get
       .mockResolvedValueOnce({
