@@ -287,6 +287,35 @@ describe("flag-definition revalidation", () => {
     expect(requestHeaders(3)).not.toHaveProperty("If-None-Match");
   });
 
+  it("does not overwrite fallback storage with a rejected older snapshot before a 304", async () => {
+    const current = modified(2, '"v2"');
+    const provider = {
+      load: vi.fn(),
+      save: vi.fn().mockResolvedValue(undefined),
+    };
+    httpClient.get
+      .mockResolvedValueOnce(current)
+      .mockResolvedValueOnce({
+        ...modified(1, '"v1"'),
+        body: { success: true, flagStateVersion: 1, features: [] },
+      })
+      .mockResolvedValueOnce(notModified);
+    const client = createClient({ flagsFallbackProvider: provider });
+    await client.initialize();
+    const snapshot = client["flagsCache"].get();
+    await refresh(client);
+    await refresh(client);
+
+    expect(client["flagsCache"].get()).toBe(snapshot);
+    expect(client["flagsCache"].getFlagStateVersion()).toBe(2);
+    expect(client["flagsCache"].getETag()).toBe('"v2"');
+    expect(requestHeaders(3)["If-None-Match"]).toBe('"v2"');
+    expect(provider.save).toHaveBeenCalledTimes(1);
+    expect(provider.save.mock.calls[0]?.[1].flags).toEqual(
+      current.body.features,
+    );
+  });
+
   it.each([
     ["an HTTP error", { ok: false, status: 500, body: { success: false } }],
     [

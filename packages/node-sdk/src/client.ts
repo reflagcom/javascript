@@ -564,6 +564,10 @@ export class ReflagClient {
             : undefined;
         }
 
+        if (flagStateVersion < (this.flagsCache.getFlagStateVersion() ?? -1)) {
+          return undefined;
+        }
+
         const responseETag = Object.entries(response?.headers ?? {}).find(
           ([name]) => name.toLowerCase() === "etag",
         )?.[1];
