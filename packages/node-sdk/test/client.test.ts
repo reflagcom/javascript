@@ -1196,7 +1196,7 @@ describe("ReflagClient", () => {
               success: true,
               ...flagDefinitions,
             },
-            headers: { etag: 'W/"flags-v1"' },
+            etag: 'W/"flags-v1"',
           })
           .mockResolvedValue({ ok: false, status: 304, body: undefined });
 

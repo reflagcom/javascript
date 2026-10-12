@@ -56,7 +56,7 @@ describe("fetchClient", () => {
       ok: true,
       status: 200,
       body: { success: true },
-      headers: { etag: 'W/"flags-v1"' },
+      etag: 'W/"flags-v1"',
     };
 
     global.fetch = vi.fn().mockResolvedValue({
@@ -146,7 +146,7 @@ describe("fetchClient", () => {
       ok: false,
       status: 400,
       body: { error: "Something went wrong" },
-      headers: {},
+      etag: undefined,
     };
 
     global.fetch = vi.fn().mockResolvedValue({
@@ -175,7 +175,7 @@ describe("fetchClient", () => {
       ok: false,
       status: 304,
       body: undefined,
-      headers: { etag: 'W/"flags-v1"' },
+      etag: 'W/"flags-v1"',
     });
     expect(json).not.toHaveBeenCalled();
   });
@@ -211,12 +211,12 @@ describe("fetchClient", () => {
       const initial = await fetchClient.get(originUrl, headers, 5000);
       const revalidated = await fetchClient.get(
         originUrl,
-        { ...headers, "If-None-Match": initial.headers!.etag! },
+        { ...headers, "If-None-Match": initial.etag! },
         5000,
       );
 
       expect(initial.status).toBe(200);
-      expect(initial.headers?.etag).toBe(etag);
+      expect(initial.etag).toBe(etag);
       expect(revalidated).toMatchObject({
         status: 304,
         ok: false,

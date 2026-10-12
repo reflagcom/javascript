@@ -51,14 +51,12 @@ const fetchClient: HttpClient = {
       cache: "no-cache",
     });
 
+    const body = response.status === 304 ? undefined : await response.json();
     return {
       ok: response.ok,
       status: response.status,
-      body:
-        response.status === 304
-          ? undefined
-          : ((await response.json()) as TResponse),
-      headers: Object.fromEntries(response.headers),
+      body: body as TResponse | undefined,
+      etag: response.headers.get("etag") ?? undefined,
     };
   },
 };

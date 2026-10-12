@@ -189,9 +189,9 @@ configured, the SDK retains the ETag only after the snapshot is saved
 successfully. A failed or pending save keeps ordinary refreshes unconditional
 so persistence can recover, without delaying flag availability.
 
-Custom HTTP clients can enable this optimization by returning the ETag in
-`HttpClientResponse.headers` and returning 304 responses with `body: undefined`.
-Clients that omit response headers continue using full fetches.
+Custom HTTP clients can enable this optimization by returning the exact ETag
+value in `HttpClientResponse.etag` and returning 304 responses with
+`body: undefined`. Clients that omit the ETag continue using full fetches.
 
 It's also possible to get the currently in use flag definitions:
 

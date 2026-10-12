@@ -568,9 +568,7 @@ export class ReflagClient {
           return undefined;
         }
 
-        const responseETag = Object.entries(response?.headers ?? {}).find(
-          ([name]) => name.toLowerCase() === "etag",
-        )?.[1];
+        const responseETag = response?.etag;
         const saved = this.saveFlagsFallbackDefinitions(res.features);
         this.canLoadFlagsFallbackProvider = false;
         return {

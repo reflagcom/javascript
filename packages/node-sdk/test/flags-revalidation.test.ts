@@ -25,7 +25,7 @@ function modified(version = 1, responseETag: string | undefined = etag) {
     ok: true,
     status: 200,
     body: { success: true, ...definitions, flagStateVersion: version },
-    headers: responseETag ? { ETag: responseETag } : undefined,
+    etag: responseETag,
   };
 }
 
@@ -257,7 +257,7 @@ describe("flag-definition revalidation", () => {
     expect(requestHeaders(2)).not.toHaveProperty("If-None-Match");
   });
 
-  it("keeps custom clients without response headers working", async () => {
+  it("keeps custom clients without an ETag working", async () => {
     httpClient.get.mockResolvedValue({
       ok: true,
       status: 200,
@@ -275,7 +275,7 @@ describe("flag-definition revalidation", () => {
   it("clears the old ETag when an accepted replacement omits it", async () => {
     httpClient.get
       .mockResolvedValueOnce(modified())
-      .mockResolvedValueOnce({ ...modified(2), headers: undefined })
+      .mockResolvedValueOnce({ ...modified(2), etag: undefined })
       .mockResolvedValueOnce(modified(3));
     const client = createClient();
     await client.initialize();
