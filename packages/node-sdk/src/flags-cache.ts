@@ -278,7 +278,6 @@ export class FlagsCache {
         return;
       }
 
-      this.clearSatisfiedPendingVersion();
       this.lastRefreshAt = Date.now();
       this.logger?.debug("flag definitions unchanged");
       return;
@@ -292,20 +291,17 @@ export class FlagsCache {
 
     this.value = result.definitions;
     this.flagStateVersion = result.flagStateVersion;
-    this.etag = typeof result.etag === "string" ? result.etag : undefined;
-    if (result.etag && typeof result.etag !== "string") {
-      void result.etag.then(
-        (etag) => {
-          // A late save must not attach its validator to a newer snapshot
-          // or restore it after destruction.
-          if (this.value === result.definitions) {
-            this.etag = etag;
-          }
-        },
-        (error) =>
-          this.logger?.error("flag definition ETag unavailable", error),
-      );
-    }
+    this.etag = undefined;
+    void Promise.resolve(result.etag).then(
+      (etag) => {
+        // A late save must not attach its validator to a newer snapshot
+        // or restore it after destruction.
+        if (this.value === result.definitions) {
+          this.etag = etag;
+        }
+      },
+      (error) => this.logger?.error("flag definition ETag unavailable", error),
+    );
     this.lastRefreshAt = Date.now();
     this.logger?.info("refreshed flag definitions");
   }

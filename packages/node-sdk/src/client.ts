@@ -543,7 +543,7 @@ export class ReflagClient {
         const response = await this.getResponse<FlagsAPIResponse>(
           path,
           this._config.flagsFetchRetries,
-          { etag, recoverUnexpectedNotModified: true },
+          { etag },
         );
         if (response?.status === 304) {
           return { notModified: true };
@@ -1212,17 +1212,15 @@ export class ReflagClient {
   private async getResponse<TResponse>(
     path: string,
     retries: number = 3,
-    options: {
-      etag?: string;
-      recoverUnexpectedNotModified?: boolean;
-    } = {},
+    revalidation?: { etag?: string },
   ) {
     ok(typeof path === "string" && path.length > 0, "path must be a string");
 
     try {
       const url = this.buildUrl(path);
-      const headers = options.etag
-        ? { ...this._config.headers, "If-None-Match": options.etag }
+      const etag = revalidation?.etag;
+      const headers = etag
+        ? { ...this._config.headers, "If-None-Match": etag }
         : this._config.headers;
       let recoveredNotModified = false;
       const request = async (requestHeaders: Record<string, string>) => {
@@ -1236,19 +1234,17 @@ export class ReflagClient {
       return await withRetry(
         async () => {
           let response = await request(headers);
-          if (response.status === 304 && options.etag) {
-            return response;
-          }
+          if (response.status === 304 && revalidation) {
+            if (etag) {
+              return response;
+            }
 
-          // An unconditional request should not receive a 304. Try once more
-          // without a validator before falling back to normal error handling.
-          if (
-            response.status === 304 &&
-            options.recoverUnexpectedNotModified &&
-            !recoveredNotModified
-          ) {
-            recoveredNotModified = true;
-            response = await request(this._config.headers);
+            // An unconditional request should not receive a 304. Recover
+            // once before falling back to normal error handling.
+            if (!recoveredNotModified) {
+              recoveredNotModified = true;
+              response = await request(this._config.headers);
+            }
           }
 
           if (

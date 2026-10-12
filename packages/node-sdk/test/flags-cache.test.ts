@@ -8,13 +8,11 @@ function createDefinitions(key: string) {
 
 function createDeferred<T>() {
   let resolve!: (value: T) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((innerResolve, innerReject) => {
+  const promise = new Promise<T>((innerResolve) => {
     resolve = innerResolve;
-    reject = innerReject;
   });
 
-  return { promise, resolve, reject };
+  return { promise, resolve };
 }
 
 function scheduleTrailingRefresh(delayMs: number, callback: () => void) {
