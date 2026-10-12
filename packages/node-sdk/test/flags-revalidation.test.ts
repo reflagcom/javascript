@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ReflagClient } from "../src/client";
 import { API_TIMEOUT_MS, FLAGS_REFETCH_MS } from "../src/config";
-import type { ClientOptions, FlagsAPIResponse } from "../src/types";
+import type {
+  ClientOptions,
+  FlagsAPIResponse,
+  FlagsFallbackSnapshot,
+} from "../src/types";
 
 const etag = 'W/"flags-v1"';
 const notModified = { ok: false, status: 304, body: undefined };
@@ -184,6 +188,61 @@ describe("flag-definition revalidation", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(client["flagsCache"].getETag()).toBe(etag);
   });
+
+  it.each(["succeeds", "fails"])(
+    "serializes fallback writes when the first save %s, keeping the latest snapshot through 304s",
+    async (outcome) => {
+      let completeFirstSave!: () => void;
+      let rejectFirstSave!: (error: Error) => void;
+      const firstSave = new Promise<void>((resolve, reject) => {
+        completeFirstSave = resolve;
+        rejectFirstSave = reject;
+      });
+      let stored: FlagsFallbackSnapshot | undefined;
+      const provider = {
+        load: vi.fn(),
+        save: vi.fn(
+          async (_context: unknown, snapshot: FlagsFallbackSnapshot) => {
+            if (snapshot.flags.length) {
+              await firstSave;
+            }
+            stored = snapshot;
+          },
+        ),
+      };
+      httpClient.get
+        .mockResolvedValueOnce(modified())
+        .mockResolvedValueOnce({
+          ...modified(2, '"v2"'),
+          body: { success: true, flagStateVersion: 2, features: [] },
+        })
+        .mockResolvedValue(notModified);
+      const client = createClient({ flagsFallbackProvider: provider });
+      await client.initialize();
+      await refresh(client);
+
+      expect(client["flagsCache"].get()).toEqual([]);
+      expect(client["flagsCache"].getFlagStateVersion()).toBe(2);
+      expect(client["flagsCache"].getETag()).toBeUndefined();
+      expect(provider.save).toHaveBeenCalledTimes(1);
+      expect(stored).toBeUndefined();
+
+      if (outcome === "succeeds") {
+        completeFirstSave();
+      } else {
+        rejectFirstSave(new Error("temporary storage failure"));
+      }
+      await vi.advanceTimersByTimeAsync(0);
+      expect(provider.save).toHaveBeenCalledTimes(2);
+      expect(stored?.flags).toEqual([]);
+      expect(client["flagsCache"].getETag()).toBe('"v2"');
+      await refresh(client);
+
+      expect(requestHeaders(3)["If-None-Match"]).toBe('"v2"');
+      expect(provider.save).toHaveBeenCalledTimes(2);
+      expect(stored?.flags).toEqual([]);
+    },
+  );
 
   it("keeps late fallback saves scoped to their original snapshots", async () => {
     let completeFirstSave!: () => void;

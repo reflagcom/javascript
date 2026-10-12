@@ -292,6 +292,7 @@ export class ReflagClient {
   private flagsSyncController: FlagsSyncController;
   private initializationFinished = false;
   private canLoadFlagsFallbackProvider = true;
+  private flagsFallbackSavePromise = Promise.resolve();
   private _initialize = once(async () => {
     const start = Date.now();
     if (!this._config.offline) {
@@ -572,7 +573,7 @@ export class ReflagClient {
           definitions: compileFlagDefinitions(res.features),
           flagStateVersion,
         };
-        void this.saveFlagsFallbackDefinitions(
+        this.saveFlagsFallbackDefinitions(
           res.features,
           snapshot,
           response?.etag,
@@ -646,28 +647,33 @@ export class ReflagClient {
     }
   }
 
-  private async saveFlagsFallbackDefinitions(
+  private saveFlagsFallbackDefinitions(
     flags: FlagAPIResponse[],
     snapshot: FlagsCacheSnapshot,
     etag?: string,
   ) {
-    try {
-      const provider = this._config.flagsFallbackProvider;
-      if (provider) {
-        await provider.save(
-          this._config.flagsFallbackProviderContext,
-          createFlagsFallbackSnapshot(flags),
-        );
-      }
-      // Enable revalidation only after saving. A late save updates only its
-      // own snapshot, never a replacement or destroyed cache.
-      snapshot.etag = etag;
-    } catch (error) {
-      this.logger.error(
-        "flagsFallbackProvider: failed to save flag definitions",
-        error,
-      );
-    }
+    // Serialize background writes so an older save cannot overwrite a newer one.
+    this.flagsFallbackSavePromise = this.flagsFallbackSavePromise.then(
+      async () => {
+        try {
+          const provider = this._config.flagsFallbackProvider;
+          if (provider) {
+            await provider.save(
+              this._config.flagsFallbackProviderContext,
+              createFlagsFallbackSnapshot(flags),
+            );
+          }
+          // Enable revalidation only after saving. A late save updates only its
+          // own snapshot, never a replacement or destroyed cache.
+          snapshot.etag = etag;
+        } catch (error) {
+          this.logger.error(
+            "flagsFallbackProvider: failed to save flag definitions",
+            error,
+          );
+        }
+      },
+    );
   }
 
   /**
