@@ -20,7 +20,7 @@ import {
   SDK_VERSION_HEADER_NAME,
 } from "./config";
 import fetchClient, { withRetry } from "./fetch-http-client";
-import { FlagsCache } from "./flags-cache";
+import { FlagsCache, type FlagsCacheSnapshot } from "./flags-cache";
 import {
   createFlagsSyncController,
   FlagsSyncController,
@@ -292,6 +292,7 @@ export class ReflagClient {
   private flagsSyncController: FlagsSyncController;
   private initializationFinished = false;
   private canLoadFlagsFallbackProvider = true;
+  private flagsFallbackSavePromise = Promise.resolve();
   private _initialize = once(async () => {
     const start = Date.now();
     if (!this._config.offline) {
@@ -536,10 +537,20 @@ export class ReflagClient {
             ? "features"
             : `features?waitForVersion=${encodeURIComponent(String(waitForVersion))}`;
 
-        const res = await this.get<FlagsAPIResponse>(
+        // A 304 cannot prove that a newer requested version was reached.
+        // Keep version-targeted fetches unconditional.
+        const etag =
+          waitForVersion === undefined ? this.flagsCache.getETag() : undefined;
+        const response = await this.getResponse<FlagsAPIResponse>(
           path,
           this._config.flagsFetchRetries,
+          { etag },
         );
+        if (response?.status === 304) {
+          return { notModified: true };
+        }
+
+        const res = response?.body;
         const flagStateVersion = res?.flagStateVersion;
         if (
           !isObject(res) ||
@@ -554,12 +565,21 @@ export class ReflagClient {
             : undefined;
         }
 
-        void this.saveFlagsFallbackDefinitions(res.features);
-        this.canLoadFlagsFallbackProvider = false;
-        return {
+        if (flagStateVersion < (this.flagsCache.getFlagStateVersion() ?? -1)) {
+          return undefined;
+        }
+
+        const snapshot: FlagsCacheSnapshot = {
           definitions: compileFlagDefinitions(res.features),
           flagStateVersion,
         };
+        this.saveFlagsFallbackDefinitions(
+          res.features,
+          snapshot,
+          response?.etag,
+        );
+        this.canLoadFlagsFallbackProvider = false;
+        return snapshot;
       },
       {
         logger: this.logger,
@@ -627,23 +647,33 @@ export class ReflagClient {
     }
   }
 
-  private async saveFlagsFallbackDefinitions(flags: FlagAPIResponse[]) {
-    const provider = this._config.flagsFallbackProvider;
-    if (!provider) {
-      return;
-    }
-
-    try {
-      await provider.save(
-        this._config.flagsFallbackProviderContext,
-        createFlagsFallbackSnapshot(flags),
-      );
-    } catch (error) {
-      this.logger.error(
-        "flagsFallbackProvider: failed to save flag definitions",
-        error,
-      );
-    }
+  private saveFlagsFallbackDefinitions(
+    flags: FlagAPIResponse[],
+    snapshot: FlagsCacheSnapshot,
+    etag?: string,
+  ) {
+    // Serialize background writes so an older save cannot overwrite a newer one.
+    this.flagsFallbackSavePromise = this.flagsFallbackSavePromise.then(
+      async () => {
+        try {
+          const provider = this._config.flagsFallbackProvider;
+          if (provider) {
+            await provider.save(
+              this._config.flagsFallbackProviderContext,
+              createFlagsFallbackSnapshot(flags),
+            );
+          }
+          // Enable revalidation only after saving. A late save updates only its
+          // own snapshot, never a replacement or destroyed cache.
+          snapshot.etag = etag;
+        } catch (error) {
+          this.logger.error(
+            "flagsFallbackProvider: failed to save flag definitions",
+            error,
+          );
+        }
+      },
+    );
   }
 
   /**
@@ -1180,18 +1210,41 @@ export class ReflagClient {
    * @returns The response from the server.
    * @throws An error if the path is invalid.
    **/
-  private async get<TResponse>(path: string, retries: number = 3) {
+  private async getResponse<TResponse>(
+    path: string,
+    retries: number = 3,
+    revalidation?: { etag?: string },
+  ) {
     ok(typeof path === "string" && path.length > 0, "path must be a string");
 
     try {
       const url = this.buildUrl(path);
+      const etag = revalidation?.etag;
+      const headers = etag
+        ? { ...this._config.headers, "If-None-Match": etag }
+        : this._config.headers;
+      let recoveryAvailable = Boolean(revalidation && !etag);
+      const request = async (requestHeaders: Record<string, string>) => {
+        const response = await this.httpClient.get<
+          TResponse & { success: boolean }
+        >(url, requestHeaders, this._config.fetchTimeoutMs);
+        this.logger.debug(`get request to "${url}"`, response);
+        return response;
+      };
+
       return await withRetry(
         async () => {
-          const response = await this.httpClient.get<
-            TResponse & { success: boolean }
-          >(url, this._config.headers, this._config.fetchTimeoutMs);
+          let response = await request(headers);
+          if (response.status === 304 && etag) {
+            return response;
+          }
 
-          this.logger.debug(`get request to "${url}"`, response);
+          // An unconditional definition request should not receive a 304.
+          // Recover once before falling back to normal error handling.
+          if (response.status === 304 && recoveryAvailable) {
+            recoveryAvailable = false;
+            response = await request(this._config.headers);
+          }
 
           if (
             !response.ok ||
@@ -1202,8 +1255,7 @@ export class ReflagClient {
               `invalid response received from server for "${url}": ${JSON.stringify(response.body)}`,
             );
           }
-          const { success: _, ...result } = response.body;
-          return result as TResponse;
+          return response;
         },
         (error) => {
           this.logger.warn("failed to fetch flags, will retry", error);
@@ -1709,9 +1761,10 @@ export class ReflagClient {
     }
 
     const query = params.toString();
-    const res = await this.get<EvaluatedFlagsAPIResponse>(
+    const response = await this.getResponse<EvaluatedFlagsAPIResponse>(
       `features/evaluated${query ? `?${query}` : ""}`,
     );
+    const res = response?.body;
 
     if (key) {
       const flag = res?.features[key];

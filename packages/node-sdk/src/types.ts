@@ -516,6 +516,12 @@ export type HttpClientResponse<TResponse> = {
    * The body of the response if available.
    **/
   body: TResponse | undefined;
+
+  /**
+   * The response's ETag, if available. Return its exact value to enable
+   * conditional flag-definition refreshes with a custom HTTP client.
+   **/
+  etag?: string;
 };
 
 /**

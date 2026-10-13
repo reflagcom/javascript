@@ -2,10 +2,14 @@ import type { CachedFlagDefinition, Logger } from "./types";
 
 const DEFAULT_MIN_REFRESH_INTERVAL_MS = 1000;
 
-type FlagsCacheRefreshResult = {
-  definitions: CachedFlagDefinition[];
-  flagStateVersion?: number;
+/** ETags belong to their snapshot, even when persistence publishes them later. */
+export type FlagsCacheSnapshot = {
+  readonly definitions: CachedFlagDefinition[];
+  readonly flagStateVersion?: number;
+  etag?: string;
 };
+
+type FlagsCacheRefreshResult = FlagsCacheSnapshot | { notModified: true };
 
 type CancelScheduledRefresh = () => void;
 
@@ -36,16 +40,14 @@ type FlagsCacheOptions = {
  * keep the pending refresh queued until the next caller touches the cache.
  */
 export class FlagsCache {
-  private value: CachedFlagDefinition[] | undefined;
-  private flagStateVersion: number | undefined;
+  private snapshot: FlagsCacheSnapshot | undefined;
   private refreshPromise: Promise<void> | undefined;
   private scheduledRefresh: ScheduledRefresh | undefined;
   private lastRefreshAt: number | undefined;
   private lastRefreshStartedAt: number | undefined;
   private destroyed = false;
 
-  private pendingFullRefresh = false;
-  private pendingWaitForVersion: number | undefined;
+  private pendingRefresh: { waitForVersion?: number } | undefined;
 
   private readonly logger?: Logger;
   private readonly minRefreshIntervalMs: number;
@@ -64,22 +66,26 @@ export class FlagsCache {
   }
 
   public get() {
-    return this.value;
+    return this.snapshot?.definitions;
   }
 
   public getFlagStateVersion() {
-    return this.flagStateVersion;
+    return this.snapshot?.flagStateVersion;
+  }
+
+  public getETag() {
+    return this.snapshot?.etag;
   }
 
   public async refresh(waitForVersion?: number) {
     if (this.destroyed) {
-      return this.value;
+      return this.get();
     }
 
     this.queueRefresh(waitForVersion);
     this.ensureRefreshStartedOrScheduled();
     await this.waitForQueuedWork();
-    return this.value;
+    return this.get();
   }
 
   public async waitRefresh() {
@@ -88,12 +94,10 @@ export class FlagsCache {
 
   public destroy() {
     this.destroyed = true;
-    this.value = undefined;
-    this.flagStateVersion = undefined;
+    this.snapshot = undefined;
     this.refreshPromise = undefined;
     this.cancelScheduledRefresh();
-    this.pendingFullRefresh = false;
-    this.pendingWaitForVersion = undefined;
+    this.pendingRefresh = undefined;
     this.lastRefreshAt = undefined;
     this.lastRefreshStartedAt = undefined;
   }
@@ -107,70 +111,46 @@ export class FlagsCache {
   // can wait for.
   private queueRefresh(waitForVersion?: number) {
     if (waitForVersion !== undefined) {
-      if (
-        this.flagStateVersion !== undefined &&
-        this.flagStateVersion >= waitForVersion
-      ) {
+      const currentVersion = this.getFlagStateVersion();
+      if (currentVersion !== undefined && currentVersion >= waitForVersion) {
         return;
       }
 
-      this.pendingWaitForVersion =
-        this.pendingWaitForVersion === undefined
-          ? waitForVersion
-          : Math.max(this.pendingWaitForVersion, waitForVersion);
-      this.pendingFullRefresh = false;
+      const pendingVersion = this.pendingRefresh?.waitForVersion;
+      this.pendingRefresh = {
+        waitForVersion:
+          pendingVersion === undefined
+            ? waitForVersion
+            : Math.max(pendingVersion, waitForVersion),
+      };
       return;
     }
 
-    if (this.pendingWaitForVersion !== undefined) {
-      return;
-    }
-
-    this.pendingFullRefresh = true;
-  }
-
-  private hasPendingRefresh() {
-    return this.pendingWaitForVersion !== undefined || this.pendingFullRefresh;
-  }
-
-  private takeNextRefreshRequest() {
-    if (this.pendingWaitForVersion !== undefined) {
-      const waitForVersion = this.pendingWaitForVersion;
-      this.pendingWaitForVersion = undefined;
-      return { waitForVersion };
-    }
-
-    if (!this.pendingFullRefresh) {
-      return undefined;
-    }
-
-    this.pendingFullRefresh = false;
-    return { waitForVersion: undefined };
+    this.pendingRefresh ??= {};
   }
 
   private shouldApplyRefreshResult(flagStateVersion?: number) {
+    const currentVersion = this.getFlagStateVersion();
     if (flagStateVersion === undefined) {
-      return this.flagStateVersion === undefined;
+      return currentVersion === undefined;
     }
 
-    return (
-      this.flagStateVersion === undefined ||
-      flagStateVersion >= this.flagStateVersion
-    );
+    return currentVersion === undefined || flagStateVersion >= currentVersion;
   }
 
   private clearSatisfiedPendingVersion(seenFlagStateVersion?: number) {
-    if (this.pendingWaitForVersion === undefined) {
+    const pendingVersion = this.pendingRefresh?.waitForVersion;
+    if (pendingVersion === undefined) {
       return;
     }
 
     const latestKnownVersion = Math.max(
-      this.flagStateVersion ?? -1,
+      this.getFlagStateVersion() ?? -1,
       seenFlagStateVersion ?? -1,
     );
 
-    if (latestKnownVersion >= this.pendingWaitForVersion) {
-      this.pendingWaitForVersion = undefined;
+    if (latestKnownVersion >= pendingVersion) {
+      this.pendingRefresh = undefined;
     }
   }
 
@@ -224,7 +204,7 @@ export class FlagsCache {
   }
 
   private ensureRefreshStartedOrScheduled() {
-    if (this.destroyed || this.refreshPromise || !this.hasPendingRefresh()) {
+    if (this.destroyed || this.refreshPromise || !this.pendingRefresh) {
       return;
     }
 
@@ -239,11 +219,12 @@ export class FlagsCache {
   }
 
   private startNextRefresh() {
-    const request = this.takeNextRefreshRequest();
+    const request = this.pendingRefresh;
     if (!request) {
       return;
     }
 
+    this.pendingRefresh = undefined;
     this.lastRefreshStartedAt = Date.now();
     this.refreshPromise = this.fetchAndApplyRefresh(
       request.waitForVersion,
@@ -259,14 +240,23 @@ export class FlagsCache {
       return;
     }
 
+    if ("notModified" in result) {
+      if (!this.snapshot?.etag || waitForVersion !== undefined) {
+        return;
+      }
+
+      this.lastRefreshAt = Date.now();
+      this.logger?.debug("flag definitions unchanged");
+      return;
+    }
+
     this.clearSatisfiedPendingVersion(result.flagStateVersion);
 
     if (!this.shouldApplyRefreshResult(result.flagStateVersion)) {
       return;
     }
 
-    this.value = result.definitions;
-    this.flagStateVersion = result.flagStateVersion;
+    this.snapshot = result;
     this.lastRefreshAt = Date.now();
     this.logger?.info("refreshed flag definitions");
   }

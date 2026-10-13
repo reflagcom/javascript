@@ -1188,14 +1188,17 @@ describe("ReflagClient", () => {
 
       vi.useFakeTimers();
       try {
-        httpClient.get.mockResolvedValue({
-          ok: true,
-          status: 200,
-          body: {
-            success: true,
-            ...flagDefinitions,
-          },
-        });
+        httpClient.get
+          .mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            body: {
+              success: true,
+              ...flagDefinitions,
+            },
+            etag: 'W/"flags-v1"',
+          })
+          .mockResolvedValue({ ok: false, status: 304, body: undefined });
 
         const client = new ReflagClient({
           ...validOptions,
@@ -1212,7 +1215,7 @@ describe("ReflagClient", () => {
         expect(httpClient.get).toHaveBeenNthCalledWith(
           2,
           "https://api.example.com/features",
-          expectedHeaders,
+          { ...expectedHeaders, "If-None-Match": 'W/"flags-v1"' },
           API_TIMEOUT_MS,
         );
 
