@@ -1,5 +1,13 @@
 # @reflag/node-sdk
 
+## 1.8.2
+
+### Patch Changes
+
+- 9d213c0: Use ETags when refreshing flag definitions to avoid downloading and recompiling unchanged flags. Custom HTTP clients can opt in by returning the response ETag.
+- Updated dependencies [aa47838]
+  - @reflag/flag-evaluation@1.1.2
+
 ## 1.8.1
 
 ### Patch Changes
