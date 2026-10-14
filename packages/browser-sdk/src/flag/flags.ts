@@ -13,6 +13,7 @@ import { logResponseError, parseResponseError } from "../utils/responseError";
 import { retryOnThrow } from "../utils/retry";
 import { FlagCache, isObject, parseAPIFlagsResponse } from "./flagCache";
 import { isValidFlagStateVersion } from "./flagStateVersion";
+import { flagValueChanged } from "./flagValueChanged";
 
 const INITIAL_FETCH_RETRY_DELAYS_MS = [0, 5000];
 
@@ -149,6 +150,15 @@ export type RawFlag = {
 };
 
 export type RawFlags = Record<string, RawFlag>;
+
+/**
+ * An effective enabled/config value changed, or a flag was added or removed.
+ */
+export type FlagUpdatedEvent = {
+  key: string;
+  /** The current raw flag, or undefined when the flag was removed. */
+  flag: RawFlag | undefined;
+};
 
 export type FallbackFlagOverride =
   | {
@@ -309,6 +319,7 @@ export class FlagsClient {
   private fetchedFlagsContextVersion = 0;
   private flagOverrides: FlagOverrides = {};
   private flags: RawFlags = {};
+  private flagUpdatedListeners = new Set<(event: FlagUpdatedEvent) => void>();
   private fallbackFlags: FallbackFlags = {};
   private contextFetchVersion = 0;
   private optInFlagsRequested = false;
@@ -416,6 +427,7 @@ export class FlagsClient {
   public stop() {
     this.supersedeOptInFlagsLoading(false);
     this.abortController.abort();
+    this.flagUpdatedListeners.clear();
   }
 
   getFlags(): RawFlags {
@@ -634,8 +646,31 @@ export class FlagsClient {
     const updatedFlags = this.mergeFlags(this.fetchedFlags, this.flagOverrides);
     // Nothing has changed, skipping update
     if (deepEqual(this.flags, updatedFlags)) return;
+    const updates: FlagUpdatedEvent[] = [];
+    if (triggerEvent) {
+      const keys = new Set([
+        ...Object.keys(this.flags),
+        ...Object.keys(updatedFlags),
+      ]);
+      for (const key of keys) {
+        const previous = Object.prototype.hasOwnProperty.call(this.flags, key)
+          ? this.flags[key]
+          : undefined;
+        const flag = Object.prototype.hasOwnProperty.call(updatedFlags, key)
+          ? updatedFlags[key]
+          : undefined;
+        if (flagValueChanged(previous, flag)) updates.push({ key, flag });
+      }
+    }
+
     this.flags = updatedFlags;
-    if (triggerEvent) this.triggerFlagsUpdated();
+    if (triggerEvent) {
+      // Raw-data subscribers may synchronously change overrides again.
+      for (const update of updates) {
+        for (const callback of this.flagUpdatedListeners) callback(update);
+      }
+      this.triggerFlagsUpdated();
+    }
   }
 
   setFlagOverride(key: string, isEnabled: boolean | null) {
@@ -669,6 +704,16 @@ export class FlagsClient {
     this.eventTarget.addEventListener("flagsUpdated", callback, {
       signal: this.abortController.signal,
     });
+  }
+
+  /**
+   * Register a callback for individual effective enabled/config value changes,
+   * including flags being added or removed. Metadata-only changes are ignored.
+   */
+  onFlagUpdated(callback: (event: FlagUpdatedEvent) => void) {
+    if (!this.abortController.signal.aborted) {
+      this.flagUpdatedListeners.add(callback);
+    }
   }
 
   /**

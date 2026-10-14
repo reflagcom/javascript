@@ -616,6 +616,8 @@ function App({ bootstrapData }: AppProps) {
 
 Returns the state of a given flag for the current context. The hook provides type-safe access to flags and their configurations.
 
+Flag updates only trigger a rerender when this flag's effective enabled/config value or presence changes. Updates to other flags or evaluation metadata alone do not trigger a rerender. Loading/context changes and ordinary React renders still work as before. Reading `isEnabled` or `config` continues to emit check telemetry using the latest evaluation metadata.
+
 ```tsx
 import { useFlag } from "@reflag/react-sdk";
 import { Loading } from "./Loading";
@@ -914,17 +916,21 @@ function LoadingWrapper({ children }: { children: ReactNode }) {
 
 Attach a callback handler to client events to act on changes. It automatically disposes itself on unmount.
 
+Use `flagUpdated` for individual flag value changes, including effective local overrides. Targeting/config versions, evaluation diagnostics, and opt-in metadata alone do not trigger it. Use `flagsUpdated` if you need raw flag data and metadata changes.
+
 ```tsx
 import { useOnEvent } from "@reflag/react-sdk";
 
 function LoggingWrapper({ children }: { children: ReactNode }) {
-  useOnEvent("flagsUpdated", (newFlags) => {
-    console.log(newFlags);
+  useOnEvent("flagUpdated", ({ key, flag }) => {
+    console.log(key, flag);
   });
 
   return children;
 }
 ```
+
+The event fires once per changed flag with `{ key, flag }`. `flag` contains raw flag data and is undefined when removed. It does not replay existing bootstrapped values; use `useClient().getFlags()` to read current raw flags without fetching or generating checks. Handle identity changes separately if your integration needs to resynchronize traits even when flag values are unchanged.
 
 ## Migrating from Bucket SDK
 

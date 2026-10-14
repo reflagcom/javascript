@@ -41,6 +41,7 @@ export type {
   CheckEvent,
   FallbackFlagOverride,
   FlagOverrides,
+  FlagUpdatedEvent,
   OptInFlag,
   RawFlag,
   RawFlagOptIn,

@@ -15,6 +15,7 @@ import {
   BootstrappedState as BrowserBootstrappedState,
   CheckEvent,
   CompanyContext,
+  FlagUpdatedEvent,
   HookArgs,
   InitOptions,
   Logger,
@@ -39,6 +40,7 @@ const useIsomorphicLayoutEffect =
 export type {
   CheckEvent,
   CompanyContext,
+  FlagUpdatedEvent,
   SetOptInOptions,
   StorageAdapter,
   TrackEvent,
@@ -720,19 +722,51 @@ export function useFlag<TKey extends FlagKey>(
 ): TypedFlags[TKey] {
   const context = useSafeContext();
   const { client, isLoading } = context;
-  const [flag, setFlag] = useState(() => client.getFlag(key));
+  const [snapshot, setSnapshot] = useState<{
+    client: ReflagClient;
+    key: TKey;
+    flag: RawFlag | undefined;
+  }>(() => ({ client, key, flag: client.getFlags()[key] }));
+  const snapshotRef = useRef(snapshot);
+  const updateFlag = () => {
+    const flag = client.getFlags()[key];
+    const previous = snapshotRef.current;
+    if (
+      previous.client !== client ||
+      previous.key !== key ||
+      previous.flag !== flag
+    ) {
+      const updated = { client, key, flag };
+      snapshotRef.current = updated;
+      setSnapshot(updated);
+    }
+  };
+  const config = useMemo(() => {
+    const flag =
+      snapshot.client === client && snapshot.key === key
+        ? snapshot.flag
+        : client.getFlags()[key];
+    return flag?.config
+      ? { key: flag.config.key, payload: flag.config.payload }
+      : { key: undefined, payload: undefined };
+  }, [client, key, snapshot]);
 
   const track = () => client.track(key);
   const requestFeedback = (opts: RequestFeedbackOptions) =>
     client.requestFeedback({ ...opts, flagKey: key });
 
   useOnEvent(
-    "flagsUpdated",
-    () => {
-      setFlag(client.getFlag(key));
+    "flagUpdated",
+    (event) => {
+      if (event.key === key) updateFlag();
     },
     client,
   );
+
+  useIsomorphicLayoutEffect(() => {
+    // Catch updates between rendering and subscribing, and changes of client/key.
+    updateFlag();
+  }, [client, key]);
 
   if (
     isLoading &&
@@ -762,10 +796,13 @@ export function useFlag<TKey extends FlagKey>(
     track,
     requestFeedback,
     get isEnabled() {
-      return flag.isEnabled ?? false;
+      // Read current metadata for check telemetry, even without a value update.
+      return client.getFlag(key).isEnabled ?? false;
     },
     get config() {
-      return flag.config as TypedFlags[TKey]["config"];
+      // Emit checks with current metadata, but keep the value object stable.
+      void client.getFlag(key).config;
+      return config as TypedFlags[TKey]["config"];
     },
   };
 }
