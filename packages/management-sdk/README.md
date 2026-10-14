@@ -229,7 +229,7 @@ const { flagStateVersion } = await api.updateUserFlags({
 // Optional: evaluate immediately using an initialized Node SDK client
 // configured for the same app and environment.
 await client.refreshFlags(flagStateVersion);
-const flag = client.getFlag("new-checkout", { user: { id: userId } });
+const flag = client.getFlag({ user: { id: userId } }, "new-checkout");
 ```
 
 The upsert makes the user available to the Management API. Refreshing the Node SDK
@@ -382,10 +382,13 @@ const { flagStateVersion } = await api.updateCompanyFlags({
 });
 
 await client.refreshFlags(flagStateVersion);
-const flag = client.getFlag("new-checkout", {
-  user: { id: "user-1" },
-  company: { id: "company-1" },
-});
+const flag = client.getFlag(
+  {
+    user: { id: "user-1" },
+    company: { id: "company-1" },
+  },
+  "new-checkout",
+);
 ```
 
 For `createFlag` or `updateFlag`, pass `result.flagStateVersions[envId]` instead.
