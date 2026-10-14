@@ -539,7 +539,7 @@ await client.initialize();
 unsub();
 ```
 
-`flagUpdated` publishes an initial value for each flag during initialization. After that, it fires only when a flag's effective enabled value (including local overrides), config key/payload, or presence changes. Targeting/config versions, evaluation diagnostics, and opt-in metadata alone do not trigger subsequent events. The payload is `{ key, flag }`, with `flag` undefined on removal.
+`flagUpdated` publishes an initial value for each flag during initialization. After that, it fires only when a flag's effective enabled value (including local overrides), config key/payload, or presence changes. The payload is `{ key, flag }`, with `flag` undefined on removal.
 
 The `flag` field has the same raw shape as `getFlags()`; when present, its effective enabled value is `flag.isEnabledOverride ?? flag.isEnabled`. Accessing the event payload does not generate check telemetry.
 
@@ -549,7 +549,7 @@ Explicit silent updates (`updateFlags(flags, false)`) update the baseline withou
 
 ### Observing refreshed raw flag data
 
-Use `flagsUpdated` when you need to observe raw flag updates, including refreshes where enabled/config values stay the same. It delivers the full flag map and also fires for targeting/config version, evaluation diagnostic, or opt-in metadata changes:
+Use `flagsUpdated` when you need to observe raw flag updates, including refreshes where enabled/config values stay the same. It delivers the full flag map:
 
 ```ts
 client.on("flagsUpdated", (flags) => {

@@ -930,7 +930,7 @@ function LoggingWrapper({ children }: { children: ReactNode }) {
 
 `flagUpdated` publishes one initial value per flag during client initialization, including bootstrapped and disabled flags. Bootstrapped values are published after cached overrides are applied, without fetching. Mount the subscription before initialization to receive these events; subscriptions added afterward do not receive a replay. `useClient().getFlags()` also lets you read current raw flags without fetching or generating checks.
 
-After initialization, the event fires only when a flag's effective enabled value (including local overrides), config key/payload, or presence changes. Targeting/config versions, evaluation diagnostics, and opt-in metadata alone do not trigger subsequent events. The payload is `{ key, flag }`; `flag` contains raw flag data and is undefined when removed. Handle identity changes separately if your integration needs to resynchronize traits even when flag values are unchanged.
+After initialization, the event fires only when a flag's effective enabled value (including local overrides), config key/payload, or presence changes. The payload is `{ key, flag }`; `flag` contains raw flag data and is undefined when removed. Handle identity changes separately if your integration needs to resynchronize traits even when flag values are unchanged.
 
 Use `flagsUpdated` if you need to observe refreshed raw flag data, even when enabled/config values stay the same. It delivers the full flag map and also fires for metadata-only updates. A refresh returning identical raw flag data does not emit this event. See the [Browser SDK event listeners](../browser-sdk/README.md#event-listeners) for the full event list.
 

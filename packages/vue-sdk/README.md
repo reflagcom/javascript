@@ -652,7 +652,7 @@ useOnEvent("flagUpdated", ({ key, flag }) => {
 
 `flagUpdated` publishes one initial value per flag during client initialization, including bootstrapped and disabled flags. Bootstrapped values are published after cached overrides are applied, without fetching. Mount the subscription before initialization to receive these events; subscriptions added afterward do not receive a replay. Use `useClient().getFlags()` to read current raw flags without generating checks.
 
-After initialization, the event fires only when a flag's effective enabled value (including local overrides), config key/payload, or presence changes. Targeting/config versions, evaluation diagnostics, and opt-in metadata alone do not trigger subsequent events. The payload is `{ key, flag }`; `flag` contains raw flag data and is undefined when removed.
+After initialization, the event fires only when a flag's effective enabled value (including local overrides), config key/payload, or presence changes. The payload is `{ key, flag }`; `flag` contains raw flag data and is undefined when removed.
 
 Use `flagsUpdated` if you need to observe refreshed raw flag data, even when enabled/config values stay the same. It delivers the full flag map and also fires for metadata-only updates. A refresh returning identical raw flag data does not emit this event. See the [Browser SDK event listeners](../browser-sdk/README.md#event-listeners) for the full event list.
 
