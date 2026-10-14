@@ -435,6 +435,114 @@ describe("flagUpdated", () => {
     ).toEqual([false, true]);
   });
 
+  test("delivers reentrant override changes in order to every listener", () => {
+    const flags = initialFlags();
+    const client = newClient(flags);
+    const values: boolean[][] = [[], [], []];
+    for (const [index, observed] of values.entries()) {
+      client.on("flagUpdated", ({ flag }) => {
+        const enabled = flag!.isEnabledOverride ?? flag!.isEnabled;
+        observed.push(enabled);
+        if (index === 0 && !enabled) {
+          client.getFlag("flagA").setIsEnabledOverride(true);
+        }
+      });
+    }
+
+    client.updateFlags({
+      ...flags,
+      flagA: { ...flags.flagA, isEnabled: false },
+    });
+
+    expect(values).toEqual([
+      [false, true],
+      [false, true],
+      [false, true],
+    ]);
+    expect(client.getFlags().flagA.isEnabledOverride).toBe(true);
+  });
+
+  test("finishes the whole notification batch before delivering nested changes", () => {
+    const flags = initialFlags();
+    const client = newClient(flags);
+    client.on("flagUpdated", ({ key, flag }) => {
+      if (key === "flagA" && !(flag!.isEnabledOverride ?? flag!.isEnabled)) {
+        client.getFlag("flagA").setIsEnabledOverride(true);
+      }
+    });
+    const listener = vi.fn();
+    client.on("flagUpdated", listener);
+
+    client.updateFlags({
+      flagA: { ...flags.flagA, isEnabled: false },
+      flagB: { ...flags.flagB, isEnabled: true },
+    });
+
+    expect(
+      listener.mock.calls.map(([{ key, flag }]) => [
+        key,
+        flag.isEnabledOverride ?? flag.isEnabled,
+      ]),
+    ).toEqual([
+      ["flagA", false],
+      ["flagB", true],
+      ["flagA", true],
+    ]);
+  });
+
+  test("queues changes made while publishing initial bootstrapped values", async () => {
+    const client = newClient(initialFlags());
+    client.on("flagUpdated", ({ key, flag }) => {
+      if (key === "flagA" && (flag!.isEnabledOverride ?? flag!.isEnabled)) {
+        client.getFlag("flagA").setIsEnabledOverride(false);
+      }
+    });
+    const listener = vi.fn();
+    client.on("flagUpdated", listener);
+
+    await client.initialize();
+
+    expect(
+      listener.mock.calls.map(([{ key, flag }]) => [
+        key,
+        flag.isEnabledOverride ?? flag.isEnabled,
+      ]),
+    ).toEqual([
+      ["flagA", true],
+      ["flagB", false],
+      ["flagA", false],
+    ]);
+    expect(client.getFlags().flagA.isEnabledOverride).toBe(false);
+  });
+
+  test("resets the notification queue after a listener throws", () => {
+    const flags = initialFlags();
+    const client = newClient(flags);
+    const off = client.on("flagUpdated", () => {
+      client.getFlag("flagA").setIsEnabledOverride(true);
+      throw new Error("listener failed");
+    });
+    const listener = vi.fn();
+    client.on("flagUpdated", listener);
+
+    expect(() =>
+      client.updateFlags({
+        ...flags,
+        flagA: { ...flags.flagA, isEnabled: false },
+      }),
+    ).toThrow("listener failed");
+    expect(listener).not.toHaveBeenCalled();
+    off();
+    client.getFlag("flagA").setIsEnabledOverride(null);
+    client.updateFlags(flags);
+
+    expect(
+      listener.mock.calls.map(
+        ([{ flag }]) => flag.isEnabledOverride ?? flag.isEnabled,
+      ),
+    ).toEqual([false, true]);
+  });
+
   test("removed flags with inherited Object property names have undefined payloads", () => {
     const client = newClient({
       constructor: { key: "constructor", isEnabled: false },
