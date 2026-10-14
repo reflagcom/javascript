@@ -7,5 +7,10 @@
       "@reflag/react-sdk": ["./src/index.tsx"]
     }
   },
-  "include": ["src", "test/opt-in-types.tsx", "test/flag-updated-types.tsx"]
+  "include": [
+    "src",
+    "test/opt-in-types.tsx",
+    "test/flag-updated-types.tsx",
+    "test/context-update-types.tsx"
+  ]
 }
