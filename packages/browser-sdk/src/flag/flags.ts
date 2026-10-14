@@ -152,7 +152,8 @@ export type RawFlag = {
 export type RawFlags = Record<string, RawFlag>;
 
 /**
- * An effective enabled/config value changed, or a flag was added or removed.
+ * An initial flag value is published, its effective enabled/config value
+ * changed, or the flag was added or removed.
  */
 export type FlagUpdatedEvent = {
   key: string;
@@ -405,8 +406,17 @@ export class FlagsClient {
         );
       }
 
-      // Apply overrides and trigger update if flags have changed
-      this.updateFlags();
+      // Apply overrides before publishing initial bootstrapped values. Suppress
+      // change events here so overridden flags are not published twice.
+      const previousFlags = this.flags;
+      this.updateFlags(!this.bootstrapped);
+      const flagsChanged = previousFlags !== this.flags;
+      if (this.bootstrapped) {
+        for (const [key, flag] of Object.entries(this.flags)) {
+          this.triggerFlagUpdated({ key, flag });
+        }
+        if (flagsChanged) this.triggerFlagsUpdated();
+      }
       initializationSucceeded = true;
     } finally {
       this.initializationComplete = true;
@@ -666,9 +676,7 @@ export class FlagsClient {
     this.flags = updatedFlags;
     if (triggerEvent) {
       // Raw-data subscribers may synchronously change overrides again.
-      for (const update of updates) {
-        for (const callback of this.flagUpdatedListeners) callback(update);
-      }
+      for (const update of updates) this.triggerFlagUpdated(update);
       this.triggerFlagsUpdated();
     }
   }
@@ -707,8 +715,9 @@ export class FlagsClient {
   }
 
   /**
-   * Register a callback for individual effective enabled/config value changes,
-   * including flags being added or removed. Metadata-only changes are ignored.
+   * Register a callback for initial flag values and individual effective
+   * enabled/config value changes, including additions/removals.
+   * Metadata-only changes are ignored.
    */
   onFlagUpdated(callback: (event: FlagUpdatedEvent) => void) {
     if (!this.abortController.signal.aborted) {
@@ -1044,6 +1053,10 @@ export class FlagsClient {
       mergedFlags[key] = { ...fetchedFlag, isEnabledOverride };
     }
     return mergedFlags;
+  }
+
+  private triggerFlagUpdated(event: FlagUpdatedEvent) {
+    for (const callback of this.flagUpdatedListeners) callback(event);
   }
 
   private triggerFlagsUpdated() {

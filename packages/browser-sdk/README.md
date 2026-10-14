@@ -518,44 +518,54 @@ reflagClient.track("huddle", { voiceHuddle: true });
 
 ## Event listeners
 
-Event listeners allow for capturing various events occurring in the `ReflagClient`. This is useful to build integrations with other system or for various debugging purposes. The available events are:
+For most integrations, subscribe to `flagUpdated` to receive initial flag values and react to subsequent value changes. Use `on()` to register a listener:
+
+```ts
+import { ReflagClient } from "@reflag/browser-sdk";
+
+const client = new ReflagClient({
+  publishableKey: "publishableKey",
+});
+
+const unsub = client.on("flagUpdated", ({ key, flag }) => {
+  console.log(key, flag);
+});
+
+// Register before initializing to receive initial values, including bootstrapped flags.
+await client.initialize();
+
+// When disposing the integration, unsubscribe using the returned function,
+// or call `off()` with the same event and handler.
+unsub();
+```
+
+`flagUpdated` publishes an initial value for each flag during initialization. After that, it fires only when a flag's effective enabled value (including local overrides), config key/payload, or presence changes. Targeting/config versions, evaluation diagnostics, and opt-in metadata alone do not trigger subsequent events. The payload is `{ key, flag }`, with `flag` undefined on removal.
+
+The `flag` field has the same raw shape as `getFlags()`; when present, its effective enabled value is `flag.isEnabledOverride ?? flag.isEnabled`. Accessing the event payload does not generate check telemetry.
+
+Subscribe before calling `initialize()` to receive one initial event per flag, including disabled flags and bootstrapped flags. Bootstrapped flags are available immediately through `getFlags()`; their initial events are published during initialization after applying cached overrides, without fetching. Subscribers registered after initialization do not receive a replay.
+
+Explicit silent updates (`updateFlags(flags, false)`) update the baseline without emitting events. Handle the `user` and `company` events separately if your integration needs to resynchronize traits when identity changes but flag values stay the same.
+
+### Observing refreshed raw flag data
+
+Use `flagsUpdated` when you need to observe raw flag updates, including refreshes where enabled/config values stay the same. It delivers the full flag map and also fires for targeting/config version, evaluation diagnostic, or opt-in metadata changes:
+
+```ts
+client.on("flagsUpdated", (flags) => {
+  console.log(flags);
+});
+```
+
+A refresh returning identical raw flag data does not emit this event.
+
+### Other events
 
 - `check`: Your code used `isEnabled` or `config` for a flag
-- `flagsUpdated`: Raw flag data changed, including targeting/config versions, evaluation diagnostics, and opt-in metadata
-- `flagUpdated`: An individual flag's effective `isEnabled` (including local overrides) or config key/payload changed, or that flag was added/removed. Metadata-only changes do not emit this event. The payload is `{ key, flag }`, with `flag` undefined on removal
 - `optInFlagsLoadingUpdated`: The opt-in flag loading state changed
 - `user`: User information updated (similar to the `identify` call used in tracking terminology)
 - `company`: Company information updated (sometimes to the `group` call used in tracking terminology)
 - `track`: Track event occurred.
-
-Use the `on()` method to add an event listener to respond to certain events. See the API reference for details on each hook.
-
-```ts
-import { ReflagClient, CheckEvent, RawFlags } from "@reflag/browser-sdk";
-
-const client = new ReflagClient({
-  // options
-});
-
-// or add the hooks after construction:
-const unsub = client.on("check", (check: CheckEvent) =>
-  console.log(`Check event ${check}`),
-);
-// use the returned function to unsubscribe, or call `off()` with the same arguments again
-unsub();
-```
-
-For integrations that only need value changes, subscribe to `flagUpdated` instead of `flagsUpdated`:
-
-```ts
-client.on("flagUpdated", ({ key, flag }) => {
-  console.log(key, flag);
-});
-```
-
-There is one event per changed flag, not a notification for all flags. The `flag` field has the same raw shape as `getFlags()`; its effective enabled value is `flag.isEnabledOverride ?? flag.isEnabled`. Accessing the event payload does not generate check telemetry.
-
-Initially fetched flags emit an event for each added flag. Bootstrapped flags are available immediately through `getFlags()` and do not replay events to new subscribers. Explicit silent updates (`updateFlags(flags, false)`) update the baseline without emitting events. Handle the `user` and `company` events separately if your integration needs to resynchronize traits when identity changes but flag values stay the same.
 
 ## Zero PII
 

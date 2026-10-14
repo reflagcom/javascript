@@ -1,4 +1,4 @@
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
 import React from "react";
@@ -15,7 +15,12 @@ import {
 
 import { RawFlags, ReflagClient } from "@reflag/browser-sdk";
 
-import { ReflagClientProvider, useFlag, useOnEvent } from "../src";
+import {
+  ReflagBootstrappedProvider,
+  ReflagClientProvider,
+  useFlag,
+  useOnEvent,
+} from "../src";
 
 const server = setupServer(
   http.post(/\/features\/events$/, () => HttpResponse.json({ success: true })),
@@ -38,7 +43,7 @@ function initialFlags(): RawFlags {
   };
 }
 
-async function newClient(flags = initialFlags()) {
+async function newClient(flags = initialFlags(), initialize = true) {
   const client = new ReflagClient({
     publishableKey: "test-key-react-flag-values",
     user: { id: "user1" },
@@ -50,7 +55,7 @@ async function newClient(flags = initialFlags()) {
     logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
   });
   clients.push(client);
-  await client.initialize();
+  if (initialize) await client.initialize();
   return client;
 }
 
@@ -427,6 +432,64 @@ describe("useFlag value subscriptions", () => {
     expect(checks).not.toHaveBeenCalled();
     unmount();
   });
+});
+
+test("bootstrapped initialization publishes values without rerendering unchanged useFlag consumers", async () => {
+  const client = await newClient(initialFlags(), false);
+  const listener = vi.fn();
+  const checks = vi.fn();
+  const renders = vi.fn();
+  client.on("check", checks);
+  const { result, unmount } = renderHook(
+    () => {
+      renders();
+      useOnEvent("flagUpdated", listener, client);
+      return useFlag("abc");
+    },
+    { wrapper: wrapperFor(client) },
+  );
+  const previous = result.current;
+
+  await act(() => client.initialize());
+
+  expect(listener.mock.calls.map(([event]) => event.key)).toEqual([
+    "abc",
+    "def",
+  ]);
+  expect(result.current).toBe(previous);
+  expect(renders).toHaveBeenCalledOnce();
+  expect(checks).not.toHaveBeenCalled();
+  unmount();
+});
+
+test("ReflagBootstrappedProvider delivers initial flagUpdated events to child subscriptions", async () => {
+  const listener = vi.fn();
+  const { unmount } = renderHook(() => useOnEvent("flagUpdated", listener), {
+    wrapper: ({ children }) => (
+      <ReflagBootstrappedProvider
+        publishableKey="test-key-bootstrap-initial-events"
+        flags={{
+          flags: initialFlags(),
+          context: { user: { id: "user1" } },
+          flagStateVersion: 1,
+        }}
+        enableTracking={false}
+        enableLiveFlagUpdates={false}
+        feedback={{ enableAutoFeedback: false }}
+        toolbar={false}
+      >
+        {children}
+      </ReflagBootstrappedProvider>
+    ),
+  });
+
+  await waitFor(() => expect(listener).toHaveBeenCalledTimes(2));
+
+  expect(listener.mock.calls.map(([event]) => event.key)).toEqual([
+    "abc",
+    "def",
+  ]);
+  unmount();
 });
 
 test("useOnEvent supports value-only subscriptions and unmount cleanup", async () => {

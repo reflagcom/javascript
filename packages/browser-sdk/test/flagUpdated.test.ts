@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import { ReflagClient } from "../src/client";
+import { InitOptions, ReflagClient } from "../src/client";
 import { FlagsClient, RawFlags } from "../src/flag/flags";
 import { flagValueChanged } from "../src/flag/flagValueChanged";
 import { testLogger } from "./testLogger";
@@ -23,7 +23,7 @@ function initialFlags(): RawFlags {
 
 const clients: ReflagClient[] = [];
 
-function newClient(flags?: RawFlags) {
+function newClient(flags?: RawFlags, options: Partial<InitOptions> = {}) {
   const client = new ReflagClient({
     publishableKey: "test-key-flag-updated",
     user: { id: "user1" },
@@ -34,6 +34,7 @@ function newClient(flags?: RawFlags) {
     toolbar: false,
     feedback: { enableAutoFeedback: false },
     logger: testLogger,
+    ...options,
   });
   clients.push(client);
   return client;
@@ -99,6 +100,113 @@ describe("flagUpdated", () => {
       expect(listener).toHaveBeenCalledWith({ key, flag });
     }
     expect(sendCheck).not.toHaveBeenCalled();
+  });
+
+  test.each(["bootstrappedFlags", "bootstrappedState"] as const)(
+    "publishes each initial %s flag once without fetching or emitting checks",
+    async (source) => {
+      const flags = initialFlags();
+      const client = newClient(flags, {
+        offline: false,
+        ...(source === "bootstrappedState"
+          ? {
+              bootstrappedFlags: undefined,
+              bootstrappedState: {
+                flags,
+                context: { user: { id: "user1" } },
+                flagStateVersion: 1,
+              },
+            }
+          : {}),
+      });
+      const listener = vi.fn();
+      const flagsUpdated = vi.fn();
+      const fetchFlags = vi.spyOn(FlagsClient.prototype, "fetchFlags");
+      const sendCheck = vi.spyOn(FlagsClient.prototype, "sendCheckEvent");
+      client.on("flagUpdated", listener);
+      client.on("flagsUpdated", flagsUpdated);
+
+      expect(Object.keys(client.getFlags())).toEqual(["flagA", "flagB"]);
+      expect(listener).not.toHaveBeenCalled();
+      await client.initialize();
+
+      expect(listener).toHaveBeenCalledTimes(2);
+      for (const [key, flag] of Object.entries(client.getFlags())) {
+        expect(listener).toHaveBeenCalledWith({ key, flag });
+      }
+      expect(flagsUpdated).not.toHaveBeenCalled();
+      expect(fetchFlags).not.toHaveBeenCalled();
+      expect(sendCheck).not.toHaveBeenCalled();
+
+      await client.initialize();
+      client.updateFlags(flags);
+      client.updateFlags({
+        ...flags,
+        flagA: { ...flags.flagA, targetingVersion: 2 },
+      });
+      expect(listener).toHaveBeenCalledTimes(2);
+      expect(flagsUpdated).toHaveBeenCalledOnce();
+    },
+  );
+
+  test("publishes cached overrides in initial bootstrap events without duplicates", async () => {
+    localStorage.setItem(
+      "__reflag_overrides",
+      JSON.stringify({ flagA: false, flagB: true }),
+    );
+    const client = newClient(initialFlags());
+    const listener = vi.fn();
+    const flagsUpdated = vi.fn();
+    client.on("flagUpdated", listener);
+    client.on("flagsUpdated", flagsUpdated);
+
+    await client.initialize();
+
+    expect(listener).toHaveBeenCalledTimes(2);
+    expect(listener.mock.calls.map(([event]) => event.key)).toEqual([
+      "flagA",
+      "flagB",
+    ]);
+    expect(
+      listener.mock.calls.map(
+        ([{ flag }]) => flag.isEnabledOverride ?? flag.isEnabled,
+      ),
+    ).toEqual([false, true]);
+    expect(flagsUpdated).toHaveBeenCalledOnce();
+    expect(flagsUpdated).toHaveBeenCalledWith(client.getFlags());
+  });
+
+  test("does not replay bootstrapped flags to listeners registered after initialization", async () => {
+    const client = newClient(initialFlags());
+    await client.initialize();
+    const listener = vi.fn();
+    client.on("flagUpdated", listener);
+
+    await client.initialize();
+    expect(listener).not.toHaveBeenCalled();
+
+    const flags = initialFlags();
+    client.updateFlags({
+      ...flags,
+      flagA: { ...flags.flagA, isEnabled: false },
+    });
+    expect(listener).toHaveBeenCalledOnce();
+    expect(listener).toHaveBeenCalledWith({
+      key: "flagA",
+      flag: client.getFlags().flagA,
+    });
+  });
+
+  test("initializing an empty bootstrapped snapshot does not publish flags", async () => {
+    const client = newClient({});
+    const listener = vi.fn();
+    client.on("flagUpdated", listener);
+
+    await client.initialize();
+
+    expect(listener).not.toHaveBeenCalled();
+    expect(client.getFlags()).toEqual({});
+    expect(client.getState()).toBe("initialized");
   });
 
   test("ignores metadata while preserving flagsUpdated and the deprecated alias", () => {
@@ -280,7 +388,7 @@ describe("flagUpdated", () => {
     });
   });
 
-  test("silent and bootstrapped updates establish a baseline without notifying", () => {
+  test("silent updates establish a baseline without notifying", () => {
     const client = newClient(initialFlags());
     const listener = vi.fn();
     const flagsUpdated = vi.fn();

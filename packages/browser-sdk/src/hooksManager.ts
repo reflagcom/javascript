@@ -11,7 +11,8 @@ export interface HookArgs {
   check: CheckEvent;
   flagsUpdated: RawFlags;
   /**
-   * Effective enabled/config values changed, or a flag was added or removed.
+   * Initial values are published during initialization, including bootstrapped flags.
+   * Subsequent events mean an effective enabled/config value or flag presence changed.
    * Targeting versions, diagnostics and opt-in metadata do not trigger this event.
    */
   flagUpdated: FlagUpdatedEvent;
