@@ -321,8 +321,7 @@ export class FlagsClient {
   private flagOverrides: FlagOverrides = {};
   private flags: RawFlags = {};
   private flagUpdatedListeners = new Set<(event: FlagUpdatedEvent) => void>();
-  private pendingFlagUpdates: FlagUpdatedEvent[][] = [];
-  private notifyingFlagUpdates = false;
+  private pendingFlagUpdates: FlagUpdatedEvent[] | undefined;
   private fallbackFlags: FallbackFlags = {};
   private contextFetchVersion = 0;
   private optInFlagsRequested = false;
@@ -436,7 +435,7 @@ export class FlagsClient {
     this.supersedeOptInFlagsLoading(false);
     this.abortController.abort();
     this.flagUpdatedListeners.clear();
-    this.pendingFlagUpdates.length = 0;
+    if (this.pendingFlagUpdates) this.pendingFlagUpdates.length = 0;
   }
 
   getFlags(): RawFlags {
@@ -1051,21 +1050,19 @@ export class FlagsClient {
     }
 
     if (!updates.length) return;
-    this.pendingFlagUpdates.push(updates);
-    if (this.notifyingFlagUpdates) return;
+    if (this.pendingFlagUpdates) {
+      for (const update of updates) this.pendingFlagUpdates.push(update);
+      return;
+    }
 
-    // Finish the current batch for all listeners before delivering nested changes.
-    this.notifyingFlagUpdates = true;
+    this.pendingFlagUpdates = updates;
     try {
-      while (this.pendingFlagUpdates.length) {
-        const batch = this.pendingFlagUpdates.shift()!;
-        for (const update of batch) {
-          for (const callback of this.flagUpdatedListeners) callback(update);
-        }
+      // Array iteration visits appended events after the original batch finishes.
+      for (const update of updates) {
+        for (const callback of this.flagUpdatedListeners) callback(update);
       }
     } finally {
-      this.notifyingFlagUpdates = false;
-      this.pendingFlagUpdates.length = 0;
+      this.pendingFlagUpdates = undefined;
     }
   }
 
