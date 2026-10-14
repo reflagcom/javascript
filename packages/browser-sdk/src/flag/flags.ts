@@ -397,25 +397,21 @@ export class FlagsClient {
         this.flagOverrides = { ...cachedOverrides, ...this.flagOverrides };
       }
 
-      if (!this.bootstrapped) {
+      if (this.bootstrapped) {
+        // Apply cached overrides silently, then publish each initial value once.
+        const previousFlags = this.flags;
+        this.updateFlags(false);
+        const rawFlagsChanged = previousFlags !== this.flags;
+        this.triggerFlagUpdates({});
+        if (rawFlagsChanged) this.triggerFlagsUpdated();
+      } else {
         const requestContextVersion = this.contextFetchVersion;
         this.applyFetchedFlagsResult(
           await this.maybeFetchFlags(requestContextVersion),
           true,
           requestContextVersion,
         );
-      }
-
-      // Apply overrides before publishing initial bootstrapped values. Suppress
-      // change events here so overridden flags are not published twice.
-      const previousFlags = this.flags;
-      this.updateFlags(!this.bootstrapped);
-      const flagsChanged = previousFlags !== this.flags;
-      if (this.bootstrapped) {
-        for (const [key, flag] of Object.entries(this.flags)) {
-          this.triggerFlagUpdated({ key, flag });
-        }
-        if (flagsChanged) this.triggerFlagsUpdated();
+        this.updateFlags();
       }
       initializationSucceeded = true;
     } finally {
@@ -656,27 +652,11 @@ export class FlagsClient {
     const updatedFlags = this.mergeFlags(this.fetchedFlags, this.flagOverrides);
     // Nothing has changed, skipping update
     if (deepEqual(this.flags, updatedFlags)) return;
-    const updates: FlagUpdatedEvent[] = [];
-    if (triggerEvent) {
-      const keys = new Set([
-        ...Object.keys(this.flags),
-        ...Object.keys(updatedFlags),
-      ]);
-      for (const key of keys) {
-        const previous = Object.prototype.hasOwnProperty.call(this.flags, key)
-          ? this.flags[key]
-          : undefined;
-        const flag = Object.prototype.hasOwnProperty.call(updatedFlags, key)
-          ? updatedFlags[key]
-          : undefined;
-        if (flagValueChanged(previous, flag)) updates.push({ key, flag });
-      }
-    }
-
+    const previousFlags = this.flags;
     this.flags = updatedFlags;
     if (triggerEvent) {
-      // Raw-data subscribers may synchronously change overrides again.
-      for (const update of updates) this.triggerFlagUpdated(update);
+      // Publish values before raw-data subscribers can change overrides again.
+      this.triggerFlagUpdates(previousFlags);
       this.triggerFlagsUpdated();
     }
   }
@@ -1055,8 +1035,22 @@ export class FlagsClient {
     return mergedFlags;
   }
 
-  private triggerFlagUpdated(event: FlagUpdatedEvent) {
-    for (const callback of this.flagUpdatedListeners) callback(event);
+  private triggerFlagUpdates(previousFlags: RawFlags) {
+    // Maps distinguish missing flags from inherited properties such as constructor.
+    const previous = new Map(Object.entries(previousFlags));
+    const current = new Map(Object.entries(this.flags));
+    const keys = new Set([...previous.keys(), ...current.keys()]);
+    const updates: FlagUpdatedEvent[] = [];
+    for (const key of keys) {
+      const flag = current.get(key);
+      if (flagValueChanged(previous.get(key), flag))
+        updates.push({ key, flag });
+    }
+
+    // Capture the whole batch before callbacks can synchronously change flags.
+    for (const update of updates) {
+      for (const callback of this.flagUpdatedListeners) callback(update);
+    }
   }
 
   private triggerFlagsUpdated() {

@@ -435,6 +435,22 @@ describe("flagUpdated", () => {
     ).toEqual([false, true]);
   });
 
+  test("removed flags with inherited Object property names have undefined payloads", () => {
+    const client = newClient({
+      constructor: { key: "constructor", isEnabled: false },
+      toString: { key: "toString", isEnabled: false },
+    });
+    const listener = vi.fn();
+    client.on("flagUpdated", listener);
+
+    client.updateFlags({});
+
+    expect(listener.mock.calls.map(([event]) => event)).toEqual([
+      { key: "constructor", flag: undefined },
+      { key: "toString", flag: undefined },
+    ]);
+  });
+
   test("listeners can unsubscribe", () => {
     const flags = initialFlags();
     const client = newClient(flags);

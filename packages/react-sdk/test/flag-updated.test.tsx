@@ -362,6 +362,38 @@ describe("useFlag value subscriptions", () => {
     unmount();
   });
 
+  test("keeps its subscription across value updates and parent rerenders", async () => {
+    const flags = initialFlags();
+    const client = await newClient(flags);
+    const subscribe = vi.spyOn(client, "on");
+    const renderSpy = vi.fn();
+    const { result, rerender, unmount } = renderHook(
+      () => {
+        renderSpy();
+        return useFlag("abc");
+      },
+      { wrapper: wrapperFor(client) },
+    );
+
+    rerender();
+    act(() =>
+      client.updateFlags({ ...flags, abc: { ...flags.abc, isEnabled: false } }),
+    );
+    act(() => client.updateFlags(flags));
+
+    expect(result.current.isEnabled).toBe(true);
+    expect(
+      subscribe.mock.calls.filter(([event]) => event === "flagUpdated"),
+    ).toHaveLength(1);
+
+    unmount();
+    renderSpy.mockClear();
+    act(() =>
+      client.updateFlags({ ...flags, abc: { ...flags.abc, isEnabled: false } }),
+    );
+    expect(renderSpy).not.toHaveBeenCalled();
+  });
+
   test("catches an update between rendering and subscribing", async () => {
     const flags = initialFlags();
     const client = await newClient(flags);

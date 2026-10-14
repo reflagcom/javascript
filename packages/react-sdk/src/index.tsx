@@ -727,20 +727,26 @@ export function useFlag<TKey extends FlagKey>(
     key: TKey;
     flag: RawFlag | undefined;
   }>(() => ({ client, key, flag: client.getFlags()[key] }));
-  const snapshotRef = useRef(snapshot);
-  const updateFlag = () => {
-    const flag = client.getFlags()[key];
-    const previous = snapshotRef.current;
-    if (
-      previous.client !== client ||
-      previous.key !== key ||
-      previous.flag !== flag
-    ) {
-      const updated = { client, key, flag };
-      snapshotRef.current = updated;
-      setSnapshot(updated);
-    }
-  };
+  useIsomorphicLayoutEffect(() => {
+    let current = snapshot;
+    const updateFlag = () => {
+      const flag = client.getFlags()[key];
+      if (
+        current.client !== client ||
+        current.key !== key ||
+        current.flag !== flag
+      ) {
+        current = { client, key, flag };
+        setSnapshot(current);
+      }
+    };
+    const unsubscribe = client.on("flagUpdated", (event) => {
+      if (event.key === key) updateFlag();
+    });
+    // Subscribe before catching updates since render, including client/key changes.
+    updateFlag();
+    return unsubscribe;
+  }, [client, key]);
   const config = useMemo(() => {
     const flag =
       snapshot.client === client && snapshot.key === key
@@ -754,19 +760,6 @@ export function useFlag<TKey extends FlagKey>(
   const track = () => client.track(key);
   const requestFeedback = (opts: RequestFeedbackOptions) =>
     client.requestFeedback({ ...opts, flagKey: key });
-
-  useOnEvent(
-    "flagUpdated",
-    (event) => {
-      if (event.key === key) updateFlag();
-    },
-    client,
-  );
-
-  useIsomorphicLayoutEffect(() => {
-    // Catch updates between rendering and subscribing, and changes of client/key.
-    updateFlag();
-  }, [client, key]);
 
   if (
     isLoading &&
