@@ -616,8 +616,6 @@ function App({ bootstrapData }: AppProps) {
 
 Returns the state of a given flag for the current context. The hook provides type-safe access to flags and their configurations.
 
-Flag updates only trigger a rerender when this flag's effective enabled/config value or presence changes. Updates to other flags or evaluation metadata alone do not trigger a rerender. Loading/context changes and ordinary React renders still work as before. Reading `isEnabled` or `config` continues to emit check telemetry using the latest evaluation metadata.
-
 ```tsx
 import { useFlag } from "@reflag/react-sdk";
 import { Loading } from "./Loading";
