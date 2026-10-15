@@ -278,7 +278,7 @@ export function useSendFeedback() {
  */
 export function useUpdateUser() {
   const client = useClient();
-  return (opts: Parameters<ReflagClient["updateUser"]>[0]) =>
+  return (opts: { [key: string]: string | number | undefined }) =>
     client.updateUser(opts);
 }
 
@@ -304,7 +304,7 @@ export function useUpdateUser() {
  */
 export function useUpdateCompany() {
   const client = useClient();
-  return (opts: Parameters<ReflagClient["updateCompany"]>[0]) =>
+  return (opts: { [key: string]: string | number | undefined }) =>
     client.updateCompany(opts);
 }
 
@@ -330,7 +330,7 @@ export function useUpdateCompany() {
  */
 export function useUpdateOtherContext() {
   const client = useClient();
-  return (opts: Parameters<ReflagClient["updateOtherContext"]>[0]) =>
+  return (opts: { [key: string]: string | number | undefined }) =>
     client.updateOtherContext(opts);
 }
 

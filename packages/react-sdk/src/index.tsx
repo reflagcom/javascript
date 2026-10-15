@@ -536,7 +536,7 @@ export type ReflagProps = ReflagPropsBase &
      * Context which is not related to a user or a company.
      * @deprecated Use `context` instead, this property will be removed in the next major version
      */
-    otherContext?: ReflagContext["other"];
+    otherContext?: Record<string, string | number | undefined>;
   };
 
 /**
@@ -935,7 +935,7 @@ export function useSendFeedback() {
  */
 export function useUpdateUser() {
   const client = useClient();
-  return (opts: Parameters<ReflagClient["updateUser"]>[0]) =>
+  return (opts: { [key: string]: string | number | undefined }) =>
     client.updateUser(opts);
 }
 
@@ -955,7 +955,7 @@ export function useUpdateUser() {
 export function useUpdateCompany() {
   const client = useClient();
 
-  return (opts: Parameters<ReflagClient["updateCompany"]>[0]) =>
+  return (opts: { [key: string]: string | number | undefined }) =>
     client.updateCompany(opts);
 }
 
@@ -975,7 +975,7 @@ export function useUpdateCompany() {
  */
 export function useUpdateOtherContext() {
   const client = useClient();
-  return (opts: Parameters<ReflagClient["updateOtherContext"]>[0]) =>
+  return (opts: { [key: string]: string | number | undefined }) =>
     client.updateOtherContext(opts);
 }
 

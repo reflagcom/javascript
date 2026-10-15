@@ -7,5 +7,5 @@
       "@reflag/vue-sdk": ["./src/index.ts"]
     }
   },
-  "include": ["src", "test/opt-in-types.ts", "test/context-update-types.ts"]
+  "include": ["src", "test/opt-in-types.ts"]
 }

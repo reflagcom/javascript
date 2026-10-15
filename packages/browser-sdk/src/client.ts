@@ -2,13 +2,7 @@ import { deepEqual } from "fast-equals";
 
 import { BulkEvent, BulkQueue } from "./bulkQueue";
 import { API_BASE_URL, APP_BASE_URL, IS_SERVER, SDK_VERSION } from "./config";
-import {
-  CompanyContext,
-  ContextValue,
-  ReflagContext,
-  ReflagDeprecatedContext,
-  UserContext,
-} from "./context";
+import { ReflagContext, ReflagDeprecatedContext } from "./context";
 import {
   AutoFeedback,
   Feedback,
@@ -850,7 +844,7 @@ export class ReflagClient {
    *
    * @param user
    */
-  async updateUser(user: Partial<UserContext>) {
+  async updateUser(user: { [key: string]: string | number | undefined }) {
     const newUserContext = {
       ...this.context.user,
       ...user,
@@ -874,7 +868,7 @@ export class ReflagClient {
    *
    * @param company The company details.
    */
-  async updateCompany(company: Partial<CompanyContext>) {
+  async updateCompany(company: { [key: string]: string | number | undefined }) {
     const newCompanyContext = {
       ...this.context.company,
       ...company,
@@ -898,7 +892,9 @@ export class ReflagClient {
    *
    * @param otherContext Additional context.
    */
-  async updateOtherContext(otherContext: Record<string, ContextValue>) {
+  async updateOtherContext(otherContext: {
+    [key: string]: string | number | undefined;
+  }) {
     const newOtherContext = {
       ...this.context.other,
       ...otherContext,

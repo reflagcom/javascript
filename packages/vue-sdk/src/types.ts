@@ -161,7 +161,7 @@ export type ReflagProps = ReflagInitOptionsBase &
      * Context which is not related to a user or a company.
      * @deprecated Use `context` instead, this property will be removed in the next major version
      */
-    otherContext?: ReflagContext["other"];
+    otherContext?: Record<string, string | number | undefined>;
   };
 
 /**
