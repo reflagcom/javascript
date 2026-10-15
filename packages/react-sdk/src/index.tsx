@@ -1,5 +1,6 @@
 "use client";
 
+import { deepEqual } from "fast-equals";
 import React, {
   createContext,
   ReactNode,
@@ -722,11 +723,13 @@ export function useFlag<TKey extends FlagKey>(
 ): TypedFlags[TKey] {
   const context = useSafeContext();
   const { client, isLoading } = context;
-  const [snapshot, setSnapshot] = useState<{
-    client: ReflagClient;
-    key: TKey;
-    flag: RawFlag | undefined;
-  }>(() => ({ client, key, flag: client.getFlags()[key] }));
+  const readSnapshot = () => ({
+    client,
+    key,
+    flag: client.getFlags()[key] as RawFlag | undefined,
+    checkedFlag: client.getFlag(key),
+  });
+  const [snapshot, setSnapshot] = useState(readSnapshot);
   useIsomorphicLayoutEffect(() => {
     let current = snapshot;
     const updateFlag = () => {
@@ -736,7 +739,7 @@ export function useFlag<TKey extends FlagKey>(
         current.key !== key ||
         current.flag !== flag
       ) {
-        current = { client, key, flag };
+        current = readSnapshot();
         setSnapshot(current);
       }
     };
@@ -747,15 +750,18 @@ export function useFlag<TKey extends FlagKey>(
     updateFlag();
     return unsubscribe;
   }, [client, key]);
-  const config = useMemo(() => {
-    const flag =
-      snapshot.client === client && snapshot.key === key
-        ? snapshot.flag
-        : client.getFlags()[key];
-    return flag?.config
-      ? { key: flag.config.key, payload: flag.config.payload }
-      : { key: undefined, payload: undefined };
-  }, [client, key, snapshot]);
+  const { flag, checkedFlag } =
+    snapshot.client === client && snapshot.key === key
+      ? snapshot
+      : readSnapshot();
+  const isEnabled = flag?.isEnabledOverride ?? flag?.isEnabled ?? false;
+  const config = useMemo(
+    () =>
+      flag?.config
+        ? { key: flag.config.key, payload: flag.config.payload }
+        : { key: undefined, payload: undefined },
+    [flag],
+  );
 
   const track = () => client.track(key);
   const requestFeedback = (opts: RequestFeedbackOptions) =>
@@ -789,12 +795,23 @@ export function useFlag<TKey extends FlagKey>(
     track,
     requestFeedback,
     get isEnabled() {
-      // Read current metadata for check telemetry, even without a value update.
-      return client.getFlag(key).isEnabled ?? false;
+      const latest = client.getFlags()[key];
+      const latestEnabled =
+        latest?.isEnabledOverride ?? latest?.isEnabled ?? false;
+      // Use fresh metadata only when it describes the rendered value. A newer
+      // value may still be waiting for React to commit its snapshot.
+      const flagForCheck =
+        latestEnabled === isEnabled ? client.getFlag(key) : checkedFlag;
+      void flagForCheck.isEnabled;
+      return isEnabled;
     },
     get config() {
-      // Emit checks with current metadata, but keep the value object stable.
-      void client.getFlag(key).config;
+      const latest = client.getFlags()[key]?.config;
+      const flagForCheck =
+        latest?.key === config.key && deepEqual(latest?.payload, config.payload)
+          ? client.getFlag(key)
+          : checkedFlag;
+      void flagForCheck.config;
       return config as TypedFlags[TKey]["config"];
     },
   };

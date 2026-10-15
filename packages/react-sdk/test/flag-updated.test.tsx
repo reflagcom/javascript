@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
 import React from "react";
+import { flushSync } from "react-dom";
 import {
   afterAll,
   afterEach,
@@ -114,7 +115,12 @@ describe("useFlag value subscriptions", () => {
           targetingVersion: 2,
           ruleEvaluationResults: [false, true],
           evaluationErrors,
-          config: { ...flags.abc.config!, version: 2, evaluationErrors },
+          config: {
+            ...flags.abc.config!,
+            payload: { nested: { limit: 10 } },
+            version: 2,
+            evaluationErrors,
+          },
         },
       }),
     );
@@ -138,6 +144,147 @@ describe("useFlag value subscriptions", () => {
         action: "check-config",
         version: 2,
         evaluationErrors,
+      }),
+    );
+    unmount();
+  });
+
+  test.each(["default", "variant"])(
+    "keeps values and check telemetry consistent during a pending transition (%s config key)",
+    async (configKey) => {
+      const flags = initialFlags();
+      const client = await newClient(flags);
+      const checks = vi.fn();
+      client.on("check", checks);
+      let readValues: () => void = () => undefined;
+      const { result, unmount } = renderHook(
+        () => {
+          const [shouldRead, setShouldRead] = React.useState(false);
+          readValues = () => setShouldRead(true);
+          const flag = useFlag("abc");
+          return shouldRead
+            ? { isEnabled: flag.isEnabled, config: flag.config }
+            : undefined;
+        },
+        { wrapper: wrapperFor(client) },
+      );
+      const updated = {
+        ...flags,
+        abc: {
+          ...flags.abc,
+          isEnabled: false,
+          targetingVersion: 2,
+          config: {
+            key: configKey,
+            payload: { nested: { limit: 20 } },
+            version: 2,
+          },
+        },
+      };
+      let synchronousValues: typeof result.current;
+
+      act(() => {
+        React.startTransition(() => client.updateFlags(updated));
+        flushSync(readValues);
+        synchronousValues = result.current;
+      });
+
+      expect(synchronousValues).toEqual({
+        isEnabled: true,
+        config: { key: "default", payload: { nested: { limit: 10 } } },
+      });
+      expect(result.current).toEqual({
+        isEnabled: false,
+        config: { key: configKey, payload: { nested: { limit: 20 } } },
+      });
+      expect(
+        checks.mock.calls.map(([event]) => ({
+          action: event.action,
+          version: event.version,
+          value: event.value,
+        })),
+      ).toEqual([
+        { action: "check-is-enabled", version: 1, value: true },
+        {
+          action: "check-config",
+          version: 1,
+          value: { key: "default", payload: { nested: { limit: 10 } } },
+        },
+        { action: "check-is-enabled", version: 2, value: false },
+        {
+          action: "check-config",
+          version: 2,
+          value: { key: configKey, payload: { nested: { limit: 20 } } },
+        },
+      ]);
+      unmount();
+    },
+  );
+
+  test("retained snapshots keep their values and check metadata after an update", async () => {
+    const flags = initialFlags();
+    const client = await newClient(flags);
+    const checks = vi.fn();
+    client.on("check", checks);
+    const { result, unmount } = renderHook(() => useFlag("abc"), {
+      wrapper: wrapperFor(client),
+    });
+    const previous = result.current;
+
+    act(() =>
+      client.updateFlags({
+        ...flags,
+        abc: {
+          ...flags.abc,
+          isEnabled: false,
+          targetingVersion: 2,
+          config: {
+            key: "variant",
+            payload: { nested: { limit: 20 } },
+            version: 2,
+          },
+        },
+      }),
+    );
+
+    expect(previous.isEnabled).toBe(true);
+    expect(previous.config).toEqual({
+      key: "default",
+      payload: { nested: { limit: 10 } },
+    });
+    expect(checks).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "check-is-enabled",
+        version: 1,
+        value: true,
+      }),
+    );
+    expect(checks).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "check-config",
+        version: 1,
+        value: previous.config,
+      }),
+    );
+    checks.mockClear();
+
+    expect(result.current.isEnabled).toBe(false);
+    expect(result.current.config).toEqual({
+      key: "variant",
+      payload: { nested: { limit: 20 } },
+    });
+    expect(checks).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "check-is-enabled",
+        version: 2,
+        value: false,
+      }),
+    );
+    expect(checks).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "check-config",
+        version: 2,
+        value: result.current.config,
       }),
     );
     unmount();
