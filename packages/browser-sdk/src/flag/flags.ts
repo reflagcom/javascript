@@ -13,6 +13,7 @@ import { logResponseError, parseResponseError } from "../utils/responseError";
 import { retryOnThrow } from "../utils/retry";
 import { FlagCache, isObject, parseAPIFlagsResponse } from "./flagCache";
 import { isValidFlagStateVersion } from "./flagStateVersion";
+import { flagValueChanged } from "./flagValueChanged";
 
 const INITIAL_FETCH_RETRY_DELAYS_MS = [0, 5000];
 
@@ -149,6 +150,16 @@ export type RawFlag = {
 };
 
 export type RawFlags = Record<string, RawFlag>;
+
+/**
+ * An initial flag value is published, its effective enabled/config value
+ * changed, or the flag was added or removed.
+ */
+export type FlagUpdatedEvent = {
+  key: string;
+  /** The current raw flag, or undefined when the flag was removed. */
+  flag: RawFlag | undefined;
+};
 
 export type FallbackFlagOverride =
   | {
@@ -309,6 +320,8 @@ export class FlagsClient {
   private fetchedFlagsContextVersion = 0;
   private flagOverrides: FlagOverrides = {};
   private flags: RawFlags = {};
+  private flagUpdatedListeners = new Set<(event: FlagUpdatedEvent) => void>();
+  private pendingFlagUpdates: FlagUpdatedEvent[] | undefined;
   private fallbackFlags: FallbackFlags = {};
   private contextFetchVersion = 0;
   private optInFlagsRequested = false;
@@ -385,17 +398,22 @@ export class FlagsClient {
         this.flagOverrides = { ...cachedOverrides, ...this.flagOverrides };
       }
 
-      if (!this.bootstrapped) {
+      if (this.bootstrapped) {
+        // Apply cached overrides silently, then publish each initial value once.
+        const previousFlags = this.flags;
+        this.updateFlags(false);
+        const rawFlagsChanged = previousFlags !== this.flags;
+        this.triggerFlagUpdates({});
+        if (rawFlagsChanged) this.triggerFlagsUpdated();
+      } else {
         const requestContextVersion = this.contextFetchVersion;
         this.applyFetchedFlagsResult(
           await this.maybeFetchFlags(requestContextVersion),
           true,
           requestContextVersion,
         );
+        this.updateFlags();
       }
-
-      // Apply overrides and trigger update if flags have changed
-      this.updateFlags();
       initializationSucceeded = true;
     } finally {
       this.initializationComplete = true;
@@ -416,6 +434,8 @@ export class FlagsClient {
   public stop() {
     this.supersedeOptInFlagsLoading(false);
     this.abortController.abort();
+    this.flagUpdatedListeners.clear();
+    if (this.pendingFlagUpdates) this.pendingFlagUpdates.length = 0;
   }
 
   getFlags(): RawFlags {
@@ -634,8 +654,13 @@ export class FlagsClient {
     const updatedFlags = this.mergeFlags(this.fetchedFlags, this.flagOverrides);
     // Nothing has changed, skipping update
     if (deepEqual(this.flags, updatedFlags)) return;
+    const previousFlags = this.flags;
     this.flags = updatedFlags;
-    if (triggerEvent) this.triggerFlagsUpdated();
+    if (triggerEvent) {
+      // Publish values before raw-data subscribers can change overrides again.
+      this.triggerFlagUpdates(previousFlags);
+      this.triggerFlagsUpdated();
+    }
   }
 
   setFlagOverride(key: string, isEnabled: boolean | null) {
@@ -669,6 +694,17 @@ export class FlagsClient {
     this.eventTarget.addEventListener("flagsUpdated", callback, {
       signal: this.abortController.signal,
     });
+  }
+
+  /**
+   * Register a callback for initial flag values and individual effective
+   * enabled/config value changes, including additions/removals.
+   * Metadata-only changes are ignored.
+   */
+  onFlagUpdated(callback: (event: FlagUpdatedEvent) => void) {
+    if (!this.abortController.signal.aborted) {
+      this.flagUpdatedListeners.add(callback);
+    }
   }
 
   /**
@@ -999,6 +1035,35 @@ export class FlagsClient {
       mergedFlags[key] = { ...fetchedFlag, isEnabledOverride };
     }
     return mergedFlags;
+  }
+
+  private triggerFlagUpdates(previousFlags: RawFlags) {
+    // Maps distinguish missing flags from inherited properties such as constructor.
+    const previous = new Map(Object.entries(previousFlags));
+    const current = new Map(Object.entries(this.flags));
+    const keys = new Set([...previous.keys(), ...current.keys()]);
+    const updates: FlagUpdatedEvent[] = [];
+    for (const key of keys) {
+      const flag = current.get(key);
+      if (flagValueChanged(previous.get(key), flag))
+        updates.push({ key, flag });
+    }
+
+    if (!updates.length) return;
+    if (this.pendingFlagUpdates) {
+      for (const update of updates) this.pendingFlagUpdates.push(update);
+      return;
+    }
+
+    this.pendingFlagUpdates = updates;
+    try {
+      // Array iteration visits appended events after the original batch finishes.
+      for (const update of updates) {
+        for (const callback of this.flagUpdatedListeners) callback(update);
+      }
+    } finally {
+      this.pendingFlagUpdates = undefined;
+    }
   }
 
   private triggerFlagsUpdated() {

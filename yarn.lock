@@ -6910,6 +6910,7 @@ __metadata:
     "@types/react": "npm:^19.0.12"
     "@types/react-dom": "npm:^19.0.5"
     "@types/webpack": "npm:^5.28.5"
+    fast-equals: "npm:^5.2.2"
     jsdom: "npm:^24.1.0"
     msw: "npm:^2.3.5"
     react: "npm:19.1.0"
