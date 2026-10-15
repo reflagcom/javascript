@@ -2,6 +2,7 @@ import { http, HttpResponse } from "msw";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ReflagClient } from "../src/client";
+import { CompanyContext, ContextValue, UserContext } from "../src/context";
 import { FlagsClient } from "../src/flag/flags";
 import { HttpClient } from "../src/httpClient";
 import { deferred } from "./deferred";
@@ -64,6 +65,37 @@ describe("ReflagClient", () => {
     localStorage.clear();
     sessionStorage.clear();
     vi.unstubAllGlobals();
+  });
+
+  it("accepts JSON-compatible values in user, company and other context updates", async () => {
+    const user: UserContext = {
+      id: "user1",
+      enabled: true,
+      tags: ["beta", 1, null],
+      preferences: { theme: "dark", omitted: undefined },
+      cleared: null,
+    };
+    const company: CompanyContext = {
+      id: "company1",
+      enterprise: false,
+      settings: { regions: ["eu", "us"] },
+    };
+    const other: Record<string, ContextValue> = {
+      preview: true,
+      settings: { locale: "en" },
+    };
+
+    await client.updateUser(user);
+    await client.updateCompany(company);
+    await client.updateOtherContext(other);
+    await client.updateUser({ enabled: false });
+
+    expect(client.getContext()).toEqual({
+      user: { ...user, enabled: false },
+      company,
+      other,
+    });
+    expect(flagClientSetContext).toHaveBeenLastCalledWith(client.getContext());
   });
 
   describe("updateUser", () => {
