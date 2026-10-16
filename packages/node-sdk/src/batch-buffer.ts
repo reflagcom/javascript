@@ -8,6 +8,7 @@ import { isObject, ok } from "./utils";
  */
 export default class BatchBuffer<T> {
   private buffer: T[] = [];
+  private inFlight = new Set<Promise<void>>();
   private flushHandler: (items: T[]) => Promise<void>;
   private logger?: Logger;
   private maxSize: number;
@@ -66,12 +67,24 @@ export default class BatchBuffer<T> {
 
     if (this.buffer.length === 0) {
       this.logger?.debug("buffer is empty. nothing to flush");
-      return;
+    } else {
+      const flushingBuffer = this.buffer;
+      this.buffer = [];
+      const request = this.send(flushingBuffer);
+      this.inFlight.add(request);
+      // Keep completed requests out of subsequent flushes, including failures.
+      void request.then(
+        () => this.inFlight.delete(request),
+        () => this.inFlight.delete(request),
+      );
     }
 
-    const flushingBuffer = this.buffer;
-    this.buffer = [];
+    // Automatic flushes remove events from the buffer before delivery finishes.
+    // Explicit flushes must also await those requests before a runtime can freeze.
+    await Promise.all(this.inFlight);
+  }
 
+  private async send(flushingBuffer: T[]): Promise<void> {
     try {
       await this.flushHandler(flushingBuffer);
 
