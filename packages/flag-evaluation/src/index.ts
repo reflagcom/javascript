@@ -25,6 +25,13 @@ export type FilterGroup<T extends FilterClass> = {
   type: "group";
   operator: "and" | "or";
   filters: FilterTree<T>[];
+  /**
+   * On OR groups representing flag references, evaluate each child as an
+   * independent enable rule. A valid matching rule wins over invalid siblings.
+   * Unmatched groups still propagate errors so negated invalid checks fail closed.
+   * Omitted for ordinary authored boolean groups, whose errors invalidate the rule.
+   */
+  ruleEvaluation?: "independent";
 };
 
 /**
@@ -650,6 +657,7 @@ function evaluateRecursively(
   filter: RuleFilter,
   context: FlattenedContext,
   errors: Map<string, EvaluationError>,
+  diagnostics: Map<string, EvaluationError>,
 ): boolean {
   switch (filter.type) {
     case "constant":
@@ -713,14 +721,38 @@ function evaluateRecursively(
       return hashVal < filter.partialRolloutThreshold;
     }
     case "group": {
+      if (filter.operator === "or" && filter.ruleEvaluation === "independent") {
+        const groupErrors = new Map<string, EvaluationError>();
+        let matched = false;
+        for (const child of filter.filters) {
+          const childErrors = new Map<string, EvaluationError>();
+          const childMatched = evaluateRecursively(
+            child,
+            context,
+            childErrors,
+            diagnostics,
+          );
+          for (const [key, error] of childErrors) {
+            groupErrors.set(key, error);
+            diagnostics.set(key, error);
+          }
+          matched ||= childErrors.size === 0 && childMatched;
+        }
+        // Only a valid grant overrides sibling errors. Without one, preserve
+        // fail-closed behavior, including under NOT_FLAG / nested negations.
+        if (!matched) {
+          for (const [key, error] of groupErrors) errors.set(key, error);
+        }
+        return matched;
+      }
       const evaluateChild = (child: RuleFilter) =>
-        evaluateRecursively(child, context, errors);
+        evaluateRecursively(child, context, errors, diagnostics);
       return filter.operator === "and"
         ? filter.filters.every(evaluateChild)
         : filter.filters.some(evaluateChild);
     }
     case "negation":
-      return !evaluateRecursively(filter.filter, context, errors);
+      return !evaluateRecursively(filter.filter, context, errors, diagnostics);
     default:
       return false;
   }
@@ -775,7 +807,12 @@ export function evaluateFlagRules<T extends RuleValue>({
 
   const ruleEvaluationResults = rules.map((rule) => {
     const ruleErrors = new Map<string, EvaluationError>();
-    const matched = evaluateRecursively(rule.filter, flatContext, ruleErrors);
+    const matched = evaluateRecursively(
+      rule.filter,
+      flatContext,
+      ruleErrors,
+      evaluationErrors,
+    );
     for (const [key, error] of ruleErrors) evaluationErrors.set(key, error);
 
     // An invalid condition must fail the entire rule, even when wrapped in a
