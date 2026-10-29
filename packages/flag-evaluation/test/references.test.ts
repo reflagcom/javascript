@@ -152,7 +152,7 @@ describe("collection evaluation", () => {
   it("selects a flag by key and preserves its value type and metadata", () => {
     const definition = flag("a", reference("b"));
     const evaluate = newEvaluator({ flags: [definition, flag("b", grant)] });
-    const result = evaluate("a", context);
+    const result = evaluate.evaluateFlag(context, "a");
     expect(result).toMatchObject({
       resolved: true,
       value: true,
@@ -165,9 +165,13 @@ describe("collection evaluation", () => {
     expectTypeOf(result.value).toEqualTypeOf<boolean | undefined>();
     if (!result.resolved) throw new Error("Expected a selected variant");
     expectTypeOf(result.value).toEqualTypeOf<boolean>();
-    expect(evaluate("b", context).value).toBe(true);
-    expect(evaluate("a", { company: { id: "other" } }).value).toBe(false);
-    expect(() => evaluate("missing", {})).toThrow('Unknown flag "missing"');
+    expect(evaluate.evaluateFlag(context, "b").value).toBe(true);
+    expect(evaluate.evaluateFlag({ company: { id: "other" } }, "a").value).toBe(
+      false,
+    );
+    expect(() => evaluate.evaluateFlag({}, "missing")).toThrow(
+      'Unknown flag "missing"',
+    );
   });
 
   it("matches multivariate variant keys, not value truthiness or object identity", () => {
@@ -184,9 +188,9 @@ describe("collection evaluation", () => {
           b,
         ],
       });
-      expect(evaluate("a", {}).value).toBe(true);
-      expect(evaluate("c", {}).value).toBe(false);
-      expect(evaluate("b", {}).value).toBe(value);
+      expect(evaluate.evaluateFlag({}, "a").value).toBe(true);
+      expect(evaluate.evaluateFlag({}, "c").value).toBe(false);
+      expect(evaluate.evaluateFlag({}, "b").value).toBe(value);
     }
   });
 
@@ -201,7 +205,7 @@ describe("collection evaluation", () => {
         },
       ],
     };
-    const result = newEvaluator(collection)("b", {});
+    const result = newEvaluator(collection).evaluateFlag({}, "b");
     expectTypeOf(result.value).toEqualTypeOf<boolean | string | undefined>();
     expect(result.value).toBe("large");
   });
@@ -219,8 +223,10 @@ describe("collection evaluation", () => {
       ],
       segments,
     });
-    expect(evaluate("a", context).value).toBe(true);
-    expect(evaluate("a", { company: { id: "other" } }).value).toBe(false);
+    expect(evaluate.evaluateFlag(context, "a").value).toBe(true);
+    expect(evaluate.evaluateFlag({ company: { id: "other" } }, "a").value).toBe(
+      false,
+    );
   });
 
   it("allows flag and segment keys to share the same name", () => {
@@ -228,7 +234,7 @@ describe("collection evaluation", () => {
       flags: [flag("a", reference("same")), flag("same", segment("same"))],
       segments: [{ key: "same", filter: yes }],
     });
-    expect(evaluate("a", {}).value).toBe(true);
+    expect(evaluate.evaluateFlag({}, "a").value).toBe(true);
   });
 
   it.each(["__proto__", "constructor", "toString"])(
@@ -245,8 +251,8 @@ describe("collection evaluation", () => {
         ],
         segments: [{ key, filter: yes }],
       });
-      expect(evaluate("a", {}).value).toBe(true);
-      expect(evaluate(key, {}).value).toBe(true);
+      expect(evaluate.evaluateFlag({}, "a").value).toBe(true);
+      expect(evaluate.evaluateFlag({}, key).value).toBe(true);
     },
   );
 
@@ -265,7 +271,7 @@ describe("collection evaluation", () => {
     });
     for (let i = 0; i < 100; i++) {
       const id = `company-${i}`;
-      expect(evaluate("a", { company: { id } }).value).toBe(
+      expect(evaluate.evaluateFlag({ company: { id } }, "a").value).toBe(
         hashInt(`original-b-key.${id}`) < threshold,
       );
     }
@@ -292,7 +298,7 @@ describe("collection evaluation", () => {
     const evaluate = newEvaluator({ flags: [flag("a", reference("b")), b] });
     for (let i = 0; i < 100; i++) {
       const id = `company-${i}`;
-      expect(evaluate("a", { company: { id } }).value).toBe(
+      expect(evaluate.evaluateFlag({ company: { id } }, "a").value).toBe(
         Math.min(hashInt(`b-split.${id}`), 99999) < 50000,
       );
     }
@@ -310,7 +316,7 @@ describe("reference error boundaries", () => {
             flag("b", ...(grantFirst ? [grant, filter] : [filter, grant])),
           ],
         });
-        const result = evaluate("a", context);
+        const result = evaluate.evaluateFlag(context, "a");
         expect(result.value).toBe(true);
         expect(result.errors).toEqual(
           grantFirst
@@ -332,7 +338,7 @@ describe("reference error boundaries", () => {
       const evaluate = newEvaluator({
         flags: [flag("a", negate(reference("b"))), flag("b", filter, no)],
       });
-      const result = evaluate("a", context);
+      const result = evaluate.evaluateFlag(context, "a");
       expect(result.value).toBe(false);
       expect(result.errors).toEqual([
         expect.objectContaining({ code, source: { type: "flag", key: "b" } }),
@@ -344,8 +350,10 @@ describe("reference error boundaries", () => {
     const evaluate = newEvaluator({
       flags: [flag("a", negate(reference("b"))), flag("b", grant)],
     });
-    expect(evaluate("a", { company: { id: "other" } }).value).toBe(true);
-    expect(evaluate("a", context).value).toBe(false);
+    expect(evaluate.evaluateFlag({ company: { id: "other" } }, "a").value).toBe(
+      true,
+    );
+    expect(evaluate.evaluateFlag(context, "a").value).toBe(false);
   });
 
   it("distinguishes an explicit fallback selection from negating an uncertain nonmatch", () => {
@@ -356,10 +364,10 @@ describe("reference error boundaries", () => {
         flag("b", invalidFilters[0].filter),
       ],
     });
-    expect(evaluate("a", context).value).toBe(true);
-    expect(evaluate("c", context).value).toBe(false);
-    expect(evaluate("a", context).errors).toHaveLength(1);
-    expect(evaluate("c", context).errors).toHaveLength(1);
+    expect(evaluate.evaluateFlag(context, "a").value).toBe(true);
+    expect(evaluate.evaluateFlag(context, "c").value).toBe(false);
+    expect(evaluate.evaluateFlag(context, "a").errors).toHaveLength(1);
+    expect(evaluate.evaluateFlag(context, "c").errors).toHaveLength(1);
   });
 
   it("does not negate a matching selection with nonfatal diagnostics into a grant", () => {
@@ -369,7 +377,7 @@ describe("reference error boundaries", () => {
         flag("b", invalidFilters[0].filter, grant),
       ],
     });
-    expect(evaluate("a", context)).toMatchObject({
+    expect(evaluate.evaluateFlag(context, "a")).toMatchObject({
       value: false,
       errors: [
         { code: "MISSING_CONTEXT_FIELD", source: { type: "flag", key: "b" } },
@@ -384,7 +392,7 @@ describe("reference error boundaries", () => {
         flag("b", negate(invalidFilters[0].filter)),
       ],
     });
-    expect(evaluate("a", context).value).toBe(false);
+    expect(evaluate.evaluateFlag(context, "a").value).toBe(false);
   });
 
   it("keeps authored OR errors local to a rule, not the entire flag", () => {
@@ -393,9 +401,9 @@ describe("reference error boundaries", () => {
     const evaluate = newEvaluator({
       flags: [flag("a", authored), flag("c", authored, grant), b],
     });
-    expect(evaluate("a", context).value).toBe(false);
-    expect(evaluate("c", context).value).toBe(true);
-    expect(evaluate("c", context).errors).toHaveLength(1);
+    expect(evaluate.evaluateFlag(context, "a").value).toBe(false);
+    expect(evaluate.evaluateFlag(context, "c").value).toBe(true);
+    expect(evaluate.evaluateFlag(context, "c").errors).toHaveLength(1);
   });
 
   it("keeps errors from distinct dependency definitions with the same missing field", () => {
@@ -406,7 +414,9 @@ describe("reference error boundaries", () => {
         flag("c", invalidFilters[0].filter),
       ],
     });
-    expect(evaluate("a", context).errors.map(({ source }) => source)).toEqual([
+    expect(
+      evaluate.evaluateFlag(context, "a").errors.map(({ source }) => source),
+    ).toEqual([
       { type: "flag", key: "b" },
       { type: "flag", key: "c" },
     ]);
@@ -420,7 +430,7 @@ describe("reference error boundaries", () => {
         flag("c", invalidFilters[0].filter, grant),
       ],
     });
-    expect(evaluate("a", context)).toMatchObject({
+    expect(evaluate.evaluateFlag(context, "a")).toMatchObject({
       value: true,
       errors: [
         { code: "MISSING_CONTEXT_FIELD", source: { type: "flag", key: "c" } },
@@ -436,7 +446,7 @@ describe("reference error boundaries", () => {
         flag("c", invalidFilters[0].filter),
       ],
     });
-    expect(evaluate("a", context)).toMatchObject({
+    expect(evaluate.evaluateFlag(context, "a")).toMatchObject({
       value: false,
       errors: [
         { code: "MISSING_CONTEXT_FIELD", source: { type: "flag", key: "c" } },
@@ -453,7 +463,7 @@ describe("reference error boundaries", () => {
           flag("b", group(operator, invalidFilters[0].filter, grant)),
         ],
       });
-      expect(evaluate("a", context).value).toBe(false);
+      expect(evaluate.evaluateFlag(context, "a").value).toBe(false);
     },
   );
 
@@ -464,7 +474,7 @@ describe("reference error boundaries", () => {
         flag("b", invalidFilters[0].filter, grant),
       ],
     });
-    const result = evaluate("a", context);
+    const result = evaluate.evaluateFlag(context, "a");
     expect(result.value).toBe(false);
     expect(result.errors.map(({ code }) => code)).toEqual([
       "MISSING_CONTEXT_FIELD",
@@ -482,7 +492,7 @@ describe("reference error boundaries", () => {
           { key: "s", filter: group("or", invalidFilters[0].filter, grant) },
         ],
       });
-      expect(evaluate("a", context)).toMatchObject({
+      expect(evaluate.evaluateFlag(context, "a")).toMatchObject({
         value: false,
         errors: [
           {
@@ -502,7 +512,7 @@ describe("reference error boundaries", () => {
         { key: "inner", filter: invalidFilters[0].filter },
       ],
     });
-    expect(evaluate("a", context)).toMatchObject({
+    expect(evaluate.evaluateFlag(context, "a")).toMatchObject({
       value: false,
       errors: [{ source: { type: "segment", key: "inner" } }],
     });
@@ -513,7 +523,10 @@ describe("reference error boundaries", () => {
       flags: [flag("a", negate(segment("s")))],
       segments: [{ key: "s", filter: no }],
     });
-    expect(evaluate("a", {})).toMatchObject({ value: true, errors: [] });
+    expect(evaluate.evaluateFlag({}, "a")).toMatchObject({
+      value: true,
+      errors: [],
+    });
   });
 
   it("allows a segment to reference a valid flag with nonfatal diagnostics", () => {
@@ -524,7 +537,7 @@ describe("reference error boundaries", () => {
       ],
       segments: [{ key: "s", filter: reference("b") }],
     });
-    expect(evaluate("a", context)).toMatchObject({
+    expect(evaluate.evaluateFlag(context, "a")).toMatchObject({
       value: true,
       errors: [
         { code: "MISSING_CONTEXT_FIELD", source: { type: "flag", key: "b" } },
@@ -539,7 +552,7 @@ describe("reference error boundaries", () => {
         flag("b", invalidFilters[0].filter),
       ],
     });
-    const result = evaluate("a", context);
+    const result = evaluate.evaluateFlag(context, "a");
     expect(result.value).toBe(false);
     expect(result.errors).toHaveLength(1);
     expect(result.ruleResults.map(({ matched }) => matched)).toEqual([
@@ -554,7 +567,7 @@ describe("reference error boundaries", () => {
     const evaluate = newEvaluator({
       flags: [flag("a", negate(reference("b"))), b],
     });
-    expect(evaluate("a", {})).toMatchObject({
+    expect(evaluate.evaluateFlag({}, "a")).toMatchObject({
       value: false,
       errors: [
         { code: "INVALID_FLAG_DEFINITION", source: { type: "flag", key: "b" } },
@@ -584,8 +597,8 @@ describe("reference error boundaries", () => {
       const evaluate = newEvaluator({
         flags: [flag("a", negate(reference("b"))), b],
       });
-      expect(evaluate("a", requestContext).value).toBe(false);
-      expect(evaluate("a", requestContext).errors).toHaveLength(1);
+      expect(evaluate.evaluateFlag(requestContext, "a").value).toBe(false);
+      expect(evaluate.evaluateFlag(requestContext, "a").errors).toHaveLength(1);
     },
   );
 
@@ -609,7 +622,7 @@ describe("reference error boundaries", () => {
     const evaluate = newEvaluator({
       flags: [flag("a", negate(reference("b"))), b],
     });
-    expect(evaluate("a", context)).toMatchObject({
+    expect(evaluate.evaluateFlag(context, "a")).toMatchObject({
       value: false,
       errors: [{ code: "INVALID_FLAG_DEFINITION" }],
     });
@@ -619,8 +632,8 @@ describe("reference error boundaries", () => {
     const evaluate = newEvaluator({
       flags: [flag("a", negate(reference("b"))), { ...flag("b"), rules: [] }],
     });
-    expect(evaluate("a", {}).value).toBe(false);
-    expect(evaluate("a", {}).errors).toMatchObject([
+    expect(evaluate.evaluateFlag({}, "a").value).toBe(false);
+    expect(evaluate.evaluateFlag({}, "a").errors).toMatchObject([
       { code: "INVALID_FLAG_DEFINITION", source: { type: "flag", key: "b" } },
     ]);
   });
@@ -725,7 +738,7 @@ describe("collection validation", () => {
         flag("d", yes),
       ],
     });
-    expect(evaluate("a", {}).value).toBe(true);
+    expect(evaluate.evaluateFlag({}, "a").value).toBe(true);
   });
 });
 
@@ -739,12 +752,14 @@ describe("recursive evaluation without result caching", () => {
     });
     const lookups = vi.spyOn(Set.prototype, "has");
     try {
-      expect(evaluate("a", context).value).toBe(true);
+      expect(evaluate.evaluateFlag(context, "a").value).toBe(true);
       expect(
         lookups.mock.calls.filter(([value]) => value === "acme"),
       ).toHaveLength(2);
-      expect(evaluate("a", { company: { id: "other" } }).value).toBe(false);
-      expect(evaluate("a", context).value).toBe(true);
+      expect(
+        evaluate.evaluateFlag({ company: { id: "other" } }, "a").value,
+      ).toBe(false);
+      expect(evaluate.evaluateFlag(context, "a").value).toBe(true);
       expect(
         lookups.mock.calls.filter(([value]) => value === "acme"),
       ).toHaveLength(4);
@@ -768,21 +783,21 @@ describe("recursive evaluation without result caching", () => {
     });
     candidates[0] = "other";
     s.filter = no;
-    expect(evaluate("a", context).value).toBe(true);
+    expect(evaluate.evaluateFlag(context, "a").value).toBe(true);
   });
 
   it("isolates diagnostics and definition snapshots between calls", () => {
     const b = flag("b", invalidFilters[0].filter, grant);
     const a = flag("a", reference("b"));
     const evaluate = newEvaluator({ flags: [a, b] });
-    const first = evaluate("a", context);
+    const first = evaluate.evaluateFlag(context, "a");
     expect(first.value).toBe(true);
     first.errors[0].source!.key = "modified";
     first.ruleResults.length = 0;
     (a.rules[0].filter as FlagReferenceFilter).key = "missing";
     (b.rules[1].filter as typeof grant).values![0] = "other";
     b.rules.length = 0;
-    const second = evaluate("a", context);
+    const second = evaluate.evaluateFlag(context, "a");
     expect(second).toMatchObject({
       value: true,
       errors: [{ source: { type: "flag", key: "b" } }],

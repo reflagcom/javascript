@@ -128,10 +128,9 @@ export type RuleEvaluationResult = {
 };
 
 /** A resolved variant can contain any T, including undefined. */
-export type EvaluationResult<T = any> = {
+export type FlagEvaluationResult<T = any> = {
   flagKey: string;
   sourceVersionId: string;
-  context: FlattenedContext;
   ruleResults: RuleEvaluationResult[];
   errors: EvaluationError[];
 } & (
@@ -150,6 +149,23 @@ export type EvaluationResult<T = any> = {
       allocationIndex?: never;
     }
 );
+
+export type EvaluationResult<T = any> = FlagEvaluationResult<T> & {
+  context: FlattenedContext;
+};
+
+export type CollectionEvaluationResult<T = any> = {
+  context: FlattenedContext;
+  flags: Record<string, FlagEvaluationResult<T>>;
+};
+
+export type Evaluator<T = any> = {
+  evaluateAll(context: Record<string, unknown>): CollectionEvaluationResult<T>;
+  evaluateFlag(
+    context: Record<string, unknown>,
+    flagKey: string,
+  ): EvaluationResult<T>;
+};
 
 function normalizeArrayElement(value: unknown): string | undefined {
   if (value === undefined) return undefined;
@@ -584,7 +600,7 @@ function validateReferences<T>(
  */
 export function newEvaluator<T>(
   collection: CompiledCollection<T>,
-): (flagKey: string, context: Record<string, unknown>) => EvaluationResult<T> {
+): Evaluator<T> {
   const flags = new Map<string, PreparedFlag<T>>();
   const segments = new Map<string, PreparedFilter>();
   for (const flag of collection.flags) {
@@ -602,21 +618,35 @@ export function newEvaluator<T>(
     segments.set(segment.key, prepareFilter(segment.filter));
   }
   validateReferences(flags, segments);
-  return (flagKey, context) => {
-    const flag = flags.get(flagKey);
-    if (!flag) throw new Error(`Unknown flag "${flagKey}"`);
-    return evaluatePreparedFlag(flag, {
-      flags,
-      segments,
-      context: flattenContext(context),
-    });
+  function createState(context: Record<string, unknown>): EvaluationState<T> {
+    return { flags, segments, context: flattenContext(context) };
+  }
+
+  return {
+    evaluateAll(context) {
+      const state = createState(context);
+      const results = Object.create(null) as Record<
+        string,
+        FlagEvaluationResult<T>
+      >;
+      for (const [key, flag] of flags) {
+        results[key] = evaluatePreparedFlag(flag, state);
+      }
+      return { context: state.context, flags: results };
+    },
+    evaluateFlag(context, flagKey) {
+      const flag = flags.get(flagKey);
+      if (!flag) throw new Error(`Unknown flag "${flagKey}"`);
+      const state = createState(context);
+      return { ...evaluatePreparedFlag(flag, state), context: state.context };
+    },
   };
 }
 
 function evaluatePreparedFlag<T>(
   flag: PreparedFlag<T>,
   state: EvaluationState<T>,
-): EvaluationResult<T> {
+): FlagEvaluationResult<T> {
   const flatContext = state.context;
   const errors = new Map<string, EvaluationError>();
   const filterErrors = new Map<string, EvaluationError>();
@@ -684,7 +714,6 @@ function evaluatePreparedFlag<T>(
       resolved: true,
       flagKey: flag.key,
       sourceVersionId: flag.sourceVersionId,
-      context: flatContext,
       ruleResults,
       errors: Array.from(errors.values()),
       value: flag.variants[destination.variantKey],
@@ -703,7 +732,6 @@ function evaluatePreparedFlag<T>(
     value: undefined,
     flagKey: flag.key,
     sourceVersionId: flag.sourceVersionId,
-    context: flatContext,
     ruleResults,
     errors: Array.from(errors.values()),
   };

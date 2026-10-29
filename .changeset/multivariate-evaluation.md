@@ -4,7 +4,7 @@
 
 Introduce a v2-only compiled-variant evaluator:
 
-- `newEvaluator({ flags, segments })` prepares a complete collection and returns a reusable `(flagKey, context)` evaluator. Remove the v1 value-rule APIs and the one-shot `evaluateFlag` wrapper.
+- `newEvaluator({ flags, segments })` prepares a complete collection and returns `evaluateAll(context)` and `evaluateFlag(context, flagKey)` methods. The batch result contains shared normalized context and per-flag results without repeated context. Single-flag evaluation visits only the requested flag and its dependencies. Unresolved batch entries do not prevent other flags from being evaluated. Remove the v1 value-rule APIs and the one-shot `evaluateFlag` wrapper.
 - Preserve flag and segment reference nodes instead of inlining their filters. Flag references explicitly match variant keys; segments remain reusable predicates. Resolve references recursively without dependency-result caching or memoization.
 - Preserve diagnostics from unsuccessful referenced rules without suppressing a valid matching selection. Invalid nonmatches remain fail-closed through negation. Propagated diagnostics identify their source flag or segment.
 - Reject duplicate keys, missing references, unknown referenced variant keys and cycles at preparation, including mixed flag/segment cycles. Evaluating an unknown flag key throws.
