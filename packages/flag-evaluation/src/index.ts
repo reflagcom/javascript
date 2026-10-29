@@ -33,6 +33,13 @@ export type PercentageRolloutFilter = {
   partialRolloutThreshold: number;
 };
 
+/** Match the selected variant, not the truthiness of its value. */
+export type FlagReferenceFilter = {
+  type: "flag";
+  key: string;
+  variantKey: string;
+};
+export type SegmentReferenceFilter = { type: "segment"; key: string };
 export type ConstantFilter = { type: "constant"; value: boolean };
 export type FilterClass = { type: string };
 export type FilterGroup<T extends FilterClass> = {
@@ -49,13 +56,17 @@ export type FilterTree<T extends FilterClass> =
   | FilterNegation<T>
   | T;
 export type RuleFilter = FilterTree<
-  ContextFilter | PercentageRolloutFilter | ConstantFilter
+  | ContextFilter
+  | PercentageRolloutFilter
+  | ConstantFilter
+  | FlagReferenceFilter
+  | SegmentReferenceFilter
 >;
 
 export type NormalizedContextValue = string | string[];
 export type FlattenedContext = Record<string, NormalizedContextValue>;
 
-export type EvaluationError =
+export type EvaluationError = (
   | { code: "MISSING_CONTEXT_FIELD"; field: string; message: string }
   | {
       code: "UNSUPPORTED_ARRAY_OPERATOR";
@@ -72,7 +83,11 @@ export type EvaluationError =
       operator: ContextFilterOperator;
       message: string;
     }
-  | { code: "INVALID_FLAG_DEFINITION"; message: string };
+  | { code: "INVALID_FLAG_DEFINITION"; message: string }
+) & {
+  /** Origin of a diagnostic propagated through a reference. */
+  source?: { type: "flag" | "segment"; key: string };
+};
 
 export type VariantDestination =
   | { type: "variant"; variantKey: string }
@@ -98,6 +113,11 @@ export type CompiledFlag<T = any> = {
   sourceVersionId: string;
   variants: Record<string, T>;
   rules: CompiledRule[];
+};
+export type CompiledSegment = { key: string; filter: RuleFilter };
+export type CompiledCollection<T = any> = {
+  flags: CompiledFlag<T>[];
+  segments?: CompiledSegment[];
 };
 
 export type RuleEvaluationResult = {
@@ -183,7 +203,11 @@ export function hashInt(hashInput: string): number {
 // Prepared lookup structures never appear in the public/wire filter types.
 type PreparedContextFilter = ContextFilter & { valueSet?: Set<string> };
 type PreparedFilter = FilterTree<
-  PreparedContextFilter | PercentageRolloutFilter | ConstantFilter
+  | PreparedContextFilter
+  | PercentageRolloutFilter
+  | ConstantFilter
+  | FlagReferenceFilter
+  | SegmentReferenceFilter
 >;
 type Distribution = Extract<RuleResult, { type: "percentageDistribution" }>;
 type PreparedDistribution = Omit<Distribution, "allocations"> & {
@@ -198,6 +222,11 @@ type PreparedRule = {
 type PreparedFlag<T> = Omit<CompiledFlag<T>, "rules"> & {
   rules: PreparedRule[];
 };
+type EvaluationState<T> = {
+  flags: Map<string, PreparedFlag<T>>;
+  segments: Map<string, PreparedFilter>;
+  context: FlattenedContext;
+};
 
 function prepareFilter(filter: RuleFilter): PreparedFilter {
   if (filter.type === "group")
@@ -211,7 +240,9 @@ function prepareFilter(filter: RuleFilter): PreparedFilter {
     // Keep only the Set's candidate references, not the source array as well.
     return { ...filter, values: [], valueSet: new Set(filter.values ?? []) };
   }
-  return { ...filter };
+  return filter.type === "context"
+    ? { ...filter, values: filter.values?.slice() }
+    : { ...filter };
 }
 
 function prepareRule(rule: CompiledRule): PreparedRule {
@@ -394,11 +425,27 @@ function compare(
   }
 }
 
-function evaluateFilter(
+function propagateErrors(
+  sourceErrors: Iterable<EvaluationError>,
+  source: NonNullable<EvaluationError["source"]>,
+  diagnostics: Map<string, EvaluationError>,
+  errors?: Map<string, EvaluationError>,
+): void {
+  for (const error of sourceErrors) {
+    const diagnostic = error.source ? error : { ...error, source };
+    const key = JSON.stringify(diagnostic);
+    diagnostics.set(key, diagnostic);
+    errors?.set(key, diagnostic);
+  }
+}
+
+function evaluateFilter<T>(
   filter: PreparedFilter,
-  context: FlattenedContext,
+  state: EvaluationState<T>,
   errors: Map<string, EvaluationError>,
+  diagnostics: Map<string, EvaluationError>,
 ): boolean {
+  const { context } = state;
   switch (filter.type) {
     case "constant":
       return filter.value;
@@ -428,44 +475,155 @@ function evaluateFilter(
       }
       return hashInt(`${filter.key}.${value}`) < filter.partialRolloutThreshold;
     }
+    case "flag": {
+      // The collection is validated before use, including unreachable references.
+      const result = evaluatePreparedFlag(state.flags.get(filter.key)!, state);
+      const matched =
+        result.resolved && result.variantKey === filter.variantKey;
+      // A valid selection wins over diagnostics in independent sibling rules.
+      // An uncertain nonmatch must not become a grant through negation.
+      propagateErrors(
+        result.errors,
+        { type: "flag", key: filter.key },
+        diagnostics,
+        matched ? undefined : errors,
+      );
+      return matched;
+    }
+    case "segment": {
+      const segmentErrors = new Map<string, EvaluationError>();
+      const segmentDiagnostics = new Map<string, EvaluationError>();
+      const matched = evaluateFilter(
+        state.segments.get(filter.key)!,
+        state,
+        segmentErrors,
+        segmentDiagnostics,
+      );
+      const source = { type: "segment" as const, key: filter.key };
+      propagateErrors(segmentDiagnostics.values(), source, diagnostics);
+      // Segments are predicates, not sets of independent enable rules.
+      propagateErrors(segmentErrors.values(), source, diagnostics, errors);
+      return matched && segmentErrors.size === 0;
+    }
     case "group":
       for (const child of filter.filters) {
-        const matched = evaluateFilter(child, context, errors);
+        const matched = evaluateFilter(child, state, errors, diagnostics);
         if (filter.operator === "and" && !matched) return false;
         if (filter.operator === "or" && matched) return true;
       }
       return filter.operator === "and";
     case "negation":
-      return !evaluateFilter(filter.filter, context, errors);
+      return !evaluateFilter(filter.filter, state, errors, diagnostics);
     default:
       invalidDefinition(errors, "Unsupported filter type");
       return false;
   }
 }
 
-/** Prepare once on definition refresh, then reuse for all evaluation contexts. */
+/** Reject incomplete or cyclic snapshots, even in short-circuited branches. */
+function validateReferences<T>(
+  flags: Map<string, PreparedFlag<T>>,
+  segments: Map<string, PreparedFilter>,
+): void {
+  const visited = new Set<PreparedFlag<T> | PreparedFilter>();
+  const visiting = new Set<PreparedFlag<T> | PreparedFilter>();
+
+  function visit(type: "flag" | "segment", key: string): void {
+    const definition = type === "flag" ? flags.get(key) : segments.get(key);
+    if (!definition) throw new Error(`Unknown ${type} reference "${key}"`);
+    if (visiting.has(definition))
+      throw new Error(`Circular reference to ${type} "${key}"`);
+    if (visited.has(definition)) return;
+    visiting.add(definition);
+    if (type === "flag") {
+      for (const rule of flags.get(key)!.rules) visitFilter(rule.filter);
+    } else {
+      visitFilter(segments.get(key)!);
+    }
+    visiting.delete(definition);
+    visited.add(definition);
+  }
+
+  function visitFilter(filter: PreparedFilter): void {
+    switch (filter.type) {
+      case "flag": {
+        visit("flag", filter.key);
+        if (
+          !Object.prototype.hasOwnProperty.call(
+            flags.get(filter.key)!.variants,
+            filter.variantKey,
+          )
+        ) {
+          throw new Error(
+            `Unknown variant "${filter.variantKey}" in flag reference "${filter.key}"`,
+          );
+        }
+        break;
+      }
+      case "segment":
+        visit("segment", filter.key);
+        break;
+      case "group":
+        filter.filters.forEach(visitFilter);
+        break;
+      case "negation":
+        visitFilter(filter.filter);
+        break;
+    }
+  }
+
+  for (const key of flags.keys()) visit("flag", key);
+  for (const key of segments.keys()) visit("segment", key);
+}
+
+/**
+ * Prepare a complete snapshot once on definition refresh. References are resolved
+ * recursively for each call, without caching context-dependent results.
+ * Throws for duplicate keys, missing references, unknown referenced variants or
+ * cycles. Evaluating an unknown flag key also throws.
+ */
 export function newEvaluator<T>(
-  flag: CompiledFlag<T>,
-): (context: Record<string, unknown>) => EvaluationResult<T> {
-  const prepared: PreparedFlag<T> = {
-    ...flag,
-    variants: { ...flag.variants },
-    rules: flag.rules.map(prepareRule),
+  collection: CompiledCollection<T>,
+): (flagKey: string, context: Record<string, unknown>) => EvaluationResult<T> {
+  const flags = new Map<string, PreparedFlag<T>>();
+  const segments = new Map<string, PreparedFilter>();
+  for (const flag of collection.flags) {
+    if (flags.has(flag.key))
+      throw new Error(`Duplicate flag key "${flag.key}"`);
+    flags.set(flag.key, {
+      ...flag,
+      variants: { ...flag.variants },
+      rules: flag.rules.map(prepareRule),
+    });
+  }
+  for (const segment of collection.segments ?? []) {
+    if (segments.has(segment.key))
+      throw new Error(`Duplicate segment key "${segment.key}"`);
+    segments.set(segment.key, prepareFilter(segment.filter));
+  }
+  validateReferences(flags, segments);
+  return (flagKey, context) => {
+    const flag = flags.get(flagKey);
+    if (!flag) throw new Error(`Unknown flag "${flagKey}"`);
+    return evaluatePreparedFlag(flag, {
+      flags,
+      segments,
+      context: flattenContext(context),
+    });
   };
-  return (context) => evaluatePreparedFlag(prepared, context);
 }
 
 function evaluatePreparedFlag<T>(
   flag: PreparedFlag<T>,
-  context: Record<string, unknown>,
+  state: EvaluationState<T>,
 ): EvaluationResult<T> {
-  const flatContext = flattenContext(context);
+  const flatContext = state.context;
   const errors = new Map<string, EvaluationError>();
   const filterErrors = new Map<string, EvaluationError>();
   const ruleResults: RuleEvaluationResult[] = [];
   for (const rule of flag.rules) {
     filterErrors.clear();
-    const matched = evaluateFilter(rule.filter, flatContext, filterErrors);
+    const matched = evaluateFilter(rule.filter, state, filterErrors, errors);
     for (const [key, error] of filterErrors) errors.set(key, error);
     const ruleResult: RuleEvaluationResult = {
       ruleId: rule.id,

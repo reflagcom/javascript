@@ -1,13 +1,19 @@
 # Flag evaluation v2
 
-Prepare a compiled flag once when its definition is loaded or refreshed, then
-reuse the evaluator for each context:
+Prepare a complete collection of compiled flags and segments when definitions
+are loaded or refreshed, then select a flag by key for each context:
 
 ```ts
 import { newEvaluator } from "@reflag/flag-evaluation";
 
-const evaluate = newEvaluator(compiledFlag);
-const result = evaluate({ company: { id: "acme" }, user: { id: "alice" } });
+const evaluate = newEvaluator({
+  flags: compiledFlags,
+  segments: compiledSegments,
+});
+const result = evaluate("my-flag", {
+  company: { id: "acme" },
+  user: { id: "alice" },
+});
 
 // Diagnostics can accompany either a successful result or a failure.
 if (result.errors.length) console.warn(result.errors);
@@ -22,18 +28,60 @@ if (result.resolved) {
 }
 ```
 
-`CompiledFlag<T = any>` and `EvaluationResult<T = any>` preserve the caller's
-value type. Non-fatal diagnostics may also accompany a successful
-default/fallthrough result.
+`CompiledFlag<T = any>`, `CompiledCollection<T = any>` and
+`EvaluationResult<T = any>` preserve the caller's value type. A heterogeneous
+collection can use a union for `T`. Non-fatal diagnostics may also accompany a
+successful default/fallthrough result.
 
 Rebuild the evaluator when definitions change. Treat definitions and returned
 values as immutable. Each evaluation has independent diagnostics.
 
+## References
+
+A collection contains `flags: CompiledFlag<T>[]` and optional
+`segments: { key: string; filter: RuleFilter }[]`. Keep references in filters
+instead of substituting the referenced definition's filters:
+
+```ts
+// Match the variant selected by another flag in the collection.
+const flagReference = { type: "flag", key: "model", variantKey: "quality" };
+// Reuse a segment predicate from the same collection.
+const segmentReference = { type: "segment", key: "enterprise" };
+// Negation and authored AND/OR groups work with either reference type.
+const negativeReference = { type: "negation", filter: flagReference };
+```
+
+Flag references match **variant keys**, never the truthiness of variant values.
+The referenced flag uses its own ordered rules, distributions and rollout salts.
+A matching selection remains valid despite diagnostics from unsuccessful sibling
+rules. A nonmatch accompanied by diagnostics is invalid, not a clean `false`, so
+negating an uncertain nonmatch cannot grant access. A clean nonmatch can be
+negated. This is intentionally more conservative than explicitly matching a
+selected fallback variant.
+
+Segments are predicates, not independent enable-rule groups: errors in a segment
+invalidate the containing rule, including through negation. Diagnostics propagated
+through references include `source: { type: "flag" | "segment", key: string }`
+identifying their original definition. Existing short-circuit behavior is retained;
+unvisited runtime branches do not produce diagnostics.
+
+`newEvaluator` throws for duplicate keys, missing references, unknown referenced
+variant keys, and cycles, including mixed flag/segment cycles and references in
+unreachable branches. Evaluating an unknown flag key also throws. Flag and segment
+keys occupy separate namespaces.
+
+References are evaluated recursively without dependency-result caching or
+memoization. Context is normalized once per call; repeated references are evaluated
+again. Only the existing definition-level membership Sets and percentage bounds
+are prepared ahead of time.
+
 ## Migration from v1
 
-V2 exports `newEvaluator(flag)`, `flattenContext`, and `hashInt`, plus their public
-types. `newEvaluator` now accepts a compiled flag, not value rules. The returned
-function accepts only context; the flag key is part of the definition.
+V2 exports `newEvaluator(collection)`, `flattenContext`, and `hashInt`, plus their
+public types. `newEvaluator` accepts a complete compiled collection, not value
+rules or a single flag. The returned function accepts `(flagKey, context)`.
+Publishers and consumers must adopt the collection/reference protocol together;
+the unchanged Node SDK remains on the published v1 evaluator.
 
 V1's `evaluateFlagRules`, scalar `evaluate`, `flattenJSON`, `unflattenJSON`, and
 value-rule types are removed. There is no v2 one-shot evaluation wrapper.

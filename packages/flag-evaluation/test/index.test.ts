@@ -4,12 +4,12 @@ import {
   ContextFilterOperator,
   flattenContext,
   hashInt,
-  newEvaluator,
   RuleFilter,
 } from "../src";
+import { prepareFlag } from "./helpers";
 
 function evaluateFilter(filter: RuleFilter, context: Record<string, unknown>) {
-  return newEvaluator({
+  return prepareFlag({
     key: "filter",
     sourceVersionId: "version-1",
     variants: { yes: true, no: false },
@@ -261,7 +261,7 @@ describe("invalid conditions", () => {
         values: ["x"],
       },
     };
-    const result = newEvaluator({
+    const result = prepareFlag({
       key: "test",
       sourceVersionId: "v1",
       variants: { yes: true, no: false },

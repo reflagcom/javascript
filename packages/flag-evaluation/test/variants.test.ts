@@ -3,13 +3,8 @@ import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { evaluateFlagRules } from "@reflag/flag-evaluation-v1";
 
 import * as api from "../src";
-import {
-  CompiledFlag,
-  ContextFilter,
-  newEvaluator,
-  hashInt,
-  RuleResult,
-} from "../src";
+import { CompiledFlag, ContextFilter, hashInt, RuleResult } from "../src";
+import { prepareFlag } from "./helpers";
 
 const defaultRule = {
   id: "default",
@@ -67,7 +62,7 @@ describe("v2 public API", () => {
       ...flag({ type: "variant", variantKey: "quality" }),
       variants: { quality: true },
     };
-    const result = newEvaluator(definition)({});
+    const result = prepareFlag(definition)({});
     expectTypeOf(result.value).toEqualTypeOf<boolean | undefined>();
     expect(result.resolved).toBe(true);
     if (!result.resolved) throw new Error("Expected a selected variant");
@@ -79,7 +74,7 @@ describe("v2 public API", () => {
       ...definition,
       variants: { quality: null },
     };
-    const selected = newEvaluator(nullable)({});
+    const selected = prepareFlag(nullable)({});
     if (!selected.resolved) throw new Error("Expected null variant");
     expectTypeOf(selected.value).toEqualTypeOf<number | null>();
     expect(selected.value).toBeNull();
@@ -91,12 +86,12 @@ describe("v2 public API", () => {
       ...flag({ type: "variant", variantKey: "quality" }),
       variants: { quality: value },
     };
-    const result = newEvaluator(definition)({});
+    const result = prepareFlag(definition)({});
     if (!result.resolved) throw new Error("Expected a selected variant");
     expectTypeOf(result.value).toEqualTypeOf<Date>();
     expect(result.value).toBe(value);
     const callback = () => "hello";
-    const selected = newEvaluator({
+    const selected = prepareFlag({
       ...definition,
       variants: { quality: callback },
     })({});
@@ -109,12 +104,12 @@ describe("v2 public API", () => {
       ...flag({ type: "variant", variantKey: "quality" }),
       variants: { quality: undefined },
     };
-    expect(newEvaluator(definition)({})).toMatchObject({
+    expect(prepareFlag(definition)({})).toMatchObject({
       resolved: true,
       value: undefined,
       variantKey: "quality",
     });
-    const failed = newEvaluator({ ...definition, rules: [] })({});
+    const failed = prepareFlag({ ...definition, rules: [] })({});
     expect(failed).toMatchObject({ resolved: false, value: undefined });
     if (failed.resolved) throw new Error("Expected failure");
     expectTypeOf(failed.value).toEqualTypeOf<undefined>();
@@ -130,7 +125,7 @@ describe("variant selection", () => {
   )("selects $value", ({ value }) => {
     const definition = flag({ type: "variant", variantKey: "quality" });
     definition.variants.quality = value;
-    expect(newEvaluator(definition)({})).toMatchObject({
+    expect(prepareFlag(definition)({})).toMatchObject({
       resolved: true,
       value,
       variantKey: "quality",
@@ -144,7 +139,7 @@ describe("variant selection", () => {
     "assigns %s at hash %i to allocation %i",
     (id, bucket, allocationIndex, variantKey) => {
       expect(hashInt(`split.${id}`)).toBe(bucket);
-      const result = newEvaluator(flag(split()))({ company: { id } });
+      const result = prepareFlag(flag(split()))({ company: { id } });
       expect(result).toMatchObject({
         resolved: true,
         allocationIndex,
@@ -180,7 +175,7 @@ describe("variant selection", () => {
         result: { type: "variant", variantKey: "control" },
       },
     );
-    const evaluate = newEvaluator(definition);
+    const evaluate = prepareFlag(definition);
     expect(
       evaluate({ user: { id: "alice" }, company: { id: "acme" } })
         .matchedRuleId,
@@ -203,7 +198,7 @@ describe("variant selection", () => {
       filter: { type: "constant", value: true },
       result: { type: "variant", variantKey: "list" },
     });
-    const result = newEvaluator(definition)({ company: { id: "acme" } });
+    const result = prepareFlag(definition)({ company: { id: "acme" } });
     expect(result).toMatchObject({
       resolved: true,
       value: [1, false],
@@ -233,13 +228,13 @@ describe("variant selection", () => {
       operator: "IS",
       values: ["x"],
     };
-    const result = newEvaluator(definition)({});
+    const result = prepareFlag(definition)({});
     expect(result.errors).toEqual([]);
     expect(result.ruleResults).toHaveLength(1);
   });
 
   it("continues on missing/scalar-invalid bucketing context", () => {
-    const evaluate = newEvaluator(flag(split()));
+    const evaluate = prepareFlag(flag(split()));
     expect(evaluate({})).toMatchObject({
       resolved: true,
       variantKey: "control",
@@ -271,7 +266,7 @@ describe("variant selection", () => {
         ],
       });
       expect(
-        newEvaluator(definition)({ company: { id: "acme" } }),
+        prepareFlag(definition)({ company: { id: "acme" } }),
       ).toMatchObject({
         resolved: false,
         errors: [{ code: "INVALID_FLAG_DEFINITION" }],
@@ -297,14 +292,14 @@ describe("variant selection", () => {
         },
       ],
     });
-    expect(
-      newEvaluator(definition)({ company: { id: "acme" } }).errors,
-    ).toEqual([]);
+    expect(prepareFlag(definition)({ company: { id: "acme" } }).errors).toEqual(
+      [],
+    );
   });
 
   it("rejects inherited property names as variants", () => {
     expect(
-      newEvaluator(flag({ type: "variant", variantKey: "constructor" }))({}),
+      prepareFlag(flag({ type: "variant", variantKey: "constructor" }))({}),
     ).toMatchObject({
       resolved: false,
       errors: [{ code: "INVALID_FLAG_DEFINITION" }],
@@ -325,7 +320,7 @@ describe("variant selection", () => {
         context,
         rules: [{ filter, value: true }],
       });
-      const result = newEvaluator({
+      const result = prepareFlag({
         key: "boolean",
         sourceVersionId: "v1",
         variants: { true: true, false: false },
@@ -371,7 +366,7 @@ describe("prepared evaluator", () => {
                   type: "negation",
                   filter: { type: "group", operator: "and", filters: [leaf] },
                 };
-        const evaluate = newEvaluator(definition);
+        const evaluate = prepareFlag(definition);
         expect(readCandidate).toHaveBeenCalled();
         readCandidate.mockClear();
         const lookups = vi.spyOn(Set.prototype, "has");
@@ -411,7 +406,7 @@ describe("prepared evaluator", () => {
     Object.defineProperty(distribution.allocations[0], "percentage", {
       get: reads,
     });
-    const evaluate = newEvaluator(flag(distribution));
+    const evaluate = prepareFlag(flag(distribution));
     reads.mockClear();
     for (let i = 0; i < 10; i++) {
       expect(
@@ -434,7 +429,7 @@ describe("prepared evaluator", () => {
     distribution.allocations.splice(2, 0, zero);
     distribution.allocations.push(zero);
     expect(
-      newEvaluator(flag(distribution))({ company: { id } }).allocationIndex,
+      prepareFlag(flag(distribution))({ company: { id } }).allocationIndex,
     ).toBe(bucket < 60000 ? 1 : 3);
   });
 
@@ -459,7 +454,7 @@ describe("prepared evaluator", () => {
         },
       ],
     };
-    const evaluate = newEvaluator(definition);
+    const evaluate = prepareFlag(definition);
     for (let i = 0; i < 200; i++) {
       const id = `company-${i}`;
       const index = Math.min(Math.floor(hashInt(`split.${id}`) / 2000), 49);
@@ -474,7 +469,7 @@ describe("prepared evaluator", () => {
   });
 
   it("isolates returned diagnostics and destinations between calls", () => {
-    const evaluate = newEvaluator(flag(split()));
+    const evaluate = prepareFlag(flag(split()));
     const missing = evaluate({});
     const selected = evaluate({ company: { id: "company-6295" } });
     expect(missing.errors).toHaveLength(1);

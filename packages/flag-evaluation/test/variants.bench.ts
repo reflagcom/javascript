@@ -2,7 +2,8 @@ import { bench, describe } from "vitest";
 
 import { newEvaluator as newLegacyEvaluator } from "@reflag/flag-evaluation-v1";
 
-import { CompiledFlag, newEvaluator, RuleFilter } from "../src";
+import { CompiledFlag, RuleFilter } from "../src";
+import { prepareFlag } from "./helpers";
 
 // Preparation is deliberately outside the timed callback, just as it should be
 // outside the SDK's getFlag hot path (rebuild only when definitions refresh).
@@ -20,7 +21,7 @@ for (const size of [10, 1000, 100000]) {
       { filter, value: true },
       { filter: { type: "constant", value: true }, value: false },
     ]);
-    const prepared = newEvaluator({
+    const prepared = prepareFlag({
       key: "boolean",
       sourceVersionId: "v1",
       variants: { true: true, false: false },
@@ -70,7 +71,7 @@ for (const size of [1, 10, 50]) {
         },
       ],
     };
-    const prepared = newEvaluator(flag);
+    const prepared = prepareFlag(flag);
     bench("prepared v2", () => {
       prepared(context);
     });
