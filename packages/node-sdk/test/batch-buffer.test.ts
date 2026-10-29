@@ -70,6 +70,7 @@ describe("BatchBuffer", () => {
 
       expect(buffer).toEqual({
         buffer: [],
+        inFlight: new Set(),
         flushHandler: mockFlushHandler,
         timer: null,
         intervalMs: 33,
@@ -82,6 +83,7 @@ describe("BatchBuffer", () => {
       const buffer = new BatchBuffer({ flushHandler: mockFlushHandler });
       expect(buffer).toEqual({
         buffer: [],
+        inFlight: new Set(),
         flushHandler: mockFlushHandler,
         intervalMs: BATCH_INTERVAL_MS,
         maxSize: BATCH_MAX_SIZE,
@@ -153,6 +155,77 @@ describe("BatchBuffer", () => {
       await buffer.add("item1");
       await Promise.all([buffer.flush(), buffer.flush()]);
       expect(itemsFlushed).toBe(1);
+    });
+
+    it.each(["full batch", "timer"])(
+      "waits for an in-flight %s even when the buffer is empty",
+      async (trigger) => {
+        vi.useFakeTimers();
+        try {
+          let release!: () => void;
+          const delivery = new Promise<void>((resolve) => {
+            release = resolve;
+          });
+          const send = vi.fn(() => delivery);
+          const buffer = new BatchBuffer({
+            flushHandler: send,
+            maxSize: trigger === "full batch" ? 1 : 10,
+            intervalMs: 100,
+          });
+          const adding = buffer.add("event");
+          if (trigger === "timer") vi.advanceTimersByTime(100);
+          expect(send).toHaveBeenCalledOnce();
+          let completed = false;
+          const flushing = buffer.flush().then(() => {
+            completed = true;
+          });
+          await Promise.resolve();
+          await Promise.resolve();
+          expect(completed).toBe(false);
+          release();
+          await Promise.all([adding, flushing]);
+          expect(completed).toBe(true);
+          expect(send).toHaveBeenCalledOnce();
+        } finally {
+          vi.useRealTimers();
+        }
+      },
+    );
+
+    it("awaits all overlapping batches, including failed delivery", async () => {
+      let release!: () => void;
+      let reject!: (error: Error) => void;
+      const first = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const second = new Promise<void>((_, fail) => {
+        reject = fail;
+      });
+      const send = vi
+        .fn()
+        .mockReturnValueOnce(first)
+        .mockReturnValueOnce(second);
+      const buffer = new BatchBuffer({
+        flushHandler: send,
+        maxSize: 1,
+        logger: mockLogger,
+      });
+      const addingFirst = buffer.add("first");
+      const addingSecond = buffer.add("second");
+      let completed = false;
+      const flushing = buffer.flush().then(() => {
+        completed = true;
+      });
+      reject(new Error("timeout"));
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(completed).toBe(false);
+      release();
+      await Promise.all([addingFirst, addingSecond, flushing]);
+      expect(completed).toBe(true);
+      expect(mockLogger.warn).toHaveBeenCalledOnce();
+      await buffer.flush();
+      expect(send).toHaveBeenCalledTimes(2);
     });
 
     it("should flush buffer", async () => {
