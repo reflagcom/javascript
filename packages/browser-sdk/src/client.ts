@@ -677,6 +677,9 @@ export class ReflagClient {
     this.flagsClient.onUpdated(() => {
       this.hooks.trigger("flagsUpdated", this.flagsClient.getFlags());
     });
+    this.flagsClient.onFlagUpdated((event) => {
+      this.hooks.trigger("flagUpdated", event);
+    });
     this.flagsClient.onOptInFlagsLoadingUpdated((isLoading) => {
       this.hooks.trigger("optInFlagsLoadingUpdated", isLoading);
     });

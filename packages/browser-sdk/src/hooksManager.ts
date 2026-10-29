@@ -1,5 +1,5 @@
 import { CompanyContext, UserContext } from "./context";
-import { CheckEvent, RawFlags } from "./flag/flags";
+import { CheckEvent, FlagUpdatedEvent, RawFlags } from "./flag/flags";
 
 /**
  * State of the client.
@@ -10,6 +10,12 @@ export interface HookArgs {
   stateUpdated: State;
   check: CheckEvent;
   flagsUpdated: RawFlags;
+  /**
+   * Initial values are published during initialization, including bootstrapped flags.
+   * Subsequent events mean an effective enabled/config value or flag presence changed.
+   * Targeting versions, diagnostics and opt-in metadata do not trigger this event.
+   */
+  flagUpdated: FlagUpdatedEvent;
   optInFlagsLoadingUpdated: boolean;
 
   /**
@@ -37,6 +43,7 @@ export class HooksManager {
     stateUpdated: ((arg0: State) => void)[];
     check: ((arg0: CheckEvent) => void)[];
     flagsUpdated: ((arg0: RawFlags) => void)[];
+    flagUpdated: ((arg0: FlagUpdatedEvent) => void)[];
     optInFlagsLoadingUpdated: ((arg0: boolean) => void)[];
     user: ((arg0: UserContext) => void)[];
     company: ((arg0: CompanyContext) => void)[];
@@ -45,6 +52,7 @@ export class HooksManager {
     stateUpdated: [],
     check: [],
     flagsUpdated: [],
+    flagUpdated: [],
     optInFlagsLoadingUpdated: [],
     user: [],
     company: [],

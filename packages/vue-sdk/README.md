@@ -634,21 +634,14 @@ const isLoading = useIsLoading();
 
 ### `useOnEvent()`
 
-Vue composable for listening to Reflag client events. This composable automatically handles mounting and unmounting of event listeners.
-
-Available events include:
-
-- `flagsUpdated`: Triggered when flags are updated
-- `track`: Triggered when tracking events are sent
-- `feedback`: Triggered when feedback is sent
+For most integrations, subscribe to `flagUpdated` to receive initial flag values and react to subsequent value changes. `useOnEvent()` automatically handles mounting and unmounting of the listener.
 
 ```vue
 <script setup lang="ts">
 import { useOnEvent } from "@reflag/vue-sdk";
 
-// Listen to flag updates
-useOnEvent("flagsUpdated", () => {
-  console.log("Flags have been updated");
+useOnEvent("flagUpdated", ({ key, flag }) => {
+  console.log(key, flag);
 });
 </script>
 
@@ -657,18 +650,25 @@ useOnEvent("flagsUpdated", () => {
 </template>
 ```
 
+`flagUpdated` publishes one initial value per flag during client initialization, including bootstrapped and disabled flags. Bootstrapped values are published after cached overrides are applied, without fetching. Mount the subscription before initialization to receive these events; subscriptions added afterward do not receive a replay. Use `useClient().getFlags()` to read current raw flags without generating checks.
+
+After initialization, the event fires only when a flag's effective enabled value (including local overrides), config key/payload, or presence changes. The payload is `{ key, flag }`; `flag` contains raw flag data and is undefined when removed.
+
+Use `flagsUpdated` if you need to observe refreshed raw flag data, even when enabled/config values stay the same. It delivers the full flag map and also fires for metadata-only updates. A refresh returning identical raw flag data does not emit this event. See the [Browser SDK event listeners](../browser-sdk/README.md#event-listeners) for the full event list.
+
 You can also provide a specific client instance if needed:
 
 ```vue
 <script setup lang="ts">
 import { ReflagClient } from "@reflag/browser-sdk";
+import { useOnEvent } from "@reflag/vue-sdk";
 
-const myReflagClient = new ReflagClient();
+const myReflagClient = new ReflagClient({ publishableKey: "publishableKey" });
 
 useOnEvent(
-  "flagsUpdated",
-  () => {
-    console.log("flags updated");
+  "flagUpdated",
+  ({ key, flag }) => {
+    console.log(key, flag);
   },
   myReflagClient,
 );
