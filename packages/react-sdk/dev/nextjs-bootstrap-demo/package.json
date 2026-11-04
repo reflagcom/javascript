@@ -14,7 +14,7 @@
     "format": "yarn fmt:fix && yarn lint:fix"
   },
   "dependencies": {
-    "@reflag/node-sdk": "workspace:^",
+    "@reflag/node-sdk-v1": "npm:@reflag/node-sdk@1.8.0",
     "@reflag/react-sdk": "workspace:^",
     "next": "16.1.5",
     "react": "^18",

@@ -1,6 +1,6 @@
 {
   "name": "@reflag/node-sdk",
-  "version": "1.8.0",
+  "version": "2.0.0-next.0",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -18,7 +18,8 @@
     "dev": "vite",
     "start": "vite",
     "build": "tsc --project tsconfig.build.json",
-    "test": "vitest run",
+    "test": "yarn test:types && vitest run",
+    "test:types": "tsc --project tsconfig.type-tests.json && tsc --project tsconfig.type-tests-augmented.json",
     "test:watch": "vitest",
     "test:ci": "yarn test --reporter=default --reporter=junit --outputFile=junit.xml",
     "coverage": "yarn test --coverage",
@@ -34,7 +35,7 @@
     "@aws-sdk/client-s3": "^3.888.0",
     "@googleapis/storage": "21.2.0",
     "@redis/client": "^5.11.0",
-    "@reflag/flag-evaluation-v1": "npm:@reflag/flag-evaluation@1.1.1"
+    "@reflag/flag-evaluation": "workspace:*"
   },
   "devDependencies": {
     "@babel/core": "~7.29.6",
