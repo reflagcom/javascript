@@ -7,7 +7,7 @@ import {
 } from "./flagsFallbackProvider";
 
 export { BoundReflagClient, ReflagClient } from "./client";
-export { EdgeClient, EdgeClientOptions } from "./edgeClient";
+export { EdgeClient, type EdgeClientOptions } from "./edgeClient";
 export type {
   FileFallbackProviderOptions,
   GCSFallbackProviderClient,
@@ -18,7 +18,6 @@ export type {
   S3FallbackProviderOptions,
   StaticFallbackProviderOptions,
 } from "./flagsFallbackProvider";
-
 export const fallbackProviders = {
   static: createStaticFallbackProvider,
   file: createFileFallbackProvider,
@@ -34,30 +33,26 @@ export type {
   ClientOptions,
   Context,
   ContextWithTracking,
-  EmptyFlagRemoteConfig,
-  Flag,
-  FlagAPIResponse,
-  FlagConfigVariant,
+  FlagCollection,
   FlagDefinition,
-  FlagOverride,
+  FlagDefaultValue,
+  FlagEvent,
   FlagOverrides,
   FlagOverridesFn,
-  FlagRemoteConfig,
   Flags,
   FlagsAPIResponse,
   FlagsFallbackProvider,
   FlagsFallbackProviderContext,
   FlagsFallbackSnapshot,
   FlagsSyncMode,
-  FlagType,
+  FlagValue,
+  FlagValueFromDefault,
   HttpClient,
   HttpClientResponse,
   IdType,
-  LOG_LEVELS,
   Logger,
   LogLevel,
   RawFlag,
-  RawFlagRemoteConfig,
   RawFlags,
   TrackingMeta,
   TrackOptions,

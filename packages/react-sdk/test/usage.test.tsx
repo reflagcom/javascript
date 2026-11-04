@@ -1,7 +1,9 @@
+import { transferableAbortController } from "node:util";
+
 import { act, render, renderHook, waitFor } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
-import React from "react";
+import React, { Suspense, useLayoutEffect } from "react";
 import { renderToString } from "react-dom/server";
 import {
   afterAll,
@@ -16,2426 +18,602 @@ import {
 
 import { ReflagClient } from "@reflag/browser-sdk";
 
+import type { BootstrappedFlags, ReflagProps } from "../src";
 import {
-  BootstrappedFlags,
-  ReflagBootstrappedProps,
   ReflagBootstrappedProvider,
   ReflagClientProvider,
-  ReflagProps,
   ReflagProvider,
   useClient,
   useFlag,
+  useFlagSuspense,
   useIsLoading,
   useOnEvent,
   useOptInFlags,
   useRequestFeedback,
-  useSetOptIn,
   useSendFeedback,
+  useSetOptIn,
   useTrack,
   useUpdateCompany,
   useUpdateOtherContext,
   useUpdateUser,
 } from "../src";
 
-const events: string[] = [];
-const originalConsoleError = console.error.bind(console);
-
-afterEach(() => {
-  events.length = 0;
-  console.error = originalConsoleError;
+globalThis.AbortController = transferableAbortController()
+  .constructor as typeof AbortController;
+const selected = (value: unknown, variantKey = "true") => ({
+  value,
+  resolved: true,
+  sourceVersionId: "version-1",
+  variantKey,
+  matchedRuleId: "default",
+  ruleResults: [{ ruleId: "default", matched: true }],
+  errors: [],
 });
-
-const company = { id: "123", name: "test" };
-const user = { id: "456", name: "test" };
-const other = { test: "test" };
-
-let keyIndex = 0;
-
-function getProvider(props: Omit<Partial<ReflagProps>, "publishableKey"> = {}) {
-  const publishableKey = `KEY-${keyIndex++}`;
-  return (
+const response = {
+  success: true,
+  protocolVersion: 2,
+  flagStateVersion: 1,
+  remoteContextUsed: false,
+  flags: {
+    release: selected(true),
+    settings: selected({ model: "quality" }, "quality"),
+  },
+};
+const state = (): BootstrappedFlags => ({
+  protocolVersion: 2,
+  context: { user: { id: "alice" } },
+  flags: { release: selected(true) as BootstrappedFlags["flags"][string] },
+  flagStateVersion: 1,
+});
+function gate() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+let index = 0;
+const clients = new Set<ReflagClient>();
+function create(bootstrappedState = state()) {
+  const client = new ReflagClient({
+    publishableKey: `external-${index++}`,
+    bootstrappedState,
+    enableTracking: false,
+    toolbar: false,
+    feedback: { enableAutoFeedback: false },
+  });
+  clients.add(client);
+  return client;
+}
+function provider(props: Partial<ReflagProps> = {}) {
+  const publishableKey = `provider-${index++}`;
+  return ({ children }: { children: React.ReactNode }) => (
     <ReflagProvider
-      context={{ user, company, other }}
       publishableKey={publishableKey}
+      context={{ user: { id: "alice" } }}
       toolbar={false}
+      feedback={{ enableAutoFeedback: false }}
+      enableLiveFlagUpdates={false}
+      enableTracking={false}
       {...props}
-    />
+    >
+      {children}
+    </ReflagProvider>
   );
 }
-
-function getBootstrapProvider(
-  bootstrapFlags: BootstrappedFlags,
-  props: Omit<Partial<ReflagBootstrappedProps>, "publishableKey"> = {},
-) {
-  const publishableKey = `KEY-${keyIndex++}`;
-  return (
-    <ReflagBootstrappedProvider
-      flags={bootstrapFlags}
-      publishableKey={publishableKey}
-      toolbar={false}
-      {...props}
-    />
-  );
-}
-
 const server = setupServer(
-  http.post(/\/event$/, () => {
-    events.push("EVENT");
-    return new HttpResponse(
-      JSON.stringify({
-        success: true,
-      }),
-      { status: 200 },
-    );
-  }),
-  http.post(/\/feedback$/, () => {
-    events.push("FEEDBACK");
-    return new HttpResponse(
-      JSON.stringify({
-        success: true,
-      }),
-      { status: 200 },
-    );
-  }),
-  http.get(/\/features\/evaluated$/, () => {
-    return new HttpResponse(
-      JSON.stringify({
-        success: true,
-        features: {
-          abc: {
-            key: "abc",
-            isEnabled: true,
-            targetingVersion: 1,
-            config: {
-              key: "gpt3",
-              payload: { model: "gpt-something", temperature: 0.5 },
-              version: 2,
-            },
-          },
-          def: {
-            key: "def",
-            isEnabled: true,
-            targetingVersion: 2,
-          },
-        },
-      }),
-      { status: 200 },
-    );
-  }),
-  http.post(/\/user$/, () => {
-    return new HttpResponse(
-      JSON.stringify({
-        success: true,
-      }),
-      { status: 200 },
-    );
-  }),
-  http.post(/\/company$/, () => {
-    return new HttpResponse(
-      JSON.stringify({
-        success: true,
-      }),
-      { status: 200 },
-    );
-  }),
-  http.post(/feedback\/prompting-init$/, () => {
-    return new HttpResponse(
-      JSON.stringify({
-        success: false,
-      }),
-      { status: 200 },
-    );
-  }),
-  http.post(/\/features\/events$/, () => {
-    return new HttpResponse(
-      JSON.stringify({
-        success: false,
-      }),
-      { status: 200 },
-    );
-  }),
-  http.post(/\/bulk$/, () => {
-    return HttpResponse.json({ success: true });
-  }),
+  http.get(/\/flags\/evaluated$/, () => HttpResponse.json(response)),
+  http.post(/\/bulk$/, () => HttpResponse.json({ success: true })),
 );
-
-beforeAll(() =>
-  server.listen({
-    onUnhandledRequest(request) {
-      console.error("Unhandled %s %s", request.method, request.url);
-    },
-  }),
-);
-
-afterEach(() => server.resetHandlers());
+beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+beforeEach(() => {
+  localStorage.clear();
+});
+afterEach(async () => {
+  server.resetHandlers();
+  vi.restoreAllMocks();
+  await Promise.all([...clients].map((client) => client.stop()));
+  clients.clear();
+});
 afterAll(() => server.close());
 
-beforeAll(() => {
-  vi.spyOn(ReflagClient.prototype, "initialize");
-  vi.spyOn(ReflagClient.prototype, "stop");
-});
-
-beforeEach(() => {
-  vi.clearAllMocks();
-});
-
-describe("<ReflagProvider />", () => {
-  test("calls initialize", () => {
-    const initialize = vi
-      .spyOn(ReflagClient.prototype, "initialize")
-      .mockResolvedValueOnce();
-
-    const provider = getProvider({
-      apiBaseUrl: "https://apibaseurl.com",
-      sseBaseUrl: "https://ssebaseurl.com",
-      context: {
-        user: { id: "456", name: "test" },
-        company: { id: "123", name: "test" },
-        other: { test: "test" },
-      },
-      enableTracking: false,
-      appBaseUrl: "https://appbaseurl.com",
-      staleTimeMs: 1001,
-      timeoutMs: 1002,
-      expireTimeMs: 1003,
-      staleWhileRevalidate: true,
-      fallbackFlags: ["flag2"],
-      feedback: { enableAutoFeedback: true },
-    });
-
-    render(provider);
-
-    expect(initialize).toHaveBeenCalled();
-  });
-
-  test("enables live flag updates by default", async () => {
-    const { result, unmount } = renderHook(() => useClient(), {
-      wrapper: ({ children }) => getProvider({ children }),
-    });
-
-    await waitFor(() => {
-      expect((result.current as any)["enableLiveFlagUpdates"]).toBe(true);
-    });
-
-    unmount();
-  });
-
-  test("allows disabling live flag updates explicitly", async () => {
-    const { result, unmount } = renderHook(() => useClient(), {
-      wrapper: ({ children }) =>
-        getProvider({ children, enableLiveFlagUpdates: false }),
-    });
-
-    await waitFor(() => {
-      expect((result.current as any)["enableLiveFlagUpdates"]).toBe(false);
-    });
-
-    unmount();
-  });
-
-  test("uses provided sdkVersion when set", async () => {
-    let capturedSdkVersion: string | null = null;
+describe("direct-value hooks", () => {
+  test("returns Boolean false while initializing, then direct values without wrappers", async () => {
+    const pending = gate();
     server.use(
-      http.get(/\/features\/evaluated$/, ({ request }) => {
-        capturedSdkVersion = new URL(request.url).searchParams.get(
-          "reflag-sdk-version",
-        );
-        return new HttpResponse(
-          JSON.stringify({
-            success: true,
-            features: {},
-          }),
-          { status: 200 },
-        );
+      http.get(/\/flags\/evaluated$/, async () => {
+        await pending.promise;
+        return HttpResponse.json(response);
       }),
     );
-
-    render(
-      getProvider({
-        sdkVersion: "react-native-sdk/test",
-        context: { other },
-      }),
-    );
-
-    await waitFor(() => {
-      expect(capturedSdkVersion).toBe("react-native-sdk/test");
-    });
-  });
-
-  test("uses provided logger", async () => {
-    const logger = {
-      debug: vi.fn(),
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-    };
-
-    const { result, unmount } = renderHook(() => useClient(), {
-      wrapper: ({ children }) => getProvider({ children, logger }),
-    });
-
-    await waitFor(() => {
-      expect(result.current.logger).toBe(logger);
-    });
-
-    unmount();
-  });
-
-  test("prefers logger over debug mode", async () => {
-    const logger = {
-      debug: vi.fn(),
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-    };
-
-    const { result, unmount } = renderHook(() => useClient(), {
-      wrapper: ({ children }) => getProvider({ children, logger, debug: true }),
-    });
-
-    await waitFor(() => {
-      expect(result.current.logger).toBe(logger);
-    });
-
-    unmount();
-  });
-
-  test("only calls init once with the same args", () => {
-    const node = getProvider();
-    const initialize = vi.spyOn(ReflagClient.prototype, "initialize");
-
-    const x = render(node);
-    x.rerender(node);
-    x.rerender(node);
-    x.rerender(node);
-
-    expect(initialize).toHaveBeenCalledOnce();
-    expect(ReflagClient.prototype.stop).not.toHaveBeenCalledOnce();
-  });
-
-  test("does not reset context for structurally equal nested values", async () => {
-    const setContext = vi.spyOn(ReflagClient.prototype, "setContext");
-    const provider = () =>
-      getProvider({
-        context: {
-          user: {
-            id: "nested-user",
-            roles: ["admin", "editor"],
-            settings: { notifications: { enabled: true } },
-          },
-        },
-      });
-
-    const { rerender } = render(provider());
-    await waitFor(() => expect(setContext).toHaveBeenCalledTimes(1));
-
-    rerender(provider());
-    await act(async () => undefined);
-
-    expect(setContext).toHaveBeenCalledTimes(1);
-  });
-
-  test("does not recurse indefinitely for structurally equal circular values", async () => {
-    vi.spyOn(ReflagClient.prototype, "initialize").mockResolvedValueOnce();
-    const setContext = vi
-      .spyOn(ReflagClient.prototype, "setContext")
-      .mockResolvedValue();
-    const circularContext = () => {
-      const value: Record<string, unknown> = { id: "circular-user" };
-      value.self = value;
-      return { user: value } as any;
-    };
-    const provider = getProvider({ context: circularContext() });
-
-    const { rerender } = render(provider);
-    await waitFor(() => expect(setContext).toHaveBeenCalledTimes(1));
-
-    rerender(React.cloneElement(provider, { context: circularContext() }));
-    await act(async () => undefined);
-
-    expect(setContext).toHaveBeenCalledTimes(1);
-  });
-
-  test("handles context changes", async () => {
-    const { queryByTestId, rerender } = render(
-      getProvider({
-        loadingComponent: <span data-testid="loading">Loading...</span>,
-        children: <span data-testid="content">Content</span>,
-      }),
-    );
-
-    // Wait for content to be visible
-    await waitFor(() => {
-      expect(queryByTestId("content")).not.toBeNull();
-    });
-
-    // Change user context
-    rerender(
-      getProvider({
-        loadingComponent: <span data-testid="loading">Loading...</span>,
-        user: { ...user, id: "new-user-id" },
-        children: <span data-testid="content">Content</span>,
-      }),
-    );
-
-    // Content should still be visible
-    await waitFor(() => {
-      expect(queryByTestId("content")).not.toBeNull();
-    });
-
-    // Change company context
-    rerender(
-      getProvider({
-        loadingComponent: <span data-testid="loading">Loading...</span>,
-        company: { ...company, id: "new-company-id" },
-        children: <span data-testid="content">Content</span>,
-      }),
-    );
-
-    // Content should still be visible
-    await waitFor(() => {
-      expect(queryByTestId("content")).not.toBeNull();
-    });
-  });
-});
-
-describe("useFlag", () => {
-  function mockDelayedFlagsResponse() {
-    let resolveFlags!: () => void;
-    const flagsRequest = new Promise<void>((resolve) => {
-      resolveFlags = resolve;
-    });
-    const requestStarted = vi.fn();
-
-    server.use(
-      http.get(/\/features\/evaluated$/, async () => {
-        requestStarted();
-        await flagsRequest;
-        return HttpResponse.json({
-          success: true,
-          features: {
-            abc: {
-              key: "abc",
-              isEnabled: true,
-              targetingVersion: 1,
-            },
-          },
-        });
-      }),
-    );
-
-    return { requestStarted, resolveFlags };
-  }
-
-  test("returns a loading state initially", async () => {
-    const { result, unmount } = renderHook(() => useFlag("huddle"), {
-      wrapper: ({ children }) => getProvider({ children }),
-    });
-
-    // The flag should exist but may be loading or not depending on implementation
-    expect(result.current.key).toBe("huddle");
-    expect(result.current.isEnabled).toBe(false);
-    expect(result.current.config).toEqual({
-      key: undefined,
-      payload: undefined,
-    });
-    expect(typeof result.current.track).toBe("function");
-    expect(typeof result.current.requestFeedback).toBe("function");
-
-    unmount();
-  });
-
-  test("suspends while loading when suspense is enabled", async () => {
-    const { requestStarted, resolveFlags } = mockDelayedFlagsResponse();
-
-    function FlaggedContent() {
-      const { isEnabled } = useFlag("abc");
-      return <span data-testid="flag-value">{String(isEnabled)}</span>;
-    }
-
-    const { getByTestId, queryByTestId, unmount } = render(
-      <React.Suspense
-        fallback={<span data-testid="suspense-fallback">Loading flags</span>}
-      >
-        {getProvider({
-          children: <FlaggedContent />,
-          suspense: true,
-        })}
-      </React.Suspense>,
-    );
-
-    expect(getByTestId("suspense-fallback").textContent).toBe("Loading flags");
-    expect(queryByTestId("flag-value")).toBeNull();
-
-    await waitFor(() => {
-      expect(requestStarted).toHaveBeenCalled();
-    });
-
-    resolveFlags();
-
-    await waitFor(() => {
-      expect(getByTestId("flag-value").textContent).toBe("true");
-    });
-    expect(queryByTestId("suspense-fallback")).toBeNull();
-
-    unmount();
-  });
-
-  test("suspends while loading when suspense is enabled for a single useFlag call", async () => {
-    const { requestStarted, resolveFlags } = mockDelayedFlagsResponse();
-
-    function FlaggedContent() {
-      const { isEnabled } = useFlag("abc", { suspense: true });
-      return <span data-testid="flag-value">{String(isEnabled)}</span>;
-    }
-
-    const { getByTestId, queryByTestId, unmount } = render(
-      <React.Suspense
-        fallback={<span data-testid="suspense-fallback">Loading flags</span>}
-      >
-        {getProvider({
-          children: <FlaggedContent />,
-        })}
-      </React.Suspense>,
-    );
-
-    expect(getByTestId("suspense-fallback").textContent).toBe("Loading flags");
-    expect(queryByTestId("flag-value")).toBeNull();
-
-    await waitFor(() => {
-      expect(requestStarted).toHaveBeenCalled();
-    });
-
-    resolveFlags();
-
-    await waitFor(() => {
-      expect(getByTestId("flag-value").textContent).toBe("true");
-    });
-    expect(queryByTestId("suspense-fallback")).toBeNull();
-
-    unmount();
-  });
-
-  test("does not suspend when suspense is disabled for a single useFlag call", async () => {
-    const { requestStarted, resolveFlags } = mockDelayedFlagsResponse();
-
-    function FlaggedContent() {
-      const { isEnabled, isLoading } = useFlag("abc", { suspense: false });
-      return (
-        <span data-testid="flag-value">
-          {String(isLoading)}:{String(isEnabled)}
-        </span>
-      );
-    }
-
-    const { getByTestId, queryByTestId, unmount } = render(
-      <React.Suspense
-        fallback={<span data-testid="suspense-fallback">Loading flags</span>}
-      >
-        {getProvider({
-          children: <FlaggedContent />,
-          suspense: true,
-        })}
-      </React.Suspense>,
-    );
-
-    expect(queryByTestId("suspense-fallback")).toBeNull();
-    expect(getByTestId("flag-value").textContent).toBe("true:false");
-
-    await waitFor(() => {
-      expect(requestStarted).toHaveBeenCalled();
-    });
-
-    resolveFlags();
-
-    await waitFor(() => {
-      expect(getByTestId("flag-value").textContent).toBe("false:true");
-    });
-
-    unmount();
-  });
-
-  test("stops suspending if on-demand initialization fails", async () => {
-    const logger = {
-      debug: vi.fn(),
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-    };
-    const initialize = vi
-      .spyOn(ReflagClient.prototype, "initialize")
-      .mockImplementationOnce(async function () {
-        (this as any).setState("initializing");
-        throw new Error("init failed");
-      });
-
-    function FlaggedContent() {
-      const { isEnabled, isLoading } = useFlag("abc");
-      return (
-        <span data-testid="flag-value">
-          {String(isLoading)}:{String(isEnabled)}
-        </span>
-      );
-    }
-
-    const { getByTestId, queryByTestId, unmount } = render(
-      <React.Suspense
-        fallback={<span data-testid="suspense-fallback">Loading flags</span>}
-      >
-        {getProvider({
-          children: <FlaggedContent />,
-          logger,
-          suspense: true,
-        })}
-      </React.Suspense>,
-    );
-
-    expect(getByTestId("suspense-fallback").textContent).toBe("Loading flags");
-
-    await waitFor(() => {
-      expect(getByTestId("flag-value").textContent).toBe("false:false");
-    });
-    expect(queryByTestId("suspense-fallback")).toBeNull();
-    expect(logger.error).toHaveBeenCalledWith(
-      "failed to initialize client",
-      expect.any(Error),
-    );
-
-    unmount();
-    initialize.mockRestore();
-  });
-
-  test("finishes loading", async () => {
-    const { result, unmount } = renderHook(() => useFlag("huddle"), {
-      wrapper: ({ children }) => getProvider({ children }),
-    });
-
-    await waitFor(() => {
-      expect(result.current).toStrictEqual({
-        key: "huddle",
-        config: { key: undefined, payload: undefined },
-        isEnabled: false,
-        isLoading: false,
-        track: expect.any(Function),
-        requestFeedback: expect.any(Function),
-      });
-    });
-
-    unmount();
-  });
-
-  test("provides the expected values if flag is enabled", async () => {
-    const { result, unmount } = renderHook(() => useFlag("abc"), {
-      wrapper: ({ children }) => getProvider({ children }),
-    });
-
-    await waitFor(() => {
-      expect(result.current).toStrictEqual({
-        key: "abc",
-        isEnabled: true,
-        isLoading: false,
-        config: {
-          key: "gpt3",
-          payload: { model: "gpt-something", temperature: 0.5 },
-        },
-        track: expect.any(Function),
-        requestFeedback: expect.any(Function),
-      });
-    });
-
-    unmount();
-  });
-});
-
-describe("useTrack", () => {
-  test("sends track request", async () => {
-    const { result, unmount } = renderHook(() => useTrack(), {
-      wrapper: ({ children }) => getProvider({ children }),
-    });
-
-    await waitFor(async () => {
-      await result.current("event", { test: "test" });
-      expect(events).toStrictEqual(["EVENT"]);
-    });
-
-    unmount();
-  });
-});
-
-describe("useSendFeedback", () => {
-  test("sends feedback", async () => {
-    const { result, unmount } = renderHook(() => useSendFeedback(), {
-      wrapper: ({ children }) => getProvider({ children }),
-    });
-
-    await waitFor(async () => {
-      await result.current({
-        flagKey: "huddles",
-        score: 5,
-      });
-      expect(events).toStrictEqual(["FEEDBACK"]);
-    });
-
-    unmount();
-  });
-});
-
-describe("useRequestFeedback", () => {
-  test("sends feedback", async () => {
-    const requestFeedback = vi
-      .spyOn(ReflagClient.prototype, "requestFeedback")
-      .mockReturnValue(undefined);
-
-    const { result, unmount } = renderHook(() => useRequestFeedback(), {
-      wrapper: ({ children }) => getProvider({ children }),
-    });
-
-    await waitFor(async () => {
-      result.current({
-        flagKey: "huddles",
-        title: "Test question",
-        companyId: "456",
-      });
-
-      expect(requestFeedback).toHaveBeenCalledOnce();
-      expect(requestFeedback).toHaveBeenCalledWith({
-        flagKey: "huddles",
-        companyId: "456",
-        title: "Test question",
-      });
-    });
-
-    unmount();
-  });
-});
-
-describe("useUpdateUser", () => {
-  test("updates user", async () => {
-    const updateUser = vi
-      .spyOn(ReflagClient.prototype, "updateUser")
-      .mockResolvedValue(undefined);
-
-    const { result: updateUserFn, unmount } = renderHook(
-      () => useUpdateUser(),
-      {
-        wrapper: ({ children }) => getProvider({ children }),
-      },
-    );
-
-    // todo: need this `waitFor` because useUpdateOtherContext
-    // runs before `client` is initialized and then the call gets
-    // lost.
-    await waitFor(async () => {
-      await updateUserFn.current({ optInHuddles: "true" });
-
-      expect(updateUser).toHaveBeenCalledWith({
-        optInHuddles: "true",
-      });
-    });
-
-    unmount();
-    updateUser.mockRestore();
-  });
-
-  test("preserves user updates across provider rerenders with unchanged context props", async () => {
-    const publishableKey = `KEY-${keyIndex++}`;
-    const seenOptInValues: (string | null)[] = [];
-    let updateUser!: ReturnType<typeof useUpdateUser>;
-    let client!: ReflagClient;
-
-    server.use(
-      http.get(/\/features\/evaluated$/, ({ request }) => {
-        const contextJson = new URL(request.url).searchParams.get(
-          "contextJson",
-        );
-        const context = contextJson
-          ? (JSON.parse(contextJson) as {
-              user?: { siteCentricOptIn?: string };
-            })
-          : undefined;
-        const siteCentricOptIn = context?.user?.siteCentricOptIn ?? null;
-        seenOptInValues.push(siteCentricOptIn);
-
-        return HttpResponse.json({
-          success: true,
-          features: {
-            SITE_CENTRIC: {
-              key: "SITE_CENTRIC",
-              isEnabled: siteCentricOptIn === "true",
-              targetingVersion: 1,
-            },
-          },
-        });
-      }),
-    );
-
-    function CaptureClient() {
-      updateUser = useUpdateUser();
-      client = useClient();
-      return null;
-    }
-
-    function ProviderShell() {
-      return (
-        <ReflagProvider
-          context={{ user: { id: "456", name: "test" }, company, other }}
-          enableLiveFlagUpdates={false}
-          enableTracking={false}
-          feedback={{ enableAutoFeedback: false }}
-          initialLoading={false}
-          publishableKey={publishableKey}
-        >
-          <CaptureClient />
-        </ReflagProvider>
-      );
-    }
-
-    const { rerender, unmount } = render(<ProviderShell />);
-
-    await waitFor(() => expect(seenOptInValues).toEqual([null]));
-
-    await act(async () => {
-      await updateUser({ siteCentricOptIn: "true" });
-    });
-    await waitFor(() => expect(seenOptInValues).toEqual([null, "true"]));
-
-    rerender(<ProviderShell />);
-    await act(async () => undefined);
-
-    expect(client.getContext().user).toMatchObject({
-      siteCentricOptIn: "true",
-    });
-    expect(seenOptInValues).toEqual([null, "true"]);
-
-    unmount();
-  });
-});
-
-describe("useUpdateCompany", () => {
-  test("updates company", async () => {
-    const updateCompany = vi
-      .spyOn(ReflagClient.prototype, "updateCompany")
-      .mockResolvedValue(undefined);
-
-    const { result: updateCompanyFn, unmount } = renderHook(
-      () => useUpdateCompany(),
-      {
-        wrapper: ({ children }) => getProvider({ children }),
-      },
-    );
-
-    // todo: need this `waitFor` because useUpdateOtherContext
-    // runs before `client` is initialized and then the call gets
-    // lost.
-    await waitFor(async () => {
-      await updateCompanyFn.current({ optInHuddles: "true" });
-
-      expect(updateCompany).toHaveBeenCalledWith({
-        optInHuddles: "true",
-      });
-    });
-    unmount();
-  });
-});
-
-describe("useUpdateOtherContext", () => {
-  test("updates other context", async () => {
-    const updateOtherContext = vi
-      .spyOn(ReflagClient.prototype, "updateOtherContext")
-      .mockResolvedValue(undefined);
-
-    const { result: updateOtherContextFn, unmount } = renderHook(
-      () => useUpdateOtherContext(),
-      {
-        wrapper: ({ children }) => getProvider({ children }),
-      },
-    );
-
-    // todo: need this `waitFor` because useUpdateOtherContext
-    // runs before `client` is initialized and then the call gets
-    // lost.
-    await waitFor(async () => {
-      await updateOtherContextFn.current({ optInHuddles: "true" });
-
-      expect(updateOtherContext).toHaveBeenCalledWith({
-        optInHuddles: "true",
-      });
-    });
-
-    unmount();
-  });
-});
-
-describe("useClient", () => {
-  test("gets the client", async () => {
-    const { result: clientFn, unmount } = renderHook(() => useClient(), {
-      wrapper: ({ children }) => getProvider({ children }),
-    });
-
-    await waitFor(async () => {
-      expect(clientFn.current).toBeDefined();
-    });
-
-    unmount();
-  });
-});
-
-describe("<ReflagBootstrappedProvider />", () => {
-  test("renders with pre-fetched flags", () => {
-    const bootstrapFlags: BootstrappedFlags = {
-      context: {
-        user: { id: "456", name: "test" },
-        company: { id: "123", name: "test" },
-        other: { test: "test" },
-      },
-      flags: {
-        abc: {
-          key: "abc",
-          isEnabled: true,
-          targetingVersion: 1,
-          config: {
-            key: "gpt3",
-            payload: { model: "gpt-something", temperature: 0.5 },
-            version: 2,
-          },
-        },
-        def: {
-          key: "def",
-          isEnabled: true,
-          targetingVersion: 2,
-        },
-      },
-    };
-
-    const { container } = render(
-      getBootstrapProvider(bootstrapFlags, {
-        apiBaseUrl: "https://apibaseurl.com",
-        sseBaseUrl: "https://ssebaseurl.com",
-        enableTracking: false,
-        appBaseUrl: "https://appbaseurl.com",
-        staleTimeMs: 1001,
-        timeoutMs: 1002,
-        expireTimeMs: 1003,
-        staleWhileRevalidate: true,
-        fallbackFlags: ["flag2"],
-        feedback: { enableAutoFeedback: true },
-        children: <span>Test Content</span>,
-      }),
-    );
-
-    expect(container).toBeDefined();
-  });
-
-  test("renders in bootstrap mode", () => {
-    const bootstrapFlags: BootstrappedFlags = {
-      context: {
-        user: { id: "456", name: "test" },
-        company: { id: "123", name: "test" },
-        other: { test: "test" },
-      },
-      flags: {
-        abc: {
-          key: "abc",
-          isEnabled: true,
-          targetingVersion: 1,
-        },
-      },
-    };
-
-    const { container } = render(
-      getBootstrapProvider(bootstrapFlags, {
-        children: <span>Bootstrap Content</span>,
-      }),
-    );
-
-    expect(container).toBeDefined();
-  });
-
-  // Removed test "does not initialize when no flags are provided"
-  // because ReflagBootstrappedProvider requires flags to be provided
-
-  test("does not enter UI loading during initial bootstrap initialization", async () => {
-    const bootstrapFlags: BootstrappedFlags = {
-      context: { user, company, other },
-      flags: {
-        abc: {
-          key: "abc",
-          isEnabled: true,
-          targetingVersion: 1,
-        },
-      },
-    };
-    let resolveStorageRead: (value: string | null) => void;
-    const storageRead = new Promise<string | null>((resolve) => {
-      resolveStorageRead = resolve;
-    });
-    const storage = {
-      getItem: vi.fn(() => storageRead),
-      setItem: vi.fn(async () => undefined),
-    };
-    let client: ReflagClient | undefined;
-
-    function Content() {
-      client = useClient();
-      return (
-        <span data-testid="bootstrap-content">{String(useIsLoading())}</span>
-      );
-    }
-
-    const { queryByTestId, unmount } = render(
-      getBootstrapProvider(bootstrapFlags, {
-        storage,
-        loadingComponent: <span data-testid="loading">Loading...</span>,
-        children: <Content />,
-      }),
-    );
-
-    await waitFor(() => {
-      expect(client?.getState()).toBe("initializing");
-    });
-
-    expect(queryByTestId("loading")).toBeNull();
-    expect(queryByTestId("bootstrap-content")?.textContent).toBe("false");
-
-    resolveStorageRead!(null);
-    await waitFor(() => {
-      expect(client?.getState()).toBe("initialized");
-    });
-
-    unmount();
-  });
-
-  test("shows content after initialization", async () => {
-    const bootstrapFlags: BootstrappedFlags = {
-      context: {
-        user: { id: "456", name: "test" },
-        company: { id: "123", name: "test" },
-        other: { test: "test" },
-      },
-      flags: {
-        abc: {
-          key: "abc",
-          isEnabled: true,
-          targetingVersion: 1,
-        },
-      },
-    };
-
-    const { container } = render(
-      getBootstrapProvider(bootstrapFlags, {
-        loadingComponent: <span data-testid="loading">Loading...</span>,
-        children: <span data-testid="bootstrap-content">Content</span>,
-      }),
-    );
-
-    // Content should eventually be visible
-    await waitFor(() => {
-      expect(
-        container.querySelector('[data-testid="bootstrap-content"]'),
-      ).not.toBeNull();
-    });
-  });
-
-  // Removed test "shows loading component when no flags are provided"
-  // because ReflagBootstrappedProvider requires flags to be provided
-});
-
-describe("useFlag with ReflagBootstrappedProvider", () => {
-  test("returns bootstrapped flag values", async () => {
-    const bootstrapFlags: BootstrappedFlags = {
-      context: {
-        user: { id: "456", name: "test" },
-        company: { id: "123", name: "test" },
-        other: { test: "test" },
-      },
-      flags: {
-        abc: {
-          key: "abc",
-          isEnabled: true,
-          targetingVersion: 1,
-          config: {
-            key: "gpt3",
-            payload: { model: "gpt-something", temperature: 0.5 },
-            version: 2,
-          },
-        },
-        def: {
-          key: "def",
-          isEnabled: true,
-          targetingVersion: 2,
-        },
-      },
-    };
-
-    const { result, unmount } = renderHook(() => useFlag("abc"), {
-      wrapper: ({ children }) =>
-        getBootstrapProvider(bootstrapFlags, { children }),
-    });
-
-    await waitFor(() => {
-      expect(result.current).toStrictEqual({
-        key: "abc",
-        isEnabled: true,
-        isLoading: false,
-        config: {
-          key: "gpt3",
-          payload: { model: "gpt-something", temperature: 0.5 },
-        },
-        track: expect.any(Function),
-        requestFeedback: expect.any(Function),
-      });
-    });
-
-    unmount();
-  });
-
-  test("returns disabled flag for non-existent flags", async () => {
-    const bootstrapFlags: BootstrappedFlags = {
-      context: {
-        user: { id: "456", name: "test" },
-        company: { id: "123", name: "test" },
-        other: { test: "test" },
-      },
-      flags: {
-        abc: {
-          key: "abc",
-          isEnabled: true,
-          targetingVersion: 1,
-        },
-      },
-    };
-
-    const { result, unmount } = renderHook(() => useFlag("nonexistent"), {
-      wrapper: ({ children }) =>
-        getBootstrapProvider(bootstrapFlags, { children }),
-    });
-
-    await waitFor(() => {
-      expect(result.current).toStrictEqual({
-        key: "nonexistent",
-        isEnabled: false,
-        isLoading: false,
-        config: {
-          key: undefined,
-          payload: undefined,
-        },
-        track: expect.any(Function),
-        requestFeedback: expect.any(Function),
-      });
-    });
-
-    unmount();
-  });
-
-  // Removed test "returns loading state when no flags are bootstrapped"
-  // because ReflagBootstrappedProvider requires flags to be provided
-});
-
-describe("opt-in hooks", () => {
-  test("uses the normal provider loading state for the initial flags request", async () => {
-    let resolveResponse!: (response: HttpResponse) => void;
-    const response = new Promise<HttpResponse>((resolve) => {
-      resolveResponse = resolve;
-    });
-    const requestStarted = vi.fn();
-    server.use(
-      http.get(/\/features\/evaluated$/, () => {
-        requestStarted();
-        return response;
-      }),
-    );
-
-    const { result, unmount } = renderHook(
+    const { result } = renderHook(
       () => ({
-        isLoading: useIsLoading(),
-        optInState: useOptInFlags(),
+        enabled: useFlag("release"),
+        settings: useFlag("settings", { model: "default" }),
+        loading: useIsLoading(),
       }),
-      {
-        wrapper: ({ children }) => getProvider({ children }),
-      },
+      { wrapper: provider() },
     );
-
-    expect(result.current.isLoading).toBe(true);
-    expect(result.current.optInState).toEqual({
-      flags: [],
-      isLoading: false,
+    expect(result.current).toEqual({
+      enabled: false,
+      settings: { model: "default" },
+      loading: true,
     });
-    await waitFor(() => expect(requestStarted).toHaveBeenCalledOnce());
-
-    resolveResponse(
-      HttpResponse.json({
-        success: true,
-        features: {
-          optInFlag: {
-            key: "optInFlag",
-            isEnabled: false,
-            targetingVersion: 1,
-            optInEnabled: true,
-            optIn: {
-              userOptedIn: false,
-              companyOptedIn: false,
-              isOptedIn: false,
-              name: "Opt-in flag",
-              description: null,
-            },
-          },
-        },
+    pending.resolve();
+    await waitFor(() =>
+      expect(result.current).toEqual({
+        enabled: true,
+        settings: { model: "quality" },
+        loading: false,
       }),
     );
-
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-      expect(result.current.optInState).toEqual({
-        flags: [expect.objectContaining({ key: "optInFlag" })],
-        isLoading: false,
-      });
-    });
-    unmount();
   });
 
-  test("does not miss opt-in flags updated between render and subscription", async () => {
+  test("tracks ignored hook reads immediately and rerenders on new evaluated state", async () => {
     const client = new ReflagClient({
-      publishableKey: "key-opt-in-mount-race",
-      offline: true,
+      publishableKey: "checks",
+      bootstrappedState: state(),
+      toolbar: false,
+      feedback: { enableAutoFeedback: false },
     });
-    const optInFlag = {
-      key: "optInFlag",
-      name: "Opt-in flag",
-      description: null,
-      isEnabled: false,
-      userOptedIn: false,
-      companyOptedIn: false,
-      isOptedIn: false,
-    };
-    const getOptInFlags = vi
-      .spyOn(client, "getOptInFlags")
-      .mockReturnValueOnce([])
-      .mockReturnValue([optInFlag]);
-
-    const { result, unmount } = renderHook(() => useOptInFlags(), {
+    clients.add(client);
+    const check = vi.fn();
+    client.on("check", check);
+    const { result } = renderHook(() => useFlag("release"), {
       wrapper: ({ children }) => (
         <ReflagClientProvider client={client} initialLoading={false}>
           {children}
         </ReflagClientProvider>
       ),
     });
-
-    expect(result.current).toEqual({ flags: [optInFlag], isLoading: false });
-    expect(getOptInFlags).toHaveBeenCalledTimes(2);
-
-    unmount();
-    await client.stop();
+    expect(result.current).toBe(true);
+    expect(check).toHaveBeenCalledTimes(1);
+    expect(check.mock.calls[0][0]).toMatchObject({
+      action: "check",
+      key: "release",
+      evalResult: "true",
+      sourceVersionId: "version-1",
+    });
+    act(() =>
+      client.updateFlags(
+        {
+          release: selected(
+            false,
+            "false",
+          ) as BootstrappedFlags["flags"][string],
+        },
+        true,
+        2,
+      ),
+    );
+    expect(result.current).toBe(false);
+    expect(check).toHaveBeenCalledTimes(2);
   });
 
-  test("returns an empty flags array when regular provider initialization fails", async () => {
+  test("uses current keys and positional defaults when props change", () => {
+    const client = create();
+    const { result, rerender } = renderHook(
+      ({ key, fallback }) => useFlag(key, fallback),
+      {
+        initialProps: { key: "release", fallback: true },
+        wrapper: ({ children }) => (
+          <ReflagClientProvider client={client} initialLoading={false}>
+            {children}
+          </ReflagClientProvider>
+        ),
+      },
+    );
+    expect(result.current).toBe(true);
+    rerender({ key: "missing", fallback: false });
+    expect(result.current).toBe(false);
+    rerender({ key: "missing", fallback: true });
+    expect(result.current).toBe(true);
+  });
+
+  test("does not miss a flag update between render and subscription", () => {
+    const client = create();
+    function UpdateBeforeSubscription() {
+      useLayoutEffect(() => {
+        client.updateFlags(
+          {
+            release: selected(
+              false,
+              "false",
+            ) as BootstrappedFlags["flags"][string],
+          },
+          true,
+          2,
+        );
+      }, []);
+      return null;
+    }
+    function Flag() {
+      return <span>{String(useFlag("release"))}</span>;
+    }
+    const view = render(
+      <ReflagClientProvider client={client} initialLoading={false}>
+        <UpdateBeforeSubscription />
+        <Flag />
+      </ReflagClientProvider>,
+    );
+    expect(view.container.textContent).toBe("false");
+  });
+
+  test("useFlag never interprets a positional payload as loading options or inherits opt-in Suspense", async () => {
+    const { result } = renderHook(
+      () => useFlag("missing", { suspense: true, model: "fallback" }),
+      { wrapper: provider({ suspense: true }) },
+    );
+    expect(result.current).toEqual({ suspense: true, model: "fallback" });
+    await waitFor(() => expect(result.current.model).toBe("fallback"));
+  });
+
+  test("useFlagSuspense waits for initialization, then a missing flag returns its default", async () => {
+    const pending = gate();
+    server.use(
+      http.get(/\/flags\/evaluated$/, async () => {
+        await pending.promise;
+        return HttpResponse.json(response);
+      }),
+    );
+    function Flag() {
+      return <span>{useFlagSuspense("missing", "fallback")}</span>;
+    }
+    const Wrapper = provider({ initialLoading: false });
+    const view = render(
+      <Wrapper>
+        <Suspense fallback={<span>Loading</span>}>
+          <Flag />
+        </Suspense>
+      </Wrapper>,
+    );
+    expect(view.container.textContent).toBe("Loading");
+    pending.resolve();
+    await waitFor(() => expect(view.container.textContent).toBe("fallback"));
+  });
+
+  test("on-demand initialization failure releases Suspense instead of hanging", async () => {
+    const client = create();
+    vi.spyOn(client, "getConfig").mockReturnValue({
+      ...client.getConfig(),
+      bootstrapped: false,
+    });
+    vi.spyOn(client, "initialize").mockRejectedValue(
+      new Error("initialization failed"),
+    );
+    function Flag() {
+      return <span>{String(useFlagSuspense("missing"))}</span>;
+    }
+    const view = render(
+      <ReflagClientProvider client={client}>
+        <Suspense fallback="Loading">
+          <Flag />
+        </Suspense>
+      </ReflagClientProvider>,
+    );
+    await waitFor(() => expect(view.container.textContent).toBe("false"));
+  });
+
+  test("bootstrapped direct values render during SSR and refresh from newer bootstrap props", async () => {
+    function Flag() {
+      return <span>{String(useFlag("release"))}</span>;
+    }
+    const key = `bootstrap-${index++}`;
+    const initial = state();
+    expect(
+      renderToString(
+        <ReflagBootstrappedProvider
+          publishableKey={key}
+          flags={initial}
+          enableTracking={false}
+          enableLiveFlagUpdates={false}
+          toolbar={false}
+        >
+          <Flag />
+        </ReflagBootstrappedProvider>,
+      ),
+    ).toContain("true");
+    const tree = (flags: BootstrappedFlags) => (
+      <ReflagBootstrappedProvider
+        publishableKey={key}
+        flags={flags}
+        enableTracking={false}
+        enableLiveFlagUpdates={false}
+        toolbar={false}
+      >
+        <Flag />
+      </ReflagBootstrappedProvider>
+    );
+    const view = render(tree(initial));
+    expect(view.container.textContent).toBe("true");
+    view.rerender(
+      tree({
+        ...initial,
+        flagStateVersion: 2,
+        flags: {
+          release: selected(
+            false,
+            "false",
+          ) as BootstrappedFlags["flags"][string],
+        },
+      }),
+    );
+    await waitFor(() => expect(view.container.textContent).toBe("false"));
+    view.rerender(tree(initial));
+    expect(view.container.textContent).toBe("false");
+  });
+});
+
+describe("provider and independent hooks", () => {
+  test("deduplicates client initialization for the same key", async () => {
+    const initialize = vi.spyOn(ReflagClient.prototype, "initialize");
+    const Wrapper = provider();
+    const view = render(
+      <Wrapper>
+        <span>one</span>
+      </Wrapper>,
+    );
+    view.rerender(
+      <Wrapper>
+        <span>two</span>
+      </Wrapper>,
+    );
+    await waitFor(() => expect(initialize).toHaveBeenCalledTimes(1));
+  });
+
+  test("forwards logger and runtime configuration and enables live updates by default", async () => {
     const logger = {
-      debug: vi.fn(),
       info: vi.fn(),
+      debug: vi.fn(),
       warn: vi.fn(),
       error: vi.fn(),
     };
-    const initialize = vi
-      .spyOn(ReflagClient.prototype, "initialize")
-      .mockRejectedValueOnce(new Error("init failed"));
-
-    const { result, unmount } = renderHook(() => useOptInFlags(), {
-      wrapper: ({ children }) => getProvider({ children, logger }),
-    });
-
-    await waitFor(() => {
-      expect(logger.error).toHaveBeenCalledWith(
-        "failed to initialize client",
-        expect.any(Error),
-      );
-    });
-    expect(result.current).toEqual({ flags: [], isLoading: false });
-
-    unmount();
-    initialize.mockRestore();
-  });
-
-  test("suspends with a regular provider during the initial flags request", async () => {
-    let resolveResponse!: (response: HttpResponse) => void;
-    const response = new Promise<HttpResponse>((resolve) => {
-      resolveResponse = resolve;
-    });
-    const requestStarted = vi.fn();
-    server.use(
-      http.get(/\/features\/evaluated$/, () => {
-        requestStarted();
-        return response;
+    const { result } = renderHook(() => useClient(), {
+      wrapper: provider({
+        logger,
+        debug: true,
+        enableLiveFlagUpdates: true,
+        sdkVersion: "react-sdk/custom",
       }),
-    );
-
-    function OptInList() {
-      const { flags } = useOptInFlags();
-      return <span data-testid="regular-opt-in-count">{flags.length}</span>;
-    }
-
-    const { getByTestId, queryByTestId, unmount } = render(
-      <React.Suspense
-        fallback={<span data-testid="regular-opt-in-loading">Loading</span>}
-      >
-        {getProvider({ suspense: true, children: <OptInList /> })}
-      </React.Suspense>,
-    );
-
-    expect(getByTestId("regular-opt-in-loading").textContent).toBe("Loading");
-    expect(queryByTestId("regular-opt-in-count")).toBeNull();
-    await waitFor(() => expect(requestStarted).toHaveBeenCalledOnce());
-
-    resolveResponse(
-      HttpResponse.json({
-        success: true,
-        features: {
-          optInFlag: {
-            key: "optInFlag",
-            isEnabled: false,
-            targetingVersion: 1,
-            optInEnabled: true,
-            optIn: {
-              userOptedIn: false,
-              companyOptedIn: false,
-              isOptedIn: false,
-              name: "Opt-in flag",
-              description: null,
-            },
-          },
-        },
-      }),
-    );
-
-    await waitFor(() => {
-      expect(getByTestId("regular-opt-in-count").textContent).toBe("1");
     });
-    expect(queryByTestId("regular-opt-in-loading")).toBeNull();
-    unmount();
+    await waitFor(() => expect(result.current.getState()).toBe("initialized"));
+    expect(result.current.logger).toBe(logger);
+    expect((result.current as any).enableLiveFlagUpdates).toBe(true);
+    expect((result.current as any).sdkVersion).toBe("react-sdk/custom");
   });
 
-  test("complete bootstrapped metadata is not loading", () => {
-    const bootstrapFlags: BootstrappedFlags = {
-      context: { user, company, other },
-      flags: {
-        optInFlag: {
-          key: "optInFlag",
-          isEnabled: false,
-          targetingVersion: 1,
-          optInEnabled: true,
-          optIn: {
-            userOptedIn: false,
-            companyOptedIn: false,
-            isOptedIn: false,
-            name: "Opt-in flag",
-            description: "Try it early",
-          },
-        },
-      },
+  test("keeps imperative context updates across equal provider-prop rerenders", async () => {
+    const context = {
+      user: { id: "alice", roles: ["reader"] },
+      other: { nested: { value: 1 } },
     };
-
-    const { result, unmount } = renderHook(() => useOptInFlags(), {
-      wrapper: ({ children }) =>
-        getBootstrapProvider(bootstrapFlags, { children }),
-    });
-
-    expect(result.current.isLoading).toBe(false);
-    expect(result.current.flags).toHaveLength(1);
-    unmount();
-  });
-
-  test("rerenders while missing bootstrapped metadata refreshes successfully", async () => {
-    let resolveResponse!: (response: HttpResponse) => void;
-    const response = new Promise<HttpResponse>((resolve) => {
-      resolveResponse = resolve;
-    });
-    const requestStarted = vi.fn();
-    server.use(
-      http.get(/\/features\/evaluated$/, () => {
-        requestStarted();
-        return response;
-      }),
-    );
-
-    const bootstrapFlags: BootstrappedFlags = {
-      context: { user, company, other },
-      flagStateVersion: 1,
-      flags: {
-        optInFlag: {
-          key: "optInFlag",
-          isEnabled: false,
-          targetingVersion: 1,
-        },
-      },
-    };
-    const loadingRenders: boolean[] = [];
-
-    const { result, unmount } = renderHook(
-      () => {
-        const state = useOptInFlags();
-        loadingRenders.push(state.isLoading);
-        return state;
-      },
-      {
-        wrapper: ({ children }) =>
-          getBootstrapProvider(bootstrapFlags, { children }),
-      },
-    );
-
-    expect(result.current).toEqual({ isLoading: true, flags: [] });
-    await waitFor(() => expect(requestStarted).toHaveBeenCalledOnce());
-
-    resolveResponse(
-      HttpResponse.json({
-        success: true,
-        flagStateVersion: 2,
-        features: {
-          optInFlag: {
-            key: "optInFlag",
-            isEnabled: false,
-            targetingVersion: 1,
-            optInEnabled: true,
-            optIn: {
-              userOptedIn: false,
-              companyOptedIn: false,
-              isOptedIn: false,
-              name: "Opt-in flag",
-              description: "Try it early",
-            },
-          },
-        },
-      }),
-    );
-
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-      expect(result.current.flags).toHaveLength(1);
-    });
-    expect(loadingRenders).toContain(true);
-    expect(loadingRenders).toContain(false);
-    unmount();
-  });
-
-  test("stops loading when a bootstrapped metadata refresh fails", async () => {
-    server.use(
-      http.get(/\/features\/evaluated$/, () =>
-        HttpResponse.json({ success: false }, { status: 500 }),
-      ),
-    );
-
-    const bootstrapFlags: BootstrappedFlags = {
-      context: { user, company, other },
-      flags: {
-        optInFlag: {
-          key: "optInFlag",
-          isEnabled: false,
-          targetingVersion: 1,
-        },
-      },
-    };
-
-    const { result, unmount } = renderHook(() => useOptInFlags(), {
-      wrapper: ({ children }) =>
-        getBootstrapProvider(bootstrapFlags, { children }),
-    });
-
-    expect(result.current.isLoading).toBe(true);
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
-    expect(result.current.flags).toEqual([]);
-    unmount();
-  });
-
-  test("stops suspending when a bootstrapped metadata refresh fails", async () => {
-    server.use(
-      http.get(/\/features\/evaluated$/, () =>
-        HttpResponse.json({ success: false }, { status: 500 }),
-      ),
-    );
-
-    const bootstrapFlags: BootstrappedFlags = {
-      context: { user, company, other },
-      flags: {
-        optInFlag: {
-          key: "optInFlag",
-          isEnabled: false,
-          targetingVersion: 1,
-        },
-      },
-    };
-
-    function OptInList() {
-      const { flags } = useOptInFlags();
-      return <span data-testid="failed-opt-in-count">{flags.length}</span>;
-    }
-
-    const { getByTestId, queryByTestId, unmount } = render(
-      <React.Suspense
-        fallback={<span data-testid="failed-opt-in-loading">Loading</span>}
-      >
-        {getBootstrapProvider(bootstrapFlags, {
-          suspense: true,
-          children: <OptInList />,
-        })}
-      </React.Suspense>,
-    );
-
-    expect(getByTestId("failed-opt-in-loading").textContent).toBe("Loading");
-
-    await waitFor(() => {
-      expect(getByTestId("failed-opt-in-count").textContent).toBe("0");
-    });
-    expect(queryByTestId("failed-opt-in-loading")).toBeNull();
-    unmount();
-  });
-
-  test("useOptInFlags suspends for missing bootstrapped metadata", async () => {
-    let resolveResponse!: (response: HttpResponse) => void;
-    const response = new Promise<HttpResponse>((resolve) => {
-      resolveResponse = resolve;
-    });
-    const requestStarted = vi.fn();
-    server.use(
-      http.get(/\/features\/evaluated$/, () => {
-        requestStarted();
-        return response;
-      }),
-    );
-
-    const bootstrapFlags: BootstrappedFlags = {
-      context: { user, company, other },
-      flags: {
-        optInFlag: {
-          key: "optInFlag",
-          isEnabled: false,
-          targetingVersion: 1,
-        },
-      },
-    };
-
-    function OptInList() {
-      const { flags } = useOptInFlags();
-      return <span data-testid="opt-in-count">{flags.length}</span>;
-    }
-
-    const { getByTestId, queryByTestId, unmount } = render(
-      <React.Suspense
-        fallback={<span data-testid="opt-in-loading">Loading opt-ins</span>}
-      >
-        {getBootstrapProvider(bootstrapFlags, {
-          suspense: true,
-          children: <OptInList />,
-        })}
-      </React.Suspense>,
-    );
-
-    expect(getByTestId("opt-in-loading").textContent).toBe("Loading opt-ins");
-    expect(queryByTestId("opt-in-count")).toBeNull();
-    await waitFor(() => expect(requestStarted).toHaveBeenCalledOnce());
-
-    resolveResponse(
-      HttpResponse.json({
-        success: true,
-        features: {
-          optInFlag: {
-            key: "optInFlag",
-            isEnabled: false,
-            targetingVersion: 1,
-            optInEnabled: true,
-            optIn: {
-              userOptedIn: false,
-              companyOptedIn: false,
-              isOptedIn: false,
-              name: "Opt-in flag",
-              description: null,
-            },
-          },
-        },
-      }),
-    );
-
-    await waitFor(() => {
-      expect(getByTestId("opt-in-count").textContent).toBe("1");
-    });
-    expect(queryByTestId("opt-in-loading")).toBeNull();
-    expect(requestStarted).toHaveBeenCalledOnce();
-    unmount();
-  });
-
-  test("can opt out of provider Suspense for opt-in metadata", async () => {
-    let resolveResponse!: (response: HttpResponse) => void;
-    const response = new Promise<HttpResponse>((resolve) => {
-      resolveResponse = resolve;
-    });
-    server.use(http.get(/\/features\/evaluated$/, () => response));
-
-    const bootstrapFlags: BootstrappedFlags = {
-      context: { user, company, other },
-      flags: {
-        optInFlag: {
-          key: "optInFlag",
-          isEnabled: false,
-          targetingVersion: 1,
-        },
-      },
-    };
-
-    function OptInList() {
-      const { flags, isLoading } = useOptInFlags({ suspense: false });
+    const key = `contexts-${index++}`;
+    function Wrapper({ children }: { children: React.ReactNode }) {
       return (
-        <span data-testid="opt-in-state">
-          {String(isLoading)}:{flags.length}
-        </span>
+        <ReflagProvider
+          publishableKey={key}
+          context={{
+            user: { ...context.user, roles: [...context.user.roles] },
+            other: { nested: { value: 1 } },
+          }}
+          enableTracking={false}
+          enableLiveFlagUpdates={false}
+          toolbar={false}
+        >
+          {children}
+        </ReflagProvider>
       );
     }
-
-    const { getByTestId, queryByTestId, unmount } = render(
-      <React.Suspense
-        fallback={<span data-testid="opt-in-loading">Loading opt-ins</span>}
-      >
-        {getBootstrapProvider(bootstrapFlags, {
-          suspense: true,
-          children: <OptInList />,
-        })}
-      </React.Suspense>,
+    const { result, rerender } = renderHook(
+      () => ({ client: useClient(), updateUser: useUpdateUser() }),
+      { wrapper: Wrapper },
     );
+    await waitFor(() =>
+      expect(result.current.client.getState()).toBe("initialized"),
+    );
+    await act(() => result.current.updateUser({ role: "admin" }));
+    rerender();
+    expect(result.current.client.getContext().user?.role).toBe("admin");
+  });
 
-    expect(queryByTestId("opt-in-loading")).toBeNull();
-    expect(getByTestId("opt-in-state").textContent).toBe("true:0");
-
-    resolveResponse(
-      HttpResponse.json({
-        success: true,
-        features: {
-          optInFlag: {
-            key: "optInFlag",
-            isEnabled: false,
-            targetingVersion: 1,
-            optInEnabled: true,
-            optIn: {
-              userOptedIn: false,
-              companyOptedIn: false,
-              isOptedIn: false,
-              name: "Opt-in flag",
-              description: null,
-            },
-          },
-        },
+  test("reflects context loading without temporarily exposing the previous user's value", async () => {
+    const pending = gate();
+    server.use(
+      http.get(/\/flags\/evaluated$/, async ({ request }) => {
+        if (
+          new URL(request.url).searchParams.get("contextJson")?.includes("bob")
+        ) {
+          await pending.promise;
+          return HttpResponse.json({
+            ...response,
+            flags: { release: selected(false, "false") },
+          });
+        }
+        return HttpResponse.json(response);
       }),
     );
-
-    await waitFor(() => {
-      expect(getByTestId("opt-in-state").textContent).toBe("false:1");
+    const { result } = renderHook(
+      () => ({
+        client: useClient(),
+        enabled: useFlag("release"),
+        loading: useIsLoading(),
+      }),
+      { wrapper: provider() },
+    );
+    await waitFor(() => expect(result.current.enabled).toBe(true));
+    let updating!: Promise<void>;
+    act(() => {
+      updating = result.current.client.setContext({ user: { id: "bob" } });
     });
-    unmount();
+    expect(result.current.enabled).toBe(false);
+    expect(result.current.loading).toBe(true);
+    await act(async () => {
+      pending.resolve();
+      await updating;
+    });
+    expect(result.current.loading).toBe(false);
   });
 
-  test("useOptInFlags returns and updates opt-in flags", async () => {
-    const bootstrapFlags: BootstrappedFlags = {
-      context: { user, company, other },
-      flags: {
-        optInFlag: {
-          key: "optInFlag",
-          isEnabled: false,
-          targetingVersion: 1,
-          optInEnabled: true,
-          optIn: {
-            userOptedIn: false,
-            companyOptedIn: false,
-            isOptedIn: false,
-            name: "Opt-in flag",
-            description: "Try it early",
-          },
-        },
-        notOptInFlag: {
-          key: "notOptInFlag",
-          isEnabled: true,
-          targetingVersion: 2,
-          optInEnabled: false,
-          optIn: null,
-        },
-      },
-    };
-
-    const { result, unmount } = renderHook(
-      () => ({ client: useClient(), optInState: useOptInFlags() }),
+  test("tracking, feedback, context and opt-in hooks remain separate client operations", async () => {
+    const client = create();
+    const track = vi.spyOn(client, "track").mockResolvedValue(undefined);
+    const requestFeedback = vi
+      .spyOn(client, "requestFeedback")
+      .mockReturnValue(undefined);
+    const feedback = vi.spyOn(client, "feedback").mockResolvedValue(undefined);
+    const user = vi.spyOn(client, "updateUser").mockResolvedValue(undefined);
+    const company = vi
+      .spyOn(client, "updateCompany")
+      .mockResolvedValue(undefined);
+    const other = vi
+      .spyOn(client, "updateOtherContext")
+      .mockResolvedValue(undefined);
+    const optIn = vi.spyOn(client, "setOptIn").mockResolvedValue(undefined);
+    const { result } = renderHook(
+      () => ({
+        track: useTrack(),
+        requestFeedback: useRequestFeedback(),
+        feedback: useSendFeedback(),
+        user: useUpdateUser(),
+        company: useUpdateCompany(),
+        other: useUpdateOtherContext(),
+        optIn: useSetOptIn(),
+      }),
       {
-        wrapper: ({ children }) =>
-          getBootstrapProvider(bootstrapFlags, { children }),
+        wrapper: ({ children }) => (
+          <ReflagClientProvider client={client} initialLoading={false}>
+            {children}
+          </ReflagClientProvider>
+        ),
       },
     );
-
-    await waitFor(() => {
-      expect(result.current.optInState.flags).toEqual([
-        {
-          key: "optInFlag",
-          name: "Opt-in flag",
-          description: "Try it early",
-          isEnabled: false,
-          userOptedIn: false,
-          companyOptedIn: false,
-          isOptedIn: false,
-        },
-      ]);
+    await result.current.track("Started", { button: "cta" });
+    result.current.requestFeedback({ flagKey: "release", title: "Feedback" });
+    await result.current.feedback({ flagKey: "release", score: 5 });
+    await result.current.user({ role: "admin" });
+    await result.current.company({ plan: "premium" });
+    await result.current.other({ region: "eu" });
+    await result.current.optIn("release", { optedIn: true, scope: "company" });
+    expect(track).toHaveBeenCalledWith("Started", { button: "cta" });
+    expect(requestFeedback).toHaveBeenCalledWith({
+      flagKey: "release",
+      title: "Feedback",
     });
-
-    act(() => {
-      result.current.client.updateFlags({
-        optInFlag: {
-          key: "optInFlag",
-          isEnabled: true,
-          targetingVersion: 2,
-          optInEnabled: true,
-          optIn: {
-            userOptedIn: true,
-            companyOptedIn: false,
-            isOptedIn: true,
-            name: "Opt-in flag",
-            description: "Try it early",
-          },
-        },
-      });
+    expect(feedback).toHaveBeenCalledWith({ flagKey: "release", score: 5 });
+    expect(user).toHaveBeenCalledWith({ role: "admin" });
+    expect(company).toHaveBeenCalledWith({ plan: "premium" });
+    expect(other).toHaveBeenCalledWith({ region: "eu" });
+    expect(optIn).toHaveBeenCalledWith("release", {
+      optedIn: true,
+      scope: "company",
     });
-
-    await waitFor(() => {
-      expect(result.current.optInState.flags).toEqual([
-        {
-          key: "optInFlag",
-          name: "Opt-in flag",
-          description: "Try it early",
-          isEnabled: true,
-          userOptedIn: true,
-          companyOptedIn: false,
-          isOptedIn: true,
-        },
-      ]);
-    });
-
-    unmount();
   });
 
-  test("useOptInFlags refreshes missing metadata after bootstrap", async () => {
-    let evaluatedRequests = 0;
+  test("event subscriptions clean up on unmount and support an external client", () => {
+    const client = create();
+    const handler = vi.fn();
+    const { unmount } = renderHook(() =>
+      useOnEvent("flagsUpdated", handler, client),
+    );
+    act(() => client.setFlagOverride("release", false));
+    expect(handler).toHaveBeenCalledTimes(1);
+    unmount();
+    client.setFlagOverride("release", true);
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  test("requires a provider", () => {
+    const error = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    expect(() => renderHook(() => useFlag("release"))).toThrow(
+      "ReflagProvider is missing",
+    );
+    error.mockRestore();
+  });
+});
+
+describe("opt-in hooks", () => {
+  test("reports initial metadata loading for regular providers and retains the v2 value", async () => {
+    const pending = gate();
     server.use(
-      http.get(/\/features\/evaluated$/, () => {
-        evaluatedRequests += 1;
+      http.get(/\/flags\/evaluated$/, async () => {
+        await pending.promise;
         return HttpResponse.json({
-          success: true,
-          flagStateVersion: 2,
-          features: {
-            optInFlag: {
-              key: "optInFlag",
-              isEnabled: false,
-              targetingVersion: 1,
+          ...response,
+          flags: {
+            release: {
+              ...selected(true),
               optInEnabled: true,
               optIn: {
-                userOptedIn: false,
+                name: "Try",
+                description: null,
+                userOptedIn: true,
                 companyOptedIn: false,
-                isOptedIn: false,
-                name: "Opt-in flag",
-                description: "Try it early",
+                isOptedIn: true,
               },
             },
           },
         });
       }),
     );
-
-    const bootstrapFlags: BootstrappedFlags = {
-      context: { user, company, other },
-      flagStateVersion: 1,
-      flags: {
-        optInFlag: {
-          key: "optInFlag",
-          isEnabled: false,
-          targetingVersion: 1,
-        },
-      },
-    };
-
-    const { result, unmount } = renderHook(() => useOptInFlags(), {
-      wrapper: ({ children }) =>
-        getBootstrapProvider(bootstrapFlags, { children }),
+    const { result } = renderHook(() => useOptInFlags(), {
+      wrapper: provider(),
     });
-
-    await waitFor(() => expect(evaluatedRequests).toBe(1));
-    await waitFor(() => {
-      expect(result.current).toEqual({
-        isLoading: false,
-        flags: [
-          {
-            key: "optInFlag",
-            name: "Opt-in flag",
-            description: "Try it early",
-            isEnabled: false,
-            userOptedIn: false,
-            companyOptedIn: false,
-            isOptedIn: false,
-          },
-        ],
-      });
+    expect(result.current.isLoading).toBe(true);
+    pending.resolve();
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.flags[0]).toMatchObject({
+      key: "release",
+      isEnabled: true,
+      userOptedIn: true,
     });
-    expect(evaluatedRequests).toBe(1);
-
-    unmount();
   });
 
-  test("useSetOptIn delegates to the browser client", async () => {
-    const setOptIn = vi
-      .spyOn(ReflagClient.prototype, "setOptIn")
-      .mockResolvedValue(undefined);
-
-    const { result, unmount } = renderHook(() => useSetOptIn(), {
-      wrapper: ({ children }) => getProvider({ children }),
-    });
-
-    await act(async () => {
-      await result.current("abc", { optedIn: false });
-    });
-
-    expect(setOptIn).toHaveBeenCalledWith("abc", { optedIn: false });
-    setOptIn.mockRestore();
-    unmount();
-  });
-});
-
-describe("<ReflagClientProvider />", () => {
-  test("renders with external client and optional loadingComponent", async () => {
-    const client = new ReflagClient({
-      publishableKey: "test-key",
-      user,
-      company,
-      other,
-    });
-
-    const { container } = render(
-      <ReflagClientProvider client={client}>
-        <span data-testid="content">Test Content</span>
-      </ReflagClientProvider>,
+  test("preserves opt-in Suspense and releases it after metadata failure", async () => {
+    const pending = gate();
+    server.use(
+      http.get(/\/flags\/evaluated$/, async () => {
+        await pending.promise;
+        return HttpResponse.json({}, { status: 503 });
+      }),
     );
-
-    expect(container.querySelector('[data-testid="content"]')).not.toBeNull();
-  });
-
-  test("renders with external client and loadingComponent", async () => {
-    const client = new ReflagClient({
-      publishableKey: "test-key",
-      user,
-      company,
-      other,
-    });
-
-    const { container } = render(
-      <ReflagClientProvider
-        client={client}
-        loadingComponent={<span data-testid="loading">Loading...</span>}
-      >
-        <span data-testid="content">Test Content</span>
-      </ReflagClientProvider>,
-    );
-
-    // Initially may show loading or content depending on client state
-    expect(container).toBeDefined();
-  });
-
-  test("provides client to child components", async () => {
-    const client = new ReflagClient({
-      publishableKey: "test-key",
-      user,
-      company,
-      other,
-    });
-
-    const { result, unmount } = renderHook(() => useClient(), {
-      wrapper: ({ children }) => (
-        <ReflagClientProvider client={client}>{children}</ReflagClientProvider>
-      ),
-    });
-
-    expect(result.current).toBe(client);
-
-    // Verify that the external client maintains its context
-    const context = result.current.getContext();
-    expect(context.user).toEqual(user);
-    expect(context.company).toEqual(company);
-    expect(context.other).toEqual(other);
-
-    unmount();
-  });
-
-  test("handles client state changes", async () => {
-    const client = new ReflagClient({
-      publishableKey: "test-key-state-changes",
-      user,
-      company,
-      other,
-    });
-
-    const { container } = render(
-      <ReflagClientProvider
-        client={client}
-        loadingComponent={<span data-testid="client-loading">Loading...</span>}
-      >
-        <span data-testid="client-content">Content</span>
-      </ReflagClientProvider>,
-    );
-
-    // The component should handle state changes properly
-    expect(
-      container.querySelector('[data-testid="client-content"]') ||
-        container.querySelector('[data-testid="client-loading"]'),
-    ).not.toBeNull();
-  });
-
-  test("works with useFlag hook", async () => {
-    const client = new ReflagClient({
-      publishableKey: "test-key",
-      user,
-      company,
-      other,
-    });
-
-    const { result, unmount } = renderHook(() => useFlag("test-flag"), {
-      wrapper: ({ children }) => (
-        <ReflagClientProvider client={client}>{children}</ReflagClientProvider>
-      ),
-    });
-
-    expect(result.current.key).toBe("test-flag");
-    expect(typeof result.current.track).toBe("function");
-    expect(typeof result.current.requestFeedback).toBe("function");
-
-    unmount();
-  });
-});
-
-describe("ReflagProvider with deprecated properties", () => {
-  test("works with deprecated user property", async () => {
-    const deprecatedUser = { id: "deprecated-user", name: "Deprecated User" };
-    const { result, unmount } = renderHook(() => useClient(), {
-      wrapper: ({ children }) => (
-        <ReflagProvider
-          context={{}}
-          publishableKey="test-key-1"
-          user={deprecatedUser}
-        >
-          {children}
-        </ReflagProvider>
-      ),
-    });
-
-    await waitFor(() => {
-      expect(result.current).toBeDefined();
-      const context = result.current.getContext();
-      expect(context.user).toEqual(deprecatedUser);
-      expect(context.company).toBeUndefined();
-      expect(context.other).toEqual({});
-    });
-
-    unmount();
-  });
-
-  test("works with deprecated company property", async () => {
-    const deprecatedCompany = {
-      id: "deprecated-company",
-      name: "Deprecated Company",
-    };
-    const { result, unmount } = renderHook(() => useClient(), {
-      wrapper: ({ children }) => (
-        <ReflagProvider
-          company={deprecatedCompany}
-          context={{}}
-          publishableKey="test-key-2"
-        >
-          {children}
-        </ReflagProvider>
-      ),
-    });
-
-    await waitFor(() => {
-      expect(result.current).toBeDefined();
-      const context = result.current.getContext();
-      expect(context.company).toEqual(deprecatedCompany);
-      expect(context.user).toBeUndefined();
-      expect(context.other).toEqual({});
-    });
-
-    unmount();
-  });
-
-  test("works with deprecated otherContext property", async () => {
-    const deprecatedOtherContext = { workspace: "deprecated-workspace" };
-    const { result, unmount } = renderHook(() => useClient(), {
-      wrapper: ({ children }) => (
-        <ReflagProvider
-          context={{}}
-          otherContext={deprecatedOtherContext}
-          publishableKey="test-key-3"
-        >
-          {children}
-        </ReflagProvider>
-      ),
-    });
-
-    await waitFor(() => {
-      expect(result.current).toBeDefined();
-      const context = result.current.getContext();
-      expect(context.other).toEqual(deprecatedOtherContext);
-      expect(context.user).toBeUndefined();
-      expect(context.company).toBeUndefined();
-    });
-
-    unmount();
-  });
-
-  test("context property overrides deprecated properties", async () => {
-    const contextUser = { id: "context-user", name: "Context User" };
-    const contextCompany = { id: "context-company", name: "Context Company" };
-    const contextOther = { workspace: "context-workspace" };
-
-    const deprecatedUser = { id: "deprecated-user", name: "Deprecated User" };
-    const deprecatedCompany = {
-      id: "deprecated-company",
-      name: "Deprecated Company",
-    };
-    const deprecatedOtherContext = { workspace: "deprecated-workspace" };
-
-    const { result, unmount } = renderHook(() => useClient(), {
-      wrapper: ({ children }) => (
-        <ReflagProvider
-          company={deprecatedCompany}
-          context={{
-            user: contextUser,
-            company: contextCompany,
-            other: contextOther,
-          }}
-          otherContext={deprecatedOtherContext}
-          publishableKey="test-key-4"
-          user={deprecatedUser}
-        >
-          {children}
-        </ReflagProvider>
-      ),
-    });
-
-    await waitFor(() => {
-      expect(result.current).toBeDefined();
-      const context = result.current.getContext();
-      // The context property should override deprecated properties
-      expect(context.user).toEqual(contextUser);
-      expect(context.company).toEqual(contextCompany);
-      expect(context.other).toEqual(contextOther);
-    });
-
-    unmount();
-  });
-
-  test("merges deprecated properties with context", async () => {
-    const contextUser = { id: "context-user", email: "context@example.com" };
-    const deprecatedUser = { id: "deprecated-user", name: "Deprecated User" };
-    const deprecatedCompany = {
-      id: "deprecated-company",
-      name: "Deprecated Company",
-    };
-
-    const { result, unmount } = renderHook(() => useClient(), {
-      wrapper: ({ children }) => (
-        <ReflagProvider
-          company={deprecatedCompany}
-          context={{
-            user: contextUser,
-          }}
-          publishableKey="test-key-5"
-          user={deprecatedUser}
-        >
-          {children}
-        </ReflagProvider>
-      ),
-    });
-
-    await waitFor(() => {
-      expect(result.current).toBeDefined();
-      const context = result.current.getContext();
-      // The context user should override the deprecated user,
-      // but deprecated company should still be present
-      expect(context.user).toEqual(contextUser);
-      expect(context.company).toEqual(deprecatedCompany);
-      expect(context.other).toEqual({});
-    });
-
-    unmount();
-  });
-
-  test("handles all deprecated properties together", async () => {
-    const deprecatedUser = { id: "deprecated-user", name: "Deprecated User" };
-    const deprecatedCompany = {
-      id: "deprecated-company",
-      name: "Deprecated Company",
-    };
-    const deprecatedOtherContext = {
-      workspace: "deprecated-workspace",
-      feature: "test",
-    };
-
-    const { result, unmount } = renderHook(() => useClient(), {
-      wrapper: ({ children }) => (
-        <ReflagProvider
-          company={deprecatedCompany}
-          context={{}}
-          otherContext={deprecatedOtherContext}
-          publishableKey="test-key-6"
-          user={deprecatedUser}
-        >
-          {children}
-        </ReflagProvider>
-      ),
-    });
-
-    await waitFor(() => {
-      expect(result.current).toBeDefined();
-      const context = result.current.getContext();
-      // All deprecated properties should be properly set
-      expect(context.user).toEqual(deprecatedUser);
-      expect(context.company).toEqual(deprecatedCompany);
-      expect(context.other).toEqual(deprecatedOtherContext);
-    });
-
-    unmount();
-  });
-});
-
-describe("useIsLoading", () => {
-  test("returns loading state during initialization", async () => {
-    const { result, unmount } = renderHook(() => useIsLoading(), {
-      wrapper: ({ children }) => getProvider({ children }),
-    });
-
-    // Should be loading initially
-    expect(result.current).toBe(true);
-
-    // Wait for initialization to complete
-    await waitFor(() => {
-      expect(result.current).toBe(false);
-    });
-
-    unmount();
-  });
-
-  test("returns loading state while refetching flags after a context change", async () => {
-    function LoadingState() {
-      return <span data-testid="loading-state">{String(useIsLoading())}</span>;
+    function Flags() {
+      const { flags } = useOptInFlags();
+      return <span>{flags.length} flags</span>;
     }
-
-    const client = new ReflagClient({
-      publishableKey: "test-key-loading-context-change",
-      user,
-      company,
-      other,
-      bootstrappedFlags: {
-        abc: {
-          key: "abc",
-          isEnabled: true,
-          targetingVersion: 1,
-        },
-      },
-    });
-    await client.initialize();
-
-    const { getByTestId, unmount } = render(
-      <ReflagClientProvider client={client}>
-        <LoadingState />
-      </ReflagClientProvider>,
-    );
-
-    await waitFor(() => {
-      expect(getByTestId("loading-state").textContent).toBe("false");
-    });
-
-    await act(async () => undefined);
-
-    act(() => {
-      (client as any).hooks.trigger("stateUpdated", "initializing");
-    });
-
-    await waitFor(() => {
-      expect(getByTestId("loading-state").textContent).toBe("true");
-    });
-
-    act(() => {
-      (client as any).hooks.trigger("stateUpdated", "initialized");
-    });
-
-    await waitFor(() => {
-      expect(getByTestId("loading-state").textContent).toBe("false");
-    });
-
-    unmount();
-  });
-
-  test("returns loading state when ReflagProvider context updates", async () => {
-    function LoadingState() {
-      return <span data-testid="loading-state">{String(useIsLoading())}</span>;
-    }
-
-    const initializeSpy = vi
-      .spyOn(ReflagClient.prototype, "initialize")
-      .mockImplementationOnce(async function () {
-        (this as any).hooks.trigger("stateUpdated", "initializing");
-        (this as any).hooks.trigger("stateUpdated", "initialized");
-      });
-    let resolveSetContext: (() => void) | undefined;
-    const setContextPromise = new Promise<void>((resolve) => {
-      resolveSetContext = resolve;
-    });
-    const setContextSpy = vi
-      .spyOn(ReflagClient.prototype, "setContext")
-      .mockResolvedValueOnce(undefined)
-      .mockImplementationOnce(async function () {
-        (this as any).hooks.trigger("stateUpdated", "initializing");
-        await setContextPromise;
-        (this as any).hooks.trigger("stateUpdated", "initialized");
-      });
-
-    const initialContext = { user, company, other };
-    const updatedContext = {
-      ...initialContext,
-      other: { ...other, workspaceId: "workspace-1" },
-    };
-
-    const { getByTestId, rerender, unmount } = render(
-      <ReflagProvider
-        context={initialContext}
-        initialLoading={false}
-        publishableKey="test-key-loading-context-prop-change"
+    const view = render(
+      <ReflagBootstrappedProvider
+        publishableKey={`opt-in-${index++}`}
+        flags={state()}
+        enableTracking={false}
+        enableLiveFlagUpdates={false}
+        toolbar={false}
+        suspense
       >
-        <LoadingState />
-      </ReflagProvider>,
+        <Suspense fallback="Metadata loading">
+          <Flags />
+        </Suspense>
+      </ReflagBootstrappedProvider>,
     );
-
-    await waitFor(() => {
-      expect(getByTestId("loading-state").textContent).toBe("false");
-    });
-
-    await waitFor(() => {
-      expect(setContextSpy).toHaveBeenCalledTimes(1);
-    });
-
-    act(() => {
-      rerender(
-        <ReflagProvider
-          context={updatedContext}
-          initialLoading={false}
-          publishableKey="test-key-loading-context-prop-change"
-        >
-          <LoadingState />
-        </ReflagProvider>,
-      );
-    });
-
-    await waitFor(() => {
-      expect(setContextSpy).toHaveBeenCalledTimes(2);
-      expect(getByTestId("loading-state").textContent).toBe("true");
-    });
-
-    resolveSetContext?.();
-
-    await waitFor(() => {
-      expect(getByTestId("loading-state").textContent).toBe("false");
-    });
-
-    unmount();
-    initializeSpy.mockRestore();
-    setContextSpy.mockRestore();
+    expect(view.container.textContent).toBe("Metadata loading");
+    pending.resolve();
+    await waitFor(() => expect(view.container.textContent).toBe("0 flags"));
   });
 
-  test("throws error when used outside provider", () => {
-    const consoleErrorSpy = vi
-      .spyOn(console, "error")
-      .mockImplementation(() => {
-        // Silence console.error during test
-      });
-
-    expect(() => {
-      renderHook(() => useIsLoading());
-    }).toThrow(
-      "ReflagProvider is missing. Please ensure your component is wrapped with a ReflagProvider.",
+  test("allows a single opt-in hook to opt out of provider Suspense", async () => {
+    const pending = gate();
+    server.use(
+      http.get(/\/flags\/evaluated$/, async () => {
+        await pending.promise;
+        return HttpResponse.json({ ...response, flags: {} });
+      }),
     );
-
-    consoleErrorSpy.mockRestore();
-  });
-});
-
-describe("useOnEvent", () => {
-  test("does not trigger the SSR useLayoutEffect warning when used inside a provider", () => {
-    const errorSpy = vi
-      .spyOn(console, "error")
-      .mockImplementation(() => undefined);
-    const client = new ReflagClient({
-      publishableKey: "test-key-ssr",
-      user,
-      company,
-      other,
+    const { result } = renderHook(() => useOptInFlags({ suspense: false }), {
+      wrapper: provider({ suspense: true }),
     });
-
-    function EventListener() {
-      useOnEvent("flagsUpdated", vi.fn());
-      return null;
-    }
-
-    renderToString(
-      <ReflagClientProvider client={client}>
-        <EventListener />
-      </ReflagClientProvider>,
-    );
-
-    expect(
-      errorSpy.mock.calls.some(([firstArg]) =>
-        String(firstArg).includes("useLayoutEffect"),
-      ),
-    ).toBe(false);
-
-    errorSpy.mockRestore();
-  });
-
-  test("subscribes to flagsUpdated event", async () => {
-    const eventHandler = vi.fn();
-    const client = new ReflagClient({
-      publishableKey: "test-key-events",
-      user,
-      company,
-      other,
-    });
-
-    const { unmount } = renderHook(
-      () => useOnEvent("flagsUpdated", eventHandler),
-      {
-        wrapper: ({ children }) => (
-          <ReflagClientProvider client={client}>
-            {children}
-          </ReflagClientProvider>
-        ),
-      },
-    );
-
-    // Initialize the client to trigger events
-    await client.initialize();
-
-    // Wait for the event to be triggered
-    await waitFor(() => {
-      expect(eventHandler).toHaveBeenCalled();
-    });
-
-    unmount();
-  });
-
-  test("works with external client parameter", async () => {
-    const eventHandler = vi.fn();
-    const client = new ReflagClient({
-      publishableKey: "test-key-external",
-      user,
-      company,
-      other,
-    });
-
-    const { unmount } = renderHook(() =>
-      useOnEvent("flagsUpdated", eventHandler, client),
-    );
-
-    // Initialize the client to trigger events
-    await client.initialize();
-
-    // Wait for the event to be triggered
-    await waitFor(() => {
-      expect(eventHandler).toHaveBeenCalled();
-    });
-
-    unmount();
-  });
-
-  test("cleans up event listeners on unmount", async () => {
-    const eventHandler = vi.fn();
-    const client = new ReflagClient({
-      publishableKey: "test-key-cleanup",
-      user,
-      company,
-      other,
-    });
-
-    // Mock the addHook method to return a cleanup function that we can spy on
-    const cleanupSpy = vi.fn();
-    const addHookSpy = vi
-      .spyOn(client["hooks"], "addHook")
-      .mockReturnValue(cleanupSpy);
-
-    const { unmount } = renderHook(
-      () => useOnEvent("flagsUpdated", eventHandler),
-      {
-        wrapper: ({ children }) => (
-          <ReflagClientProvider client={client}>
-            {children}
-          </ReflagClientProvider>
-        ),
-      },
-    );
-
-    // Verify that addHook was called with the correct parameters
-    expect(addHookSpy).toHaveBeenCalledWith("flagsUpdated", eventHandler);
-
-    unmount();
-
-    // Verify that the cleanup function was called
-    expect(cleanupSpy).toHaveBeenCalled();
-
-    addHookSpy.mockRestore();
-  });
-
-  test("throws error when used outside provider without client parameter", () => {
-    const consoleErrorSpy = vi
-      .spyOn(console, "error")
-      .mockImplementation(() => {
-        // Silence console.error during test
-      });
-    const eventHandler = vi.fn();
-
-    expect(() => {
-      renderHook(() => useOnEvent("flagsUpdated", eventHandler));
-    }).toThrow(
-      "ReflagProvider is missing and no client was provided. Please ensure your component is wrapped with a ReflagProvider.",
-    );
-
-    consoleErrorSpy.mockRestore();
-  });
-
-  test("handles multiple event subscriptions", async () => {
-    const flagsHandler = vi.fn();
-    const stateHandler = vi.fn();
-    const client = new ReflagClient({
-      publishableKey: "test-key-multiple",
-      user,
-      company,
-      other,
-    });
-
-    const { unmount } = renderHook(
-      () => {
-        useOnEvent("flagsUpdated", flagsHandler);
-        useOnEvent("stateUpdated", stateHandler);
-      },
-      {
-        wrapper: ({ children }) => (
-          <ReflagClientProvider client={client}>
-            {children}
-          </ReflagClientProvider>
-        ),
-      },
-    );
-
-    // Initialize the client to trigger events
-    await client.initialize();
-
-    // Wait for both events to be triggered
-    await waitFor(() => {
-      expect(flagsHandler).toHaveBeenCalled();
-      expect(stateHandler).toHaveBeenCalled();
-    });
-
-    unmount();
+    expect(result.current.isLoading).toBe(true);
+    pending.resolve();
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
   });
 });

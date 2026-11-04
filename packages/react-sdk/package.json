@@ -1,6 +1,6 @@
 {
   "name": "@reflag/react-sdk",
-  "version": "1.7.0",
+  "version": "2.0.0-next.0",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -27,7 +27,7 @@
     "dev": "vite",
     "build": "tsc --project tsconfig.build.json && vite build",
     "test": "yarn test:types && vitest run",
-    "test:types": "tsc --project tsconfig.type-tests.json",
+    "test:types": "tsc --project tsconfig.type-tests.json && tsc --project tsconfig.type-tests-defaults.json",
     "test:watch": "vitest",
     "test:ci": "yarn test --reporter=default --reporter=junit --outputFile=junit.xml",
     "coverage": "yarn test --coverage",
@@ -40,7 +40,7 @@
     "fmt:fix": "oxfmt --write ."
   },
   "dependencies": {
-    "@reflag/browser-sdk": "1.7.0"
+    "@reflag/browser-sdk": "workspace:^"
   },
   "devDependencies": {
     "@reflag/tsconfig": "^0.0.2",

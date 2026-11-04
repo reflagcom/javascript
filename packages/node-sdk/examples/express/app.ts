@@ -45,11 +45,9 @@ app.get("/todos", async (_req, res) => {
   // We use the `getFlag` method to check if the user has the "show-todos" feature enabled.
   // Note that "show-todos" is a feature that we defined in the `Flags` interface in the `reflag.ts` file.
   // and that the indexing for feature name below is type-checked at compile time.
-  const { isEnabled, track } = res.locals.reflagUser.getFlag("show-todos");
+  const showTodos = res.locals.reflagUser.getFlag("show-todos");
 
-  if (isEnabled) {
-    track();
-
+  if (showTodos) {
     // You can instead also send any custom event if you prefer, including attributes.
     // res.locals.reflagUser.track("Todo's viewed", { attributes: { access: "api" } });
 
@@ -67,20 +65,24 @@ app.post("/todos", (req, res) => {
     return res.status(400).json({ error: "Invalid todo" });
   }
 
-  const { track, isEnabled, config } =
-    res.locals.reflagUser.getFlag("create-todos");
+  const settings = res.locals.reflagUser.getFlag("create-todos", null);
 
-  // Check if the user has the "create-todos" feature enabled
-  if (isEnabled) {
+  // Null/missing settings disable creation. Validate the arbitrary JSON payload.
+  if (
+    settings !== null &&
+    typeof settings === "object" &&
+    !Array.isArray(settings) &&
+    typeof settings.minimumLength === "number"
+  ) {
     // Check if the todo is at least N characters long
-    if (todo.length < config.payload.minimumLength) {
+    if (todo.length < settings.minimumLength) {
       return res
         .status(400)
         .json({ error: "Todo must be at least 5 characters long" });
     }
 
-    // Track the feature usage
-    track();
+    // Ordinary usage events are separate from the automatically registered check.
+    void res.locals.reflagUser.track("Todo created");
     todos.push(todo);
 
     return res.status(201).json({ todo });
@@ -98,13 +100,12 @@ app.delete("/todos/:idx", (req, res) => {
     return res.status(400).json({ error: "Invalid index" });
   }
 
-  const { track, isEnabled } = res.locals.reflagUser.getFlag("delete-todos");
+  const canDelete = res.locals.reflagUser.getFlag("delete-todos");
 
-  if (isEnabled) {
+  if (canDelete) {
     todos.splice(idx, 1);
-
-    track();
-    res.json({});
+    void res.locals.reflagUser.track("Todo deleted");
+    return res.json({});
   }
 
   res

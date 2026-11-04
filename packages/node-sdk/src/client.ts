@@ -1,11 +1,6 @@
 import fs from "fs";
 
-import {
-  EvaluationError,
-  EvaluationResult,
-  flattenJSON,
-  newEvaluator,
-} from "@reflag/flag-evaluation-v1";
+import { flattenContext } from "@reflag/flag-evaluation";
 
 import BatchBuffer from "./batch-buffer";
 import {
@@ -20,47 +15,48 @@ import {
   SDK_VERSION_HEADER_NAME,
 } from "./config";
 import fetchClient, { withRetry } from "./fetch-http-client";
+import {
+  applyFlagDefault,
+  checkFlagDefault,
+  flagValueType,
+} from "./flag-defaults";
+import { isFlagValue, prepareFlagCollection } from "./flag-definitions";
 import { FlagsCache } from "./flags-cache";
 import {
   createFlagsSyncController,
-  FlagsSyncController,
+  type FlagsSyncController,
 } from "./flags-refresher";
 import { isFlagsFallbackSnapshot } from "./flagsFallbackProvider";
 import { subscribe as triggerOnExit } from "./flusher";
 import { newRateLimiter } from "./rate-limiter";
 import type {
   BootstrappedFlags,
-  CachedFlagDefinition,
-  EvaluatedFlagsAPIResponse,
-  FlagAPIResponse,
-  FlagDefinition,
-  FlagOverrides,
-  FlagOverridesFn,
-  FlagsFallbackProvider,
-  FlagsFallbackProviderContext,
-  FlagsFallbackSnapshot,
-  FlagsSyncMode,
-  IdType,
-  RawFlag,
-  RawFlags,
-  TypedFlagKey,
-} from "./types";
-import {
-  Attributes,
   ClientOptions,
   Context,
   ContextWithTracking,
+  EvaluatedFlagsAPIResponse,
+  FlagCollection,
+  FlagDefaultValue,
   FlagEvent,
+  FlagOverrides,
+  FlagOverridesFn,
   FlagsAPIResponse,
+  FlagsFallbackSnapshot,
+  FlagValue,
+  FlagValueFromDefault,
   HttpClient,
+  IdType,
   Logger,
-  TrackingMeta,
+  RawFlag,
+  RawFlags,
   TrackOptions,
+  TypedFlagKey,
   TypedFlags,
 } from "./types";
 import {
   applyLogLevel,
   canonicalContextJSONStringify,
+  canonicalJSONStringify,
   decorateLogger,
   hashObject,
   hashString,
@@ -71,549 +67,288 @@ import {
   once,
 } from "./utils";
 
-const reflagConfigDefaultFile = "reflag.config.json";
-
-function evaluationErrorsRateLimitKey(errors: EvaluationError[]): string {
-  return errors
-    .map((error) =>
-      JSON.stringify([
-        error.code,
-        error.field,
-        "operator" in error ? error.operator : "",
-      ]),
-    )
-    .sort()
-    .join("\n");
-}
-
-type PartialBy<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
-type FlagOverrideLayer = {
-  id: number;
-  overrides: FlagOverridesFn;
-};
-
-function scheduleTrailingRefreshWithTimeout(
-  delayMs: number,
-  callback: () => void,
-) {
-  const timer = setTimeout(callback, delayMs);
-  timer.unref?.();
-  return () => {
-    clearTimeout(timer);
-  };
-}
-
-function normalizeFlagOverrides(
-  overrides: FlagOverridesFn | FlagOverrides | undefined,
-): FlagOverridesFn {
-  if (typeof overrides === "function") {
-    return overrides;
-  }
-
-  return () => overrides ?? {};
-}
-
-function composeFlagOverrides(
-  baseOverrides: FlagOverridesFn,
-  layers: FlagOverrideLayer[],
-): FlagOverridesFn {
-  if (layers.length === 0) {
-    return baseOverrides;
-  }
-
-  return (context) =>
-    layers.reduce(
-      (acc, layer) => ({
-        ...acc,
-        ...layer.overrides(context),
-      }),
-      baseOverrides(context),
-    );
-}
-
 type BulkEvent =
+  | ({ type: "feature-flag-event" } & FlagEvent)
   | {
       type: "company";
       companyId: IdType;
       userId?: IdType;
-      attributes?: Attributes;
-      context?: TrackingMeta;
+      attributes?: TrackOptions["attributes"];
+      context?: TrackOptions["meta"];
     }
   | {
       type: "user";
       userId: IdType;
-      attributes?: Attributes;
-      context?: TrackingMeta;
-    }
-  | {
-      type: "feature-flag-event";
-      action: "check" | "check-config";
-      key: string;
-      targetingVersion?: number;
-      evalResult:
-        | boolean
-        | { key: string; payload: any }
-        | { key: undefined; payload: undefined };
-      evalContext?: Record<string, any>;
-      evalRuleResults?: boolean[];
-      evalMissingFields?: string[];
+      attributes?: TrackOptions["attributes"];
+      context?: TrackOptions["meta"];
     }
   | {
       type: "event";
       event: string;
-      companyId?: IdType;
       userId: IdType;
-      attributes?: Attributes;
-      context?: TrackingMeta;
+      companyId?: IdType;
+      attributes?: TrackOptions["attributes"];
+      context?: TrackOptions["meta"];
     };
 
-function compileFlagDefinitions(
-  flags: FlagAPIResponse[],
-): CachedFlagDefinition[] {
-  return flags.map((flagDef) => {
-    return {
-      ...flagDef,
-      enabledEvaluator: newEvaluator(
-        flagDef.targeting.rules.map((rule) => ({
-          filter: rule.filter,
-          value: true,
-        })),
-      ),
-      configEvaluator: flagDef.config
-        ? newEvaluator(
-            flagDef.config.variants.map((variant) => ({
-              filter: variant.filter,
-              value: {
-                key: variant.key,
-                payload: variant.payload,
-              },
-            })),
-          )
-        : undefined,
-    } satisfies CachedFlagDefinition;
-  });
-}
-
-function createFlagsFallbackSnapshot(
-  flags: FlagAPIResponse[],
-): FlagsFallbackSnapshot {
-  return {
-    version: 1,
-    savedAt: new Date().toISOString(),
-    flags,
+function normalizeOverrides(
+  overrides?: FlagOverrides | FlagOverridesFn,
+): FlagOverridesFn {
+  ok(
+    overrides === undefined ||
+      typeof overrides === "function" ||
+      (isObject(overrides) && isFlagValue(overrides)),
+    "flagOverrides must be a JSON value map or function",
+  );
+  if (typeof overrides !== "function") return () => overrides ?? {};
+  return (context) => {
+    const result = overrides(context);
+    ok(
+      isObject(result) && isFlagValue(result),
+      "flagOverrides must return a JSON value map",
+    );
+    return result;
   };
 }
-
-function formatFlagsFallbackAge(savedAt: string): string | undefined {
-  const savedAtMs = Date.parse(savedAt);
-  if (!Number.isFinite(savedAtMs)) {
-    return undefined;
-  }
-
-  const ageMs = Math.max(0, Date.now() - savedAtMs);
-  const minuteMs = 60_000;
-  const hourMs = 60 * minuteMs;
-  const dayMs = 24 * hourMs;
-
-  if (ageMs < minuteMs) {
-    return "<1m";
-  }
-
-  if (ageMs < hourMs) {
-    return `${Math.floor(ageMs / minuteMs)}m`;
-  }
-
-  if (ageMs < dayMs) {
-    return `${Math.floor(ageMs / hourMs)}h`;
-  }
-
-  return `${Math.floor(ageMs / dayMs)}d`;
+function scheduleRefresh(delayMs: number, callback: () => void) {
+  const timer = setTimeout(callback, delayMs);
+  timer.unref?.();
+  return () => clearTimeout(timer);
+}
+function copyValue(value: RawFlag["value"]): RawFlag["value"] {
+  return value === undefined ? undefined : structuredClone(value);
+}
+function localResult(key: string, value: RawFlag["value"]): RawFlag {
+  return { flagKey: key, resolved: false, value, ruleResults: [], errors: [] };
+}
+function contextOnly({
+  enableTracking: _,
+  meta: __,
+  ...context
+}: ContextWithTracking): Context {
+  return context;
 }
 
-function createErrorWithCause(message: string, cause: unknown): Error {
-  const error = new Error(message) as Error & { cause?: unknown };
-  error.cause = cause;
-  return error;
-}
-
-/**
- * The SDK client.
- *
- * @remarks
- * This is the main class for interacting with Reflag.
- * It is used to evaluate flags, update user and company contexts, and track events.
- *
- * @example
- * ```ts
- * // set the REFLAG_SECRET_KEY environment variable or pass the secret key to the constructor
- * const client = new ReflagClient();
- *
- * // evaluate a flag
- * const isFlagEnabled = client.getFlag("flag-key", {
- *   user: { id: "user-id" },
- *   company: { id: "company-id" },
- * });
- * ```
- **/
+/** V2 client: flag reads return values and immediately register checks. */
 export class ReflagClient {
-  private _config: {
-    apiBaseUrl: string;
-    refetchInterval: number;
-    headers: Record<string, string>;
-    fallbackFlags?: RawFlags;
-    flagsFallbackProvider?: FlagsFallbackProvider;
-    flagsFallbackProviderContext: FlagsFallbackProviderContext;
-    flagOverrides: FlagOverridesFn;
-    offline: boolean;
-    configFile?: string;
-    flagsFetchRetries: number;
-    fetchTimeoutMs: number;
-    flagsSyncMode: FlagsSyncMode;
-    flagsPushUrl: string;
-  };
-  httpClient: HttpClient;
-
-  private flagsCache: FlagsCache;
-  private batchBuffer: BatchBuffer<BulkEvent>;
-  private rateLimiter: ReturnType<typeof newRateLimiter>;
-  private baseFlagOverrides: FlagOverridesFn = () => ({});
-  private flagOverrideLayers: FlagOverrideLayer[] = [];
-  private nextFlagOverrideLayerId = 0;
-
-  /**
-   * Gets the logger associated with the client.
-   */
   public readonly logger: Logger;
-
-  private flagsSyncController: FlagsSyncController;
-  private initializationFinished = false;
-  private canLoadFlagsFallbackProvider = true;
-  private _initialize = once(async () => {
-    const start = Date.now();
-    if (!this._config.offline) {
+  public readonly httpClient: HttpClient;
+  private readonly config;
+  private readonly flagsCache: FlagsCache;
+  private readonly flagsSyncController: FlagsSyncController;
+  private readonly batchBuffer: BatchBuffer<BulkEvent>;
+  private readonly rateLimiter = newRateLimiter(
+    FLAG_EVENT_RATE_LIMITER_WINDOW_SIZE_MS,
+  );
+  private baseOverrides: FlagOverridesFn;
+  private overrideLayers: { overrides: FlagOverridesFn }[] = [];
+  private initialized = false;
+  private canLoadFallback = true;
+  private fallbackSave = Promise.resolve();
+  private readonly initializeOnce = once(async () => {
+    if (!this.config.offline) {
       await this.flagsSyncController.start();
       await this.flagsCache.refresh();
     }
+    this.initialized = true;
     this.logger.info(
-      "Reflag initialized in " +
-        Math.round(Date.now() - start) +
-        "ms" +
-        (this._config.offline ? " (offline mode)" : ""),
+      `Reflag initialized${this.config.offline ? " (offline mode)" : ""}`,
     );
-    this.initializationFinished = true;
   });
 
-  /**
-   * Creates a new SDK client.
-   * See README for configuration options.
-   *
-   * @param options - The options for the client or an existing client to clone.
-   * @param options.secretKey - The secret key to use for the client.
-   * @param options.apiBaseUrl - The base URL to send requests to (optional).
-   * @param options.logger - The logger to use for logging (optional).
-   * @param options.httpClient - The HTTP client to use for sending requests (optional).
-   * @param options.logLevel - The log level to use for logging (optional).
-   * @param options.offline - Whether to run in offline mode (optional).
-   * @param options.fallbackFlags - The fallback flags to use if the flag is not found (optional).
-   * @param options.batchOptions - The options for the batch buffer (optional).
-   * @param options.flagOverrides - The flag overrides to use for the client (optional).
-   * @param options.configFile - The path to the config file (optional).
-   * @param options.flagsFetchRetries - Number of retries for fetching flags (optional, defaults to 3).
-   * @param options.fetchTimeoutMs - Timeout for fetching flags (optional, defaults to 10000ms).
-   * @param options.flagsSyncMode - How flag definitions are synchronized (optional, defaults to "push").
-   *
-   * @throws An error if the options are invalid.
-   **/
   constructor(options: ClientOptions = {}) {
     ok(isObject(options), "options must be an object");
-
+    for (const key of [
+      "host",
+      "apiBaseUrl",
+      "flagsPushUrl",
+      "secretKey",
+    ] as const) {
+      ok(
+        options[key] === undefined ||
+          (typeof options[key] === "string" && options[key].length > 0),
+        `${key} must be a non-empty string`,
+      );
+    }
+    for (const key of ["logger", "httpClient", "batchOptions"] as const)
+      ok(
+        options[key] === undefined || isObject(options[key]),
+        `${key} must be an object`,
+      );
+    for (const key of ["flagsFetchRetries", "fetchTimeoutMs"] as const)
+      ok(
+        options[key] === undefined ||
+          (Number.isInteger(options[key]) && options[key] >= 0),
+        `${key} must be a non-negative integer`,
+      );
     ok(
-      options.host === undefined ||
-        (typeof options.host === "string" && options.host.length > 0),
-      "host must be a string",
-    );
-    ok(
-      options.apiBaseUrl === undefined ||
-        (typeof options.apiBaseUrl === "string" &&
-          options.apiBaseUrl.length > 0),
-      "apiBaseUrl must be a string",
-    );
-    ok(
-      options.logger === undefined || isObject(options.logger),
-      "logger must be an object",
-    );
-    ok(
-      options.httpClient === undefined || isObject(options.httpClient),
-      "httpClient must be an object",
-    );
-    ok(
-      options.flagsFallbackProvider === undefined ||
-        (isObject(options.flagsFallbackProvider) &&
-          typeof options.flagsFallbackProvider.load === "function" &&
-          typeof options.flagsFallbackProvider.save === "function"),
-      "flagsFallbackProvider must be an object with load/save functions",
-    );
-    ok(
-      options.fallbackFlags === undefined ||
-        Array.isArray(options.fallbackFlags) ||
-        isObject(options.fallbackFlags),
-      "fallbackFlags must be an array or object",
-    );
-    ok(
-      options.batchOptions === undefined || isObject(options.batchOptions),
-      "batchOptions must be an object",
+      options.offline === undefined || typeof options.offline === "boolean",
+      "offline must be a boolean",
     );
     ok(
       options.configFile === undefined ||
         typeof options.configFile === "string",
       "configFile must be a string",
     );
-
     ok(
-      options.flagsFetchRetries === undefined ||
-        (Number.isInteger(options.flagsFetchRetries) &&
-          options.flagsFetchRetries >= 0),
-      "flagsFetchRetries must be a non-negative integer",
+      options.flagsFallbackProvider === undefined ||
+        (isObject(options.flagsFallbackProvider) &&
+          typeof options.flagsFallbackProvider.load === "function" &&
+          typeof options.flagsFallbackProvider.save === "function"),
+      "flagsFallbackProvider must have load/save functions",
     );
-
-    ok(
-      options.fetchTimeoutMs === undefined ||
-        (Number.isInteger(options.fetchTimeoutMs) &&
-          options.fetchTimeoutMs >= 0),
-      "fetchTimeoutMs must be a non-negative integer",
-    );
-
-    ok(
-      options.flagsSyncMode === undefined ||
-        options.flagsSyncMode === "polling" ||
-        options.flagsSyncMode === "in-request" ||
-        options.flagsSyncMode === "push",
-      'flagsSyncMode must be one of "polling", "in-request", or "push"',
-    );
-
-    ok(
-      options.flagsPushUrl === undefined ||
-        (typeof options.flagsPushUrl === "string" &&
-          options.flagsPushUrl.length > 0),
-      "flagsPushUrl must be a non-empty string",
-    );
-
-    const envConfigFile =
-      typeof process.env.REFLAG_CONFIG_FILE === "string" &&
-      process.env.REFLAG_CONFIG_FILE.length > 0
-        ? process.env.REFLAG_CONFIG_FILE
-        : undefined;
-
-    if (!options.configFile) {
-      options.configFile =
-        envConfigFile ??
-        (fs.existsSync(reflagConfigDefaultFile)
-          ? reflagConfigDefaultFile
-          : undefined);
-    }
-
-    const externalConfig = loadConfig(options.configFile);
-    const config = mergeSkipUndefined(externalConfig, options);
-
+    const configFile =
+      options.configFile ??
+      process.env.REFLAG_CONFIG_FILE ??
+      (fs.existsSync("reflag.config.json") ? "reflag.config.json" : undefined);
+    const config = mergeSkipUndefined(loadConfig(configFile), options);
     const offline = config.offline ?? process.env.NODE_ENV === "test";
-    if (!offline) {
-      ok(
-        typeof config.secretKey === "string",
-        "secretKey must be a string, or set offline=true",
-      );
-      ok(config.secretKey.length > 22, "invalid secretKey specified");
-    }
-
-    // use the supplied logger or apply the log level to the console logger
-    const logLevel = options.logLevel ?? config?.logLevel ?? "INFO";
-
-    this.logger = options.logger
-      ? options.logger
-      : applyLogLevel(decorateLogger(REFLAG_LOG_PREFIX, console), logLevel);
-
-    const baseFlagOverrides = normalizeFlagOverrides(
-      typeof config.flagOverrides === "function" ||
-        isObject(config.flagOverrides)
-        ? config.flagOverrides
-        : {},
+    ok(
+      offline ||
+        (typeof config.secretKey === "string" && config.secretKey.length > 22),
+      "a valid secretKey is required unless offline=true",
     );
-
+    this.logger =
+      options.logger ??
+      applyLogLevel(
+        decorateLogger(REFLAG_LOG_PREFIX, console),
+        config.logLevel ?? "INFO",
+      );
+    this.httpClient = options.httpClient ?? fetchClient;
+    this.baseOverrides = normalizeOverrides(config.flagOverrides);
     const fallbackFlags = Array.isArray(options.fallbackFlags)
-      ? options.fallbackFlags.reduce((acc, key) => {
-          acc[key as TypedFlagKey] = {
-            isEnabled: true,
-            key,
-          };
-          return acc;
-        }, {} as RawFlags)
-      : isObject(options.fallbackFlags)
-        ? Object.entries(options.fallbackFlags).reduce(
-            (acc, [key, fallback]) => {
-              acc[key as TypedFlagKey] = {
-                isEnabled:
-                  typeof fallback === "object"
-                    ? fallback.isEnabled
-                    : !!fallback,
-                key,
-                config:
-                  typeof fallback === "object" && fallback.config
-                    ? {
-                        key: fallback.config.key,
-                        payload: fallback.config.payload,
-                      }
-                    : undefined,
-              };
-              return acc;
-            },
-            {} as RawFlags,
-          )
-        : undefined;
-
-    this.rateLimiter = newRateLimiter(FLAG_EVENT_RATE_LIMITER_WINDOW_SIZE_MS);
-    this.httpClient = options.httpClient || fetchClient;
-    this.batchBuffer = new BatchBuffer<BulkEvent>({
-      ...options?.batchOptions,
-      flushHandler: (items) => this.sendBulkEvents(items),
-      logger: this.logger,
-    });
-
-    const flagsSyncMode: FlagsSyncMode =
+      ? Object.fromEntries(options.fallbackFlags.map((key) => [key, true]))
+      : (options.fallbackFlags ?? {});
+    ok(
+      isObject(fallbackFlags) && isFlagValue(fallbackFlags),
+      "fallbackFlags must contain JSON values",
+    );
+    const flagsSyncMode =
       options.flagsSyncMode ??
       (options.cacheStrategy === "in-request"
         ? "in-request"
         : options.cacheStrategy === "periodically-update"
           ? "polling"
           : "push");
-
-    const secretKeyHash = config.secretKey ? hashString(config.secretKey) : "";
-
     ok(
-      offline || flagsSyncMode !== "push" || secretKeyHash.length > 0,
-      'flagsSyncMode="push" requires a valid secretKey',
+      ["polling", "push", "in-request"].includes(flagsSyncMode),
+      "invalid flagsSyncMode",
     );
-
     const pushUrl = new URL(options.flagsPushUrl ?? PUBSUB_SSE_URL);
     pushUrl.searchParams.delete("channels");
-
-    this._config = {
+    this.config = {
       offline,
-      apiBaseUrl: (config.apiBaseUrl ?? config.host) || API_BASE_URL,
+      fallbackFlags,
+      flagsFallbackProvider: options.flagsFallbackProvider,
+      fallbackContext: {
+        secretKeyHash: config.secretKey ? hashString(config.secretKey) : "",
+      },
+      apiBaseUrl: (config.apiBaseUrl ?? config.host ?? API_BASE_URL).replace(
+        /\/?$/,
+        "/",
+      ),
+      fetchTimeoutMs: options.fetchTimeoutMs ?? API_TIMEOUT_MS,
+      flagsFetchRetries: options.flagsFetchRetries ?? 3,
       headers: {
         "Content-Type": "application/json",
         [SDK_VERSION_HEADER_NAME]: SDK_VERSION,
-        ["Authorization"]: `Bearer ${config.secretKey}`,
+        Authorization: `Bearer ${config.secretKey}`,
       },
-      refetchInterval: FLAGS_REFETCH_MS,
-      fallbackFlags: fallbackFlags,
-      flagsFallbackProvider: options.flagsFallbackProvider,
-      flagsFallbackProviderContext: {
-        secretKeyHash,
-      },
-      flagOverrides: baseFlagOverrides,
-      flagsFetchRetries: options.flagsFetchRetries ?? 3,
-      fetchTimeoutMs: options.fetchTimeoutMs ?? API_TIMEOUT_MS,
-      flagsSyncMode,
-      flagsPushUrl: pushUrl.toString(),
     };
-    this.baseFlagOverrides = baseFlagOverrides;
-
-    if ((config.batchOptions?.flushOnExit ?? true) && !this._config.offline) {
+    this.batchBuffer = new BatchBuffer({
+      ...config.batchOptions,
+      logger: this.logger,
+      flushHandler: (events) => this.post("bulk", events),
+    });
+    if (!offline && (config.batchOptions?.flushOnExit ?? true))
       triggerOnExit(() => this.flush());
-    }
-
-    if (!new URL(this._config.apiBaseUrl).pathname.endsWith("/")) {
-      this._config.apiBaseUrl += "/";
-    }
-
     this.flagsCache = new FlagsCache(
-      async (waitForVersion?: number) => {
-        const path =
-          waitForVersion === undefined
-            ? "features"
-            : `features?waitForVersion=${encodeURIComponent(String(waitForVersion))}`;
-
-        const res = await this.get<FlagsAPIResponse>(
-          path,
-          this._config.flagsFetchRetries,
+      async (waitForVersion) => {
+        const response = await this.get<FlagsAPIResponse>(
+          `flags${waitForVersion === undefined ? "" : `?waitForVersion=${encodeURIComponent(waitForVersion)}`}`,
+          this.config.flagsFetchRetries,
         );
-        const flagStateVersion = res?.flagStateVersion;
-        if (
-          !isObject(res) ||
-          !Array.isArray(res?.features) ||
-          typeof flagStateVersion !== "number" ||
-          !Number.isInteger(flagStateVersion) ||
-          flagStateVersion < 0
-        ) {
-          const fallbackDefinitions = await this.loadFlagsFallbackDefinitions();
-          return fallbackDefinitions
-            ? { definitions: fallbackDefinitions }
-            : undefined;
+        try {
+          if (
+            !response ||
+            response.protocolVersion !== 2 ||
+            !Number.isSafeInteger(response.flagStateVersion) ||
+            response.flagStateVersion < 0
+          )
+            throw new Error("invalid v2 flag response");
+          return {
+            definitions: prepareFlagCollection(response),
+            flagStateVersion: response.flagStateVersion,
+          };
+        } catch (error) {
+          this.logger.debug("flag collection unavailable or invalid", error);
+          return this.loadFallback();
         }
-
-        void this.saveFlagsFallbackDefinitions(res.features);
-        this.canLoadFlagsFallbackProvider = false;
-        return {
-          definitions: compileFlagDefinitions(res.features),
-          flagStateVersion,
-        };
       },
       {
         logger: this.logger,
-        // Edge runtimes use `in-request` mode and cannot rely on delayed timer
-        // callbacks to perform trailing refresh work after the current request.
         scheduleTrailingRefresh:
-          flagsSyncMode === "in-request"
-            ? undefined
-            : scheduleTrailingRefreshWithTimeout,
+          flagsSyncMode === "in-request" ? undefined : scheduleRefresh,
+        onApply: ({ definitions, flagStateVersion, fallback }) => {
+          if (fallback) return;
+          this.canLoadFallback = false;
+          if (!this.config.flagsFallbackProvider) return;
+          // Persist only accepted snapshots, and serialize saves to prevent an old
+          // slow write from overwriting a newer collection in external storage.
+          const snapshot: FlagsFallbackSnapshot = structuredClone({
+            version: 2,
+            savedAt: new Date().toISOString(),
+            flagStateVersion,
+            flags: definitions.flags,
+            segments: definitions.segments,
+          });
+          this.fallbackSave = this.fallbackSave.then(async () => {
+            try {
+              await this.config.flagsFallbackProvider?.save(
+                this.config.fallbackContext,
+                snapshot,
+              );
+            } catch (error) {
+              this.logger.error(
+                "flagsFallbackProvider: failed to save flag definitions",
+                error,
+              );
+            }
+          });
+        },
       },
     );
-
     this.flagsSyncController = createFlagsSyncController({
-      mode: this._config.flagsSyncMode,
+      mode: flagsSyncMode,
       cache: this.flagsCache,
-      intervalMs: this._config.refetchInterval,
-      pushUrl: this._config.flagsPushUrl,
-      headers: this._config.headers,
+      intervalMs: FLAGS_REFETCH_MS,
+      pushUrl: pushUrl.toString(),
+      headers: this.config.headers,
       logger: this.logger,
     });
   }
 
-  private async loadFlagsFallbackDefinitions() {
-    if (!this.canLoadFlagsFallbackProvider) {
-      return undefined;
-    }
-
-    this.canLoadFlagsFallbackProvider = false;
-    const provider = this._config.flagsFallbackProvider;
-    if (!provider) {
-      return undefined;
-    }
-
+  private async loadFallback() {
+    if (!this.canLoadFallback) return undefined;
+    this.canLoadFallback = false;
     try {
-      const snapshot = await provider.load(
-        this._config.flagsFallbackProviderContext,
+      const snapshot = await this.config.flagsFallbackProvider?.load(
+        this.config.fallbackContext,
       );
-
-      if (!snapshot) {
-        this.logger.warn(
-          "remote flags unavailable, no fallback flags found in flagsFallbackProvider",
-        );
-        return undefined;
-      }
-
-      if (!isFlagsFallbackSnapshot(snapshot)) {
-        this.logger.warn("flagsFallbackProvider: invalid snapshot returned");
-        return undefined;
-      }
-
-      const fallbackAge = formatFlagsFallbackAge(snapshot.savedAt);
+      if (!snapshot) return undefined;
+      ok(isFlagsFallbackSnapshot(snapshot), "invalid fallback snapshot");
+      const definitions = prepareFlagCollection(
+        snapshot,
+        snapshot.source !== "static",
+      );
       this.logger.warn(
-        fallbackAge
-          ? `remote flags unavailable, using fallback flags fetched ${fallbackAge} ago (${snapshot.savedAt})`
-          : `remote flags unavailable, using fallback flags (${snapshot.savedAt})`,
+        `remote flags unavailable, using fallback flags (${snapshot.savedAt})`,
       );
-
-      return compileFlagDefinitions(snapshot.flags);
+      return {
+        definitions,
+        flagStateVersion: snapshot.flagStateVersion,
+        fallback: true,
+      };
     } catch (error) {
       this.logger.error(
         "flagsFallbackProvider: failed to load flag definitions",
@@ -623,584 +358,489 @@ export class ReflagClient {
     }
   }
 
-  private async saveFlagsFallbackDefinitions(flags: FlagAPIResponse[]) {
-    const provider = this._config.flagsFallbackProvider;
-    if (!provider) {
-      return;
-    }
-
-    try {
-      await provider.save(
-        this._config.flagsFallbackProviderContext,
-        createFlagsFallbackSnapshot(flags),
-      );
-    } catch (error) {
-      this.logger.error(
-        "flagsFallbackProvider: failed to save flag definitions",
-        error,
-      );
-    }
+  public async initialize() {
+    await this.initializeOnce();
   }
-
-  /**
-   * Replaces the base flag overrides used by the client.
-   *
-   * @param overrides - The flag overrides.
-   *
-   * @remarks
-   * Base overrides are always applied before any temporary layers added through
-   * `pushFlagOverrides()`.
-   *
-   * @example
-   * ```ts
-   * client.setFlagOverrides({
-   *   "flag-1": true,
-   *   "flag-2": false,
-   * });
-   * ```
-   **/
-  setFlagOverrides(overrides: FlagOverridesFn | FlagOverrides) {
-    this.baseFlagOverrides = normalizeFlagOverrides(overrides);
-    this.syncFlagOverrides();
+  public async flush() {
+    if (this.config.offline) return;
+    await this.batchBuffer.flush();
+    await this.flagsCache.waitRefresh();
+    await this.fallbackSave;
   }
-
-  /**
-   * @deprecated
-   * Use `setFlagOverrides()` for replacing the base override set.
-   **/
-  set flagOverrides(overrides: FlagOverridesFn | FlagOverrides) {
+  public async refreshFlags(waitForVersion?: number) {
+    ok(
+      waitForVersion === undefined ||
+        (Number.isSafeInteger(waitForVersion) && waitForVersion >= 0),
+      "waitForVersion must be a non-negative safe integer",
+    );
+    if (!this.config.offline) await this.flagsCache.refresh(waitForVersion);
+  }
+  public destroy() {
+    this.flagsSyncController.destroy();
+    this.flagsCache.destroy();
+    this.batchBuffer.destroy();
+  }
+  public setFlagOverrides(overrides: FlagOverrides | FlagOverridesFn) {
+    this.baseOverrides = normalizeOverrides(overrides);
+  }
+  /** @deprecated Use setFlagOverrides. */
+  public set flagOverrides(overrides: FlagOverrides | FlagOverridesFn) {
     this.setFlagOverrides(overrides);
   }
-
-  /**
-   * Temporarily layers flag overrides on top of the current overrides.
-   *
-   * @param overrides - The flag overrides to apply for the scoped period.
-   *
-   * @returns A remove function that removes only this override layer.
-   *
-   * @remarks
-   * This is intended for tests or other short-lived local overrides. The remove
-   * function is idempotent and can safely be called multiple times.
-   *
-   * @example
-   * ```ts
-   * let remove: (() => void) | undefined;
-   *
-   * beforeEach(() => {
-   *   remove = client.pushFlagOverrides({ "flag-1": true });
-   * });
-   *
-   * afterEach(() => {
-   *   remove?.();
-   *   remove = undefined;
-   * });
-   * ```
-   **/
-  pushFlagOverrides(overrides: FlagOverridesFn | FlagOverrides): () => void {
-    const layer: FlagOverrideLayer = {
-      id: this.nextFlagOverrideLayerId++,
-      overrides: normalizeFlagOverrides(overrides),
-    };
-
-    this.flagOverrideLayers.push(layer);
-    this.syncFlagOverrides();
-
-    let restored = false;
-
+  public clearFlagOverrides() {
+    this.baseOverrides = () => ({});
+  }
+  public pushFlagOverrides(overrides: FlagOverrides | FlagOverridesFn) {
+    const layer = { overrides: normalizeOverrides(overrides) };
+    this.overrideLayers.push(layer);
     return () => {
-      if (restored) {
-        return;
-      }
-      restored = true;
-
-      const layerIndex = this.flagOverrideLayers.findIndex(
-        ({ id }) => id === layer.id,
+      this.overrideLayers = this.overrideLayers.filter(
+        (candidate) => candidate !== layer,
       );
-      if (layerIndex === -1) {
-        return;
-      }
-
-      this.flagOverrideLayers.splice(layerIndex, 1);
-      this.syncFlagOverrides();
     };
   }
-
-  /**
-   * Clears the base flag overrides.
-   *
-   * @remarks
-   * This does not affect temporary layers added with `pushFlagOverrides()`.
-   *
-   * @example
-   * ```ts
-   * client.clearFlagOverrides();
-   * ```
-   **/
-  clearFlagOverrides() {
-    this.baseFlagOverrides = () => ({});
-    this.syncFlagOverrides();
+  public bindClient(options: ContextWithTracking) {
+    return new BoundReflagClient(this, options);
   }
 
-  private syncFlagOverrides() {
-    this._config.flagOverrides = composeFlagOverrides(
-      this.baseFlagOverrides,
-      this.flagOverrideLayers,
+  /** Complete definitions, including segments needed for offline evaluation. */
+  public getFlagDefinitions(): FlagCollection {
+    this.onAccess();
+    const collection = this.flagsCache.get();
+    return JSON.parse(
+      JSON.stringify({
+        flags: collection?.flags ?? [],
+        segments: collection?.segments ?? [],
+      }),
+    ) as FlagCollection;
+  }
+  /** Read a Boolean with an implicit false default, or supply an explicit value default. */
+  public getFlag<Key extends TypedFlagKey>(
+    options: ContextWithTracking,
+    key: Key,
+    defaultValue?: undefined,
+  ): boolean;
+  public getFlag<Key extends TypedFlagKey, Default extends FlagDefaultValue>(
+    options: ContextWithTracking,
+    key: Key,
+    defaultValue: Default,
+  ): FlagValueFromDefault<Default>;
+  public getFlag(
+    options: ContextWithTracking,
+    key: TypedFlagKey,
+    defaultValue: FlagDefaultValue = false,
+  ): FlagValue {
+    checkFlagDefault(defaultValue);
+    return this.readFlagValue(
+      key,
+      defaultValue,
+      { ...this.evaluate(options, key, false), context: contextOnly(options) },
+      options.enableTracking !== false,
     );
   }
 
-  /**
-   * Returns a new BoundReflagClient with the user/company/otherContext
-   * set to be used in subsequent calls.
-   * For example, for evaluating flag targeting or tracking events.
-   *
-   * @param context - The context to bind the client to.
-   * @param context.enableTracking - Whether to enable tracking for the context.
-   * @param context.user - The user context.
-   * @param context.company - The company context.
-   * @param context.other - The other context.
-   *
-   * @returns A new client bound with the arguments given.
-   *
-   * @throws An error if the user/company is given but their ID is not a string.
-   *
-   * @remarks
-   * The `updateUser` / `updateCompany` methods will automatically be called when
-   * the user/company is set respectively.
-   **/
-  public bindClient({
-    enableTracking = true,
-    ...context
-  }: ContextWithTracking) {
-    return new BoundReflagClient(this, { enableTracking, ...context });
+  private readFlagValue(
+    key: string,
+    defaultValue: FlagValue,
+    evaluation: {
+      flags: RawFlags;
+      context: Context;
+      flagStateVersion?: number;
+    },
+    enableTracking: boolean,
+  ): FlagValue {
+    const result = evaluation.flags[key] ?? localResult(key, undefined);
+    const selected = applyFlagDefault(result.value, defaultValue);
+    if (selected.typeMismatch)
+      this.logger.warn(
+        `flag "${key}" returned ${flagValueType(result.value!)}; expected ${flagValueType(defaultValue)}. Using the default value.`,
+      );
+    if (enableTracking) {
+      const checkResult = selected.usedDefault
+        ? {
+            ...localResult(key, defaultValue),
+            ruleResults: result.ruleResults,
+            errors: result.errors,
+          }
+        : result;
+      this.registerCheck(
+        key,
+        checkResult,
+        evaluation.context,
+        evaluation.flagStateVersion,
+      );
+    }
+    return structuredClone(selected.value);
+  }
+  /** Return all values and immediately register checks for the returned roots. */
+  public getFlags(options: ContextWithTracking): TypedFlags {
+    const { flags } = this.evaluate(options, undefined, true);
+    return Object.fromEntries(
+      Object.entries(flags).map(([key, result]) => [
+        key,
+        copyValue(result.value),
+      ]),
+    ) as TypedFlags;
+  }
+  /** Serialization is not a read by the browser; it must not emit check events. */
+  public getFlagsForBootstrap(options: ContextWithTracking): BootstrappedFlags {
+    const { flags, flagStateVersion } = this.evaluate(
+      options,
+      undefined,
+      false,
+    );
+    return {
+      protocolVersion: 2,
+      context: JSON.parse(
+        canonicalJSONStringify(contextOnly(options)),
+      ) as Context,
+      flags: structuredClone(flags),
+      ...(flagStateVersion === undefined ? {} : { flagStateVersion }),
+    };
   }
 
-  /**
-   * Updates the associated user in Reflag.
-   *
-   * @param userId - The userId of the user to update.
-   * @param options - The options for the user.
-   * @param options.attributes - The additional attributes of the user (optional).
-   * @param options.meta - The meta context associated with tracking (optional).
-   *
-   * @throws An error if the company is not set or the options are invalid.
-   * @remarks
-   * The company must be set using `withCompany` before calling this method.
-   * If the user is set, the company will be associated with the user.
-   **/
+  private onAccess() {
+    if (!this.config.offline) this.flagsSyncController.onAccess?.();
+  }
+  private evaluate(
+    options: ContextWithTracking,
+    key: string | undefined,
+    checks: boolean,
+  ) {
+    checkContext(options);
+    const { enableTracking = true } = options;
+    const context = contextOnly(options);
+    if (!this.initialized)
+      this.logger.error("getFlag(s): ReflagClient is not initialized yet.");
+    void this.syncContext({ ...options, enableTracking }).catch((error) =>
+      this.logger.error("failed to synchronize context", error),
+    );
+    this.onAccess();
+    const collection = this.flagsCache.get();
+    const flagStateVersion = this.flagsCache.getFlagStateVersion();
+    const flags: RawFlags = Object.create(null);
+    if (collection) {
+      if (key === undefined)
+        Object.assign(flags, collection.evaluator.evaluateAll(context).flags);
+      else if (collection.flags.some((flag) => flag.key === key))
+        flags[key] = collection.evaluator.evaluateFlag(context, key);
+      if (!collection.trackSelections)
+        for (const [flagKey, result] of Object.entries(flags))
+          flags[flagKey] = localResult(flagKey, result.value);
+    } else {
+      for (const [flagKey, value] of Object.entries(this.config.fallbackFlags))
+        if (key === undefined || key === flagKey)
+          flags[flagKey] = localResult(flagKey, value);
+    }
+    const overrides = this.overrideLayers.reduce(
+      (current, layer) => ({ ...current, ...layer.overrides(context) }),
+      this.baseOverrides(context),
+    );
+    for (const [flagKey, value] of Object.entries(overrides)) {
+      if (key !== undefined && key !== flagKey) continue;
+      ok(isFlagValue(value), "flag overrides must contain JSON values");
+      flags[flagKey] = localResult(flagKey, value);
+    }
+    if (key !== undefined && !Object.prototype.hasOwnProperty.call(flags, key))
+      flags[key] = localResult(key, undefined);
+    if (checks && enableTracking)
+      for (const [flagKey, result] of Object.entries(flags))
+        this.registerCheck(flagKey, result, context, flagStateVersion);
+    return { flags, flagStateVersion };
+  }
+
+  private registerCheck(
+    key: string,
+    result: RawFlag,
+    context: Context,
+    flagStateVersion?: number,
+  ) {
+    if (this.config.offline) return;
+    const event: FlagEvent = {
+      action: "check",
+      key,
+      ...(result.resolved
+        ? {
+            evalResult: result.variantKey,
+            sourceVersionId: result.sourceVersionId,
+          }
+        : {}),
+      flagStateVersion,
+      evalContext: JSON.parse(canonicalJSONStringify(context)) as Record<
+        string,
+        unknown
+      >,
+      evalRuleResults: result.ruleResults.map((rule) => rule.matched),
+      ...(result.errors.length ? { evalErrors: result.errors } : {}),
+    };
+    // Include selection/version identity: equal JSON payloads are not the same variant.
+    const identity = {
+      ...event,
+      evalContext: flattenContext(event.evalContext ?? {}),
+    };
+    if (
+      !this.rateLimiter.isAllowed(hashString(canonicalJSONStringify(identity)))
+    )
+      return;
+    if (result.errors.length)
+      this.logger.warn("flag targeting rules could not be fully evaluated.", {
+        [key]: result.errors,
+      });
+    void this.batchBuffer
+      .add({ type: "feature-flag-event", ...event })
+      .catch((error) =>
+        this.logger.error(`failed to send check event for "${key}"`, error),
+      );
+  }
+
+  public async getFlagsRemote(
+    userId?: IdType,
+    companyId?: IdType,
+    context?: ContextWithTracking,
+  ): Promise<TypedFlags> {
+    const evaluation = await this.getRemote(
+      undefined,
+      userId,
+      companyId,
+      context,
+    );
+    if (context?.enableTracking !== false)
+      for (const [key, result] of Object.entries(evaluation.flags))
+        this.registerCheck(
+          key,
+          result,
+          evaluation.context,
+          evaluation.flagStateVersion,
+        );
+    return Object.fromEntries(
+      Object.entries(evaluation.flags).map(([key, result]) => [
+        key,
+        copyValue(result.value),
+      ]),
+    ) as TypedFlags;
+  }
+  public getFlagRemote<Key extends TypedFlagKey>(
+    key: Key,
+    defaultValue?: undefined,
+    userId?: IdType,
+    companyId?: IdType,
+    context?: ContextWithTracking,
+  ): Promise<boolean>;
+  public getFlagRemote<
+    Key extends TypedFlagKey,
+    Default extends FlagDefaultValue,
+  >(
+    key: Key,
+    defaultValue: Default,
+    userId?: IdType,
+    companyId?: IdType,
+    context?: ContextWithTracking,
+  ): Promise<FlagValueFromDefault<Default>>;
+  public async getFlagRemote(
+    key: TypedFlagKey,
+    defaultValue: FlagDefaultValue = false,
+    userId?: IdType,
+    companyId?: IdType,
+    context?: ContextWithTracking,
+  ): Promise<FlagValue> {
+    checkFlagDefault(defaultValue);
+    const evaluation = await this.getRemote(key, userId, companyId, context);
+    return this.readFlagValue(
+      key,
+      defaultValue,
+      evaluation,
+      context?.enableTracking !== false,
+    );
+  }
+  private async getRemote(
+    key: string | undefined,
+    userId?: IdType,
+    companyId?: IdType,
+    additionalContext: ContextWithTracking = {},
+  ): Promise<{ flags: RawFlags; context: Context; flagStateVersion?: number }> {
+    const context = {
+      ...contextOnly(additionalContext),
+      ...(userId === undefined
+        ? {}
+        : { user: { ...additionalContext.user, id: userId } }),
+      ...(companyId === undefined
+        ? {}
+        : { company: { ...additionalContext.company, id: companyId } }),
+    };
+    checkContext(additionalContext);
+    checkContext(context);
+    if (this.config.offline)
+      return {
+        ...this.evaluate({ ...context, enableTracking: false }, key, false),
+        context,
+      };
+    const query = new URLSearchParams({
+      contextJson: canonicalContextJSONStringify(context) ?? "{}",
+    });
+    if (key !== undefined) query.set("key", key);
+    const response = await this.get<EvaluatedFlagsAPIResponse>(
+      `flags/evaluated?${query}`,
+    );
+    const flags: RawFlags = Object.create(null);
+    if (
+      !response ||
+      response.protocolVersion !== 2 ||
+      !Number.isSafeInteger(response.flagStateVersion) ||
+      response.flagStateVersion < 0 ||
+      !isObject(response.flags)
+    )
+      return { flags, context };
+    for (const [flagKey, result] of Object.entries(response.flags)) {
+      if (key !== undefined && key !== flagKey) continue;
+      // The endpoint returns only successful selections, with the same metadata as local evaluation.
+      if (
+        !isObject(result) ||
+        !isFlagValue(result.value) ||
+        typeof result.variantKey !== "string" ||
+        !result.variantKey ||
+        typeof result.sourceVersionId !== "string" ||
+        !result.sourceVersionId ||
+        typeof result.matchedRuleId !== "string" ||
+        !Array.isArray(result.ruleResults) ||
+        !result.ruleResults.every(
+          (rule) =>
+            isObject(rule) &&
+            typeof rule.ruleId === "string" &&
+            typeof rule.matched === "boolean",
+        ) ||
+        !Array.isArray(result.errors) ||
+        !result.errors.every(
+          (error: unknown) =>
+            isObject(error) &&
+            typeof error.code === "string" &&
+            typeof error.message === "string" &&
+            (error.field === undefined || typeof error.field === "string") &&
+            (error.operator === undefined ||
+              typeof error.operator === "string") &&
+            (error.source === undefined ||
+              (isObject(error.source) &&
+                ["flag", "segment"].includes(error.source.type) &&
+                typeof error.source.key === "string")),
+        )
+      )
+        continue;
+      flags[flagKey] = { ...result, flagKey, resolved: true };
+    }
+    return { flags, context, flagStateVersion: response.flagStateVersion };
+  }
+
   public async updateUser(userId: IdType, options?: TrackOptions) {
     idOk(userId, "userId");
-    ok(options === undefined || isObject(options), "options must be an object");
-    ok(
-      options?.attributes === undefined || isObject(options.attributes),
-      "attributes must be an object",
-    );
-    checkMeta(options?.meta);
-
-    if (this._config.offline) {
+    checkTrackOptions(options);
+    if (
+      this.config.offline ||
+      !this.rateLimiter.isAllowed(hashObject({ userId, ...options }))
+    )
       return;
-    }
-
-    if (this.rateLimiter.isAllowed(hashObject({ ...options, userId }))) {
-      await this.batchBuffer.add({
-        type: "user",
-        userId,
-        attributes: options?.attributes,
-        context: options?.meta,
-      });
-    }
+    await this.batchBuffer.add({
+      type: "user",
+      userId,
+      attributes: options?.attributes,
+      context: options?.meta,
+    });
   }
-
-  /**
-   * Updates the associated company in Reflag.
-   *
-   * @param companyId - The companyId of the company to update.
-   * @param options - The options for the company.
-   * @param options.attributes - The additional attributes of the company (optional).
-   * @param options.meta - The meta context associated with tracking (optional).
-   * @param options.userId - The userId of the user to associate with the company (optional).
-   *
-   * @throws An error if the company is not set or the options are invalid.
-   * @remarks
-   * The company must be set using `withCompany` before calling this method.
-   * If the user is set, the company will be associated with the user.
-   **/
   public async updateCompany(
     companyId: IdType,
     options?: TrackOptions & { userId?: IdType },
   ) {
     idOk(companyId, "companyId");
-    ok(options === undefined || isObject(options), "options must be an object");
-    ok(
-      options?.attributes === undefined || isObject(options.attributes),
-      "attributes must be an object",
-    );
-    checkMeta(options?.meta);
-
-    if (typeof options?.userId !== "undefined") {
-      idOk(options?.userId, "userId");
-    }
-
-    if (this._config.offline) {
+    checkTrackOptions(options);
+    if (options?.userId !== undefined) idOk(options.userId, "userId");
+    if (
+      this.config.offline ||
+      !this.rateLimiter.isAllowed(hashObject({ companyId, ...options }))
+    )
       return;
-    }
-
-    if (this.rateLimiter.isAllowed(hashObject({ ...options, companyId }))) {
-      await this.batchBuffer.add({
-        type: "company",
-        companyId,
-        userId: options?.userId,
-        attributes: options?.attributes,
-        context: options?.meta,
-      });
-    }
+    await this.batchBuffer.add({
+      type: "company",
+      companyId,
+      userId: options?.userId,
+      attributes: options?.attributes,
+      context: options?.meta,
+    });
   }
-
-  /**
-   * Tracks an event in Reflag.
-
-   * @param options.companyId - Optional company ID for the event (optional).
-   *
-   * @throws An error if the user is not set or the event is invalid or the options are invalid.
-   * @remarks
-   * If the company is set, the event will be associated with the company.
-   **/
   public async track(
     userId: IdType,
     event: string,
     options?: TrackOptions & { companyId?: IdType },
   ) {
     idOk(userId, "userId");
-    ok(typeof event === "string" && event.length > 0, "event must be a string");
-    ok(options === undefined || isObject(options), "options must be an object");
     ok(
-      options?.attributes === undefined || isObject(options.attributes),
-      "attributes must be an object",
+      typeof event === "string" && event.length > 0,
+      "event must be a non-empty string",
     );
-    ok(
-      options?.meta === undefined || isObject(options.meta),
-      "meta must be an object",
-    );
-    if (options?.companyId !== undefined) {
-      idOk(options?.companyId, "companyId");
-    }
-
-    if (this._config.offline) {
-      return;
-    }
-
-    await this.batchBuffer.add({
-      type: "event",
-      event,
-      companyId: options?.companyId,
-      userId,
-      attributes: options?.attributes,
-      context: options?.meta,
-    });
+    checkTrackOptions(options);
+    if (options?.companyId !== undefined) idOk(options.companyId, "companyId");
+    if (!this.config.offline)
+      await this.batchBuffer.add({
+        type: "event",
+        userId,
+        event,
+        companyId: options?.companyId,
+        attributes: options?.attributes,
+        context: options?.meta,
+      });
   }
-
-  /**
-   * Initializes the client by caching the flags definitions.
-   *
-   * @remarks
-   * Call this method before calling `getFlags` to ensure the flag definitions are cached.
-   * The client will ignore subsequent calls to this method.
-   **/
-  public async initialize() {
-    await this._initialize();
-    return;
-  }
-
-  /**
-   * Flushes and completes any in-flight fetches in the flag cache.
-   *
-   * @remarks
-   * It is recommended to call this method when the application is shutting down to ensure all events are sent
-   * before the process exits.
-   *
-   * This method is automatically called when the process exits if `batchOptions.flushOnExit` is `true` in the options (default).
-   */
-  public async flush() {
-    if (this._config.offline) {
-      return;
-    }
-
-    await this.batchBuffer.flush();
-    await this.flagsCache.waitRefresh();
-  }
-
-  /**
-   * Refreshes the flag definitions from the server.
-   *
-   * @remarks
-   * This triggers an on-demand refresh of the cached flag definitions.
-   * Useful when you know flags have changed and don't want to wait for the next automatic refresh cycle.
-   *
-   * Note: updated flag rules take a few seconds to propagate to all servers.
-   *
-   * Fetch starts are throttled to at most once per second.
-   * Outside `in-request` mode, throttling only delays when the next fetch
-   * begins: `refreshFlags(99)` still waits until the cache has applied flag
-   * definitions from version `99` or newer before the promise resolves.
-   * Concurrent callers are deduplicated and may share the same in-flight or
-   * scheduled follow-up refresh.
-   *
-   * In `in-request` mode, delayed follow-up refreshes are not scheduled. On edge
-   * runtimes like Cloudflare Workers, a call during the throttle window only
-   * records pending refresh work, and the promise may resolve before that fetch
-   * runs. The pending refresh is executed on the next request/access or
-   * `refreshFlags()` call after the throttle window expires.
-   *
-   * @param waitForVersion - Optional flag state version to wait for before returning updated definitions.
-   */
-  public async refreshFlags(waitForVersion?: number) {
-    if (this._config.offline) {
-      return;
-    }
-
-    await this.flagsCache.refresh(waitForVersion);
-  }
-
-  /**
-   * Destroys the client and cleans up all resources including timers and background processes.
-   *
-   * @remarks
-   * After calling this method, the client should not be used anymore.
-   * This is particularly useful in development environments with hot reloading to prevent
-   * multiple background processes from running simultaneously.
-   */
-  public destroy() {
-    this.flagsSyncController.destroy();
-    this.flagsCache.destroy();
-    this.batchBuffer.destroy();
-  }
-
-  /**
-   * Gets the flag definitions, including all config values.
-   * To evaluate which flags are enabled for a given user/company, use `getFlags`.
-   *
-   * @returns The flags definitions.
-   */
-  public getFlagDefinitions(): FlagDefinition[] {
-    if (!this._config.offline) {
-      this.flagsSyncController.onAccess?.();
-    }
-    const flags = this.flagsCache.get() || [];
-    return flags.map((f) => ({
-      key: f.key,
-      description: f.description,
-      flag: f.targeting,
-      config: f.config,
-    }));
-  }
-
-  /**
-   * Gets the evaluated flags for the current context which includes the user, company, and custom context.
-   *
-   * @param options - The options for the context.
-   * @param options.enableTracking - Whether to enable tracking for the context.
-   * @param options.meta - The meta context associated with the context.
-   * @param options.user - The user context.
-   * @param options.company - The company context.
-   * @param options.other - The other context.
-   *
-   * @returns The evaluated flags.
-   *
-   * @remarks
-   * Call `initialize` before calling this method to ensure the flag definitions are cached, no flags will be returned otherwise.
-   **/
-  public getFlags({
+  private async syncContext({
     enableTracking = true,
-    ...context
-  }: ContextWithTracking): TypedFlags {
-    const contextWithTracking = { enableTracking, ...context };
-    const rawFlags = this._getFlags(contextWithTracking);
-    return Object.fromEntries(
-      Object.entries(rawFlags).map(([key, rawFlag]) => [
-        key,
-        this._wrapRawFlag(contextWithTracking, rawFlag),
-      ]),
-    );
-  }
-
-  /**
-   * Gets the evaluated flag for the current context which includes the user, company, and custom context.
-   * Using the `isEnabled` property sends a `check` event to Reflag.
-   *
-   * @param key - The key of the flag to get.
-   * @returns The evaluated flag.
-   *
-   * @remarks
-   * Call `initialize` before calling this method to ensure the flag definitions are cached, no flags will be returned otherwise.
-   **/
-  public getFlag<TKey extends TypedFlagKey>(
-    { enableTracking = true, ...context }: ContextWithTracking,
-    key: TKey,
-  ): TypedFlags[TKey] {
-    const contextWithTracking = { enableTracking, ...context };
-    const rawFlag = this._getFlags(contextWithTracking, key);
-    return this._wrapRawFlag(
-      { enableChecks: true, ...contextWithTracking },
-      rawFlag ?? { key },
-    );
-  }
-
-  /**
-   * Gets the evaluated flags for the current context without wrapping them in getters.
-   * This method returns raw flag data suitable for bootstrapping client-side applications.
-   *
-   * @param options - The options for the context.
-   * @param options.enableTracking - Whether to enable tracking for the context.
-   * @param options.meta - The meta context associated with the context.
-   * @param options.user - The user context.
-   * @param options.company - The company context.
-   * @param options.other - The other context.
-   *
-   * @returns The evaluated raw flags and the context.
-   *
-   * @remarks
-   * Call `initialize` before calling this method to ensure the flag definitions are cached, no flags will be returned otherwise.
-   * This method returns RawFlag objects without wrapping them in getters, making them suitable for serialization.
-   **/
-  public getFlagsForBootstrap({
-    enableTracking = true,
-    ...context
-  }: ContextWithTracking): BootstrappedFlags {
-    const contextWithTracking = { enableTracking, ...context };
-    const flagStateVersion = this.flagsCache.getFlagStateVersion();
-
-    return {
-      context: contextWithTracking,
-      flags: this._getFlags(contextWithTracking),
-      ...(flagStateVersion !== undefined ? { flagStateVersion } : {}),
-    };
-  }
-
-  /**
-   * Gets evaluated flags with the usage of remote context.
-   * This method triggers a network request every time it's called.
-   *
-   * @param userId - The userId of the user to get the flags for.
-   * @param companyId - The companyId of the company to get the flags for.
-   * @param additionalContext - The additional context to get the flags for.
-   *
-   * @returns evaluated flags
-   */
-  public async getFlagsRemote(
-    userId?: IdType,
-    companyId?: IdType,
-    additionalContext?: Context,
-  ): Promise<TypedFlags> {
-    return this._getFlagsRemote(
-      undefined,
-      userId,
-      companyId,
-      additionalContext,
-    );
-  }
-
-  /**
-   * Gets evaluated flag with the usage of remote context.
-   * This method triggers a network request every time it's called.
-   *
-   * @param key - The key of the flag to get.
-   * @param userId - The userId of the user to get the flag for.
-   * @param companyId - The companyId of the company to get the flag for.
-   * @param additionalContext - The additional context to get the flag for.
-   *
-   * @returns evaluated flag
-   */
-  public async getFlagRemote<TKey extends TypedFlagKey>(
-    key: TKey,
-    userId?: IdType,
-    companyId?: IdType,
-    additionalContext?: Context,
-  ): Promise<TypedFlags[TKey]> {
-    return this._getFlagsRemote(key, userId, companyId, additionalContext);
-  }
-
-  private buildUrl(path: string) {
-    if (path.startsWith("/")) {
-      path = path.slice(1);
+    user,
+    company,
+    meta,
+  }: ContextWithTracking) {
+    if (!enableTracking || this.config.offline) return;
+    const pending: Promise<void>[] = [];
+    if (user?.id !== undefined) {
+      const { id, ...attributes } = user;
+      pending.push(this.updateUser(id, { attributes, meta }));
     }
-
-    const url = new URL(path, this._config.apiBaseUrl);
-    return url.toString();
-  }
-
-  /**
-   * Sends a POST request to the specified path.
-   *
-   * @param path - The path to send the request to.
-   * @param body - The body of the request.
-   *
-   * @throws An error if the path or body is invalid.
-   **/
-  private async post<TBody>(path: string, body: TBody) {
-    ok(typeof path === "string" && path.length > 0, "path must be a string");
-    ok(typeof body === "object", "body must be an object");
-
-    const url = this.buildUrl(path);
-    try {
-      const response = await this.httpClient.post<TBody, { success: boolean }>(
-        url,
-        this._config.headers,
-        body,
-      );
-
-      this.logger.debug(`post request to "${url}"`, response);
-
-      if (!response.ok || !isObject(response.body) || !response.body.success) {
-        throw createErrorWithCause(
-          `invalid response received from server for "${url}"`,
-          JSON.stringify(response),
-        );
-      }
-    } catch (error) {
-      throw createErrorWithCause(
-        `post request to "${url}" failed with error`,
-        error,
+    if (company?.id !== undefined) {
+      const { id, ...attributes } = company;
+      pending.push(
+        this.updateCompany(id, { userId: user?.id, attributes, meta }),
       );
     }
+    await Promise.all(pending);
   }
-
-  /**
-   * Sends a GET request to the specified path.
-   *
-   * @param path - The path to send the request to.
-   * @param retries - Optional number of retries for the request.
-   *
-   * @returns The response from the server.
-   * @throws An error if the path is invalid.
-   **/
-  private async get<TResponse>(path: string, retries: number = 3) {
-    ok(typeof path === "string" && path.length > 0, "path must be a string");
-
+  private async post(path: string, body: BulkEvent[]) {
+    const response = await this.httpClient.post<
+      BulkEvent[],
+      { success: boolean }
+    >(
+      new URL(path, this.config.apiBaseUrl).toString(),
+      this.config.headers,
+      body,
+    );
+    if (!response.ok || !response.body?.success)
+      throw new Error("invalid response sending bulk events");
+  }
+  private async get<Response>(
+    path: string,
+    retries = this.config.flagsFetchRetries,
+  ): Promise<Response | undefined> {
+    const url = new URL(path, this.config.apiBaseUrl).toString();
     try {
-      const url = this.buildUrl(path);
       return await withRetry(
         async () => {
           const response = await this.httpClient.get<
-            TResponse & { success: boolean }
-          >(url, this._config.headers, this._config.fetchTimeoutMs);
-
-          this.logger.debug(`get request to "${url}"`, response);
-
+            Response & { success: boolean }
+          >(url, this.config.headers, this.config.fetchTimeoutMs);
           if (
             !response.ok ||
             !isObject(response.body) ||
-            !response.body.success
-          ) {
+            response.body.success !== true
+          )
             throw new Error(
-              `invalid response received from server for "${url}": ${JSON.stringify(response.body)}`,
+              `invalid response received from server for "${url}"`,
             );
-          }
-          const { success: _, ...result } = response.body;
-          return result as TResponse;
+          const { success: _, ...body } = response.body;
+          return body as Response;
         },
-        (error) => {
-          this.logger.warn("failed to fetch flags, will retry", error);
-        },
+        (error) => this.logger.warn("failed to fetch flags, will retry", error),
         retries,
         1000,
         10000,
@@ -1213,770 +853,140 @@ export class ReflagClient {
       return undefined;
     }
   }
+}
 
-  /**
-   * Sends a batch of events to the Reflag API.
-   *
-   * @param events - The events to send.
-   *
-   * @throws An error if the send fails.
-   **/
-  private async sendBulkEvents(events: BulkEvent[]) {
-    ok(
-      Array.isArray(events) && events.length > 0,
-      "events must be a non-empty array",
-    );
-
-    try {
-      await this.post("bulk", events);
-    } catch (error) {
-      throw createErrorWithCause("failed to send bulk events", error);
-    }
+/** Context-bound reads have the same direct-value and immediate-check semantics. */
+export class BoundReflagClient {
+  constructor(
+    private readonly client: ReflagClient,
+    private readonly options: ContextWithTracking,
+  ) {
+    checkContext(options);
   }
-
-  /**
-   * Sends a flag event to the Reflag API.
-   *
-   * Flag events are used to track the evaluation of flag targeting rules.
-   * "check" events are sent when a flag's `isEnabled` property is checked.
-   * "evaluate" events are sent when a flag's targeting rules are matched against
-   * the current context.
-   *
-   * @param event - The event to send.
-   * @param event.action - The action to send.
-   * @param event.key - The key of the flag to send.
-   * @param event.targetingVersion - The targeting version of the flag to send.
-   * @param event.evalResult - The evaluation result of the flag to send.
-   * @param event.evalContext - The evaluation context of the flag to send.
-   * @param event.evalRuleResults - The evaluation rule results of the flag to send.
-   * @param event.evalMissingFields - The evaluation missing fields of the flag to send.
-   *
-   * @throws An error if the event is invalid.
-   *
-   * @remarks
-   * This method is rate-limited to prevent too many events from being sent.
-   **/
-  private async sendFlagEvent(event: FlagEvent) {
-    ok(typeof event === "object", "event must be an object");
-    ok(
-      typeof event.action === "string" &&
-        (event.action === "check" || event.action === "check-config"),
-      "event must have an action",
+  public get user() {
+    return this.options.user;
+  }
+  public get company() {
+    return this.options.company;
+  }
+  public get otherContext() {
+    return this.options.other;
+  }
+  public getFlag<Key extends TypedFlagKey>(
+    key: Key,
+    defaultValue?: undefined,
+  ): boolean;
+  public getFlag<Key extends TypedFlagKey, Default extends FlagDefaultValue>(
+    key: Key,
+    defaultValue: Default,
+  ): FlagValueFromDefault<Default>;
+  public getFlag(
+    key: TypedFlagKey,
+    defaultValue: FlagDefaultValue = false,
+  ): FlagValue {
+    return this.client.getFlag(this.options, key, defaultValue);
+  }
+  public getFlags() {
+    return this.client.getFlags(this.options);
+  }
+  public getFlagsForBootstrap() {
+    return this.client.getFlagsForBootstrap(this.options);
+  }
+  public async getFlagsRemote() {
+    return this.client.getFlagsRemote(undefined, undefined, this.options);
+  }
+  public getFlagRemote<Key extends TypedFlagKey>(
+    key: Key,
+    defaultValue?: undefined,
+  ): Promise<boolean>;
+  public getFlagRemote<
+    Key extends TypedFlagKey,
+    Default extends FlagDefaultValue,
+  >(key: Key, defaultValue: Default): Promise<FlagValueFromDefault<Default>>;
+  public getFlagRemote(
+    key: TypedFlagKey,
+    defaultValue: FlagDefaultValue = false,
+  ): Promise<FlagValue> {
+    return this.client.getFlagRemote(
+      key,
+      defaultValue,
+      undefined,
+      undefined,
+      this.options,
     );
-    ok(
-      typeof event.key === "string" && event.key.length > 0,
-      "event must have a flag key",
-    );
-    ok(
-      typeof event.targetingVersion === "number" ||
-        event.targetingVersion === undefined,
-      "event must have a targeting version",
-    );
-    ok(
-      typeof event.evalResult === "boolean" || isObject(event.evalResult),
-      "event must have an evaluation result",
-    );
-    ok(
-      event.evalContext === undefined || typeof event.evalContext === "object",
-      "event context must be an object",
-    );
-    ok(
-      event.evalRuleResults === undefined ||
-        Array.isArray(event.evalRuleResults),
-      "event rule results must be an array",
-    );
-    ok(
-      event.evalMissingFields === undefined ||
-        Array.isArray(event.evalMissingFields),
-      "event missing fields must be an array",
-    );
-
-    const contextKey = new URLSearchParams(
-      flattenJSON(event.evalContext || {}),
-    ).toString();
-
-    if (this._config.offline) {
-      return;
-    }
-
-    if (
-      !this.rateLimiter.isAllowed(
-        hashObject({
-          action: event.action,
-          key: event.key,
-          targetingVersion: event.targetingVersion,
-          evalResult: event.evalResult,
-          contextKey,
-        }),
-      )
-    ) {
-      return;
-    }
-
-    await this.batchBuffer.add({
-      type: "feature-flag-event",
-      action: event.action,
-      key: event.key,
-      targetingVersion: event.targetingVersion,
-      evalContext: event.evalContext,
-      evalResult: event.evalResult,
-      evalRuleResults: event.evalRuleResults,
-      evalMissingFields: event.evalMissingFields,
+  }
+  public bindClient(next: ContextWithTracking) {
+    return new BoundReflagClient(this.client, {
+      ...this.options,
+      ...next,
+      enableTracking: next.enableTracking ?? this.options.enableTracking,
+      meta: next.meta ?? this.options.meta,
+      user:
+        next.user === undefined ? this.user : { ...this.user, ...next.user },
+      company:
+        next.company === undefined
+          ? this.company
+          : { ...this.company, ...next.company },
+      other:
+        next.other === undefined
+          ? this.otherContext
+          : { ...this.otherContext, ...next.other },
     });
   }
-
-  /**
-   * Updates the context in Reflag (if needed).
-   * This method should be used before requesting flags or binding a client.
-   *
-   * @param options - The options for the context.
-   * @param options.enableTracking - Whether to enable tracking for the context.
-   * @param options.meta - The meta context associated with the context.
-   * @param options.user - The user context.
-   * @param options.company - The company context.
-   * @param options.other - The other context.
-   */
-  private async syncContext(options: ContextWithTracking) {
-    if (!options.enableTracking) {
-      this.logger.debug("tracking disabled, not updating user/company");
-
-      return;
-    }
-
-    const promises: Promise<void>[] = [];
-    if (typeof options.company?.id !== "undefined") {
-      const { id: _, ...attributes } = options.company;
-      promises.push(
-        this.updateCompany(options.company.id, {
-          userId: options.user?.id,
-          attributes,
-          meta: options.meta,
-        }),
-      );
-    }
-
-    if (typeof options.user?.id !== "undefined") {
-      const { id: _, ...attributes } = options.user;
-      promises.push(
-        this.updateUser(options.user.id, {
-          attributes,
-          meta: options.meta,
-        }),
-      );
-    }
-
-    if (promises.length > 0) {
-      await Promise.all(promises);
-    }
-  }
-
-  /**
-   * Warns if a flag or config evaluation produced diagnostics.
-   *
-   * @param flag - The flag to check.
-   */
-  private _warnFlagEvaluationDiagnostics(flag: {
-    key: string;
-    missingContextFields?: string[];
-    evaluationErrors?: EvaluationError[];
-    config?: {
-      key: string;
-      missingContextFields?: string[];
-      evaluationErrors?: EvaluationError[];
-    };
-  }) {
-    const missingFieldsReport: Record<string, string[]> = {};
-    const errorReport: Record<string, EvaluationError[]> = {};
-    const { config, ...flagData } = flag;
-    const evaluations = [
-      {
-        reportKey: flagData.key,
-        rateLimitKey: { flagKey: flagData.key },
-        missingContextFields: flagData.missingContextFields,
-        errors: flagData.evaluationErrors,
-      },
-      ...(config
-        ? [
-            {
-              reportKey: `${flagData.key}.config`,
-              rateLimitKey: { flagKey: flagData.key, configKey: config.key },
-              missingContextFields: config.missingContextFields,
-              errors: config.evaluationErrors,
-            },
-          ]
-        : []),
-    ];
-
-    for (const evaluation of evaluations) {
-      if (
-        evaluation.missingContextFields?.length &&
-        !evaluation.errors?.some(
-          ({ code }) => code === "MISSING_CONTEXT_FIELD",
-        ) &&
-        this.rateLimiter.isAllowed(
-          hashObject({
-            ...evaluation.rateLimitKey,
-            missingContextFields: JSON.stringify(
-              [...evaluation.missingContextFields].sort(),
-            ),
-          }),
-        )
-      ) {
-        missingFieldsReport[evaluation.reportKey] =
-          evaluation.missingContextFields;
-      }
-    }
-
-    if (Object.keys(missingFieldsReport).length > 0) {
-      this.logger.warn(
-        `flag targeting rules might not be correctly evaluated due to missing context fields.`,
-        missingFieldsReport,
-      );
-    }
-
-    for (const evaluation of evaluations) {
-      if (
-        evaluation.errors?.length &&
-        this.rateLimiter.isAllowed(
-          hashObject({
-            ...evaluation.rateLimitKey,
-            evaluationErrors: evaluationErrorsRateLimitKey(evaluation.errors),
-          }),
-        )
-      ) {
-        errorReport[evaluation.reportKey] = evaluation.errors;
-      }
-    }
-
-    if (Object.keys(errorReport).length > 0) {
-      this.logger.warn(
-        "flag targeting rules could not be fully evaluated.",
-        errorReport,
-      );
-    }
-  }
-
-  private _getFlags(options: ContextWithTracking): RawFlags;
-  private _getFlags<TKey extends TypedFlagKey>(
-    options: ContextWithTracking,
-    key: TKey,
-  ): RawFlag | undefined;
-  private _getFlags<TKey extends TypedFlagKey>(
-    options: ContextWithTracking,
-    key?: TKey,
-  ): RawFlags | RawFlag | undefined {
-    checkContextWithTracking(options);
-
-    if (!this.initializationFinished) {
-      this.logger.error("getFlag(s): ReflagClient is not initialized yet.");
-    }
-
-    void this.syncContext(options);
-    let flagDefinitions: CachedFlagDefinition[] = [];
-
-    if (!this._config.offline) {
-      this.flagsSyncController.onAccess?.();
-      const flagDefs = this.flagsCache.get();
-      if (!flagDefs) {
-        this.logger.warn(
-          "no flag definitions available, using fallback flags.",
-        );
-        const fallbackFlags = this._config.fallbackFlags || {};
-        if (key) {
-          return fallbackFlags[key];
-        }
-        return fallbackFlags;
-      }
-      flagDefinitions = flagDefs;
-    }
-
-    const { enableTracking: _, meta: __, ...context } = options;
-
-    const evaluated = flagDefinitions
-      .filter(({ key: flagKey }) => (key ? key === flagKey : true))
-      .map((flag) => ({
-        flagKey: flag.key,
-        targetingVersion: flag.targeting.version,
-        configVersion: flag.config?.version,
-        enabledResult: flag.enabledEvaluator(context, flag.key),
-        configResult:
-          flag.configEvaluator?.(context, flag.key) ??
-          ({
-            flagKey: flag.key,
-            context,
-            value: undefined,
-            ruleEvaluationResults: [],
-            missingContextFields: [],
-            errors: undefined,
-          } satisfies EvaluationResult<any>),
-      }));
-
-    let evaluatedFlags = evaluated.reduce((acc, res) => {
-      acc[res.flagKey as TypedFlagKey] = {
-        key: res.flagKey,
-        isEnabled: res.enabledResult.value ?? false,
-        ruleEvaluationResults: res.enabledResult.ruleEvaluationResults,
-        missingContextFields: res.enabledResult.missingContextFields,
-        ...(res.enabledResult.errors?.length
-          ? { evaluationErrors: res.enabledResult.errors }
-          : {}),
-        targetingVersion: res.targetingVersion,
-        config: {
-          key: res.configResult?.value?.key,
-          payload: res.configResult?.value?.payload,
-          targetingVersion: res.configVersion,
-          ruleEvaluationResults: res.configResult?.ruleEvaluationResults,
-          missingContextFields: res.configResult?.missingContextFields,
-          ...(res.configResult?.errors?.length
-            ? { evaluationErrors: res.configResult.errors }
-            : {}),
-        },
-      };
-      return acc;
-    }, {} as RawFlags);
-
-    const overrides = Object.entries(this._config.flagOverrides(context))
-      .filter(([flagKey]) => (key ? key === flagKey : true))
-      .map(([flagKey, override]) => [
-        flagKey,
-        isObject(override)
-          ? {
-              key: flagKey,
-              isEnabled: override.isEnabled,
-              config: override.config,
-            }
-          : {
-              key: flagKey,
-              isEnabled: !!override,
-              config: undefined,
-            },
-      ]);
-
-    if (overrides.length > 0) {
-      // merge overrides into evaluated flags
-      evaluatedFlags = {
-        ...evaluatedFlags,
-        ...Object.fromEntries(overrides),
-      };
-    }
-
-    if (key) {
-      return evaluatedFlags[key];
-    }
-
-    return evaluatedFlags;
-  }
-
-  private _wrapRawFlag<TKey extends TypedFlagKey>(
-    {
-      enableTracking,
-      enableChecks = false,
-      ...context
-    }: { enableTracking: boolean; enableChecks?: boolean } & Context,
-    { config, ...flag }: PartialBy<RawFlag, "isEnabled">,
-  ): TypedFlags[TKey] {
-    // eslint-disable-next-line @typescript-eslint/no-this-alias
-    const client = this;
-
-    const simplifiedConfig = config
-      ? { key: config.key, payload: config.payload }
-      : { key: undefined, payload: undefined };
-
-    return {
-      get isEnabled() {
-        if (enableTracking && enableChecks) {
-          client._warnFlagEvaluationDiagnostics(flag);
-
-          void client
-            .sendFlagEvent({
-              action: "check",
-              key: flag.key,
-              targetingVersion: flag.targetingVersion,
-              evalResult: flag.isEnabled ?? false,
-              evalContext: context,
-              evalRuleResults: flag.ruleEvaluationResults,
-              evalMissingFields: flag.missingContextFields,
-            })
-            .catch((err) => {
-              client.logger?.error(
-                `failed to send check event for "${flag.key}": ${err}`,
-                err,
-              );
-            });
-        }
-        return flag.isEnabled ?? false;
-      },
-      get config() {
-        if (enableTracking && enableChecks) {
-          client._warnFlagEvaluationDiagnostics({ ...flag, config });
-
-          void client
-            .sendFlagEvent({
-              action: "check-config",
-              key: flag.key,
-              targetingVersion: config?.targetingVersion,
-              evalResult: simplifiedConfig,
-              evalContext: context,
-              evalRuleResults: config?.ruleEvaluationResults,
-              evalMissingFields: config?.missingContextFields,
-            })
-            .catch((err) => {
-              client.logger?.error(
-                `failed to send check event for "${flag.key}": ${err}`,
-                err,
-              );
-            });
-        }
-        return simplifiedConfig as TypedFlags[TKey]["config"];
-      },
-      key: flag.key,
-      track: async () => {
-        if (typeof context.user?.id === "undefined") {
-          this.logger.warn("no user set, cannot track event");
-          return;
-        }
-
-        if (enableTracking) {
-          await this.track(context.user.id, flag.key, {
-            companyId: context.company?.id,
-          });
-        } else {
-          this.logger.debug("tracking disabled, not tracking event");
-        }
-      },
-    };
-  }
-
-  private async _getFlagsRemote(
-    key: undefined,
-    userId?: IdType,
-    companyId?: IdType,
-    additionalContext?: Context,
-  ): Promise<TypedFlags>;
-  private async _getFlagsRemote<TKey extends TypedFlagKey>(
-    key: TKey,
-    userId?: IdType,
-    companyId?: IdType,
-    additionalContext?: Context,
-  ): Promise<TypedFlags[TKey]>;
-  private async _getFlagsRemote<TKey extends TypedFlagKey>(
-    key?: string,
-    userId?: IdType,
-    companyId?: IdType,
-    additionalContext?: Context,
-  ): Promise<TypedFlags | TypedFlags[TKey]> {
-    const context = additionalContext || {};
-    if (userId) {
-      context.user = { id: userId };
-    }
-    if (companyId) {
-      context.company = { id: companyId };
-    }
-
-    const contextWithTracking = {
-      ...context,
-      enableTracking: true,
-    };
-
-    checkContextWithTracking(contextWithTracking);
-
-    const params = new URLSearchParams();
-    const contextJson = canonicalContextJSONStringify(context);
-    if (contextJson) {
-      params.set("contextJson", contextJson);
-    }
-
-    if (key) {
-      params.append("key", key);
-    }
-
-    const query = params.toString();
-    const res = await this.get<EvaluatedFlagsAPIResponse>(
-      `features/evaluated${query ? `?${query}` : ""}`,
-    );
-
-    if (key) {
-      const flag = res?.features[key];
-      if (!flag) {
-        this.logger.error(`flag ${key} not found`);
-      }
-      return this._wrapRawFlag(contextWithTracking, { key, ...flag });
-    } else {
-      return res?.features
-        ? Object.fromEntries(
-            Object.entries(res?.features).map(([flagKey, flag]) => [
-              flagKey,
-              this._wrapRawFlag(contextWithTracking, flag),
-            ]),
-          )
-        : {};
-    }
-  }
-}
-
-/**
- * A client bound with a specific user, company, and other context.
- */
-export class BoundReflagClient {
-  private readonly _client: ReflagClient;
-  private readonly _options: ContextWithTracking;
-
-  /**
-   * (Internal) Creates a new BoundReflagClient. Use `bindClient` to create a new client bound with a specific context.
-   *
-   * @param client - The `ReflagClient` to use.
-   * @param options - The options for the client.
-   * @param options.enableTracking - Whether to enable tracking for the client.
-   *
-   * @internal
-   */
-  constructor(
-    client: ReflagClient,
-    { enableTracking = true, ...context }: ContextWithTracking,
-  ) {
-    this._client = client;
-
-    this._options = { enableTracking, ...context };
-
-    checkContextWithTracking(this._options);
-    void this._client["syncContext"](this._options);
-  }
-
-  /**
-   * Gets the "other" context associated with the client.
-   *
-   * @returns The "other" context or `undefined` if it is not set.
-   **/
-  public get otherContext() {
-    return this._options.other;
-  }
-
-  /**
-   * Gets the user associated with the client.
-   *
-   * @returns The user or `undefined` if it is not set.
-   **/
-  public get user() {
-    return this._options.user;
-  }
-
-  /**
-   * Gets the company associated with the client.
-   *
-   * @returns The company or `undefined` if it is not set.
-   **/
-  public get company() {
-    return this._options.company;
-  }
-
-  /**
-   * Get flags for the user/company/other context bound to this client.
-   * Meant for use in serialization of flags for transferring to the client-side/browser.
-   *
-   * @returns Flags for the given user/company and whether each one is enabled or not
-   */
-  public getFlags(): TypedFlags {
-    return this._client.getFlags(this._options);
-  }
-
-  /**
-   * Get raw flags for the user/company/other context bound to this client without wrapping them in getters.
-   * This method returns raw flag data suitable for bootstrapping client-side applications.
-   *
-   * @returns Raw flags for the given user/company and whether each one is enabled or not
-   */
-  public getFlagsForBootstrap(): BootstrappedFlags {
-    return this._client.getFlagsForBootstrap({ ...this._options });
-  }
-
-  /**
-   * Get a specific flag for the user/company/other context bound to this client.
-   * Using the `isEnabled` property sends a `check` event to Reflag.
-   *
-   * @param key - The key of the flag to get.
-   *
-   * @returns Flags for the given user/company and whether each one is enabled or not
-   */
-  public getFlag<TKey extends TypedFlagKey>(key: TKey): TypedFlags[TKey] {
-    return this._client.getFlag(this._options, key);
-  }
-
-  /**
-   * Get remotely evaluated flag for the user/company/other context bound to this client.
-   *
-   * @returns Flags for the given user/company and whether each one is enabled or not
-   */
-  public async getFlagsRemote() {
-    const { enableTracking: _, meta: __, ...context } = this._options;
-    return await this._client.getFlagsRemote(undefined, undefined, context);
-  }
-
-  /**
-   * Get remotely evaluated flag for the user/company/other context bound to this client.
-   *
-   * @param key - The key of the flag to get.
-   *
-   * @returns Flag for the given user/company and key and whether it's enabled or not
-   */
-  public async getFlagRemote(key: string) {
-    const { enableTracking: _, meta: __, ...context } = this._options;
-    return await this._client.getFlagRemote(key, undefined, undefined, context);
-  }
-
-  /**
-   * Track an event in Reflag.
-   *
-   * @param event - The event to track.
-   * @param options - The options for the event.
-   * @param options.attributes - The attributes of the event (optional).
-   * @param options.meta - The meta context associated with tracking (optional).
-   * @param options.companyId - Optional company ID for the event (optional).
-   *
-   * @throws An error if the event is invalid or the options are invalid.
-   */
   public async track(
     event: string,
-    options?: TrackOptions & { companyId?: string },
+    options?: TrackOptions & { companyId?: IdType },
   ) {
-    ok(options === undefined || isObject(options), "options must be an object");
-    checkMeta(options?.meta);
-
-    const userId = this._options.user?.id;
-
-    if (!userId) {
-      this._client.logger?.warn("no user set, cannot track event");
+    if (this.user?.id === undefined) {
+      this.client.logger.warn("no user set, cannot track event");
       return;
     }
-
-    if (!this._options.enableTracking) {
-      this._client.logger?.debug(
-        "tracking disabled for this bound client, not tracking event",
-      );
-      return;
-    }
-
-    await this._client.track(
-      userId,
-      event,
-      options?.companyId
-        ? options
-        : { ...options, companyId: this._options.company?.id },
-    );
+    if (this.options.enableTracking === false) return;
+    await this.client.track(this.user.id, event, {
+      companyId: this.company?.id,
+      ...options,
+    });
   }
-
-  /**
-   * Create a new client bound with the additional context.
-   * Note: This performs a shallow merge for user/company/other individually.
-   *
-   * @param context - The context to bind the client to.
-   * @param context.user - The user to bind the client to.
-   * @param context.company - The company to bind the client to.
-   * @param context.other - The other context to bind the client to.
-   * @param context.enableTracking - Whether to enable tracking for the client.
-   * @param context.meta - The meta context to bind the client to.
-   *
-   * @returns new client bound with the additional context
-   */
-  public bindClient({
-    user,
-    company,
-    other,
-    enableTracking,
-    meta,
-  }: ContextWithTracking) {
-    // merge new context into existing
-    const boundConfig = {
-      ...this._options,
-      user:
-        user === undefined
-          ? this._options.user
-          : { ...this._options.user, ...user },
-      company:
-        company === undefined
-          ? this._options.company
-          : { ...this._options.company, ...company },
-      other:
-        other === undefined
-          ? this._options.other
-          : { ...this._options.other, ...other },
-      enableTracking: enableTracking ?? this._options.enableTracking,
-      meta: meta ?? this._options.meta,
-    };
-
-    return new BoundReflagClient(this._client, boundConfig);
-  }
-
-  /**
-   * Flushes the batch buffer.
-   */
   public async flush() {
-    await this._client.flush();
+    await this.client.flush();
   }
-
-  /**
-   * Refreshes the flag definitions from the server.
-   *
-   * Fetch starts are throttled to at most once per second. Outside
-   * `in-request` mode, a call to `refreshFlags(waitForVersion)` still waits
-   * until the cache has applied that version or newer.
-   *
-   * In `in-request` mode, a throttled call only records pending refresh work.
-   * The fetch then runs on the next request/access or `refreshFlags()` call
-   * after the throttle window expires.
-   *
-   * @param waitForVersion - Optional flag state version to wait for before returning updated definitions.
-   */
   public async refreshFlags(waitForVersion?: number) {
-    await this._client.refreshFlags(waitForVersion);
+    await this.client.refreshFlags(waitForVersion);
   }
 }
-
-function checkMeta(
-  meta?: TrackingMeta,
-): asserts meta is TrackingMeta | undefined {
+function checkTrackOptions(options?: TrackOptions) {
+  ok(options === undefined || isObject(options), "options must be an object");
   ok(
-    typeof meta === "undefined" || isObject(meta),
-    "meta must be an object if given",
+    options?.attributes === undefined || isObject(options.attributes),
+    "attributes must be an object",
   );
   ok(
-    meta?.active === undefined || typeof meta?.active === "boolean",
-    "meta.active must be a boolean if given",
+    options?.meta === undefined || isObject(options.meta),
+    "meta must be an object",
+  );
+  ok(
+    options?.meta?.active === undefined ||
+      typeof options.meta.active === "boolean",
+    "meta.active must be a boolean",
   );
 }
-
-function checkContext(context: Context): asserts context is Context {
+function checkContext(context: ContextWithTracking) {
   ok(isObject(context), "context must be an object");
-  ok(
-    typeof context.user === "undefined" || isObject(context.user),
-    "user must be an object if given",
-  );
-  if (typeof context.user?.id !== "undefined") {
-    idOk(context.user.id, "user.id");
+  for (const name of ["user", "company"] as const) {
+    ok(
+      context[name] === undefined || isObject(context[name]),
+      `${name} must be an object`,
+    );
+    if (context[name]?.id !== undefined) idOk(context[name].id, `${name}.id`);
   }
-
-  ok(
-    typeof context.company === "undefined" || isObject(context.company),
-    "company must be an object if given",
-  );
-  if (typeof context.company?.id !== "undefined") {
-    idOk(context.company.id, "company.id");
-  }
-
   ok(
     context.other === undefined || isObject(context.other),
-    "other must be an object if given",
+    "other must be an object",
   );
-}
-
-function checkContextWithTracking(
-  context: ContextWithTracking,
-): asserts context is ContextWithTracking & { enableTracking: boolean } {
-  checkContext(context);
-
   ok(
-    typeof context.enableTracking === "boolean",
+    context.enableTracking === undefined ||
+      typeof context.enableTracking === "boolean",
     "enableTracking must be a boolean",
   );
-
-  checkMeta(context.meta);
+  checkTrackOptions({ meta: context.meta });
 }

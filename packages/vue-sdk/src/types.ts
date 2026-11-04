@@ -6,51 +6,25 @@ import type {
   InitOptions,
   Logger,
   OptInFlag as BrowserOptInFlag,
-  RawFlags,
+  FlagValue,
+  FlagDefaultValue,
+  FlagValueFromDefault,
   ReflagClient,
   ReflagContext,
   RequestFeedbackData,
   UserContext,
 } from "@reflag/browser-sdk";
 
-export type EmptyFlagRemoteConfig = { key: undefined; payload: undefined };
-
-export type FlagType = {
-  config?: {
-    payload: any;
-  };
-};
-
-export type FlagRemoteConfig =
-  | {
-      key: string;
-      payload: any;
-    }
-  | EmptyFlagRemoteConfig;
-
-export interface Flag<
-  TConfig extends FlagType["config"] = EmptyFlagRemoteConfig,
-> {
-  key: string;
-  isEnabled: Ref<boolean>;
-  isLoading: Ref<boolean>;
-  config: Ref<({ key: string } & TConfig) | EmptyFlagRemoteConfig>;
-  track(): Promise<Response | undefined> | undefined;
-  requestFeedback: (opts: RequestFlagFeedbackOptions) => void;
-}
+export type { FlagValue, FlagDefaultValue, FlagValueFromDefault };
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface Flags {}
-
 export type TypedFlags = keyof Flags extends never
-  ? Record<string, Flag>
-  : {
-      [TypedFlagKey in keyof Flags]: Flags[TypedFlagKey] extends FlagType
-        ? Flag<Flags[TypedFlagKey]["config"]>
-        : Flag;
-    };
-
-export type FlagKey = keyof TypedFlags;
+  ? Record<string, FlagValue | undefined>
+  : { [Key in keyof Flags]: Flags[Key] | undefined };
+export type FlagKey = keyof Flags extends never
+  ? string
+  : Extract<keyof Flags, string>;
 
 export type OptInFlag = Omit<BrowserOptInFlag, "key"> & {
   key: FlagKey;
@@ -66,9 +40,7 @@ export interface ProviderContextType {
   isLoading: Ref<boolean>;
 }
 
-export type BootstrappedFlags = BrowserBootstrappedState & {
-  flags: RawFlags;
-};
+export type BootstrappedFlags = BrowserBootstrappedState;
 
 export type RequestFlagFeedbackOptions = Omit<
   RequestFeedbackData,

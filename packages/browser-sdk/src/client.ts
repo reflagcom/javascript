@@ -12,6 +12,7 @@ import {
   RequestFeedbackOptions,
 } from "./feedback/feedback";
 import * as feedbackLib from "./feedback/ui";
+import { parseAPIFlagsResponse } from "./flag/flagCache";
 import {
   CheckEvent,
   FallbackFlagOverride,
@@ -20,6 +21,14 @@ import {
   RawFlags,
 } from "./flag/flags";
 import { isValidFlagStateVersion } from "./flag/flagStateVersion";
+import {
+  copyJSON,
+  FlagDefaultValue,
+  FlagValue,
+  FlagValueFromDefault,
+  flagValueType,
+  resolveFlagValue,
+} from "./flag/values";
 import { HookArgs, HooksManager, State } from "./hooksManager";
 import { HttpClient } from "./httpClient";
 import { Logger, loggerWithPrefix, quietConsoleLogger } from "./logger";
@@ -35,17 +44,18 @@ import { ToolbarPosition } from "./ui/types";
 import { logResponseError } from "./utils/responseError";
 
 const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
+const hasId = (id: unknown) => id !== undefined && id !== null && id !== "";
 const isNode = typeof document === "undefined"; // deno supports "window" but not "document" according to https://remix.run/docs/en/main/guides/gotchas
 
 function normalizeContext({
   otherContext,
   ...context
 }: ReflagDeprecatedContext): ReflagContext {
-  return {
-    user: context.user?.id ? { ...context.user } : undefined,
-    company: context.company?.id ? { ...context.company } : undefined,
+  return copyJSON({
+    user: hasId(context.user?.id) ? context.user : undefined,
+    company: hasId(context.company?.id) ? context.company : undefined,
     other: { ...otherContext, ...context.other },
-  };
+  });
 }
 
 /**
@@ -221,6 +231,7 @@ export type FlagDefinitions = Readonly<Array<string>>;
  * Pre-fetched evaluated state used to bootstrap the client.
  */
 export type BootstrappedState = {
+  protocolVersion: 2;
   context: ReflagContext;
   flags: RawFlags;
   flagStateVersion?: number;
@@ -261,10 +272,8 @@ export type InitOptions = ReflagDeprecatedContext & {
   offline?: boolean;
 
   /**
-   * Flag keys for which `isEnabled` should fallback to true
-   * if SDK fails to fetch flags from Reflag servers. If a record
-   * is supplied instead of array, the values of each key represent the
-   * configuration values and `isEnabled` is assume `true`.
+   * Value-only startup fallbacks. An array enables the listed Boolean flags.
+   * Fallback values never identify an authored selection.
    */
   fallbackFlags?: string[] | Record<string, FallbackFlagOverride>;
 
@@ -349,13 +358,6 @@ export type InitOptions = ReflagDeprecatedContext & {
   bootstrappedState?: BootstrappedState;
 
   /**
-   * Pre-fetched flags used for the initial flag state.
-   * The client fetches opt-in metadata on demand when opt-in flags are requested.
-   * @deprecated Use `bootstrappedState` instead.
-   */
-  bootstrappedFlags?: RawFlags;
-
-  /**
    * Optional storage adapter used for caching flags and overrides.
    * Useful for React Native (AsyncStorage).
    */
@@ -403,23 +405,6 @@ const defaultConfig: Config = {
 };
 
 /**
- * A remotely managed configuration value for a flag.
- */
-export type FlagRemoteConfig =
-  | {
-      /**
-       * The key of the matched configuration value.
-       */
-      key: string;
-
-      /**
-       * The optional user-supplied payload data.
-       */
-      payload: any;
-    }
-  | { key: undefined; payload: undefined };
-
-/**
  * Represents a flag.
  */
 export type SetOptInOptions = {
@@ -433,42 +418,6 @@ export type SetOptInOptions = {
    */
   scope?: "user" | "company";
 };
-
-export interface Flag {
-  /**
-   * Result of flag flag evaluation.
-   * Note: Does not take local overrides into account.
-   */
-  isEnabled: boolean;
-
-  /*
-   * Optional user-defined configuration.
-   */
-  config: FlagRemoteConfig;
-
-  /**
-   * Function to send analytics events for this flag.
-   */
-  track: () => Promise<Response | undefined>;
-
-  /**
-   * Function to request feedback for this flag.
-   */
-  requestFeedback: (
-    options: Omit<RequestFeedbackData, "flagKey" | "featureId">,
-  ) => void;
-
-  /**
-   * The current override status of isEnabled for the flag.
-   */
-  isEnabledOverride: boolean | null;
-
-  /**
-   * Set the override status for isEnabled for the flag.
-   * Set to `null` to remove the override.
-   */
-  setIsEnabledOverride(isEnabled: boolean | null): void;
-}
 
 function shouldShowToolbar(opts: InitOptions) {
   const toolbarOpts = opts.toolbar;
@@ -515,6 +464,20 @@ export class ReflagClient {
    * Create a new ReflagClient instance.
    */
   constructor(opts: InitOptions) {
+    if ("bootstrappedFlags" in opts)
+      throw new Error(
+        "Use a protocol-v2 bootstrappedState; v1 bootstrap is incompatible",
+      );
+    if (
+      opts.bootstrappedState &&
+      (opts.bootstrappedState.protocolVersion !== 2 ||
+        !parseAPIFlagsResponse(opts.bootstrappedState.flags, true) ||
+        (opts.bootstrappedState.flagStateVersion !== undefined &&
+          !isValidFlagStateVersion(opts.bootstrappedState.flagStateVersion)))
+    )
+      throw new Error(
+        "Expected a protocol-v2 bootstrap snapshot; v1 bootstrap is incompatible",
+      );
     this.publishableKey = opts.publishableKey;
     this.logger =
       opts?.logger ?? loggerWithPrefix(quietConsoleLogger, "[Reflag]");
@@ -537,9 +500,7 @@ export class ReflagClient {
       sseBaseUrl: opts?.sseBaseUrl ?? apiBaseUrl,
       enableTracking: opts?.enableTracking ?? defaultConfig.enableTracking,
       offline: opts?.offline ?? defaultConfig.offline,
-      bootstrapped:
-        !!opts?.bootstrappedState ||
-        (opts && "bootstrappedFlags" in opts && !!opts.bootstrappedFlags),
+      bootstrapped: !!opts?.bootstrappedState,
     };
 
     const requestedEnableLiveFlagUpdates = opts?.enableLiveFlagUpdates ?? false;
@@ -547,8 +508,7 @@ export class ReflagClient {
       opts?.bootstrappedState?.flagStateVersion,
     );
     const bootstrappedWithoutFlagStateVersion =
-      (!!opts?.bootstrappedState && !hasBootstrappedFlagStateVersion) ||
-      (!!opts && "bootstrappedFlags" in opts && !!opts.bootstrappedFlags);
+      !!opts?.bootstrappedState && !hasBootstrappedFlagStateVersion;
 
     if (requestedEnableLiveFlagUpdates && bootstrappedWithoutFlagStateVersion) {
       this.logger.warn(
@@ -605,13 +565,11 @@ export class ReflagClient {
       {
         bootstrappedState: opts.bootstrappedState
           ? {
+              protocolVersion: 2,
               flags: opts.bootstrappedState.flags,
               flagStateVersion: opts.bootstrappedState.flagStateVersion,
             }
-          : opts.bootstrappedFlags
-            ? { flags: opts.bootstrappedFlags }
-            : undefined,
-        bootstrappedFlags: opts.bootstrappedFlags,
+          : undefined,
         expireTimeMs: opts.expireTimeMs,
         staleTimeMs: opts.staleTimeMs,
         staleWhileRevalidate: opts.staleWhileRevalidate,
@@ -808,7 +766,7 @@ export class ReflagClient {
    * Get the current context.
    */
   getContext() {
-    return this.context;
+    return copyJSON(this.context);
   }
 
   /**
@@ -908,10 +866,10 @@ export class ReflagClient {
     const previousContext = this.context;
     const newContext = normalizeContext(context);
 
-    if (warnOnMissingIds && !context.user?.id) {
+    if (warnOnMissingIds && context.user && !hasId(context.user.id)) {
       this.logger.warn("No user Id provided in context, user will be ignored");
     }
-    if (warnOnMissingIds && !context.company?.id) {
+    if (warnOnMissingIds && context.company && !hasId(context.company.id)) {
       this.logger.warn(
         "No company Id provided in context, company will be ignored",
       );
@@ -966,6 +924,13 @@ export class ReflagClient {
     bootstrappedState: BootstrappedState,
     triggerEvent = true,
   ) {
+    if (
+      bootstrappedState.protocolVersion !== 2 ||
+      !parseAPIFlagsResponse(bootstrappedState.flags, true) ||
+      (bootstrappedState.flagStateVersion !== undefined &&
+        !isValidFlagStateVersion(bootstrappedState.flagStateVersion))
+    )
+      throw new Error("Invalid protocol-v2 bootstrap snapshot");
     const previousContext = this.context;
     const newContext = normalizeContext(bootstrappedState.context);
 
@@ -1077,7 +1042,7 @@ export class ReflagClient {
       event: eventName,
     };
     if (attributes) payload.attributes = attributes;
-    if (this.context.company?.id)
+    if (hasId(this.context.company?.id))
       payload.companyId = String(this.context.company?.id);
 
     const res = await this.httpClient.post({ path: "/event", body: payload });
@@ -1113,11 +1078,15 @@ export class ReflagClient {
 
     const userId =
       payload.userId ||
-      (this.context.user?.id ? String(this.context.user?.id) : undefined);
+      (hasId(this.context.user?.id)
+        ? String(this.context.user?.id)
+        : undefined);
 
     const companyId =
       payload.companyId ||
-      (this.context.company?.id ? String(this.context.company?.id) : undefined);
+      (hasId(this.context.company?.id)
+        ? String(this.context.company?.id)
+        : undefined);
 
     return await feedback(this.httpClient, this.logger, {
       userId,
@@ -1134,7 +1103,7 @@ export class ReflagClient {
    * @param options
    */
   requestFeedback(options: RequestFeedbackData) {
-    if (!this.context.user?.id) {
+    if (!hasId(this.context.user?.id)) {
       this.logger.error(
         "`requestFeedback` call ignored. No `user` context provided at initialization",
       );
@@ -1152,7 +1121,7 @@ export class ReflagClient {
       flagKey: options.flagKey,
       companyId:
         options.companyId ||
-        (this.context.company?.id
+        (hasId(this.context.company?.id)
           ? String(this.context.company?.id)
           : undefined),
       source: "widget" as const,
@@ -1203,15 +1172,38 @@ export class ReflagClient {
   }
 
   /**
-   * Returns a map of enabled flags.
-   * Accessing a flag will *not* send a check event
-   * and `isEnabled` does not take any flag overrides
-   * into account.
-   *
-   * @returns Map of flags.
+   * Return direct values and register checks for these returned roots.
+   * Use getFlagResults() for diagnostic/serialization access without checks.
    */
-  getFlags(): RawFlags {
+  getFlags(): Record<string, FlagValue | undefined> {
+    return Object.fromEntries(
+      Object.entries(this.flagsClient.getFlags()).map(([key, result]) => {
+        this.registerCheck(key, result);
+        return [key, result.value];
+      }),
+    );
+  }
+
+  /** Owned evaluated diagnostics; inspecting these is not an application read. */
+  getFlagResults(): RawFlags {
     return this.flagsClient.getFlags();
+  }
+
+  getFlagsForBootstrap(): BootstrappedState {
+    return {
+      protocolVersion: 2,
+      context: this.getContext(),
+      flags: this.getFlagResults(),
+      flagStateVersion: this.flagsClient.getFlagStateVersion(),
+    };
+  }
+
+  /** Overrides are applied after server evaluation and never invent selections. */
+  setFlagOverride(key: string, value: FlagValue | undefined) {
+    this.flagsClient.setFlagOverride(key, value);
+  }
+  getFlagOverride(key: string) {
+    return this.flagsClient.getFlagOverride(key);
   }
 
   /**
@@ -1227,19 +1219,23 @@ export class ReflagClient {
   getOptInFlags(): OptInFlag[] {
     this.flagsClient.requestOptInFlags();
 
-    return Object.values(this.getFlags()).flatMap((flag) => {
-      if (flag.optInEnabled !== true || !flag.optIn) return [];
-
-      return {
-        key: flag.key,
-        name: flag.optIn.name,
-        description: flag.optIn.description,
-        isEnabled: flag.isEnabledOverride ?? flag.isEnabled,
-        userOptedIn: flag.optIn.userOptedIn,
-        companyOptedIn: flag.optIn.companyOptedIn,
-        isOptedIn: flag.optIn.isOptedIn,
-      } satisfies OptInFlag;
-    });
+    const flags = this.flagsClient.getFlags();
+    return Object.entries(this.flagsClient.getOptInMetadata()).flatMap(
+      ([key, metadata]) => {
+        const flag = Object.prototype.hasOwnProperty.call(flags, key)
+          ? flags[key]
+          : undefined;
+        return flag
+          ? [
+              {
+                key,
+                ...metadata,
+                isEnabled: flag.value === true,
+              } satisfies OptInFlag,
+            ]
+          : [];
+      },
+    );
   }
 
   /**
@@ -1282,7 +1278,7 @@ export class ReflagClient {
     }
 
     const scopedContext = this.context[scope];
-    if (!scopedContext?.id) {
+    if (scopedContext?.id === undefined) {
       this.logger.error(
         `\`setOptIn\` call ignored. No \`${scope}\` context provided`,
       );
@@ -1299,7 +1295,7 @@ export class ReflagClient {
     const assertScopedContextUnchanged = () => {
       const currentScopedContext = this.context[scope];
       if (
-        currentScopedContext?.id &&
+        currentScopedContext?.id !== undefined &&
         String(currentScopedContext.id) === scopedContextId
       ) {
         return;
@@ -1365,14 +1361,12 @@ export class ReflagClient {
       );
     }
 
-    const refreshedOptIn = this.flagsClient.getFetchedFlags()[flagKey]?.optIn;
+    const refreshedOptIn = this.flagsClient.getOptInMetadata()[flagKey];
     const scopedOptIn =
       scope === "user"
         ? refreshedOptIn?.userOptedIn
         : refreshedOptIn?.companyOptedIn;
-    const isConfirmed = options.optedIn
-      ? scopedOptIn === true
-      : scopedOptIn !== true;
+    const isConfirmed = scopedOptIn === options.optedIn;
     if (!isConfirmed) {
       failConfirmation(
         `Opt-in changed remotely, but the updated ${scope} membership was not reflected in the SDK`,
@@ -1382,81 +1376,58 @@ export class ReflagClient {
     return res;
   }
 
-  /**
-   * @deprecated Use `getFlag` instead.
-   */
-  getFeature(flagKey: string) {
-    return this.getFlag(flagKey);
+  /** Boolean-first reads; positional defaults select other top-level JSON categories. */
+  getFlag(key: string, defaultValue?: undefined): boolean;
+  getFlag<Default extends FlagDefaultValue>(
+    key: string,
+    defaultValue: Default,
+  ): FlagValueFromDefault<Default>;
+  getFlag(key: string, defaultValue: FlagDefaultValue = false): FlagValue {
+    const flags = this.flagsClient.getFlags();
+    const result = Object.prototype.hasOwnProperty.call(flags, key)
+      ? flags[key]
+      : undefined;
+    const selected = resolveFlagValue(result?.value, defaultValue);
+    if (selected.typeMismatch)
+      this.logger.warn(
+        `flag "${key}" returned ${flagValueType(result!.value!)}; expected ${flagValueType(defaultValue as FlagValue)}. Using the default value.`,
+      );
+    this.registerCheck(key, result, selected.usedDefault);
+    return selected.value;
   }
 
-  /**
-   * Return a flag. Accessing `isEnabled` or `config` will automatically send a `check` event.
-   *
-   * @param flagKey - The key of the flag to get.
-   * @returns A flag.
-   */
-  getFlag(flagKey: string): Flag {
-    const f = this.getFlags()[flagKey];
-
-    // eslint-disable-next-line @typescript-eslint/no-this-alias
-    const self = this;
-    const value = f?.isEnabledOverride ?? f?.isEnabled ?? false;
-    const config = f?.config
-      ? {
-          key: f.config.key,
-          payload: f.config.payload,
-        }
-      : { key: undefined, payload: undefined };
-
-    return {
-      get isEnabled() {
-        self
-          .sendCheckEvent({
-            action: "check-is-enabled",
-            key: flagKey,
-            version: f?.targetingVersion,
-            ruleEvaluationResults: f?.ruleEvaluationResults,
-            missingContextFields: f?.missingContextFields,
-            value,
-          })
-          .catch(() => {
-            // ignore
-          });
-        return value;
-      },
-      get config() {
-        self
-          .sendCheckEvent({
-            action: "check-config",
-            key: flagKey,
-            version: f?.config?.version,
-            ruleEvaluationResults: f?.config?.ruleEvaluationResults,
-            missingContextFields: f?.config?.missingContextFields,
-            value: f?.config && {
-              key: f.config.key,
-              payload: f.config.payload,
-            },
-          })
-          .catch(() => {
-            // ignore
-          });
-
-        return config;
-      },
-      track: () => this.track(flagKey),
-      requestFeedback: (
-        options: Omit<RequestFeedbackData, "flagKey" | "featureId">,
-      ) => {
-        this.requestFeedback({
-          flagKey,
-          ...options,
-        });
-      },
-      isEnabledOverride: this.flagsClient.getFlagOverride(flagKey),
-      setIsEnabledOverride(isEnabled: boolean | null) {
-        self.flagsClient.setFlagOverride(flagKey, isEnabled);
-      },
+  private registerCheck(
+    key: string,
+    result?: RawFlags[string],
+    usedDefault = false,
+  ) {
+    if (!this.config.enableTracking || this.config.offline) return;
+    const selected =
+      !usedDefault &&
+      result?.resolved === true &&
+      result.variantKey !== undefined &&
+      result.sourceVersionId !== undefined;
+    const event: CheckEvent = {
+      action: "check",
+      key,
+      ...(selected
+        ? {
+            evalResult: result.variantKey,
+            sourceVersionId: result.sourceVersionId,
+          }
+        : {}),
+      flagStateVersion: this.flagsClient.getFlagStateVersion(),
+      evalRuleResults: result?.ruleResults.map((rule) => rule.matched),
+      evalMissingFields: result?.errors.flatMap((error) =>
+        error.code === "MISSING_CONTEXT_FIELD" && error.field
+          ? [error.field]
+          : [],
+      ),
+      evalErrors: result?.errors,
     };
+    void this.sendCheckEvent(event).catch((error) =>
+      this.logger.warn("failed to register flag check", error),
+    );
   }
 
   showToolbarToggle(position?: ToolbarPosition) {
