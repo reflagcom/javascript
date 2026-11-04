@@ -4,7 +4,7 @@ import {
   EvaluationError,
   newEvaluator,
   RuleFilter,
-} from "@reflag/flag-evaluation";
+} from "@reflag/flag-evaluation-v1";
 
 /**
  * Describes the meta context associated with tracking.

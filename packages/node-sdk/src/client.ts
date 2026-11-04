@@ -5,7 +5,7 @@ import {
   EvaluationResult,
   flattenJSON,
   newEvaluator,
-} from "@reflag/flag-evaluation";
+} from "@reflag/flag-evaluation-v1";
 
 import BatchBuffer from "./batch-buffer";
 import {

@@ -6778,10 +6778,20 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@reflag/flag-evaluation@npm:1.1.2, @reflag/flag-evaluation@workspace:packages/flag-evaluation":
+"@reflag/flag-evaluation-v1@npm:@reflag/flag-evaluation@1.1.2":
+  version: 1.1.2
+  resolution: "@reflag/flag-evaluation@npm:1.1.2"
+  dependencies:
+    js-sha256: "npm:0.11.0"
+  checksum: 10c0/944c0e8e573784c3f4ba6238424fe626d594f355a7c4adcfd6d3301280298f9e181a6b7c2034281fc8d0d75009ba7105199b1cc50967af6e294efa341f594ffe
+  languageName: node
+  linkType: hard
+
+"@reflag/flag-evaluation@workspace:packages/flag-evaluation":
   version: 0.0.0-use.local
   resolution: "@reflag/flag-evaluation@workspace:packages/flag-evaluation"
   dependencies:
+    "@reflag/flag-evaluation-v1": "npm:@reflag/flag-evaluation@1.1.2"
     "@reflag/tsconfig": "npm:^0.0.2"
     "@types/node": "npm:^22.12.0"
     js-sha256: "npm:0.11.0"
@@ -6828,7 +6838,7 @@ __metadata:
     "@babel/core": "npm:~7.29.6"
     "@googleapis/storage": "npm:21.2.0"
     "@redis/client": "npm:^5.11.0"
-    "@reflag/flag-evaluation": "npm:1.1.2"
+    "@reflag/flag-evaluation-v1": "npm:@reflag/flag-evaluation@1.1.2"
     "@reflag/tsconfig": "npm:~0.0.2"
     "@types/node": "npm:^22.12.0"
     "@vitest/coverage-v8": "npm:4.1.11"
