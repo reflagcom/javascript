@@ -5,6 +5,8 @@ import {
   onMounted,
   onUnmounted,
   ref,
+  shallowRef,
+  type ShallowRef,
 } from "vue";
 
 import {
@@ -20,8 +22,9 @@ import {
   FlagKey,
   OptInFlag,
   ProviderContextType,
-  RequestFlagFeedbackOptions,
-  TypedFlags,
+  FlagDefaultValue,
+  FlagValue,
+  FlagValueFromDefault,
   UseOptInFlagsResult,
 } from "./types";
 import { SDK_VERSION } from "./version";
@@ -67,60 +70,28 @@ export function useReflagClient(
   return reflagClients.get(publishableKey)!;
 }
 
-/**
- * Vue composable for getting the state of a given flag for the current context.
- *
- * This composable returns an object with the state of the flag for the current context.
- *
- * @param key - The key of the flag to get the state of.
- * @returns An object with the state of the flag.
- *
- * @example
- * ```ts
- * import { useFlag } from '@reflag/vue-sdk';
- *
- * const { isEnabled, config, track, requestFeedback } = useFlag("huddles");
- *
- * function StartHuddlesButton() {
- *   const { isEnabled, config: { payload }, track } = useFlag("huddles");
- *   if (isEnabled) {
- *    return <button onClick={() => track()}>{payload?.buttonTitle ?? "Start Huddles"}</button>;
- * }
- * ```
- */
-export function useFlag<TKey extends FlagKey>(key: TKey): TypedFlags[TKey] {
+/** Reactive direct values: Boolean/false by default, or infer a positional JSON default. */
+export function useFlag(
+  key: FlagKey,
+  defaultValue?: undefined,
+): ShallowRef<boolean>;
+export function useFlag<Default extends FlagDefaultValue>(
+  key: FlagKey,
+  defaultValue: Default,
+): ShallowRef<FlagValueFromDefault<Default>>;
+export function useFlag(
+  key: FlagKey,
+  defaultValue: FlagDefaultValue = false,
+): ShallowRef<FlagValue> {
   const client = useClient();
-  const isLoading = useIsLoading();
-
-  const track = () => client.track(key);
-  const requestFeedback = (opts: RequestFlagFeedbackOptions) =>
-    client.requestFeedback({ ...opts, flagKey: key });
-
-  const flag = ref(
-    client.getFlag(key) || {
-      isEnabled: false,
-      config: { key: undefined, payload: undefined },
-    },
-  );
-
+  const flag = shallowRef(client.getFlag(key, defaultValue));
   const updateFlag = () => {
-    flag.value = client.getFlag(key);
+    flag.value = client.getFlag(key, defaultValue);
   };
-
-  onMounted(() => {
-    updateFlag();
-  });
-
-  useOnEvent("flagsUpdated", updateFlag);
-
-  return {
-    key,
-    isLoading,
-    isEnabled: computed(() => flag.value.isEnabled),
-    config: computed(() => flag.value.config),
-    track,
-    requestFeedback,
-  } as TypedFlags[TKey];
+  useOnEvent("flagsUpdated", updateFlag, client);
+  // Catch updates between setup and listener registration.
+  onMounted(updateFlag);
+  return flag;
 }
 
 /**
@@ -133,15 +104,15 @@ export function useFlag<TKey extends FlagKey>(key: TKey): TypedFlags[TKey] {
  */
 export function useOptInFlags(): UseOptInFlagsResult {
   const client = useClient();
-  const isBootstrapped = client.getConfig().bootstrapped;
+  const isLoading = useIsLoading();
   const optInFlags = ref<OptInFlag[]>(client.getOptInFlags() as OptInFlag[]);
   const isOptInFlagsLoading = ref(client.getIsLoadingOptInFlags());
 
   const updateOptInFlags = () => {
     optInFlags.value = client.getOptInFlags() as OptInFlag[];
   };
-  const updateIsLoading = (isLoading = client.getIsLoadingOptInFlags()) => {
-    isOptInFlagsLoading.value = isLoading;
+  const updateIsLoading = (loading = client.getIsLoadingOptInFlags()) => {
+    isOptInFlagsLoading.value = loading;
   };
 
   useOnEvent("flagsUpdated", updateOptInFlags, client);
@@ -154,7 +125,7 @@ export function useOptInFlags(): UseOptInFlagsResult {
 
   return {
     flags: computed(() => optInFlags.value),
-    isLoading: computed(() => isBootstrapped && isOptInFlagsLoading.value),
+    isLoading: computed(() => isLoading.value || isOptInFlagsLoading.value),
   };
 }
 

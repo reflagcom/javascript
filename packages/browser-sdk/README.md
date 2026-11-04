@@ -1,582 +1,148 @@
-# Reflag Browser SDK
+# Reflag Browser SDK v2
 
-Basic client for [Reflag.com](https://reflag.com). If you're using React, you'll be better off with the Reflag React SDK.
+Client-side feature flags and JSON values for [Reflag](https://reflag.com).
 
-Reflag supports flag toggling, tracking flag usage, [collecting feedback](#qualitative-feedback-on-beta-flags) on flags, and [remotely configuring flags](#remote-config).
+> This is a breaking v2 prerelease. It requires the v2 evaluated-flags/check protocol on the server. Do not switch existing v1 applications or bootstrap consumers without coordinating that upgrade. Nothing in this branch publishes or deploys the SDK/server.
 
-## Install
+## Get started
 
-First find your `publishableKey` under [environment settings](https://app.reflag.com/env-current/settings/app-environments) in Reflag.
-
-The package can be imported or used directly in a HTML script tag:
-
-A. Import module:
-
-```typescript
+```ts
 import { ReflagClient } from "@reflag/browser-sdk";
 
-const user = {
-  id: 42,
-  role: "manager",
-};
-
-const company = {
-  id: 99,
-  plan: "enterprise",
-};
-
-const reflagClient = new ReflagClient({ publishableKey, user, company });
-
-await reflagClient.initialize();
-
-const {
-  isEnabled,
-  config: { payload: question },
-  track,
-  requestFeedback,
-} = reflagClient.getFlag("huddle");
-
-if (isEnabled) {
-  // Show flag. When retrieving `isEnabled` the client automatically
-  // sends a "check" event for the "huddle" flag which is shown in the
-  // Reflag UI.
-
-  // On usage, call `track` to let Reflag know that a user interacted with the flag
-  track();
-
-  // The `payload` is a user-supplied JSON in Reflag that is dynamically picked
-  // out depending on the user/company.
-  const question = payload?.question ?? "Tell us what you think of Huddles";
-
-  // Use `requestFeedback` to create "Send feedback" buttons easily for specific
-  // flags. This is not related to `track` and you can call them individually.
-  requestFeedback({ title: question });
-}
-
-// `track` just calls `reflagClient.track(<flagKey>)` to send an event using the same flag key
-// You can also use `track` on the client directly to send any custom event.
-reflagClient.track("huddle");
-
-// similarly, `requestFeedback` just calls `reflagClient.requestFeedback({flagKey: <flagKey>})`
-// which you can also call directly:
-reflagClient.requestFeedback({ flagKey: "huddle" });
-```
-
-B. Script tag (client-side directly in html)
-
-See [example/browser.html](https://github.com/reflagcom/javascript/tree/main/packages/browser-sdk/example/browser.html) for a working example:
-
-```html
-<script src="https://cdn.jsdelivr.net/npm/@reflag/browser-sdk@2"></script>
-<script>
-  const reflag = new ReflagBrowserSDK.ReflagClient({
-    publishableKey: "publishableKey",
-    user: { id: "42" },
-    company: { id: "1" },
-  });
-
-  reflag.initialize().then(() => {
-    console.log("Reflag initialized");
-    document.getElementById("loading").style.display = "none";
-    document.getElementById("start-huddle").style.display = "block";
-  });
-</script>
-<span id="loading">Loading...</span>
-<button
-  id="start-huddle"
-  style="display: none"
-  onClick="reflag.track('Started huddle')"
->
-  Click me
-</button>
-```
-
-### Init options
-
-Supply these to the constructor call:
-
-```typescript
-type Configuration = {
-  logger: console; // by default only logs warn/error, by passing `console` you'll log everything
-  apiBaseUrl?: "https://front.reflag.com";
-  credentials?: "include" | "same-origin" | "omit"; // forwarded to fetch requests; "include" also enables credentials for the default EventSource transport
-  feedback?: undefined; // See FEEDBACK.md
-  enableTracking?: true; // set to `false` to stop sending track events and user/company updates to Reflag servers. Useful when you're impersonating a user
-  enableLiveFlagUpdates?: false; // Set to `true` to keep flags up to date over SSE (browser SDK default: false)
-  eventSourceFactory?: (url: string) => {
-    // Advanced: provide a custom EventSource-compatible transport
-    addEventListener: (type: string, cb: (event: any) => void) => void;
-    close: () => void;
-  };
-  fallbackFlags?:
-    | string[]
-    | Record<string, { key: string; payload: any } | true>; // Enable these flags if unable to contact reflag.com. Can be a list of flag keys or a record with configuration values
-  timeoutMs?: number; // Timeout for fetching flags (default: 5000ms)
-  staleWhileRevalidate?: boolean; // Revalidate in the background when cached flags turn stale to avoid latency in the UI (default: false)
-  staleTimeMs?: number; // at initialization time flags are loaded from the cache unless they have gone stale. Defaults to 0 which means the cache is disabled. Increase this in the case of a non-SPA
-  expireTimeMs?: number; // In case we're unable to fetch flags from Reflag, cached/stale flags will be used instead until they expire after `expireTimeMs`. Default is 30 days
-  offline?: boolean; // Use the SDK in offline mode. Offline mode is useful during testing and local development
-};
-```
-
-## Migrating from Bucket SDK
-
-If you have been using the Bucket SDKs, the following list will help you migrate to Reflag SDK:
-
-- `Bucket*` classes, and types have been renamed to `Reflag*` (e.g. `BucketClient` is now `ReflagClient`)
-- `Feature*` classes, and types have been renamed to `Feature*` (e.g. `Feature` is now `Flag`, `RawFeatures` is now `RawFlags`)
-- All methods that contained `feature` in the name have been renamed to use the `flag` terminology (e.g. `getFeature` is `getFlag`)
-- The `fallbackFeatures` property in client constructor and configuration files has been renamed to `fallbackFlags`
-- `featureKey` has been renamed to `flagKey` in all methods that accepts that argument
-- The new cookies that are stored in the client's browser are now `reflag-*` prefixed instead og `bucket-*`
-- The `featuresUpdated` hook has been renamed to `flagsUpdated`
-- The `checkIsEnabled` and `checkConfig` hooks have been removed, use `check` from now on
-
-To ease in transition to Reflag SDK, some of the old methods have been preserved as aliases to the new methods:
-
-- `getFeature` method is an alias for `getFlag`
-- `getFeatures` method is an alias for `getFlags`
-- `featuresUpdated` hook is an alias for `flagsUpdated`
-
-If you are running with strict Content Security Policies active on your website, you will need change them as follows:
-
-- `connect-src https://front.bucket.co` to `connect-src https://front.reflag.com`
-
-Finally, if you have customized the look & feel of the Feedback component, update `--bucket-feedback-*` CSS classes to `--reflag-feedback-*`
-
-## Flag toggles
-
-Reflag determines which flags are active for a given user/company. The user/company is given in the ReflagClient constructor.
-
-If you supply `user` or `company` objects, they must include at least the `id` property otherwise they will be ignored in their entirety.
-In addition to the `id`, you must also supply anything additional that you want to be able to evaluate flag targeting rules against.
-
-Attributes cannot be nested (multiple levels) and must be either strings, integers or booleans.
-Some attributes are special and used in Reflag UI:
-
-- `name` -- display name for `user`/`company`,
-- `email` -- is accepted for `user`s and will be highlighted in the Reflag UI if available,
-- `avatar` -- can be provided for both `user` and `company` and should be an URL to an image.
-
-```ts
-const reflagClient = new ReflagClient({
-  publishableKey,
-  user: {
-    id: "user_123",
-    name: "John Doe",
-    email: "john@acme.com"
-    avatar: "https://example.com/images/udsy6363"
-  },
-  company: {
-    id: "company_123",
-    name: "Acme, Inc",
-    avatar: "https://example.com/images/31232ds"
-  },
+const reflag = new ReflagClient({
+  publishableKey: "your-publishable-key",
+  user: { id: "alice", role: "manager" },
+  company: { id: "acme", plan: "enterprise" },
 });
+await reflag.initialize();
+
+const enabled = reflag.getFlag("huddles"); // boolean, implicit false
+const settings = reflag.getFlag("assistant-settings", { model: "quick" });
+// settings: { model: string }
+
+if (enabled) {
+  // Application usage tracking is separate from reading the flag.
+  await reflag.track("Started huddle");
+}
 ```
 
-To retrieve flags along with their targeting information, use `getFlag(key: string)`:
+Use only a **publishable** key in a browser. Secret keys belong on your server.
+
+## Direct-value reads
 
 ```ts
-const huddle = reflagClient.getFlag("huddle");
-// {
-//   isEnabled: true,
-//   config: { key: "zoom", payload: { ... } },
-//   track: () => Promise<Response>
-//   requestFeedback: (options: RequestFeedbackData) => void
-// }
+reflag.getFlag("release"); // boolean; missing/mismatched -> false
+reflag.getFlag("model", "quick"); // string
+reflag.getFlag("limit", 10); // number
+reflag.getFlag("settings", { model: "quick" });
+reflag.getFlag("nullable-settings", null); // FlagValue (arbitrary JSON)
 ```
 
-You can use `getFlags()` to retrieve all enabled flags currently.
+- Defaults are positional JSON values; generation is not required for useful types. Primitive literals widen, and readonly defaults are accepted.
+- A non-null default accepts only the same **top-level JSON category**: Boolean, number, string, array or object. A mismatch warns without logging the payload and returns the default. A bare read can never return a truthy object.
+- Explicit `null` accepts any JSON value, including authored null. Missing values return null.
+- Falsy selected values (`false`, `0`, `""`, null) are preserved when accepted by the requested category.
+- Object fields and array elements are **not schema-validated**. Validate untrusted/nested payloads in your application.
+- Values and defaults are returned as independent mutable copies. There are no reserved JSON property names.
+
+`getFlags()` returns a direct-value record (entries may be undefined) and registers checks for its returned roots. `getFlagResults()` returns owned evaluated diagnostics **without checks**; it is intended for tooling, not ordinary application reads. `getFlagsForBootstrap()` serializes protocol-v2 evaluated state without checks.
+
+## Checks and delivery
+
+Calling a getter registers a requested-root check immediately, even if its return value is ignored. There are no `.isEnabled`, `.config`, `.value` or flag `.track()` wrappers. Delivery remains buffered through `/bulk` and identity-aware rate-limited.
+
+A selected check carries the authored selected key as `evalResult`, its `sourceVersionId` and the available snapshot `flagStateVersion`. Payload equality is not identity: equal-valued selections or segment-only snapshot changes remain distinguishable on subsequent reads. Defaults, category mismatches, local overrides and static fallback values do not fabricate authored selections. Diagnostics and bootstrap serialization generate no checks. The server evaluates dependencies; fetching their results does not itself register reads.
+
+`enableTracking: false` disables checks and user/company/usage tracking. `offline: true` skips HTTP and tracking. `await reflag.stop()` flushes buffered events and closes the client's background transports.
+
+## Context, refresh and cache
 
 ```ts
-const flags = reflagClient.getFlags();
-// {
-//   huddle: {
-//     isEnabled: true,
-//     targetingVersion: 42,
-//     config: ...
-//   }
-// }
+await reflag.updateUser({ role: "admin" });
+await reflag.updateCompany({ plan: "enterprise" });
+await reflag.updateOtherContext({ region: "eu" });
+await reflag.setContext({
+  user: { id: "bob" },
+  company: { id: "other-company" },
+});
+await reflag.refresh();
 ```
 
-`getFlags()` is meant to be more low-level than `getFlag()` and it typically used
-by down-stream clients, like the React SDK.
+`setContext()` replaces the context; update methods shallow-merge their section. User/company sections require IDs, including valid numeric zero. Context supports nested JSON and arrays. A context change clears the old context's values while fetching; stale/in-flight responses cannot replace a newer context or snapshot.
 
-Note that accessing `isEnabled` on the object returned by `getFlags` does not automatically
-generate a `check` event, contrary to the `isEnabled` property on the object returned by `getFlag`.
+Values come from `GET /flags/evaluated`, not legacy `/features/evaluated`. Server evaluation retains the complete internal graph and authorized public roots. The Browser SDK does not cache dependency evaluations of its own.
+
+Constructor options include:
+
+| Option                          | Behavior                                                                    |
+| ------------------------------- | --------------------------------------------------------------------------- |
+| `apiBaseUrl`, `appBaseUrl`      | API origin and toolbar/feedback links                                       |
+| `credentials`                   | Fetch credentials mode; `include` also enables default SSE credentials      |
+| `timeoutMs`                     | Flag request timeout; default 5,000 ms                                      |
+| `staleTimeMs`                   | Fresh-cache duration; default 0                                             |
+| `staleWhileRevalidate`          | Serve stale cached state while revalidating; default false                  |
+| `expireTimeMs`                  | Cache expiry; default 30 days                                               |
+| `storage`                       | Optional async storage adapter                                              |
+| `fallbackFlags`                 | Value record or array of enabled Boolean keys, without authored provenance  |
+| `enableLiveFlagUpdates`         | Refresh after SSE publications; default false in Browser, true in React/Vue |
+| `eventSourceFactory`            | Optional EventSource-compatible transport                                   |
+| `trackingQueue`                 | Buffered-delivery `flushDelayMs` and `maxSize`                              |
+| `logger`, `toolbar`, `feedback` | Logging, Boolean override toolbar and feedback options                      |
+
+Evaluated cache and override storage use isolated v2 keys. V1 cache entries are never interpreted as v2 values. Malformed refreshes leave known-good state intact. Valid saved v2 selections retain their real provenance on restore. There is no automatic periodic HTTP fallback after an SSE failure; manual refresh/context updates remain available.
+
+## Overrides and toolbar
+
+```ts
+reflag.setFlagOverride("release", true);
+reflag.setFlagOverride("settings", { model: "local" });
+reflag.setFlagOverride("nullable-settings", null); // a real null override
+reflag.setFlagOverride("release", undefined); // clear the override
+```
+
+Overrides apply after server evaluation and do not rewrite authored dependency results. The built-in toolbar appears on localhost by default and offers Boolean overrides only. It uses diagnostic access, so opening it does not register application checks.
+
+## Server bootstrap
+
+Generate the full payload with **Node SDK v2** on your server:
+
+```ts
+const bootstrappedState = serverClient.getFlagsForBootstrap(context);
+// Send via your framework's safe JSON/hydration mechanism.
+```
+
+```ts
+const reflag = new ReflagClient({ publishableKey, bootstrappedState });
+await reflag.initialize();
+const enabled = reflag.getFlag("release");
+```
+
+The payload includes `protocolVersion: 2`, context, evaluated diagnostics/selections and an optional snapshot version. V1 payloads and the old `bootstrappedFlags` option are rejected. Preserve the entire envelope; do not pass just its `flags` property. A version is required for bootstrapped live updates. Never embed secrets or server-only context in public bootstrap data. Later refreshes use browser-visible context and can differ from server-only evaluation; disable live updates when that is inappropriate.
 
 ## End-user opt-in
 
-If a flag has end-user opt-in enabled in Reflag, you can list the opt-in options for the current context and set or cancel opt-in for the current user or company.
-
 ```ts
-const optInFlags = reflagClient.getOptInFlags();
-const isLoadingOptInFlags = reflagClient.getIsLoadingOptInFlags();
-// [{ key, name, description, isEnabled, userOptedIn, companyOptedIn, isOptedIn }]
-
-await reflagClient.setOptIn("huddle", { optedIn: true });
-await reflagClient.setOptIn("huddle", { optedIn: false });
-
-await reflagClient.setOptIn("huddle", {
-  optedIn: true,
-  scope: "company",
-});
+const options = reflag.getOptInFlags();
+const loading = reflag.getIsLoadingOptInFlags();
+await reflag.setOptIn("huddles", { optedIn: true });
+await reflag.setOptIn("huddles", { optedIn: false, scope: "company" });
 ```
 
-By default, `setOptIn()` changes the opt-in for the current user, so the current context must include a `user.id`. To manage the current company's opt-in instead, pass `scope: "company"`; the context must then include a `company.id`.
+The list contains presentation/membership metadata (`key`, `name`, `description`, `isEnabled`, `userOptedIn`, `companyOptedIn`, `isOptedIn`); this is not the ordinary flag getter API. User/company grants remain independent. The selected scope requires its ID. Successful mutations wait for versioned evaluation and membership confirmation.
 
-User and company opt-ins are managed independently. Setting `optedIn` to `false` removes the opt-in only for the selected scope. For example, cancelling a user's opt-in does not change the company's opt-in for the same flag.
+Metadata arrives with ordinary `/flags/evaluated` responses and is cached with the evaluated snapshot. Bootstrapped clients whose snapshot lacks metadata fetch it on demand from the same v2 endpoint, without replacing server-derived values or provenance with browser-context evaluations. Loading settles on success or failure, including an empty list. Opt-in mutations confirm values and membership together in one versioned refresh. `optInFlagsLoadingUpdated` and `flagsUpdated` support UI subscriptions.
 
-`setOptIn` returns a promise so you can wait for the new membership state to be synchronized. It resolves after the latest flag state has been applied locally, the requested membership change has been confirmed, and `flagsUpdated` listeners have been notified.
+## Tracking, feedback and events
 
-The `description` comes from the dedicated SDK-facing opt-in description configured in Reflag.
+Use `track(eventName, attributes?)`, `feedback(payload)` and `requestFeedback({ flagKey, ... })` on the client. See [FEEDBACK.md](./FEEDBACK.md) for the feedback UI and prompting configuration.
 
-For a bootstrapped client, the first `getOptInFlags()` or `getIsLoadingOptInFlags()` call starts one flags refresh. The list call returns the currently available list synchronously, and the loading getter returns `true` until the refresh succeeds or fails. Normal initialization already exposes loading through the client's state.
+`on(event, handler)` returns an unsubscribe function. Events include `stateUpdated`, `flagsUpdated` (evaluated diagnostics), `check`, `track`, `user`, `company` and `optInFlagsLoadingUpdated`.
 
-Listen for `optInFlagsLoadingUpdated` to update UI when this loading state changes. `flagsUpdated` is emitted when a successful refresh updates the list.
+## Migration from v1
 
-## Remote config
-
-Remote config is a dynamic and flexible approach to configuring flag behavior outside of your app – without needing to re-deploy it.
-
-Similar to `isEnabled`, each flag has a `config` property. This configuration is managed from within Reflag.
-It is managed similar to the way access to flags is managed, but instead of the binary `isEnabled` you can have
-multiple configuration values which are given to different user/companies.
-
-```ts
-const flags = reflagClient.getFlags();
-// {
-//   huddle: {
-//     isEnabled: true,
-//     targetingVersion: 42,
-//     config: {
-//       key: "gpt-3.5",
-//       payload: { maxTokens: 10000, model: "gpt-3.5-beta1" }
-//     }
-//   }
-// }
-```
-
-`key` is mandatory for a config, but if a flag has no config or no config value was matched against the context, the `key` will be `undefined`. Make sure to check against this case when trying to use the configuration in your application. `payload` is an optional JSON value for arbitrary configuration needs.
-
-Just as `isEnabled`, accessing `config` on the object returned by `getFlags` does not automatically
-generate a `check` event, contrary to the `config` property on the object returned by `getFlag`.
-
-## Server-side rendering and bootstrapping
-
-For server-side rendered applications, you can render immediately with pre-fetched flag data by bootstrapping the client.
-
-### Init options bootstrapped
-
-```typescript
-type Configuration = {
-  logger: console; // by default only logs warn/error, by passing `console` you'll log everything
-  apiBaseUrl?: "https://front.reflag.com";
-  credentials?: "include" | "same-origin" | "omit"; // forwarded to fetch requests; "include" also enables credentials for the default EventSource transport
-  feedback?: undefined; // See FEEDBACK.md
-  enableTracking?: true; // set to `false` to stop sending track events and user/company updates to Reflag servers. Useful when you're impersonating a user
-  offline?: boolean; // Use the SDK in offline mode. Offline mode is useful during testing and local development
-  bootstrappedState?: {
-    context: ReflagContext;
-    flags: FetchedFlags;
-    flagStateVersion?: number;
-  }; // Pre-fetched evaluated state from server-side (see Server-side rendering section)
-  bootstrappedFlags?: FetchedFlags; // Deprecated: use `bootstrappedState` instead
-};
-```
-
-### Using `bootstrappedState`
-
-Use the Node SDK's `getFlagsForBootstrap()` method to pre-fetch evaluated state server-side, then pass the returned object directly to the browser client:
-
-```typescript
-// Server-side: Get bootstrapped state using Node SDK
-import { ReflagClient as ReflagNodeClient } from "@reflag/node-sdk";
-
-const serverClient = new ReflagNodeClient({ secretKey: "your-secret-key" });
-await serverClient.initialize();
-
-const bootstrappedState = serverClient.getFlagsForBootstrap({
-  user: { id: "user123", name: "John Doe", email: "john@acme.com" },
-  company: { id: "company456", name: "Acme Inc", plan: "enterprise" },
-});
-
-// Pass the bootstrapped state to the client using your framework's preferred method
-app.get("/", (req, res) => {
-  res.set("Content-Type", "text/html");
-  res.send(
-    Buffer.from(
-      `<script>var bootstrappedState = ${JSON.stringify(bootstrappedState)};</script>
-      <main id="app"></main>`,
-    ),
-  );
-});
-
-// Client-side: Initialize with pre-fetched evaluated state
-import { ReflagClient } from "@reflag/browser-sdk";
-
-const reflagClient = new ReflagClient({
-  publishableKey: "your-publishable-key",
-  bootstrappedState, // Contains context, flags, and optional flagStateVersion
-});
-
-await reflagClient.initialize();
-const { isEnabled } = reflagClient.getFlag("huddle");
-```
-
-The `bootstrappedState` object contains:
-
-- `context`: the evaluation context used on the server
-- `flags`: the evaluated raw flags
-- `flagStateVersion`: an optional version used to avoid redundant live-update refreshes immediately after bootstrapping
-
-If you want live flag updates to continue working after bootstrapping, use a recent `@reflag/node-sdk` so `getFlagsForBootstrap()` includes `flagStateVersion`.
-
-If a bootstrapped application requests opt-in flags, the browser SDK performs one flags refresh. Applications that do not request opt-in data do not make this request.
-
-If you previously used `bootstrappedFlags`, migrate like this:
-
-```typescript
-// Before
-const { flags } = serverClient.getFlagsForBootstrap(context);
-const client = new ReflagClient({
-  publishableKey,
-  user: context.user,
-  company: context.company,
-  other: context.other,
-  bootstrappedFlags: flags,
-});
-
-// After
-const bootstrappedState = serverClient.getFlagsForBootstrap(context);
-const client = new ReflagClient({
-  publishableKey,
-  bootstrappedState,
-});
-```
-
-> [!NOTE]
-> After bootstrapping, any live flag updates are fetched directly by the browser SDK from Reflag using the browser-visible context. If your bootstrapped snapshot depends on server-only or secret context that is not available in the browser, later live refreshes may differ. In that case, keep `enableLiveFlagUpdates` disabled.
-
-This eliminates loading states and removes the initial render's dependency on the flags API.
-
-## Context management
-
-### Updating user/company/other context
-
-Attributes given for the user/company/other context in the ReflagClient constructor can be updated for use in flag targeting evaluation with the `updateUser()`, `updateCompany()` and `updateOtherContext()` methods.
-They return a promise which resolves once the flags have been re-evaluated follow the update of the attributes.
-
-> [!NOTE] > `user`/`company` attributes are also stored remotely on the Reflag servers and will automatically be used to evaluate flag targeting if the page is refreshed.
-
-### setContext()
-
-The `setContext()` method allows you to replace the entire context (user, company, and other attributes) at once. This method is useful when you need to completely change the context, such as when a user logs in or switches between different accounts.
-
-```ts
-await reflagClient.setContext({
-  user: {
-    id: "new-user-123",
-    name: "Jane Doe",
-    email: "jane@example.com",
-    role: "admin",
-  },
-  company: {
-    id: "company-456",
-    name: "New Company Inc",
-    plan: "enterprise",
-  },
-  other: {
-    feature: "beta",
-    locale: "en-US",
-  },
-});
-```
-
-The method will:
-
-- Replace the entire context with the new values
-- Re-evaluate all flags based on the new context
-- Update the user and company information on Reflag servers
-- Return a promise that resolves once the flags have been re-evaluated
-
-### getContext()
-
-The `getContext()` method returns the current context being used for flag evaluation. This is useful for debugging or when you need to inspect the current user, company, and other attributes.
-
-```ts
-const currentContext = reflagClient.getContext();
-console.log(currentContext);
-// {
-//   user: { id: "user-123", name: "John Doe", email: "john@example.com" },
-//   company: { id: "company-456", name: "Acme Inc", plan: "enterprise" },
-//   other: { locale: "en-US", feature: "beta" }
-// }
-```
-
-The returned context object contains:
-
-- `user`: Current user attributes (if any)
-- `company`: Current company attributes (if any)
-- `other`: Additional context attributes not related to user or company
-
-## Toolbar
-
-The Reflag Toolbar is great for toggling flags on/off for yourself to ensure that everything works both when a flag is on and when it's off.
-
-<img width="352" alt="Toolbar screenshot" src="https://github.com/user-attachments/assets/c223df5a-4bd8-49a1-8b4a-ad7001357693" />
-
-The toolbar will automatically appear on `localhost`. However, it can also be incredibly useful in production.
-You have full control over when it appears through the `toolbar` configuration option passed to the `ReflagClient`.
-
-You can pass a simple boolean to force the toolbar to appear/disappear:
-
-```typescript
-const client = new ReflagClient({
-  // show the toolbar even in production if the user is an internal/admin user
-  toolbar: user?.isInternal,
-  ...
-});
-```
-
-You can also configure the position of the toolbar on the screen:
-
-```typescript
-const client = new ReflagClient({
-  toolbar: {
-    show: true;
-    position: {
-      placement: "bottom-left",
-      offset: {x: "1rem", y: "1rem"}
-    }
-  }
-  ...
-})
-```
-
-See [the reference](https://docs.reflag.com/supported-languages/browser-sdk/globals#toolbaroptions) for details.
-
-## Qualitative feedback on beta flags
-
-Reflag can collect qualitative feedback from your users in the form of a [Customer Satisfaction Score](https://en.wikipedia.org/wiki/Customer_satisfaction) and a comment.
-
-### Automated feedback collection
-
-The Reflag Browser SDK comes with automated feedback collection mode enabled by default, which lets the Reflag service ask your users for feedback for relevant flags just after they've used them.
-
-> [!NOTE]
-> To get started with automatic feedback collection, make sure you've set `user` in the `ReflagClient` constructor.
-
-Automated feedback surveys work even if you're not using the SDK to send events to Reflag.
-It works because the Reflag Browser SDK maintains a live connection to Reflag's servers and can automatically show a feedback prompt whenever the Reflag servers determines that an event should trigger a prompt - regardless of how this event is sent to Reflag.
-
-You can find all the options to make changes to the default behavior in the [Reflag feedback documentation](./FEEDBACK.md).
-
-### Reflag feedback UI
-
-Reflag can assist you with collecting your user's feedback by offering a pre-built UI, allowing you to get started with minimal code and effort.
-
-[Read the Reflag feedback UI documentation](./FEEDBACK.md)
-
-### Reflag feedback SDK
-
-Feedback can be submitted to Reflag using the SDK:
-
-```ts
-reflagClient.feedback({
-  flagKey: "my-flag-key", // String (required), copy from Flag feedback tab
-  score: 5, // Number: 1-5 (optional)
-  comment: "Absolutely stellar work!", // String (optional)
-});
-```
-
-### Reflag feedback API
-
-If you are not using the Reflag Browser SDK, you can still submit feedback using the HTTP API.
-
-See details in [Feedback HTTP API](https://docs.reflag.com/api/http-api#post-feedback)
-
-## Tracking flag usage
-
-The `track` function lets you send events to Reflag to denote flag usage.
-By default Reflag expects event names to align with the flag keys, but
-you can customize it as you wish.
-
-```ts
-reflagClient.track("huddle", { voiceHuddle: true });
-```
-
-## Event listeners
-
-Event listeners allow for capturing various events occurring in the `ReflagClient`. This is useful to build integrations with other system or for various debugging purposes. The available events are:
-
-- `check`: Your code used `isEnabled` or `config` for a flag
-- `flagsUpdated`: Flags were updated. Either because they were loaded as part of initialization or because the user/company updated
-- `optInFlagsLoadingUpdated`: The opt-in flag loading state changed
-- `user`: User information updated (similar to the `identify` call used in tracking terminology)
-- `company`: Company information updated (sometimes to the `group` call used in tracking terminology)
-- `track`: Track event occurred.
-
-Use the `on()` method to add an event listener to respond to certain events. See the API reference for details on each hook.
-
-```ts
-import { ReflagClient, CheckEvent, RawFlags } from "@reflag/browser-sdk";
-
-const client = new ReflagClient({
-  // options
-});
-
-// or add the hooks after construction:
-const unsub = client.on("check", (check: CheckEvent) =>
-  console.log(`Check event ${check}`),
-);
-// use the returned function to unsubscribe, or call `off()` with the same arguments again
-unsub();
-```
-
-## Zero PII
-
-The Reflag Browser SDK doesn't collect any metadata and HTTP IP addresses are _not_ being stored.
-
-For tracking individual users, we recommend using something like database ID as userId, as it's unique and doesn't include any PII (personal identifiable information). If, however, you're using e.g. email address as userId, but prefer not to send any PII to Reflag, you can hash the sensitive data before sending it to Reflag:
-
-```ts
-import reflag from "@reflag/browser-sdk";
-import { sha256 } from "crypto-hash";
-
-reflag.user(await sha256("john_doe"));
-```
-
-## Use of cookies
-
-The Reflag Browser SDK uses a couple of cookies to support automated feedback surveys. These cookies are not used for tracking purposes and thus should not need to appear in cookie consent forms.
-
-The two cookies are:
-
-- `reflag-prompt-${userId}`: store the last automated feedback prompt message ID received to avoid repeating surveys
-- `reflag-token-${userId}`: caching a token used to connect to Reflag's live messaging infrastructure that is used to deliver automated feedback surveys in real time.
-
-## TypeScript
-
-Types are bundled together with the library and exposed automatically when importing through a package manager.
-
-## Content Security Policy (CSP)
-
-If you are running with strict Content Security Policies active on your website, you will need to enable these directives in order to use the SDK:
-
-| Directive   | Values                                               | Reason                                                                                                  |
-| ----------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| connect-src | [https://front.reflag.com](https://front.reflag.com) | API requests plus Server-Sent Events for live flag updates and automated feedback surveys.              |
-| style-src   | 'unsafe-inline'                                      | The feedback UI is styled with inline styles. Not having this directive results unstyled HTML elements. |
-
-If you are including the Reflag tracking SDK with a `<script>`-tag from `jsdelivr.net` you will also need:
-
-| Directive       | Values                                               | Reason                          |
-| --------------- | ---------------------------------------------------- | ------------------------------- |
-| script-src-elem | [https://cdn.jsdelivr.net](https://cdn.jsdelivr.net) | Loads the Reflag SDK from a CDN |
-
-## License
-
-> MIT License
-> Copyright (c) 2025 Bucket ApS
+- Replace `getFlag(key).isEnabled` with `getFlag(key)`.
+- Replace legacy remote config access with a separately authored multivariate flag and a positional default. Legacy config is **not** automatically converted into v2 values.
+- Move flag `.track()` / `.requestFeedback()` calls to ordinary client methods.
+- Replace wrapper overrides with `setFlagOverride(key, value)`; undefined clears, null is a value.
+- `getFlags()` now returns values and registers checks. Tooling should use `getFlagResults()`.
+- Upgrade both ends of bootstrap to v2. Old Browser/framework clients remain incompatible with v2 bootstrap.

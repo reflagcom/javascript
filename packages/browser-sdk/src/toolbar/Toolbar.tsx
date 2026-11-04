@@ -47,16 +47,19 @@ export default function Toolbar({
   const [isHidden, setIsHidden] = useState(wasHidden);
 
   const updateFlags = useCallback(() => {
-    const rawFlags = reflagClient.getFlags();
+    const rawFlags = reflagClient.getFlagResults();
     setFlags(
-      Object.values(rawFlags)
-        .filter((f) => f !== undefined)
+      Object.entries(rawFlags)
+        .filter(([, flag]) => typeof flag.value === "boolean")
         .map(
-          (flag) =>
+          ([key, flag]) =>
             ({
-              flagKey: flag.key,
-              isEnabledOverride: flag.isEnabledOverride ?? null,
-              isEnabled: flag.isEnabled,
+              flagKey: key,
+              isEnabledOverride:
+                typeof reflagClient.getFlagOverride(key) === "boolean"
+                  ? (reflagClient.getFlagOverride(key) as boolean)
+                  : null,
+              isEnabled: flag.value === true,
             }) satisfies FlagItem,
         ),
     );
@@ -157,7 +160,10 @@ export default function Toolbar({
             flags={sortedFlags}
             searchQuery={search?.toLocaleLowerCase() ?? null}
             setIsEnabledOverride={(flagKey, isEnabled) =>
-              reflagClient.getFlag(flagKey).setIsEnabledOverride(isEnabled)
+              reflagClient.setFlagOverride(
+                flagKey,
+                isEnabled === null ? undefined : isEnabled,
+              )
             }
           />
         </DialogContent>

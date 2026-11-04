@@ -4,43 +4,41 @@ import { RawFlags } from "../../src/flag/flags";
 
 export const testChannel = "testChannel";
 
-export const flagResponse = {
-  success: true,
-  features: {
-    flagA: {
-      isEnabled: true,
-      key: "flagA",
-      targetingVersion: 1,
-      config: undefined,
-      ruleEvaluationResults: [false, true],
-      missingContextFields: ["field1", "field2"],
-    },
-    flagB: {
-      isEnabled: true,
-      targetingVersion: 11,
-      key: "flagB",
-      config: {
-        version: 12,
-        key: "gpt3",
-        payload: { model: "gpt-something", temperature: 0.5 },
-        ruleEvaluationResults: [true, false, false],
-        missingContextFields: ["field3"],
-      },
-    },
+export function selectedFlag(
+  value: RawFlags[string]["value"],
+  variantKey = "true",
+  sourceVersionId = "version-1",
+): RawFlags[string] {
+  return {
+    value,
+    resolved: true,
+    variantKey,
+    sourceVersionId,
+    matchedRuleId: "default",
+    ruleResults: [{ ruleId: "default", matched: true }],
+    errors: [],
+  };
+}
+
+export const flagsResult: RawFlags = {
+  flagA: { ...selectedFlag(true), optInEnabled: false, optIn: null },
+  flagB: {
+    ...selectedFlag(
+      { model: "gpt-something", temperature: 0.5 },
+      "gpt3",
+      "version-2",
+    ),
+    optInEnabled: false,
+    optIn: null,
   },
 };
-
-export const flagsResult = Object.entries(flagResponse.features).reduce(
-  (acc, [key, flag]) => {
-    acc[key] = {
-      ...flag!,
-      config: flag.config,
-      isEnabledOverride: null,
-    };
-    return acc;
-  },
-  {} as RawFlags,
-);
+export const flagResponse = {
+  success: true,
+  protocolVersion: 2,
+  flagStateVersion: 1,
+  remoteContextUsed: false,
+  flags: flagsResult,
+};
 
 function checkRequest(request: StrictRequest<DefaultBodyType>) {
   const url = new URL(request.url);
@@ -104,11 +102,7 @@ export const handlers = [
         );
       }
       if (event.type === "feature-flag-event") {
-        return (
-          typeof event.key === "string" &&
-          (event.action === "check-is-enabled" ||
-            event.action === "check-config")
-        );
+        return typeof event.key === "string" && event.action === "check";
       }
       if (event.type === "prompt-event") {
         return (
@@ -208,7 +202,7 @@ export const handlers = [
     });
   }),
   http.get("https://front.reflag.com/features/enabled", getFlags),
-  http.get("https://front.reflag.com/features/evaluated", getFlags),
+  http.get("https://front.reflag.com/flags/evaluated", getFlags),
   http.post(
     "https://front.reflag.com/feedback/prompting-init",
     ({ request }) => {

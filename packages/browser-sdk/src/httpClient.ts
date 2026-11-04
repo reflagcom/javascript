@@ -75,13 +75,14 @@ export class HttpClient {
     const controller = createAbortController();
     const id = setTimeout(() => controller.abort(), timeoutMs);
 
-    const res = await fetch(url, {
-      ...this.fetchOptions,
-      signal: controller.signal,
-    });
-    clearTimeout(id);
-
-    return res;
+    try {
+      return await fetch(url, {
+        ...this.fetchOptions,
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(id);
+    }
   }
 
   async post({

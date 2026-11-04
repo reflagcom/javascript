@@ -1,1064 +1,364 @@
-import { afterAll, beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
-import { version } from "../package.json";
-import { FLAGS_EXPIRE_MS } from "../src/config";
-import {
-  FlagsClient,
-  FetchedFlagsResult,
-  RawFlag,
-  validateFlagsResponse,
-} from "../src/flag/flags";
+import { FlagCache } from "../src/flag/flagCache";
+import { FlagsClient, validateFlagsResponse } from "../src/flag/flags";
 import { HttpClient } from "../src/httpClient";
+import { createNoopStorageAdapter } from "../src/storage";
 import { deferred } from "./deferred";
-import { newCache, TEST_STALE_MS } from "./flagCache.test";
-import { flagResponse, flagsResult } from "./mocks/handlers";
+import { flagResponse, flagsResult, selectedFlag } from "./mocks/handlers";
 import { testLogger } from "./testLogger";
 
-beforeEach(() => {
-  vi.useFakeTimers();
-  vi.resetAllMocks();
-});
-
-afterAll(() => {
-  vi.useRealTimers();
-});
-
-function evaluatedFlagsResponse(
-  flagStateVersion: number,
-  flagAEnabled: boolean,
-) {
-  return new Response(
-    JSON.stringify({
-      ...flagResponse,
-      flagStateVersion,
-      features: {
-        ...flagResponse.features,
-        flagA: {
-          ...flagResponse.features.flagA,
-          isEnabled: flagAEnabled,
-        },
+function response(version = 1, value = true): Response {
+  return Response.json({
+    ...flagResponse,
+    flagStateVersion: version,
+    flags: {
+      flagA: {
+        ...selectedFlag(value, String(value), `source-${version}`),
+        optInEnabled: false,
+        optIn: null,
       },
-    }),
-    {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
     },
-  );
-}
-
-function flagsClientFactory() {
-  const { cache } = newCache();
-  const httpClient = new HttpClient("pk", {
-    baseUrl: "https://front.reflag.com",
   });
-
-  vi.spyOn(httpClient, "get");
-  vi.spyOn(httpClient, "post");
-  vi.spyOn(globalThis, "fetch").mockResolvedValue(
-    new Response(JSON.stringify(flagResponse), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    }),
-  );
-
-  return {
-    cache,
-    httpClient,
-    newFlagsClient: function newFlagsClient(
-      context?: Record<string, any>,
-      options?: { staleWhileRevalidate?: boolean; fallbackFlags?: any },
-    ) {
-      return new FlagsClient(
-        httpClient,
-        {
-          user: { id: "123" },
-          company: { id: "456" },
-          other: { eventId: "big-conference1" },
-          ...context,
-        },
-        testLogger,
-        {
-          cache,
-          ...options,
-        },
-      );
-    },
-  };
 }
-
-describe("FlagsClient", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+function setup(
+  options: NonNullable<ConstructorParameters<typeof FlagsClient>[3]> = {},
+) {
+  const http = new HttpClient("pk", { baseUrl: "https://front.reflag.com" });
+  const get = vi.spyOn(http, "get").mockImplementation(async () => response());
+  const client = new FlagsClient(http, { user: { id: "alice" } }, testLogger, {
+    storage: createNoopStorageAdapter(),
+    ...options,
   });
+  return { client, get };
+}
+afterEach(() => vi.useRealTimers());
 
-  test("parses opt-in metadata", () => {
-    const result = validateFlagsResponse({
-      success: true,
-      features: {
-        optInFlag: {
-          key: "optInFlag",
-          isEnabled: true,
-          targetingVersion: 1,
-          optInEnabled: true,
-          optIn: {
-            userOptedIn: true,
-            companyOptedIn: false,
-            isOptedIn: true,
-            name: "Opt-in flag",
-            description: "Try it early",
+describe("v2 snapshots", () => {
+  test.each([
+    ["legacy protocol", { success: true, features: {} }],
+    [
+      "missing snapshot version",
+      { ...flagResponse, flagStateVersion: undefined },
+    ],
+    ["negative snapshot version", { ...flagResponse, flagStateVersion: -1 }],
+    [
+      "missing selected identity",
+      {
+        ...flagResponse,
+        flags: { bad: { ...selectedFlag(true), sourceVersionId: undefined } },
+      },
+    ],
+    [
+      "malformed rule diagnostics",
+      {
+        ...flagResponse,
+        flags: { bad: { ...selectedFlag(true), ruleResults: [true] } },
+      },
+    ],
+    [
+      "malformed error diagnostics",
+      {
+        ...flagResponse,
+        flags: {
+          bad: {
+            ...selectedFlag(true),
+            errors: [{ code: "MISSING_CONTEXT_FIELD" }],
           },
         },
-        normalFlag: {
-          key: "normalFlag",
-          isEnabled: false,
-          targetingVersion: 2,
-          optInEnabled: false,
-          optIn: null,
+      },
+    ],
+    [
+      "malformed opt-in metadata",
+      {
+        ...flagResponse,
+        flags: {
+          bad: {
+            ...selectedFlag(true),
+            optInEnabled: true,
+            optIn: { name: "Try" },
+          },
         },
       },
-    });
-
-    expect(result?.flags.optInFlag).toMatchObject({
-      key: "optInFlag",
-      isEnabled: true,
-      optInEnabled: true,
-      optIn: {
-        userOptedIn: true,
-        companyOptedIn: false,
-        isOptedIn: true,
-        name: "Opt-in flag",
-        description: "Try it early",
-      },
-    });
-    expect(result?.flags.normalFlag).toMatchObject({
-      key: "normalFlag",
-      optInEnabled: false,
-      optIn: null,
-    });
+    ],
+  ])("rejects %s atomically", (_name, body) => {
+    expect(validateFlagsResponse(body)).toBeUndefined();
   });
 
-  test("fetches flags", async () => {
-    const { newFlagsClient, httpClient } = flagsClientFactory();
-    const flagsClient = newFlagsClient();
-
-    let updated = false;
-    flagsClient.onUpdated(() => {
-      updated = true;
-    });
-
-    await flagsClient.initialize();
-    expect(flagsClient.getFlags()).toEqual(flagsResult);
-
-    expect(updated).toBe(true);
-    expect(httpClient.get).toBeCalledTimes(1);
-
-    const calls = vi.mocked(httpClient.get).mock.calls.at(0)!;
-    const { params, path, timeoutMs } = calls[0];
-
-    const paramsObj = Object.fromEntries(new URLSearchParams(params));
-    expect(paramsObj).toEqual({
-      "reflag-sdk-version": "browser-sdk/" + version,
-      contextJson:
-        '{"company":{"id":"456"},"other":{"eventId":"big-conference1"},"user":{"id":"123"}}',
-      publishableKey: "pk",
-    });
-
-    expect(path).toEqual("/features/evaluated");
-    expect(timeoutMs).toEqual(5000);
-  });
-
-  test("sends array context as canonical JSON", async () => {
-    const { newFlagsClient, httpClient } = flagsClientFactory();
-    const flagsClient = newFlagsClient({
-      user: { id: "123", roles: ["admin", "editor"] },
+  test("fetches v2 evaluated values with canonical JSON context and no root checks", async () => {
+    const { client, get } = setup();
+    await client.setContext({
+      user: { id: 0, roles: ["admin", "editor"] },
       other: { z: { second: 2, first: 1 }, a: true },
     });
-
-    await flagsClient.initialize();
-
-    const { params } = vi.mocked(httpClient.get).mock.calls[0][0];
-    expect(new URLSearchParams(params).get("contextJson")).toBe(
-      '{"company":{"id":"456"},"other":{"a":true,"z":{"first":1,"second":2}},"user":{"id":"123","roles":["admin","editor"]}}',
+    expect(get).toHaveBeenCalledWith(
+      expect.objectContaining({ path: "/flags/evaluated", timeoutMs: 5000 }),
     );
-  });
-
-  test("uses waitForVersion when refreshing flags for a pushed version", async () => {
-    const { newFlagsClient, httpClient } = flagsClientFactory();
-    const flagsClient = newFlagsClient();
-
-    await flagsClient.initialize();
-    vi.mocked(httpClient.get).mockClear();
-    vi.mocked(httpClient.get).mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: () => Promise.resolve({ ...flagResponse, flagStateVersion: 22 }),
-    } as Response);
-
-    const refreshedFlags = await flagsClient.refreshFlags(22);
-
-    expect(refreshedFlags).not.toBe(flagsClient.getFetchedFlags());
-    expect(httpClient.get).toHaveBeenCalledTimes(1);
-    const { params, path } = vi.mocked(httpClient.get).mock.calls[0][0];
-    const paramsObj = Object.fromEntries(new URLSearchParams(params));
-
-    expect(path).toEqual("/features/evaluated");
-    expect(paramsObj).toMatchObject({
-      contextJson:
-        '{"company":{"id":"456"},"other":{"eventId":"big-conference1"},"user":{"id":"123"}}',
-      publishableKey: "pk",
-      waitForVersion: "22",
-    });
-  });
-
-  test("preserves flagStateVersion from the initial fetch result", async () => {
-    const { newFlagsClient, httpClient } = flagsClientFactory();
-    vi.mocked(httpClient.get).mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: () => Promise.resolve({ ...flagResponse, flagStateVersion: 5 }),
-    } as Response);
-
-    const flagsClient = newFlagsClient();
-    await flagsClient.initialize();
-
-    expect(flagsClient.getFlags()).toEqual(flagsResult);
-    expect(flagsClient.getFlagStateVersion()).toBe(5);
-  });
-
-  test("ignores stale waitForVersion refresh responses", async () => {
-    const { newFlagsClient, httpClient } = flagsClientFactory();
-    vi.mocked(httpClient.get)
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: () => Promise.resolve({ ...flagResponse, flagStateVersion: 5 }),
-      } as Response)
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: () =>
-          Promise.resolve({
-            success: true,
-            flagStateVersion: 5,
-            features: {
-              ...flagResponse.features,
-              flagA: {
-                ...flagResponse.features.flagA,
-                isEnabled: false,
-              },
-            },
-          }),
-      } as Response);
-
-    const flagsClient = newFlagsClient();
-    await flagsClient.initialize();
-
-    const result = await flagsClient.refreshFlags(6);
-
-    expect(result).toBeUndefined();
-    expect(flagsClient.getFlags()).toEqual(flagsResult);
-    expect(flagsClient.getFlagStateVersion()).toBe(5);
-    expect(testLogger.warn).toHaveBeenCalledWith(
-      "[Flags] ignoring stale flag response for requested flag state version.",
-      {
-        requestedFlagStateVersion: 6,
-        responseFlagStateVersion: 5,
-      },
+    expect(get.mock.calls[0][0].params?.get("contextJson")).toBe(
+      '{"other":{"a":true,"z":{"first":1,"second":2}},"user":{"id":0,"roles":["admin","editor"]}}',
     );
-  });
-
-  test("does not let an older concurrent refresh replace newer flags", async () => {
-    const { newFlagsClient, httpClient } = flagsClientFactory();
-    const flagsClient = newFlagsClient();
-    await flagsClient.initialize();
-
-    const olderResponse = deferred<Response>();
-    const newerResponse = deferred<Response>();
-    vi.mocked(httpClient.get)
-      .mockReset()
-      .mockReturnValueOnce(olderResponse.promise)
-      .mockReturnValueOnce(newerResponse.promise);
-
-    const olderRefresh = flagsClient.refreshFlags(6);
-    const newerRefresh = flagsClient.refreshFlags(7);
-
-    newerResponse.resolve(evaluatedFlagsResponse(7, false));
-    await newerRefresh;
-    olderResponse.resolve(evaluatedFlagsResponse(6, true));
-
-    await expect(olderRefresh).resolves.toEqual(flagsClient.getFetchedFlags());
-    expect(flagsClient.getFlagStateVersion()).toBe(7);
-    expect(flagsClient.getFlags().flagA.isEnabled).toBe(false);
-  });
-
-  test("does not let an older context fetch replace a newer refresh", async () => {
-    const { newFlagsClient, httpClient } = flagsClientFactory();
-    const flagsClient = newFlagsClient();
-    await flagsClient.initialize();
-
-    const contextResponse = deferred<Response>();
-    const refreshResponse = deferred<Response>();
-    vi.mocked(httpClient.get)
-      .mockReset()
-      .mockReturnValueOnce(contextResponse.promise)
-      .mockReturnValueOnce(refreshResponse.promise);
-
-    const contextUpdate = flagsClient.setContext({ user: { id: "789" } });
-    await vi.waitFor(() => expect(httpClient.get).toHaveBeenCalledTimes(1));
-
-    const refresh = flagsClient.refreshFlags(7);
-    await vi.waitFor(() => expect(httpClient.get).toHaveBeenCalledTimes(2));
-
-    refreshResponse.resolve(evaluatedFlagsResponse(7, false));
-    await refresh;
-    contextResponse.resolve(evaluatedFlagsResponse(6, true));
-
-    await expect(contextUpdate).resolves.toBe(true);
-    expect(flagsClient.getFlagStateVersion()).toBe(7);
-    expect(flagsClient.getFlags().flagA.isEnabled).toBe(false);
-  });
-
-  test("does not apply a refresh started for a previous context", async () => {
-    const { newFlagsClient, httpClient } = flagsClientFactory();
-    const flagsClient = newFlagsClient();
-    await flagsClient.initialize();
-
-    const previousContextResponse = deferred<Response>();
-    vi.mocked(httpClient.get)
-      .mockReset()
-      .mockReturnValue(previousContextResponse.promise);
-
-    const previousContextRefresh = flagsClient.refreshFlags(6);
-    flagsClient.setContextWithoutFetch({ user: { id: "789" } });
-    flagsClient.setFetchedFlags(
-      {
-        ...flagsResult,
-        flagA: { ...flagsResult.flagA, isEnabled: false },
-      },
-      true,
-      7,
-    );
-    previousContextResponse.resolve(evaluatedFlagsResponse(6, true));
-
-    await expect(previousContextRefresh).resolves.toBeUndefined();
-    expect(flagsClient.getFlagStateVersion()).toBe(7);
-    expect(flagsClient.getFlags().flagA.isEnabled).toBe(false);
-  });
-
-  test("rate limits refreshes after 20 requests in the refresh window", async () => {
-    const { newFlagsClient, httpClient } = flagsClientFactory();
-    const flagsClient = newFlagsClient();
-    await flagsClient.initialize();
-
-    vi.mocked(httpClient.get).mockClear();
-    vi.mocked(testLogger.warn).mockClear();
-    vi.mocked(httpClient.get).mockImplementation(() =>
-      Promise.resolve(evaluatedFlagsResponse(1, true)),
-    );
-
-    await Promise.all(
-      Array.from({ length: 20 }, () => flagsClient.refreshFlags()),
-    );
-    expect(httpClient.get).toHaveBeenCalledTimes(20);
-
-    await expect(flagsClient.refreshFlags(22)).resolves.toBeUndefined();
-    expect(httpClient.get).toHaveBeenCalledTimes(20);
-    expect(testLogger.warn).toHaveBeenCalledWith(
-      "[Flags] refresh rate limit exceeded",
-    );
-
-    vi.mocked(httpClient.get).mockImplementation(() =>
-      Promise.resolve(evaluatedFlagsResponse(22, false)),
-    );
-    await vi.advanceTimersByTimeAsync(60 * 1000);
-    const refreshedFlags = await flagsClient.refreshFlags(22);
-    expect(refreshedFlags).toEqual(flagsClient.getFetchedFlags());
-    expect(httpClient.get).toHaveBeenCalledTimes(21);
-    expect(flagsClient.getFlagStateVersion()).toBe(22);
-    expect(flagsClient.getFlags().flagA.isEnabled).toBe(false);
-  });
-
-  test("warns about missing context fields", async () => {
-    const { newFlagsClient } = flagsClientFactory();
-    const flagsClient = newFlagsClient();
-
-    await flagsClient.initialize();
-
-    expect(testLogger.warn).toHaveBeenCalledTimes(1);
-    expect(testLogger.warn).toHaveBeenCalledWith(
-      "[Flags] flag targeting rules might not be correctly evaluated due to missing context fields.",
-      {
-        flagA: ["field1", "field2"],
-        "flagB.config": ["field3"],
-      },
-    );
-
-    vi.advanceTimersByTime(TEST_STALE_MS + 1);
-
-    expect(testLogger.warn).toHaveBeenCalledTimes(1);
-    vi.advanceTimersByTime(60 * 1000);
-    await flagsClient.initialize();
-    expect(testLogger.warn).toHaveBeenCalledTimes(2);
-  });
-
-  test("ignores undefined context", async () => {
-    const { newFlagsClient, httpClient } = flagsClientFactory();
-    const flagsClient = newFlagsClient({
-      user: undefined,
-      company: undefined,
-      other: undefined,
-    });
-    await flagsClient.initialize();
-    expect(flagsClient.getFlags()).toEqual(flagsResult);
-
-    expect(httpClient.get).toBeCalledTimes(1);
-    const calls = vi.mocked(httpClient.get).mock.calls.at(0);
-    const { params, path, timeoutMs } = calls![0];
-
-    const paramsObj = Object.fromEntries(new URLSearchParams(params));
-    expect(paramsObj).toEqual({
-      "reflag-sdk-version": "browser-sdk/" + version,
-      publishableKey: "pk",
-    });
-
-    expect(path).toEqual("/features/evaluated");
-    expect(timeoutMs).toEqual(5000);
-  });
-
-  test("only applies flags from the latest context update", async () => {
-    const { newFlagsClient } = flagsClientFactory();
-    const flagsClient = newFlagsClient();
-
-    let resolveFirstFetch: ((flags: FetchedFlagsResult) => void) | undefined;
-    let resolveSecondFetch: ((flags: FetchedFlagsResult) => void) | undefined;
-    const firstFetch = new Promise<FetchedFlagsResult>((resolve) => {
-      resolveFirstFetch = resolve;
-    });
-    const secondFetch = new Promise<FetchedFlagsResult>((resolve) => {
-      resolveSecondFetch = resolve;
-    });
-
-    vi.spyOn(flagsClient as any, "maybeFetchFlags")
-      .mockImplementationOnce(async () => firstFetch)
-      .mockImplementationOnce(async () => secondFetch);
-
-    const firstUpdate = flagsClient.setContext({
-      user: { id: "user-1" },
-      company: { id: "company-1" },
-      other: { workspaceId: "workspace-1" },
-    });
-    const secondUpdate = flagsClient.setContext({
-      user: { id: "user-2" },
-      company: { id: "company-2" },
-      other: { workspaceId: "workspace-2" },
-    });
-
-    resolveSecondFetch?.({
-      flags: {
-        latestFlag: {
-          key: "latestFlag",
-          isEnabled: true,
-          targetingVersion: 2,
-        },
-      },
-      flagStateVersion: 2,
-    });
-
-    await expect(secondUpdate).resolves.toBe(true);
-    expect(flagsClient.getFlags()).toEqual({
-      latestFlag: {
-        key: "latestFlag",
-        isEnabled: true,
-        targetingVersion: 2,
-        isEnabledOverride: null,
-      },
-    });
-
-    resolveFirstFetch?.({
-      flags: {
-        staleFlag: {
-          key: "staleFlag",
-          isEnabled: false,
-          targetingVersion: 1,
-        },
-      },
-      flagStateVersion: 1,
-    });
-
-    await expect(firstUpdate).resolves.toBe(false);
-    expect(flagsClient.getFlags()).toEqual({
-      latestFlag: {
-        key: "latestFlag",
-        isEnabled: true,
-        targetingVersion: 2,
-        isEnabledOverride: null,
-      },
+    expect(client.getFlags().flagA).toMatchObject({
+      value: true,
+      variantKey: "true",
+      sourceVersionId: "source-1",
     });
   });
 
-  test("return fallback flags on failure (string list)", async () => {
-    const { newFlagsClient, httpClient } = flagsClientFactory();
-
-    vi.mocked(httpClient.get).mockRejectedValue(
-      new Error("Failed to fetch flags"),
-    );
-
-    const flagsClient = newFlagsClient(undefined, {
-      fallbackFlags: ["huddle"],
-    });
-
-    const initializePromise = flagsClient.initialize();
-    await vi.advanceTimersByTimeAsync(5000);
-    await initializePromise;
-    expect(flagsClient.getFlags()).toStrictEqual({
-      huddle: {
-        isEnabled: true,
-        config: undefined,
-        key: "huddle",
-        isEnabledOverride: null,
-      },
-    });
-  });
-
-  test("return fallback flags on failure (record)", async () => {
-    const { newFlagsClient, httpClient } = flagsClientFactory();
-
-    vi.mocked(httpClient.get).mockRejectedValue(
-      new Error("Failed to fetch flags"),
-    );
-    const flagsClient = newFlagsClient(undefined, {
-      fallbackFlags: {
-        huddle: {
-          key: "john",
-          payload: { something: "else" },
-        },
-        zoom: true,
-      },
-    });
-
-    const initializePromise = flagsClient.initialize();
-    await vi.advanceTimersByTimeAsync(5000);
-    await initializePromise;
-    expect(flagsClient.getFlags()).toStrictEqual({
-      huddle: {
-        isEnabled: true,
-        config: { key: "john", payload: { something: "else" } },
-        key: "huddle",
-        isEnabledOverride: null,
-      },
-      zoom: {
-        isEnabled: true,
-        config: undefined,
-        key: "zoom",
-        isEnabledOverride: null,
-      },
-    });
-  });
-
-  test("retries thrown flag fetch failures before succeeding", async () => {
-    const { newFlagsClient, httpClient } = flagsClientFactory();
-
-    vi.mocked(httpClient.get)
-      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
-      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
-      .mockResolvedValue(
-        new Response(JSON.stringify(flagResponse), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      );
-
-    const flagsClient = newFlagsClient();
-    const initializePromise = flagsClient.initialize();
-    await vi.advanceTimersByTimeAsync(5000);
-    await initializePromise;
-
-    expect(httpClient.get).toHaveBeenCalledTimes(3);
-    expect(testLogger.error).not.toHaveBeenCalled();
-    expect(flagsClient.getFlags()).toEqual(flagsResult);
-  });
-
-  test("retries thrown flag body-read failures before succeeding", async () => {
-    const { newFlagsClient, httpClient } = flagsClientFactory();
-
-    vi.mocked(httpClient.get)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
-      } as unknown as Response)
-      .mockResolvedValue(
-        new Response(JSON.stringify(flagResponse), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      );
-
-    const flagsClient = newFlagsClient();
-    const initializePromise = flagsClient.initialize();
-    await vi.advanceTimersByTimeAsync(0);
-    await initializePromise;
-
-    expect(httpClient.get).toHaveBeenCalledTimes(2);
-    expect(testLogger.error).not.toHaveBeenCalled();
-    expect(flagsClient.getFlags()).toEqual(flagsResult);
-  });
-
-  test("caches response", async () => {
-    const { newFlagsClient, httpClient } = flagsClientFactory();
-
-    const flagsClient1 = newFlagsClient();
-    await flagsClient1.initialize();
-
-    expect(httpClient.get).toBeCalledTimes(1);
-
-    const flagsClient2 = newFlagsClient();
-    await flagsClient2.initialize();
-
-    const flags = flagsClient2.getFlags();
-
-    expect(flags).toEqual(flagsResult);
-    expect(httpClient.get).toBeCalledTimes(1);
-  });
-
-  test("use cache when unable to fetch flags", async () => {
-    const { newFlagsClient, httpClient } = flagsClientFactory();
-    const flagsClient = newFlagsClient({ staleWhileRevalidate: false });
-    await flagsClient.initialize(); // cache them initially
-
-    vi.mocked(httpClient.get).mockRejectedValue(
-      new Error("Failed to fetch flags"),
-    );
-    expect(httpClient.get).toBeCalledTimes(1);
-
-    vi.advanceTimersByTime(TEST_STALE_MS + 1);
-
-    // fail this time
-    const fetchPromise = flagsClient.fetchFlags();
-    await vi.advanceTimersByTimeAsync(5000);
-    await fetchPromise;
-    expect(httpClient.get).toBeCalledTimes(4);
-
-    const staleFlags = flagsClient.getFlags();
-    expect(staleFlags).toEqual(flagsResult);
-  });
-
-  test("stale-while-revalidate should cache but start new fetch", async () => {
-    const response = {
-      success: true,
-      features: {
-        flagB: {
-          isEnabled: true,
-          key: "flagB",
-          targetingVersion: 1,
-        } satisfies RawFlag,
-      },
-    };
-
-    const { newFlagsClient, httpClient } = flagsClientFactory();
-
-    vi.mocked(httpClient.get).mockResolvedValue({
-      status: 200,
-      ok: true,
-      json: function () {
-        return Promise.resolve(response);
-      },
-    } as Response);
-
-    const client = newFlagsClient({
-      staleWhileRevalidate: true,
-    });
-    expect(httpClient.get).toHaveBeenCalledTimes(0);
-
+  test("accepts empty snapshots but retains the known-good state after an invalid refresh", async () => {
+    const { client, get } = setup();
     await client.initialize();
-    expect(client.getFlags()).toEqual({
-      flagB: {
-        isEnabled: true,
-        key: "flagB",
-        targetingVersion: 1,
-        isEnabledOverride: null,
-      } satisfies RawFlag,
-    });
-
-    expect(httpClient.get).toHaveBeenCalledTimes(1);
-    const client2 = newFlagsClient({
-      staleWhileRevalidate: true,
-    });
-
-    // change the response so we can validate that we'll serve the stale cache
-    vi.mocked(httpClient.get).mockResolvedValue({
-      status: 200,
-      ok: true,
-      json: () =>
-        Promise.resolve({
-          success: true,
-          features: {
-            flagA: {
-              isEnabled: true,
-              key: "flagA",
-              targetingVersion: 1,
-            },
-          },
-        }),
-    } as Response);
-
-    vi.advanceTimersByTime(TEST_STALE_MS + 1);
-
-    await client2.initialize();
-
-    // new fetch was fired in the background
-    expect(httpClient.get).toHaveBeenCalledTimes(2);
-
-    await vi.waitFor(() =>
-      expect(client2.getFlags()).toEqual({
-        flagA: {
-          isEnabled: true,
-          targetingVersion: 1,
-          key: "flagA",
-          isEnabledOverride: null,
-        } satisfies RawFlag,
+    get.mockResolvedValueOnce(
+      Response.json({
+        ...flagResponse,
+        flags: { valid: selectedFlag(true), broken: {} },
       }),
     );
+    expect(await client.refreshFlags()).toBeUndefined();
+    expect(client.getFlags().flagA.value).toBe(true);
+    get.mockResolvedValueOnce(
+      Response.json({ ...flagResponse, flagStateVersion: 2, flags: {} }),
+    );
+    expect(await client.refreshFlags()).toEqual({});
+    expect(client.getFlags()).toEqual({});
   });
 
-  test("does not apply stale background revalidation for a previous context", async () => {
-    const { cache, newFlagsClient, httpClient } = flagsClientFactory();
-    vi.mocked(httpClient.get).mockResolvedValue(
-      evaluatedFlagsResponse(6, true),
-    );
+  test("passes waitForVersion and refuses a response below the requested version", async () => {
+    const { client, get } = setup();
+    await client.initialize();
+    get.mockResolvedValueOnce(response(2, false));
+    expect(await client.refreshFlags(3)).toBeUndefined();
+    expect(get.mock.calls.at(-1)?.[0].params?.get("waitForVersion")).toBe("3");
+    expect(client.getFlagStateVersion()).toBe(1);
+  });
 
-    const firstClient = newFlagsClient();
-    await firstClient.initialize();
-    vi.advanceTimersByTime(TEST_STALE_MS + 1);
+  test("a late lower-version refresh cannot replace newer flags", async () => {
+    const { client, get } = setup();
+    await client.initialize();
+    const older = deferred<Response>();
+    const newer = deferred<Response>();
+    get.mockReturnValueOnce(older.promise).mockReturnValueOnce(newer.promise);
+    const first = client.refreshFlags();
+    const second = client.refreshFlags();
+    newer.resolve(response(3, false));
+    await second;
+    older.resolve(response(2, true));
+    expect(await first).toBeUndefined();
+    expect(client.getFlags().flagA.value).toBe(false);
+    expect(client.getFlagStateVersion()).toBe(3);
+  });
 
-    const backgroundResponse = deferred<Response>();
-    vi.mocked(httpClient.get)
-      .mockReset()
-      .mockReturnValue(backgroundResponse.promise);
-
-    const flagsClient = newFlagsClient(undefined, {
-      staleWhileRevalidate: true,
-    });
-    await flagsClient.initialize();
-
-    flagsClient.setContextWithoutFetch({ user: { id: "789" } });
-    flagsClient.setFetchedFlags(
-      {
-        ...flagsResult,
-        flagA: { ...flagsResult.flagA, isEnabled: false },
+  test("a context change in an update listener cannot redirect a refresh cache write", async () => {
+    const stored = new Map<string, string>();
+    const cache = new FlagCache({
+      storage: {
+        getItem: async (key) => stored.get(key) ?? null,
+        setItem: async (key, value) => {
+          stored.set(key, value);
+        },
       },
-      true,
-      7,
+      staleTimeMs: 60_000,
+      expireTimeMs: 60_000,
+    });
+    const cacheGet = vi.spyOn(cache, "get");
+    const { client, get } = setup({ cache });
+    await client.initialize();
+    const aliceCacheKey = cacheGet.mock.calls[0][0];
+
+    get
+      .mockResolvedValue(Response.json({}, { status: 503 }))
+      .mockResolvedValueOnce(response(2, false));
+    const switchContext = vi
+      .fn()
+      .mockImplementationOnce(() => client.setContext({ user: { id: "bob" } }));
+    client.onUpdated(switchContext);
+
+    await client.refreshFlags();
+    await switchContext.mock.results[0].value;
+    const bobCacheKey = cacheGet.mock.calls.at(-1)![0];
+    expect(await cache.get(bobCacheKey)).toBeUndefined();
+    expect(await cache.get(aliceCacheKey)).toMatchObject({
+      flagStateVersion: 2,
+      flags: {
+        flagA: {
+          value: false,
+          variantKey: "false",
+          sourceVersionId: "source-2",
+        },
+      },
+    });
+    expect(client.getFlags()).toEqual({});
+  });
+
+  test("context changes immediately clear old values and discard late responses for the previous context", async () => {
+    const { client, get } = setup();
+    await client.initialize();
+    const oldRefresh = deferred<Response>();
+    const current = deferred<Response>();
+    get
+      .mockReturnValueOnce(oldRefresh.promise)
+      .mockReturnValueOnce(current.promise);
+    const refresh = client.refreshFlags();
+    const context = client.setContext({ user: { id: "bob" } });
+    expect(client.getFlags()).toEqual({});
+    await vi.waitFor(() => expect(get).toHaveBeenCalledTimes(3));
+    current.resolve(response(2, false));
+    await context;
+    oldRefresh.resolve(response(9, true));
+    await refresh;
+    expect(client.getFlags().flagA.value).toBe(false);
+    expect(client.getFlagStateVersion()).toBe(2);
+  });
+
+  test("only the latest overlapping context update is accepted", async () => {
+    const { client, get } = setup();
+    const first = deferred<Response>();
+    const second = deferred<Response>();
+    get.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    const a = client.setContext({ user: { id: "a" } });
+    await vi.waitFor(() => expect(get).toHaveBeenCalledTimes(1));
+    const b = client.setContext({ user: { id: "b" } });
+    await vi.waitFor(() => expect(get).toHaveBeenCalledTimes(2));
+    second.resolve(response(1, false));
+    expect(await b).toBe(true);
+    first.resolve(response(9, true));
+    expect(await a).toBe(false);
+    expect(client.getFlags().flagA.value).toBe(false);
+  });
+
+  test("limits refresh storms without blocking the initial fetch", async () => {
+    const { client, get } = setup();
+    await client.initialize();
+    for (let i = 0; i < 21; i++) await client.refreshFlags();
+    expect(get).toHaveBeenCalledTimes(21);
+  });
+
+  test.each(["network", "body"])(
+    "retries a thrown %s failure during initialization",
+    async (kind) => {
+      vi.useFakeTimers();
+      const { client, get } = setup();
+      if (kind === "network") get.mockRejectedValueOnce(new Error("network"));
+      else
+        get.mockResolvedValueOnce({
+          ok: true,
+          json: async () => {
+            throw new Error("body");
+          },
+        } as unknown as Response);
+      const initialization = client.initialize();
+      await vi.runAllTimersAsync();
+      await initialization;
+      expect(get).toHaveBeenCalledTimes(2);
+      expect(client.getFlags().flagA.value).toBe(true);
+    },
+  );
+
+  test("falls back to unselected direct JSON after an initial HTTP failure", async () => {
+    const { client, get } = setup({
+      fallbackFlags: { settings: { model: "offline" }, false: false },
+    });
+    get.mockResolvedValue(Response.json({}, { status: 503 }));
+    await client.initialize();
+    expect(client.getFlags()).toEqual({
+      settings: {
+        value: { model: "offline" },
+        resolved: false,
+        ruleResults: [],
+        errors: [],
+      },
+      false: { value: false, resolved: false, ruleResults: [], errors: [] },
+    });
+  });
+
+  test("storage failure does not discard a successful live response", async () => {
+    const { client } = setup({
+      storage: {
+        getItem: async () => null,
+        setItem: async () => {
+          throw new Error("quota");
+        },
+      },
+    });
+    await client.initialize();
+    expect(client.getFlags().flagA.value).toBe(true);
+  });
+
+  test("uses stale v2 cache on failure, preserving real selections", async () => {
+    const cache = new FlagCache({
+      storage: createNoopStorageAdapter(),
+      staleTimeMs: 0,
+      expireTimeMs: 1000,
+    });
+    vi.spyOn(cache, "get").mockResolvedValue({
+      flags: flagsResult,
+      flagStateVersion: 4,
+      stale: true,
+    });
+    const { client, get } = setup({ cache });
+    get.mockResolvedValue(Response.json({}, { status: 503 }));
+    await client.initialize();
+    expect(client.getFlags()).toEqual(flagsResult);
+    expect(client.getFlagStateVersion()).toBe(4);
+  });
+
+  test("stale background revalidation cannot cross a context boundary", async () => {
+    const cache = new FlagCache({
+      storage: createNoopStorageAdapter(),
+      staleTimeMs: 0,
+      expireTimeMs: 1000,
+    });
+    vi.spyOn(cache, "get")
+      .mockResolvedValueOnce({
+        flags: flagsResult,
+        flagStateVersion: 1,
+        stale: true,
+      })
+      .mockResolvedValue(undefined);
+    const { client, get } = setup({ cache, staleWhileRevalidate: true });
+    const background = deferred<Response>();
+    get.mockReturnValueOnce(background.promise);
+    await client.initialize();
+    await client.setContext({ user: { id: "bob" } });
+    background.resolve(response(9, false));
+    await vi.waitFor(() => expect(client.getFlagStateVersion()).toBe(1));
+    expect(client.getFlags().flagA.value).toBe(true);
+  });
+
+  test("superseded opt-in metadata cannot leak across contexts and empty metadata settles loading", async () => {
+    const { client, get } = setup({
+      bootstrappedState: {
+        protocolVersion: 2,
+        flagStateVersion: 1,
+        flags: { flagA: selectedFlag(true) },
+      },
+    });
+    await client.initialize();
+    const oldMetadata = deferred<Response>();
+    get.mockReturnValueOnce(oldMetadata.promise);
+    client.requestOptInFlags();
+    const refresh = client.refreshOptInMetadataIfNeeded();
+    get.mockResolvedValueOnce(response());
+    await client.setContext({ user: { id: "bob" } });
+    oldMetadata.resolve(
+      Response.json({
+        ...flagResponse,
+        flags: {
+          flagA: {
+            ...selectedFlag(true),
+            optInEnabled: true,
+            optIn: {
+              name: "Alice",
+              description: null,
+              userOptedIn: true,
+              companyOptedIn: false,
+              isOptedIn: true,
+            },
+          },
+        },
+      }),
     );
-
-    const cacheSet = vi.spyOn(cache, "set");
-    const setFetchedFlags = vi.spyOn(flagsClient, "setFetchedFlags");
-    backgroundResponse.resolve(evaluatedFlagsResponse(6, true));
-
-    await vi.waitFor(() => expect(cacheSet).toHaveBeenCalledTimes(1));
-    await vi.advanceTimersByTimeAsync(0);
-
-    expect(setFetchedFlags).not.toHaveBeenCalled();
-    expect(flagsClient.getFlagStateVersion()).toBe(7);
-    expect(flagsClient.getFlags().flagA.isEnabled).toBe(false);
-  });
-
-  test("expires cache eventually", async () => {
-    // change the response so we can validate that we'll serve the stale cache
-    const { newFlagsClient, httpClient } = flagsClientFactory();
-    const client = newFlagsClient();
-    await client.initialize();
-    const a = client.getFlags();
-
-    vi.advanceTimersByTime(FLAGS_EXPIRE_MS + 1);
-    vi.mocked(httpClient.get).mockResolvedValue({
-      status: 200,
-      ok: true,
-      json: () =>
-        Promise.resolve({
-          success: true,
-          features: {
-            flagB: { isEnabled: true, key: "flagB" },
-          },
-        }),
-    } as Response);
-    const client2 = newFlagsClient();
-    await client2.initialize();
-
-    const b = client2.getFlags();
-
-    expect(httpClient.get).toHaveBeenCalledTimes(2);
-    expect(a).not.toEqual(b);
-  });
-
-  test("handled overrides", async () => {
-    // change the response so we can validate that we'll serve the stale cache
-    const { newFlagsClient } = flagsClientFactory();
-    // localStorage.clear();
-    const client = newFlagsClient();
-    await client.initialize();
-
-    let updated = false;
-    client.onUpdated(() => {
-      updated = true;
-    });
-
-    expect(client.getFlags().flagA.isEnabled).toBe(true);
-    expect(client.getFlags().flagA.isEnabledOverride).toBe(null);
-
-    expect(updated).toBe(false);
-
-    client.setFlagOverride("flagA", false);
-
-    expect(updated).toBe(true);
-    expect(client.getFlags().flagA.isEnabled).toBe(true);
-    expect(client.getFlags().flagA.isEnabledOverride).toBe(false);
-  });
-
-  test("ignores overrides for flags not returned by API", async () => {
-    // change the response so we can validate that we'll serve the stale cache
-    const { newFlagsClient } = flagsClientFactory();
-
-    // localStorage.clear();
-    const client = newFlagsClient(undefined);
-    await client.initialize();
-
-    let updated = false;
-    client.onUpdated(() => {
-      updated = true;
-    });
-
-    expect(client.getFlags().flagB.isEnabled).toBe(true);
-    expect(client.getFlags().flagB.isEnabledOverride).toBe(null);
-
-    // Setting an override for a flag that doesn't exist in fetched flags
-    // should not trigger an update since the merged flags don't change
-    client.setFlagOverride("flagC", true);
-
-    expect(updated).toBe(false);
-    expect(client.getFlags().flagC).toBeUndefined();
-  });
-
-  describe("pre-fetched flags", () => {
-    test("should have flags available when bootstrapped flags are provided in constructor", () => {
-      const { httpClient } = flagsClientFactory();
-      const preFetchedFlags = {
-        testFlag: {
-          key: "testFlag",
-          isEnabled: true,
-          targetingVersion: 1,
-        },
-        configFlag: {
-          key: "configFlag",
-          isEnabled: false,
-          targetingVersion: 2,
-          config: {
-            key: "config1",
-            version: 1,
-            payload: { value: "test" },
-          },
-        },
-      };
-
-      const flagsClient = new FlagsClient(
-        httpClient,
-        {
-          user: { id: "123" },
-          company: { id: "456" },
-          other: { eventId: "big-conference1" },
-        },
-        testLogger,
-        {
-          bootstrappedFlags: preFetchedFlags,
-        },
-      );
-
-      // Should be bootstrapped but not initialized until initialize() is called
-      expect(flagsClient["bootstrapped"]).toBe(true);
-      expect(flagsClient["initialized"]).toBe(false);
-
-      // Should have the flags available even before initialize()
-      expect(flagsClient.getFlags()).toEqual({
-        testFlag: {
-          key: "testFlag",
-          isEnabled: true,
-          targetingVersion: 1,
-          isEnabledOverride: null,
-        },
-        configFlag: {
-          key: "configFlag",
-          isEnabled: false,
-          targetingVersion: 2,
-          config: {
-            key: "config1",
-            version: 1,
-            payload: { value: "test" },
-          },
-          isEnabledOverride: null,
-        },
-      });
-    });
-
-    test("should preserve flagStateVersion when bootstrapped state is provided in constructor", () => {
-      const { httpClient } = flagsClientFactory();
-      const preFetchedFlags = {
-        testFlag: {
-          key: "testFlag",
-          isEnabled: true,
-          targetingVersion: 1,
-        },
-      };
-
-      const flagsClient = new FlagsClient(
-        httpClient,
-        {
-          user: { id: "123" },
-          company: { id: "456" },
-          other: { eventId: "big-conference1" },
-        },
-        testLogger,
-        {
-          bootstrappedState: {
-            flags: preFetchedFlags,
-            flagStateVersion: 7,
-          },
-        },
-      );
-
-      expect(flagsClient.getFlagStateVersion()).toBe(7);
-      expect(flagsClient.getFlags()).toEqual({
-        testFlag: {
-          key: "testFlag",
-          isEnabled: true,
-          targetingVersion: 1,
-          isEnabledOverride: null,
-        },
-      });
-    });
-
-    test("should skip fetching when already initialized with pre-fetched flags", async () => {
-      const { httpClient } = flagsClientFactory();
-      vi.spyOn(httpClient, "get");
-
-      const preFetchedFlags = {
-        testFlag: {
-          key: "testFlag",
-          isEnabled: true,
-          targetingVersion: 1,
-        },
-      };
-
-      const flagsClient = new FlagsClient(
-        httpClient,
-        {
-          user: { id: "123" },
-          company: { id: "456" },
-          other: { eventId: "big-conference1" },
-        },
-        testLogger,
-        {
-          bootstrappedFlags: preFetchedFlags,
-        },
-      );
-
-      // Call initialize() after flags are already provided
-      await flagsClient.initialize();
-
-      // Should not have made any HTTP requests since already initialized
-      expect(httpClient.get).not.toHaveBeenCalled();
-
-      // Should still have the flags available
-      expect(flagsClient.getFlags()).toEqual({
-        testFlag: {
-          key: "testFlag",
-          isEnabled: true,
-          targetingVersion: 1,
-          isEnabledOverride: null,
-        },
-      });
-    });
-
-    test("should trigger onUpdated when pre-fetched flags are set", async () => {
-      const { httpClient } = flagsClientFactory();
-      const preFetchedFlags = {
-        testFlag: {
-          key: "testFlag",
-          isEnabled: true,
-          targetingVersion: 1,
-        },
-      };
-
-      const flagsClient = new FlagsClient(
-        httpClient,
-        {
-          user: { id: "123" },
-          company: { id: "456" },
-          other: { eventId: "big-conference1" },
-        },
-        testLogger,
-        {
-          bootstrappedFlags: preFetchedFlags,
-        },
-      );
-
-      let updateTriggered = false;
-      flagsClient.onUpdated(() => {
-        updateTriggered = true;
-      });
-
-      // Trigger the flags updated event by setting context (which should still fetch)
-      await flagsClient.setContext({
-        user: { id: "456" },
-        company: { id: "789" },
-        other: { eventId: "other-conference" },
-      });
-
-      expect(updateTriggered).toBe(true);
-    });
-
-    test("should work with fallback flags when initialization fails", async () => {
-      const { httpClient } = flagsClientFactory();
-      vi.spyOn(httpClient, "get").mockRejectedValue(
-        new Error("Failed to fetch flags"),
-      );
-
-      const preFetchedFlags = {
-        testFlag: {
-          key: "testFlag",
-          isEnabled: true,
-          targetingVersion: 1,
-        },
-      };
-
-      const flagsClient = new FlagsClient(
-        httpClient,
-        {
-          user: { id: "123" },
-          company: { id: "456" },
-          other: { eventId: "big-conference1" },
-        },
-        testLogger,
-        {
-          bootstrappedFlags: preFetchedFlags,
-          fallbackFlags: ["fallbackFlag"],
-        },
-      );
-
-      // Should be bootstrapped but not initialized until initialize() is called
-      expect(flagsClient["bootstrapped"]).toBe(true);
-      expect(flagsClient["initialized"]).toBe(false);
-      expect(flagsClient.getFlags()).toEqual({
-        testFlag: {
-          key: "testFlag",
-          isEnabled: true,
-          targetingVersion: 1,
-          isEnabledOverride: null,
-        },
-      });
-
-      // Calling initialize should not fetch since already bootstrapped
-      await flagsClient.initialize();
-      expect(httpClient.get).not.toHaveBeenCalled();
-      expect(flagsClient["initialized"]).toBe(true);
-    });
+    await refresh;
+    expect(client.getIsLoadingOptInFlags()).toBe(false);
+    expect(client.getOptInMetadata()).toEqual({});
   });
 });

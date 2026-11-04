@@ -1,665 +1,127 @@
-# Reflag Vue SDK (beta)
+# Reflag Vue SDK v2 (beta)
 
-Vue client side library for [Reflag.com](https://reflag.com)
+Reactive direct-value flags for Vue 3, backed by [Browser SDK v2](../browser-sdk/README.md).
 
-Reflag supports flag toggling, tracking flag usage, requesting feedback on features and remotely configuring flags.
+> Breaking prerelease: requires the compatible v2 server protocol. Bootstrap must come from **Node SDK v2**, not v1. Generated declarations are optional; existing CLI wrapper-shaped generation has not been migrated.
 
-The Reflag Vue SDK comes with the same built-in toolbar as the browser SDK which appears on `localhost` by default.
-
-## Install
-
-Install via npm:
-
-```shell
-npm i @reflag/vue-sdk
-```
-
-## Migrating from Bucket SDK
-
-If you have been using the Bucket SDKs, the following list will help you migrate to Reflag SDK:
-
-- `Bucket*` classes, and types have been renamed to `Reflag*` (e.g. `BucketClient` is now `ReflagClient`)
-- `Feature*` classes, and types have been renamed to `Feature*` (e.g. `Feature` is now `Flag`, `RawFeatures` is now `RawFlags`)
-- All methods that contained `feature` in the name have been renamed to use the `flag` terminology (e.g. `getFeature` is `getFlag`)
-- The `fallbackFeatures` property in client constructor and configuration files has been renamed to `fallbackFlags`
-- `featureKey` has been renamed to `flagKey` in all methods that accepts that argument
-- The SDKs will not emit `evaluate` and `evaluate-config` events anymore
-- The new cookies that are stored in the client's browser are now `reflag-*` prefixed instead og `bucket-*`
-- The `featuresUpdated` hook has been renamed to `flagsUpdated`
-- The `checkIsEnabled` and `checkConfig` hooks have been removed, use `check` from now on
-
-To ease in transition to Reflag SDK, some of the old methods have been preserved as aliases to the new methods:
-
-- `getFeature` method is an alias for `getFlag`
-- `getFeatures` method is an alias for `getFlags`
-- `featuresUpdated` hook is an alias for `flagsUpdated`
-
-If you are running with strict Content Security Policies active on your website, you will need change them as follows:
-
-- `connect-src https://front.bucket.co` to `connect-src https://front.reflag.com`
-
-Finally, if you have customized the look & feel of the Feedback component, update `--bucket-feedback-*` CSS classes to `--reflag-feedback-*`
-
-## Get started
-
-### 1. Add the `ReflagProvider` context provider
-
-Add the `ReflagProvider` context provider to your application:
-
-**Example:**
+## Setup
 
 ```vue
 <script setup lang="ts">
 import { ReflagProvider } from "@reflag/vue-sdk";
 </script>
 
-<ReflagProvider
-  :publishable-key="publishableKey"
-  :context="{
-    user: { id: 'user_123', name: 'John Doe', email: 'john@acme.com' },
-    company: { id: 'acme_inc', plan: 'pro' },
-  }"
->
-  <!-- your app -->
-</ReflagProvider>
-```
-
-If using Nuxt, wrap `<ReflagProvider>` in `<ClientOnly>`. `<ReflagProvider>` only renders client-side currently.
-
-### 2. Use `useFlag get flag status
-
-```vue
-<script setup lang="ts">
-import { useFlag } from "@reflag/vue-sdk";
-
-const { isEnabled } = useFlag("huddles");
-</script>
-
-<template>
-  <div v-if="isEnabled">
-    <button>Start huddles!</button>
-  </div>
-</template>
-```
-
-See [useFlag()](#useflag) for a full example
-
-## Setting context
-
-Reflag determines which flags are active for a given `user`, `company`, or `other` context.
-You can pass these to the `ReflagProvider` using the `context` prop.
-
-### Using the `context` prop
-
-```vue
-<ReflagProvider
-  :publishable-key="publishableKey"
-  :context="{
-    user: { id: 'user_123', name: 'John Doe', email: 'john@acme.com' },
-    company: { id: 'acme_inc', plan: 'pro' },
-    other: { source: 'web' },
-  }"
->
-  <!-- your app -->
-</ReflagProvider>
-```
-
-### Legacy individual props (deprecated)
-
-For backward compatibility, you can still use individual props, but these are deprecated and will be removed in the next major version:
-
-```vue
-<ReflagProvider
-  :publishable-key="publishableKey"
-  :user="{ id: 'user_123', name: 'John Doe', email: 'john@acme.com' }"
-  :company="{ id: 'acme_inc', plan: 'pro' }"
-  :other-context="{ source: 'web' }"
->
-  <!-- your app -->
-</ReflagProvider>
-```
-
-> [!Important]
-> The `user`, `company`, and `otherContext` props are deprecated. Use the `context` prop instead, which provides the same functionality in a more structured way.
-
-### Context requirements
-
-If you supply `user` or `company` objects, they must include at least the `id` property otherwise they will be ignored in their entirety.
-In addition to the `id`, you must also supply anything additional that you want to be able to evaluate flag targeting rules against.
-Attributes which are not properties of the `user` or `company` can be supplied using the `other` property.
-
-Attributes cannot be nested (multiple levels) and must be either strings, numbers or booleans.
-A number of special attributes exist:
-
-- `name` -- display name for `user`/`company`,
-- `email` -- the email of the user,
-- `avatar` -- the URL for `user`/`company` avatar image.
-
-To retrieve flags along with their targeting information, use `useFlag(key: string)` hook (described in a section below).
-
-Note that accessing `isEnabled` on the object returned by `useFlag()` automatically
-generates a `check` event.
-
-## Remote config
-
-Remote config is a dynamic and flexible approach to configuring flag behavior outside of your app – without needing to re-deploy it.
-
-Similar to `isEnabled`, each flag accessed using the `useFlag()` hook, has a `config` property. This configuration is managed from within Reflag. It is managed similar to the way access to flags is managed, but instead of the
-binary `isEnabled` you can have multiple configuration values which are given to different user/companies.
-
-### Get started with Remote config
-
-```ts
-const {
-  isEnabled,
-  config: { key, payload },
-} = useFlag("huddles");
-
-// isEnabled: true,
-// key: "gpt-3.5",
-// payload: { maxTokens: 10000, model: "gpt-3.5-beta1" }
-```
-
-`key` is mandatory for a config, but if a flag has no config or no config value was matched against the context, the `key` will be `undefined`. Make sure to check against this case when trying to use the configuration in your application. `payload` is an optional JSON value for arbitrary configuration needs.
-
-Note that, similar to `isEnabled`, accessing `config` on the object returned by `useFlag()` automatically
-generates a `check` event.
-
-## `<ReflagProvider>` component
-
-The `<ReflagProvider>` initializes the Reflag SDK, fetches flags and starts listening for automated feedback survey events. The component can be configured using a number of props:
-
-- `publishableKey` is used to connect the provider to an _environment_ on Reflag. Find your `publishableKey` under [environment settings](https://app.reflag.com/env-current/settings/app-environments) in Reflag,
-- `context`: An object containing `user`, `company`, and `other` properties that make up the evaluation context used to determine if a flag is enabled or not. `company` and `user` contexts are automatically transmitted to Reflag servers so the Reflag app can show you which companies have access to which flags etc.
-- `company`, `user` and `otherContext` (deprecated): Individual props for context. These are deprecated in favor of the `context` prop and will be removed in the next major version.
-
-  > [!Note]
-  > If you specify `company` and/or `user` they must have at least the `id` property, otherwise they will be ignored in their entirety. You should also supply anything additional you want to be able to evaluate flag targeting against,
-
-- `timeoutMs`: Timeout in milliseconds when fetching flags from the server,
-- `staleWhileRevalidate`: If set to `true`, stale flags will be returned while refetching flags in the background,
-- `expireTimeMs`: If set, flags will be cached between page loads for this duration (in milliseconds),
-- `staleTimeMs`: Maximum time (in milliseconds) that stale flags will be returned if `staleWhileRevalidate` is true and new flags cannot be fetched.
-
-- `enableTracking`: Set to `false` to stop sending tracking events and user/company updates to Reflag. Useful when you're impersonating a user (defaults to `true`),
-- `apiBaseUrl`: Optional base URL for the Reflag API. This also controls the SSE origin used for live flag updates and automated feedback,
-- `credentials`: Optional fetch credentials mode. Set to `"include"` when proxying through your backend and authenticating with cookies; this also enables credentials for live-update SSE connections.
-- `appBaseUrl`: Optional base URL for the Reflag application. Use this to override the default app URL,
-
-- `debug`: Set to `true` to enable debug logging to the console. If both `logger` and `debug` are provided, `logger` takes precedence,
-- `logger`: Optional custom logger implementation (`debug`, `info`, `warn`, `error`) used by the underlying client,
-- `toolbar`: Optional [configuration](https://docs.reflag.com/supported-languages/browser-sdk/globals#toolbaroptions) for the Reflag toolbar,
-- `feedback`: Optional configuration for feedback collection
-
-### Loading states
-
-ReflagProvider lets you define a template to be shown while ReflagProvider is initializing:
-
-```vue
 <template>
   <ReflagProvider
-    :publishable-key="publishableKey"
-    :user="user"
-    :company="{ id: 'acme_inc', plan: 'pro' }"
+    publishable-key="your-publishable-key"
+    :context="{
+      user: { id: 'alice' },
+      company: { id: 'acme', plan: 'enterprise' },
+    }"
   >
-    <template #loading>Loading...</template>
-    <StartHuddlesButton />
+    <template #loading>Loading flags…</template>
+    <App />
   </ReflagProvider>
 </template>
 ```
 
-If you want more control over loading screens, `useIsLoading()` returns a `Ref<boolean>` which you can use to customize the loading experience.
+Provider options forward Browser settings, including cache/storage, fallback values, offline/tracking, feedback, toolbar, credentials and API origins. `logger` takes precedence over `debug`. Live updates default to true; disable with `:enable-live-flag-updates="false"`. For an ordinary client-only Nuxt provider, wrap it in `<ClientOnly>`.
 
-## `<ReflagBootstrappedProvider>` component
-
-The `<ReflagBootstrappedProvider>` component is a specialized version of `ReflagProvider` designed for server-side rendering and preloaded flag scenarios. It uses pre-fetched flags for the initial render, resulting in faster initial page loads and better SSR compatibility.
-
-### Usage
+## `useFlag(key, defaultValue?)`
 
 ```vue
 <script setup lang="ts">
-import { ReflagBootstrappedProvider } from "@reflag/vue-sdk";
+import { useFlag, useIsLoading, useTrack } from "@reflag/vue-sdk";
 
-// Pre-fetched flags (typically from your server/SSR layer)
-const bootstrappedFlags = {
-  context: {
-    user: { id: "user123", name: "John Doe", email: "john@acme.com" },
-    company: { id: "company456", name: "Acme Inc", plan: "enterprise" },
-  },
-  flags: {
-    huddles: {
-      isEnabled: true,
-      config: {
-        key: "enhanced",
-        payload: { maxParticipants: 50, videoQuality: "hd" },
-      },
-    },
-  },
-  flagStateVersion: 42,
-};
-</script>
-
-<template>
-  <ReflagBootstrappedProvider
-    :publishable-key="publishableKey"
-    :flags="bootstrappedFlags"
-  >
-    <StartHuddlesButton />
-  </ReflagBootstrappedProvider>
-</template>
-```
-
-### Getting bootstrapped flags
-
-You'll typically generate the `bootstrappedFlags` object on your server using the Node.js SDK or by fetching from the Reflag API. Pass the full object returned by `getFlagsForBootstrap()` directly to `<ReflagBootstrappedProvider>`. It contains:
-
-- `context`: the evaluation context used on the server
-- `flags`: the evaluated raw flags
-- `flagStateVersion`: an optional version used to avoid redundant live-update refreshes immediately after bootstrapping
-
-If you want live flag updates to continue working after bootstrapping, use a recent `@reflag/node-sdk` so `getFlagsForBootstrap()` includes `flagStateVersion`.
-
-With `ReflagBootstrappedProvider`, `useOptInFlags()` triggers one flags refresh and reports `isLoading: true` until it settles. No refresh occurs unless the composable is used.
-
-Here's an example using the Node.js SDK:
-
-```js
-// server.js (Node.js/SSR)
-import { ReflagClient } from "@reflag/node-sdk";
-
-const client = new ReflagClient({
-  secretKey: "your-secret-key", // Use secret key on server
-});
-await client.initialize();
-
-// Fetch flags for specific context
-const context = {
-  user: { id: "user123", name: "John Doe", email: "john@acme.com" },
-  company: { id: "company456", name: "Acme Inc", plan: "enterprise" },
-};
-
-const bootstrappedFlags = client.getFlagsForBootstrap(context);
-
-// Pass to your Vue app
-```
-
-### ReflagBootstrappedProvider Props
-
-`ReflagBootstrappedProvider` accepts all the same props as `ReflagProvider` except:
-
-- `flags`: The pre-fetched bootstrapped state object containing `context`, evaluated `flags`, and an optional `flagStateVersion`
-- All other props available in `ReflagProvider` are supported except `context`, `user`, `company`, and `otherContext` (which are extracted from `flags.context`)
-
-If the `flags` prop is not provided or is undefined, the provider will not initialize the client and will render in a non-loading state.
-
-> [!NOTE]
-> The on-demand browser refresh and any later live flag updates use the browser-visible context. If your bootstrapped snapshot depends on server-only or secret context that is not available in the browser, refreshed flags may differ. In that case, keep `enableLiveFlagUpdates` disabled.
-
-## `<ReflagClientProvider>` component
-
-The `<ReflagClientProvider>` is a lower-level component that accepts a pre-initialized `ReflagClient` instance. This is useful for advanced use cases where you need full control over client initialization or want to share a client instance across multiple parts of your application.
-
-### ReflagClientProvider Usage
-
-```vue
-<script setup lang="ts">
-import { ReflagClient } from "@reflag/browser-sdk";
-import { ReflagClientProvider } from "@reflag/vue-sdk";
-
-// Initialize the client yourself
-const client = new ReflagClient({
-  publishableKey: "your-publishable-key",
-  user: { id: "user123", name: "John Doe" },
-  company: { id: "company456", name: "Acme Inc" },
-  // ... other configuration options
-});
-
-// Initialize the client
-await client.initialize();
-</script>
-
-<template>
-  <ReflagClientProvider :client="client">
-    <template #loading>Loading...</template>
-    <Router />
-  </ReflagClientProvider>
-</template>
-```
-
-### ReflagClientProvider Props
-
-The `ReflagClientProvider` accepts the following props:
-
-- `client`: A pre-initialized `ReflagClient` instance
-
-### Slots
-
-- `loading`: Optional slot to show while the client is initializing (same as `ReflagProvider`)
-
-> [!Note]
-> Most applications should use `ReflagProvider` or `ReflagBootstrappedProvider` instead of `ReflagClientProvider`. Only use this component when you need the advanced control it provides.
-
-## Hooks
-
-### `useFlag()`
-
-Returns the state of a given flag for the current context. The composable provides access to flags and their configurations.
-
-`useFlag()` returns an object with this shape:
-
-```ts
-{
-  isEnabled: boolean, // is the flag enabled
-  track: () => void, // send a track event when the flag is used
-  requestFeedback: (...) => void // open up a feedback dialog
-  config: {key: string, payload: any},  // remote configuration for this flag
-  isLoading: boolean // if you want to manage loading state at the flag level
-}
-```
-
-Example:
-
-```vue
-<script setup lang="ts">
-import { useFlag } from "@reflag/vue-sdk";
-
-const { isEnabled, track, requestFeedback, config } = useFlag("huddles");
-</script>
-
-<template>
-  <div v-if="isLoading">Loading...</div>
-  <div v-else-if="!isEnabled">Flag not available</div>
-  <div v-else>
-    <button @click="track()">Start huddles!</button>
-    <button
-      @click="
-        (e) =>
-          requestFeedback({
-            title:
-              config.payload?.question ??
-              'How do you like the Huddles feature?',
-            position: {
-              type: 'POPOVER',
-              anchor: e.currentTarget as HTMLElement,
-            },
-          })
-      "
-    >
-      Give feedback!
-    </button>
-  </div>
-</template>
-```
-
-See the reference docs for details.
-
-### `useOptInFlags()` and `useSetOptIn()`
-
-Use these composables to build an end-user opt-in UI for flags where opt-in is enabled in Reflag.
-
-```vue
-<script setup lang="ts">
-import { useOptInFlags, useSetOptIn } from "@reflag/vue-sdk";
-
-const { flags: optInFlags, isLoading } = useOptInFlags();
-const setOptIn = useSetOptIn();
-</script>
-
-<template>
-  <p v-if="isLoading">Loading opt-in flags...</p>
-  <p v-else-if="optInFlags.length === 0">No opt-in flags are available.</p>
-  <template v-else>
-    <button
-      v-for="flag in optInFlags"
-      :key="flag.key"
-      @click="setOptIn(flag.key, { optedIn: !flag.userOptedIn })"
-    >
-      {{ flag.userOptedIn ? "Cancel opt-in" : `Try ${flag.name}` }}
-    </button>
-  </template>
-</template>
-```
-
-By default, `useSetOptIn()` changes the opt-in for the current user, so the current context must include a `user.id`. To manage the current company's opt-in instead, pass `scope: "company"`; the context must then include a `company.id`.
-
-User and company opt-ins are managed independently. Setting `optedIn` to `false` removes the opt-in only for the selected scope. For example, cancelling a user's opt-in does not change the company's opt-in for the same flag.
-
-`setOptIn` returns a promise so you can wait for the new membership state to be synchronized. It resolves after the latest flag state has been applied, the requested membership change has been confirmed, and components using `useOptInFlags()` have been notified. Vue schedules the resulting render normally, so it may not yet be committed when the promise resolves.
-
-`useOptInFlags()` returns `{ flags, isLoading }`, where both values are computed refs. With `ReflagBootstrappedProvider`, the composable fetches opt-in metadata on first use and reports `isLoading: true` until the flags refresh succeeds or fails.
-
-With a regular `ReflagProvider`, opt-in metadata arrives as part of the normal initial flags request, so `useOptInFlags().isLoading` remains `false`. Use the general `useIsLoading()` composable or the provider's loading slot for that initial loading state.
-
-### `useTrack()`
-
-`useTrack()` returns a function which lets you send custom events to Reflag. It takes a string argument with the event name and optionally an object with properties to attach the event.
-
-Using `track` returned from `useFlag()` calls this track function with the flag key as the event name.
-
-```vue
-<script setup lang="ts">
-import { useTrack } from "@reflag/vue-sdk";
-
+const enabled = useFlag("huddles"); // ShallowRef<boolean>; implicit false
+const settings = useFlag("huddle-settings", { maxParticipants: 10 });
+const isLoading = useIsLoading();
 const track = useTrack();
+// In script: enabled.value, settings.value.maxParticipants
 </script>
 
 <template>
-  <div>
-    <button @click="track('Huddles Started', { huddlesType: 'voice' })">
-      Start voice huddles!
-    </button>
-  </div>
-</template>
-```
-
-### `useRequestFeedback()`
-
-Returns a function that lets you open up a dialog to ask for feedback on a specific feature. This is useful for collecting targeted feedback about specific features.
-
-See [Automated Feedback Surveys](https://docs.reflag.com/product-handbook/live-satisfaction) for how to do this automatically, without code.
-
-When using the `useRequestFeedback` you must pass the flag key to `requestFeedback`.
-The example below shows how to use `position` to ensure the popover appears next to the "Give feedback!" button.
-
-```vue
-<script setup lang="ts">
-import { useRequestFeedback } from "@reflag/vue-sdk";
-
-const requestFeedback = useRequestFeedback();
-</script>
-
-<template>
-  <button
-    @click="
-      (e) =>
-        requestFeedback({
-          flagKey: 'huddles',
-          title: 'How satisfied are you with file uploads?',
-          position: {
-            type: 'POPOVER',
-            anchor: e.currentTarget as HTMLElement,
-          },
-          // Optional custom styling
-          style: {
-            theme: 'light',
-            primaryColor: '#007AFF',
-          },
-        })
-    "
-  >
-    Give feedback!
+  <span v-if="isLoading">Loading…</span>
+  <button v-else-if="enabled" @click="track('Started huddle')">
+    Start huddle (up to {{ settings.maxParticipants }} people)
   </button>
 </template>
 ```
 
-See the [Feedback Documentation](https://github.com/reflagcom/javascript/blob/main/packages/browser-sdk/FEEDBACK.md#manual-feedback-collection) for more information on `requestFeedback` options.
+Vue unwraps refs in templates; use `.value` in script. This is a **Vue ref**, not a flag wrapper. There are no `.isEnabled`, `.config`, flag `.track()` or flag loading fields.
 
-### `useSendFeedback()`
+```ts
+useFlag("release"); // ShallowRef<boolean>
+useFlag("model", "quick"); // ShallowRef<string>
+useFlag("limit", 10); // ShallowRef<number>
+useFlag("settings", { model: "quick" }); // ShallowRef<{ model: string }>
+useFlag("nullable-settings", null); // ShallowRef<FlagValue>
+```
 
-Returns a function that lets you send feedback to Reflag. This is useful if you've manually collected feedback through your own UI and want to send it to Reflag.
+Defaults are positional JSON; literals widen without generated types. Non-null defaults require the same top-level category (Boolean/number/string/array/object), otherwise the default is returned with a payload-safe warning. Null explicitly accepts arbitrary JSON, including authored null; missing returns null. Valid false/zero/empty strings are preserved. Nested payload schemas are not validated by the SDK. Returned values/defaults are independent copies; readonly defaults are accepted.
+
+The ref updates when evaluated flags change. A composable read registers the requested root through the Browser SDK, even if its result is ignored; refresh-driven rereads are identity-aware rate-limited and delivered in batches. Diagnostics/bootstrap inspection register none. Checks carry genuine selected key/source/snapshot identity, never payloads or invented selections for defaults/overrides.
+
+## Loading, context and client access
+
+- `useIsLoading()` returns a Boolean ref for provider loading; the `#loading` slot and `initialLoading` control initial presentation.
+- `useUpdateUser()`, `useUpdateCompany()` and `useUpdateOtherContext()` return async shallow-update functions.
+- `useClient()` exposes the Browser client, including `setContext(context)`, `refresh()` and `setFlagOverride(key, value)`. Undefined clears an override; null is a JSON override.
+- `getFlags()` returns direct values and registers returned-root checks. Use `getFlagResults()` for tooling without checks.
+- `useOnEvent(type, handler, client?)` subscribes on mount and unsubscribes on unmount. An external client may be supplied explicitly.
+
+A context change clears old values while fetching. Late responses for previous contexts or lower snapshot versions cannot replace accepted state. V2 cache/override storage is isolated from v1. Browser fetching uses `/flags/evaluated` and never re-evaluates/caches dependencies locally.
+
+## Bootstrap
+
+On the server, use Node SDK v2 and your framework's safe serialization mechanism:
+
+```ts
+const flags = serverClient.getFlagsForBootstrap(context);
+```
 
 ```vue
-<script setup lang="ts">
-import { useSendFeedback } from "@reflag/vue-sdk";
+<ReflagBootstrappedProvider :publishable-key="publishableKey" :flags="flags">
+  <App />
+</ReflagBootstrappedProvider>
+```
 
+Pass the entire envelope (`protocolVersion: 2`, context, evaluated flags and optional snapshot version). Legacy v1 bootstrap is rejected. A snapshot version is required for live updates. Never expose secret keys/server-only attributes in bootstrap data; later refreshes use browser-visible context, so disable live updates when they must not replace server-only evaluations.
+
+`ReflagClientProvider` accepts an externally initialized Browser v2 client. Its lifecycle belongs to the application.
+
+## Opt-in, tracking and feedback
+
+```ts
+const { flags, isLoading } = useOptInFlags(); // refs to metadata/list loading
+const setOptIn = useSetOptIn();
+await setOptIn("huddles", { optedIn: true });
+await setOptIn("huddles", { optedIn: false, scope: "company" });
+
+const track = useTrack();
+await track("Started huddle", { button: "cta" });
+const requestFeedback = useRequestFeedback();
+requestFeedback({ flagKey: "huddles", title: "How did it go?" });
 const sendFeedback = useSendFeedback();
-
-const handleSubmit = async (data: FormData) => {
-  await sendFeedback({
-    flagKey: "reflag-flag-key",
-    score: parseInt(data.get("score") as string),
-    comment: data.get("comment") as string,
-  });
-};
-</script>
-
-<template>
-  <form @submit="handleSubmit">
-    <!-- form content -->
-  </form>
-</template>
+await sendFeedback({ flagKey: "huddles", score: 5 });
 ```
 
-### `useUpdateUser()`, `useUpdateCompany()` and `useUpdateOtherContext()`
+Opt-in metadata arrives with ordinary `/flags/evaluated` responses. Bootstrapped providers fetch missing metadata on demand from the same v2 endpoint without replacing server-derived values or provenance; loading settles on success or failure. User/company grants remain independent; successful mutations confirm versioned evaluation and membership in a single refresh. The metadata list retains presentation/membership fields such as `isEnabled`; ordinary reads remain direct values.
 
-These composables return functions that let you update the attributes for the currently set user, company, or other context. Updates to user/company are stored remotely and affect flag targeting, while "other" context updates only affect the current session.
+`enableTracking: false` disables checks and ordinary tracking. Offline mode skips HTTP/tracking. See [Browser feedback documentation](../browser-sdk/FEEDBACK.md) for prompting/UI options.
 
-```vue
-<script setup lang="ts">
-import {
-  useUpdateUser,
-  useUpdateCompany,
-  useUpdateOtherContext,
-} from "@reflag/vue-sdk";
+## Optional key registration and migration
 
-const updateUser = useUpdateUser();
-const updateCompany = useUpdateCompany();
-const updateOtherContext = useUpdateOtherContext();
-
-const handleUserUpdate = async () => {
-  await updateUser({
-    role: "admin",
-    betaFeatures: "enabled",
-  });
-};
-
-const handleCompanyUpdate = async () => {
-  await updateCompany({
-    plan: "enterprise",
-    employees: 500,
-  });
-};
-
-const handleContextUpdate = async () => {
-  await updateOtherContext({
-    currentWorkspace: "workspace-123",
-    theme: "dark",
-  });
-};
-</script>
-
-<template>
-  <div>
-    <button @click="handleUserUpdate">Update User</button>
-    <button @click="handleCompanyUpdate">Update Company</button>
-    <button @click="handleContextUpdate">Update Context</button>
-  </div>
-</template>
+```ts
+import "@reflag/vue-sdk";
+declare module "@reflag/vue-sdk" {
+  interface Flags {
+    huddles: boolean;
+    "huddle-settings": { maxParticipants: number };
+  }
+}
 ```
 
-Note: To change the `user.id` or `company.id`, you need to update the props passed to `ReflagProvider` instead of using these composables.
+Registration constrains keys, not bare singular return types. Positional defaults determine inferred direct-value types. Old generated wrappers cannot restore wrapper semantics.
 
-### `useClient()`
-
-Returns the `ReflagClient` used by the `ReflagProvider`. The client offers more functionality that
-is not directly accessible through the other composables.
-
-```vue
-<script setup>
-import { useClient } from "@reflag/vue-sdk";
-import { onMounted } from "vue";
-
-const client = useClient();
-
-console.log(client.getContext());
-</script>
-
-<template>
-  <!-- your component content -->
-</template>
-```
-
-### `useIsLoading()`
-
-Returns a `Ref<boolean>` to indicate if Reflag has finished loading.
-Initially, the value will be `true` if no bootstrap flags have been provided and the client has not be initialized.
-
-```vue
-<script setup>
-import { useIsLoading } from "@reflag/vue-sdk";
-import { Spinner } from "./Spinner";
-
-const isLoading = useIsLoading();
-</script>
-
-<template>
-  <!-- your component content -->
-</template>
-```
-
-### `useOnEvent()`
-
-Vue composable for listening to Reflag client events. This composable automatically handles mounting and unmounting of event listeners.
-
-Available events include:
-
-- `flagsUpdated`: Triggered when flags are updated
-- `track`: Triggered when tracking events are sent
-- `feedback`: Triggered when feedback is sent
-
-```vue
-<script setup lang="ts">
-import { useOnEvent } from "@reflag/vue-sdk";
-
-// Listen to flag updates
-useOnEvent("flagsUpdated", () => {
-  console.log("Flags have been updated");
-});
-</script>
-
-<template>
-  <!-- your component content -->
-</template>
-```
-
-You can also provide a specific client instance if needed:
-
-```vue
-<script setup lang="ts">
-import { ReflagClient } from "@reflag/browser-sdk";
-
-const myReflagClient = new ReflagClient();
-
-useOnEvent(
-  "flagsUpdated",
-  () => {
-    console.log("flags updated");
-  },
-  myReflagClient,
-);
-</script>
-
-<template>
-  <!-- your component content -->
-</template>
-```
-
-## Content Security Policy (CSP)
-
-See [CSP](https://github.com/reflagcom/javascript/blob/main/packages/browser-sdk/README.md#content-security-policy-csp) for info on using Reflag React SDK with CSP
-
-## License
-
-MIT License
-
-Copyright (c) 2025 Bucket ApS
+Replace `const { isEnabled } = useFlag(key)` with `const enabled = useFlag(key)` (then `enabled.value` in script). Replace remote-config wrappers with separately authored multivariate flags and positional defaults, and move usage/feedback into their separate composables. Bootstrap both ends with v2. This branch does not publish SDKs or deploy the required server changes.

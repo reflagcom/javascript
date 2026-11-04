@@ -5,7 +5,6 @@ import {
   beforeEach,
   describe,
   expect,
-  it,
   test,
   vi,
 } from "vitest";
@@ -17,7 +16,6 @@ import {
   checkPromptMessageCompleted,
   markPromptMessageCompleted,
 } from "../src/feedback/promptStorage";
-import { FlagsClient } from "../src/flag/flags";
 import { HttpClient } from "../src/httpClient";
 import {
   AblySSEChannel,
@@ -74,17 +72,13 @@ describe("usage", () => {
     });
 
     const flags = reflagInstance.getFlags();
-    expect(flags).toEqual(flagsResult);
-
-    const flag = reflagInstance.getFlag("flag-1");
-    expect(flag).toStrictEqual({
-      isEnabled: false,
-      track: expect.any(Function),
-      requestFeedback: expect.any(Function),
-      config: { key: undefined, payload: undefined },
-      isEnabledOverride: null,
-      setIsEnabledOverride: expect.any(Function),
-    });
+    expect(flags).toEqual(
+      Object.fromEntries(
+        Object.entries(flagsResult).map(([key, flag]) => [key, flag.value]),
+      ),
+    );
+    expect(reflagInstance.getFlag("flag-1")).toBe(false);
+    await reflagInstance.stop();
   });
 
   test("accepts `flagKey` instead of `featureId` for manual feedback", async () => {
@@ -376,291 +370,5 @@ describe("feedback state management", () => {
       "123",
       new Date(message.showBefore),
     );
-  });
-});
-
-describe(`sends "check" events `, () => {
-  test("getFlags() does not send `check` events", async () => {
-    vi.spyOn(FlagsClient.prototype, "sendCheckEvent");
-
-    const client = new ReflagClient({
-      publishableKey: KEY,
-      user: { id: "123" },
-    });
-    await client.initialize();
-
-    expect(
-      vi.mocked(FlagsClient.prototype.sendCheckEvent),
-    ).toHaveBeenCalledTimes(0);
-
-    const flagA = client.getFlags()?.flagA;
-
-    expect(flagA?.isEnabled).toBe(true);
-    expect(
-      vi.mocked(FlagsClient.prototype.sendCheckEvent),
-    ).toHaveBeenCalledTimes(0);
-  });
-
-  describe("getFlag", async () => {
-    afterEach(() => {
-      vi.clearAllMocks();
-    });
-
-    it(`returns get the expected flag details`, async () => {
-      const client = new ReflagClient({
-        publishableKey: KEY,
-        user: { id: "uid" },
-        company: { id: "cid" },
-      });
-
-      await client.initialize();
-
-      expect(client.getFlag("flagA")).toStrictEqual({
-        isEnabled: true,
-        config: { key: undefined, payload: undefined },
-        track: expect.any(Function),
-        requestFeedback: expect.any(Function),
-        isEnabledOverride: null,
-        setIsEnabledOverride: expect.any(Function),
-      });
-
-      expect(client.getFlag("flagB")).toStrictEqual({
-        isEnabled: true,
-        config: {
-          key: "gpt3",
-          payload: {
-            model: "gpt-something",
-            temperature: 0.5,
-          },
-        },
-        track: expect.any(Function),
-        requestFeedback: expect.any(Function),
-        isEnabledOverride: null,
-        setIsEnabledOverride: expect.any(Function),
-      });
-
-      expect(client.getFlag("flagC")).toStrictEqual({
-        isEnabled: false,
-        config: { key: undefined, payload: undefined },
-        track: expect.any(Function),
-        requestFeedback: expect.any(Function),
-        isEnabledOverride: null,
-        setIsEnabledOverride: expect.any(Function),
-      });
-    });
-
-    it(`does not send check events when offline`, async () => {
-      const postSpy = vi.spyOn(HttpClient.prototype, "post");
-
-      const client = new ReflagClient({
-        publishableKey: KEY,
-        user: { id: "uid" },
-        company: { id: "cid" },
-        offline: true,
-      });
-      await client.initialize();
-
-      const flagA = client.getFlag("flagA");
-      expect(flagA.isEnabled).toBe(false);
-
-      expect(postSpy).not.toHaveBeenCalled();
-    });
-
-    it(`sends check event when accessing "isEnabled"`, async () => {
-      const sendCheckEventSpy = vi.spyOn(
-        FlagsClient.prototype,
-        "sendCheckEvent",
-      );
-
-      const postSpy = vi.spyOn(HttpClient.prototype, "post");
-
-      const client = new ReflagClient({
-        publishableKey: KEY,
-        user: { id: "uid" },
-        company: { id: "cid" },
-        trackingQueue: {
-          flushDelayMs: 0,
-        },
-      });
-      await client.initialize();
-
-      const flagA = client.getFlag("flagA");
-
-      expect(sendCheckEventSpy).toHaveBeenCalledTimes(0);
-      expect(flagA.isEnabled).toBe(true);
-
-      expect(sendCheckEventSpy).toHaveBeenCalledTimes(1);
-      expect(sendCheckEventSpy).toHaveBeenCalledWith(
-        {
-          action: "check-is-enabled",
-          key: "flagA",
-          value: true,
-          version: 1,
-          missingContextFields: ["field1", "field2"],
-          ruleEvaluationResults: [false, true],
-        },
-        expect.any(Function),
-      );
-
-      await vi.waitFor(() => {
-        const bulkEvents = vi
-          .mocked(postSpy)
-          .mock.calls.filter(([request]) => request.path === "/bulk")
-          .flatMap(([request]) =>
-            Array.isArray(request.body) ? request.body : [],
-          );
-
-        expect(bulkEvents).toEqual(
-          expect.arrayContaining([
-            expect.objectContaining({
-              type: "feature-flag-event",
-              action: "check-is-enabled",
-              key: "flagA",
-              targetingVersion: 1,
-              evalContext: {
-                company: {
-                  id: "cid",
-                },
-                other: {},
-                user: {
-                  id: "uid",
-                },
-              },
-              evalResult: true,
-              evalRuleResults: [false, true],
-              evalMissingFields: ["field1", "field2"],
-            }),
-          ]),
-        );
-      });
-    });
-
-    it(`sends check event when accessing "config"`, async () => {
-      const postSpy = vi.spyOn(HttpClient.prototype, "post");
-
-      const client = new ReflagClient({
-        publishableKey: KEY,
-        user: { id: "uid" },
-        trackingQueue: {
-          flushDelayMs: 0,
-        },
-      });
-
-      await client.initialize();
-      const flagB = client.getFlag("flagB");
-      expect(flagB.config).toMatchObject({
-        key: "gpt3",
-      });
-
-      await vi.waitFor(() => {
-        const bulkEvents = vi
-          .mocked(postSpy)
-          .mock.calls.filter(([request]) => request.path === "/bulk")
-          .flatMap(([request]) =>
-            Array.isArray(request.body) ? request.body : [],
-          );
-
-        expect(bulkEvents).toEqual(
-          expect.arrayContaining([
-            expect.objectContaining({
-              type: "feature-flag-event",
-              action: "check-config",
-              key: "flagB",
-              targetingVersion: 12,
-              evalContext: {
-                company: undefined,
-                other: {},
-                user: {
-                  id: "uid",
-                },
-              },
-              evalResult: {
-                key: "gpt3",
-                payload: { model: "gpt-something", temperature: 0.5 },
-              },
-              evalRuleResults: [true, false, false],
-              evalMissingFields: ["field3"],
-            }),
-          ]),
-        );
-      });
-    });
-
-    it("sends check event for not-enabled flags", async () => {
-      // disabled flags don't appear in the API response
-      vi.spyOn(FlagsClient.prototype, "sendCheckEvent");
-
-      const client = new ReflagClient({ publishableKey: KEY });
-      await client.initialize();
-
-      const nonExistentFlag = client.getFlag("non-existent");
-
-      expect(
-        vi.mocked(FlagsClient.prototype.sendCheckEvent),
-      ).toHaveBeenCalledTimes(0);
-      expect(nonExistentFlag.isEnabled).toBe(false);
-
-      expect(
-        vi.mocked(FlagsClient.prototype.sendCheckEvent),
-      ).toHaveBeenCalledTimes(1);
-      expect(
-        vi.mocked(FlagsClient.prototype.sendCheckEvent),
-      ).toHaveBeenCalledWith(
-        {
-          action: "check-is-enabled",
-          value: false,
-          key: "non-existent",
-          version: undefined,
-        },
-        expect.any(Function),
-      );
-    });
-
-    it("calls client.track with the flagKey", async () => {
-      const client = new ReflagClient({ publishableKey: KEY });
-      await client.initialize();
-
-      const flag = client.getFlag("flag-1");
-      expect(flag).toStrictEqual({
-        isEnabled: false,
-        track: expect.any(Function),
-        requestFeedback: expect.any(Function),
-        config: { key: undefined, payload: undefined },
-        isEnabledOverride: null,
-        setIsEnabledOverride: expect.any(Function),
-      });
-
-      vi.spyOn(client, "track");
-
-      await flag.track();
-
-      expect(client.track).toHaveBeenCalledWith("flag-1");
-    });
-
-    it("calls client.requestFeedback with the flagKey", async () => {
-      const client = new ReflagClient({ publishableKey: KEY });
-      await client.initialize();
-
-      const flag = client.getFlag("flag-1");
-      expect(flag).toStrictEqual({
-        isEnabled: false,
-        track: expect.any(Function),
-        requestFeedback: expect.any(Function),
-        config: { key: undefined, payload: undefined },
-        isEnabledOverride: null,
-        setIsEnabledOverride: expect.any(Function),
-      });
-
-      vi.spyOn(client, "requestFeedback");
-
-      flag.requestFeedback({
-        title: "Feedback",
-      });
-
-      expect(client.requestFeedback).toHaveBeenCalledWith({
-        flagKey: "flag-1",
-        title: "Feedback",
-      });
-    });
   });
 });
