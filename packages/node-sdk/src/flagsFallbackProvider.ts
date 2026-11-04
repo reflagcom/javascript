@@ -2,7 +2,8 @@ import { promises as fs } from "fs";
 import path from "path";
 
 import type {
-  FlagAPIResponse,
+  FlagDefinition,
+  FlagValue,
   FlagsFallbackProvider,
   FlagsFallbackProviderContext,
   FlagsFallbackSnapshot,
@@ -133,11 +134,11 @@ export type StaticFallbackProviderOptions = {
   /**
    * Static fallback flags keyed by flag key.
    */
-  flags: Record<string, boolean>;
+  flags: Record<string, FlagValue>;
 };
 
 function defaultSnapshotName(secretKeyHash: string) {
-  return `flags-fallback-${secretKeyHash.slice(0, 16)}.json`;
+  return `flags-fallback-v2-${secretKeyHash.slice(0, 16)}.json`;
 }
 
 function snapshotFilePath(
@@ -166,7 +167,7 @@ function snapshotRedisKey(
   context: FlagsFallbackProviderContext,
   keyPrefix = "reflag:flags-fallback",
 ) {
-  return `${trimTrailingCharacter(keyPrefix, ":")}:${context.secretKeyHash.slice(0, 16)}`;
+  return `${trimTrailingCharacter(keyPrefix, ":")}:v2:${context.secretKeyHash.slice(0, 16)}`;
 }
 
 export function isFlagsFallbackSnapshot(
@@ -174,25 +175,15 @@ export function isFlagsFallbackSnapshot(
 ): value is FlagsFallbackSnapshot {
   return (
     isObject(value) &&
-    value.version === 1 &&
+    value.version === 2 &&
     typeof value.savedAt === "string" &&
+    Number.isFinite(Date.parse(value.savedAt)) &&
+    (value.source === undefined || value.source === "static") &&
+    (value.flagStateVersion === undefined ||
+      (Number.isSafeInteger(value.flagStateVersion) &&
+        value.flagStateVersion >= 0)) &&
     Array.isArray(value.flags) &&
-    value.flags.every(isFlagApiResponse)
-  );
-}
-
-function isFlagApiResponse(value: unknown): value is FlagAPIResponse {
-  return (
-    isObject(value) &&
-    typeof value.key === "string" &&
-    typeof value.description !== "undefined" &&
-    isObject(value.targeting) &&
-    typeof value.targeting.version === "number" &&
-    Array.isArray(value.targeting.rules) &&
-    (value.config === undefined ||
-      (isObject(value.config) &&
-        typeof value.config.version === "number" &&
-        Array.isArray(value.config.variants)))
+    Array.isArray(value.segments)
   );
 }
 
@@ -230,24 +221,18 @@ function isNotFoundError(error: any) {
   );
 }
 
-function staticFlagApiResponse(
-  key: string,
-  isEnabled: boolean,
-): FlagAPIResponse {
+function staticFlagDefinition(key: string, value: FlagValue): FlagDefinition {
   return {
     key,
-    description: null,
-    targeting: {
-      version: 1,
-      rules: [
-        {
-          filter: {
-            type: "constant",
-            value: isEnabled,
-          },
-        },
-      ],
-    },
+    sourceVersionId: `static:${key}`,
+    variants: { default: value },
+    rules: [
+      {
+        id: "default",
+        filter: { type: "constant", value: true },
+        result: { type: "variant", variantKey: "default" },
+      },
+    ],
   };
 }
 
@@ -371,11 +356,13 @@ export function createStaticFallbackProvider({
   return {
     async load() {
       return {
-        version: 1,
+        version: 2,
+        source: "static",
         savedAt: new Date().toISOString(),
-        flags: Object.entries(flags).map(([key, isEnabled]) =>
-          staticFlagApiResponse(key, isEnabled),
+        flags: Object.entries(flags).map(([key, value]) =>
+          staticFlagDefinition(key, value),
         ),
+        segments: [],
       };
     },
 

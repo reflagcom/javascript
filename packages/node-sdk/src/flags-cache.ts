@@ -1,9 +1,10 @@
-import type { CachedFlagDefinition, Logger } from "./types";
+import type { CachedFlagCollection, Logger } from "./types";
 
 const DEFAULT_MIN_REFRESH_INTERVAL_MS = 1000;
 
 type FlagsCacheRefreshResult = {
-  definitions: CachedFlagDefinition[];
+  definitions: CachedFlagCollection;
+  fallback?: boolean;
   flagStateVersion?: number;
 };
 
@@ -17,6 +18,7 @@ type ScheduledRefresh = {
 
 type FlagsCacheOptions = {
   logger?: Logger;
+  onApply?: (result: FlagsCacheRefreshResult) => void;
   minRefreshIntervalMs?: number;
   scheduleTrailingRefresh?: (
     delayMs: number,
@@ -36,7 +38,7 @@ type FlagsCacheOptions = {
  * keep the pending refresh queued until the next caller touches the cache.
  */
 export class FlagsCache {
-  private value: CachedFlagDefinition[] | undefined;
+  private value: CachedFlagCollection | undefined;
   private flagStateVersion: number | undefined;
   private refreshPromise: Promise<void> | undefined;
   private scheduledRefresh: ScheduledRefresh | undefined;
@@ -55,7 +57,7 @@ export class FlagsCache {
     private readonly fetchFlags: (
       waitForVersion?: number,
     ) => Promise<FlagsCacheRefreshResult | undefined>,
-    options: FlagsCacheOptions = {},
+    private readonly options: FlagsCacheOptions = {},
   ) {
     this.logger = options.logger;
     this.minRefreshIntervalMs =
@@ -268,6 +270,7 @@ export class FlagsCache {
     this.value = result.definitions;
     this.flagStateVersion = result.flagStateVersion;
     this.lastRefreshAt = Date.now();
+    this.options.onApply?.(result);
     this.logger?.info("refreshed flag definitions");
   }
 

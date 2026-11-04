@@ -8,11 +8,7 @@ type CreateConfigPayload = {
 declare module "@reflag/node-sdk" {
   interface Flags {
     "show-todos": boolean;
-    "create-todos": {
-      config: {
-        payload: CreateConfigPayload;
-      };
-    };
+    "create-todos": CreateConfigPayload | null;
     "delete-todos": boolean;
     "some-else": {};
   }
@@ -20,15 +16,7 @@ declare module "@reflag/node-sdk" {
 
 const flagOverrides = (_: Context): FlagOverrides => {
   return {
-    "create-todos": {
-      isEnabled: true,
-      config: {
-        key: "short",
-        payload: {
-          minimumLength: 10,
-        },
-      },
-    },
+    "create-todos": { minimumLength: 10 },
   }; // feature keys checked at compile time
 };
 

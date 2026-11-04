@@ -1,1108 +1,221 @@
 # Reflag Node.js SDK
 
-Node.js, JavaScript/TypeScript client for [Reflag.com](https://reflag.com).
+Server-side Boolean and multivariate flag values for [Reflag](https://reflag.com).
 
-Reflag supports flag toggling, tracking flag usage, collecting feedback on features, and [remotely configuring flags](#remote-config).
+> This branch implements the breaking v2 API. It requires the collection-capable evaluator, the v2 `/flags` endpoint, and compatible variant-key check ingestion. It has not been published or deployed.
 
-## Installation
-
-Install using your favorite package manager:
-
-{% tabs %}
-{% tab title="npm" %}
-
-```sh
-npm i @reflag/node-sdk
-```
-
-{% endtab %}
-
-{% tab title="yarn" %}
+## Installation and initialization
 
 ```sh
 yarn add @reflag/node-sdk
 ```
 
-{% endtab %}
-
-{% tab title="bun" %}
-
-```sh
-bun add @reflag/node-sdk
-```
-
-{% endtab %}
-
-{% tab title="pnpm" %}
-
-```sh
-pnpm add @reflag/node-sdk
-```
-
-{% endtab %}
-
-{% tab title="deno" %}
-
-```sh
-deno add npm:@reflag/node-sdk
-```
-
-{% endtab %}
-{% endtabs %}
-
-Other supported languages/frameworks are in the [Supported languages](https://docs.reflag.com/quickstart/supported-languages) documentation pages.
-
-You can also [use the HTTP API directly](https://docs.reflag.com/api/http-api)
-
-## Basic usage
-
-To get started you need to obtain your secret key from the [environment settings](https://app.reflag.com/env-current/settings/app-environments)
-in Reflag.
-
-Reflag will load settings through the various environment variables automatically (see [Configuring](#configuring) below).
-
-1. Find the Reflag secret key for your development environment under [environment settings](https://app.reflag.com/env-current/settings/app-environments) in Reflag.
-2. Set `REFLAG_SECRET_KEY` in your `.env` file
-3. Create a `reflag.ts` file containing the following:
-
-```typescript
-import { ReflagClient } from "@reflag/node-sdk";
-
-// Create a new instance of the client with the secret key. Additional options
-// are available, such as supplying a logger and other custom properties.
-//
-// We recommend that only one global instance of `client` should be created
-// to avoid multiple round-trips to our servers.
-export const reflagClient = new ReflagClient();
-
-// Initialize the client and begin fetching flag targeting definitions.
-// You must call this method prior to any calls to `getFlags()`,
-// otherwise an empty object will be returned.
-reflagClient.initialize().then(() => {
-  console.log("Reflag initialized!");
-});
-```
-
-Once the client is initialized, you can obtain flags along with the `isEnabled`
-status to indicate whether the flag is targeted for this user/company:
-
-> [!IMPORTANT]
-> If `user.id` is not given, the whole `user` object is ignore. Similarly, without `company.id` the `company` object is ignored.
-
-```typescript
-// configure the client
-const boundClient = reflagClient.bindClient({
-  user: {
-    id: "john_doe",
-    name: "John Doe",
-    email: "john@acme.com",
-    avatar: "https://example.com/users/jdoe",
-  },
-  company: {
-    id: "acme_inc",
-    name: "Acme, Inc.",
-    avatar: "https://example.com/companies/acme",
-  },
-});
-
-// get the huddle flag using company, user and custom context to
-// evaluate the targeting.
-const { isEnabled, track, config } = boundClient.getFlag("huddle");
-
-if (isEnabled) {
-  // this is your flag gated code ...
-  // send an event when the flag is used:
-  track();
-
-  if (config?.key === "zoom") {
-    // this code will run if a given remote configuration
-    // is set up.
-  }
-
-  // CAUTION: if you plan to use the event for automated feedback surveys
-  // call `flush` immediately after `track`. It can optionally be awaited
-  // to guarantee the sent happened.
-  boundClient.flush();
-}
-```
-
-You can also use the `getFlags()` method which returns a map of all flags:
-
-```typescript
-// get the current flags (uses company, user and custom context to
-// evaluate the flags).
-const flags = boundClient.getFlags();
-const bothEnabled = flags.huddle?.isEnabled && flags.voiceHuddle?.isEnabled;
-```
-
-## High performance flag targeting
-
-The SDK contacts the Reflag servers when you call `initialize()`
-and downloads the flags with their targeting rules.
-These rules are then matched against the user/company information you provide
-to `getFlags()` (or through `bindClient(..).getFlags()`). That means the
-`getFlags()` call does not need to contact the Reflag servers once
-`initialize()` has completed. By default, `ReflagClient` uses
-`flagsSyncMode: "push"`, which keeps targeting rules up to date via live SSE
-updates. You can switch `flagsSyncMode` to `polling` for periodic background
-refreshes or `in-request` for request-driven refreshes instead.
-
-### Batch Operations
-
-The SDK automatically batches operations like user/company updates and flag tracking events to minimize API calls.
-The batch buffer is configurable through the client options:
-
-```typescript
-const client = new ReflagClient({
-  batchOptions: {
-    maxSize: 100, // Maximum number of events to batch
-    intervalMs: 10000, // Flush interval in milliseconds (default: 10000)
-  },
-});
-```
-
-You can manually flush the batch buffer at any time:
-
-```typescript
-await client.flush();
-```
-
-> [!TIP]
-> It's recommended to call `flush()` before your application shuts down to ensure all events are sent.
-
-### Rate Limiting
-
-The SDK includes automatic rate limiting for flag events to prevent overwhelming the API.
-Rate limiting is applied per unique combination of flag key and evaluation context.
-This behavior is built in and does not currently require configuration.
-
-### Flag definitions
-
-Flag definitions include the rules needed to determine which flags should be enabled and which config values should be applied to any given user/company.
-Flag definitions are automatically fetched when calling `initialize()`.
-They are then cached and refreshed in the background.
-It's also possible to get the currently in use flag definitions:
-
-```typescript
-import fs from "fs";
-
-const client = new ReflagClient();
-
-const flagDefs = await client.getFlagDefinitions();
-// [{
-//   key: "huddle",
-//   description: "Live voice conversations with colleagues."
-//   flag: { ... }
-//   config: { ... }
-// }]
-```
-
-### Fallback provider
-
-`flagsFallbackProvider` is a reliability feature that lets the SDK persist the latest successfully fetched raw flag definitions to fallback storage such as a local file, Redis, S3, GCS, or a custom backend.
-
-> [!NOTE]
->
-> `fallbackFlags` is deprecated. Prefer `flagsFallbackProvider` for startup fallback and outage recovery.
-> `flagsFallbackProvider` is not used in offline mode.
-
-#### How it works
-
-Reflag servers remain the primary source of truth. On `initialize()`, the SDK always tries to fetch a live copy of the flag definitions first, and it continues refreshing those definitions from the Reflag servers over time.
-
-If that initial live fetch fails, the SDK can call `flagsFallbackProvider.load()` and start with the last saved snapshot instead. This is mainly useful for cold starts in the exceedingly rare case that Reflag has an outage.
-
-If Reflag becomes unavailable after the SDK has already initialized successfully, the SDK keeps using the last successfully fetched definitions it already has in memory. In other words, the fallback provider is mainly what helps future processes start, not what keeps an already running process alive.
-
-After successfully fetching updated flag definitions, the SDK calls `flagsFallbackProvider.save()` to keep the stored snapshot up to date.
-
-Typical reliability flow:
-
-1. The SDK starts and tries to fetch live flag definitions from Reflag.
-2. If that succeeds, those definitions are used immediately and the SDK continues operating normally.
-3. After successfully fetching updated flag definitions, the SDK saves the latest snapshot through the fallback provider so a recent copy is available if needed later.
-4. If a future process starts while Reflag is unavailable, it can load the last saved snapshot from the fallback provider and still initialize.
-5. Once Reflag becomes available again, the SDK resumes using live data and refreshes the fallback snapshot.
-
-Most deployments run multiple SDK processes, so more than one process may save identical flag definitions to the fallback storage at roughly the same time. This is expected and generally harmless for backends like a local file, Redis, S3, or GCS because the operation is cheap. In practice, this only becomes worth thinking about once you have many thousands of SDK processes writing to the same fallback storage.
-
-> [!TIP]
-> If you are building a web or client-side application and want the most resilient setup, combine `flagsFallbackProvider` on the server with bootstrapped flags on the client.
->
-> `flagsFallbackProvider` helps new server processes start if they cannot reach Reflag during initialization. Bootstrapping helps clients render from server-provided flags instead of depending on an initial client-side fetch from the Reflag servers.
->
-> This applies to React (`getFlagsForBootstrap()` + `ReflagBootstrappedProvider`), React Native, the Browser SDK (`bootstrappedState`), and the Vue SDK (bootstrapped flags via the provider).
-
-#### Built-in providers
-
-You can access the built-in providers through the `fallbackProviders` namespace:
-
-- `fallbackProviders.static(...)`
-- `fallbackProviders.file(...)`
-- `fallbackProviders.redis(...)`
-- `fallbackProviders.s3(...)`
-- `fallbackProviders.gcs(...)`
-
-##### Static provider
-
-If you just want a fixed fallback copy of simple enabled/disabled flags, you can provide a static map:
-
-```typescript
-import { ReflagClient, fallbackProviders } from "@reflag/node-sdk";
-
-const client = new ReflagClient({
-  secretKey: process.env.REFLAG_SECRET_KEY,
-  flagsFallbackProvider: fallbackProviders.static({
-    flags: {
-      huddle: true,
-      "smart-summaries": false,
-    },
-  }),
-});
-
-await client.initialize();
-```
-
-##### File provider
-
-```typescript
-import { ReflagClient, fallbackProviders } from "@reflag/node-sdk";
-
-const client = new ReflagClient({
-  secretKey: process.env.REFLAG_SECRET_KEY,
-  flagsFallbackProvider: fallbackProviders.file({
-    directory: ".reflag",
-  }),
-});
-
-await client.initialize();
-```
-
-The file provider stores one snapshot file per environment in the configured
-`directory`, using the filename
-`flags-fallback-<secretKeyHash.slice(0, 16)>.json`.
-
-##### Redis provider
-
-The built-in Redis provider creates a Redis client automatically when omitted and uses `REDIS_URL` from the environment. It stores snapshots under the configured `keyPrefix` and appends the first 16 characters of the secret key hash to that prefix.
-
-Without a `keyPrefix` set, it will default to the key `reflag:flags-fallback:<secretKeyHash.slice(0, 16)>`. When you provide a custom `keyPrefix`, any trailing `:` is trimmed before the hash suffix is appended.
-
-```typescript
-import { ReflagClient, fallbackProviders } from "@reflag/node-sdk";
-
-const client = new ReflagClient({
-  secretKey: process.env.REFLAG_SECRET_KEY,
-  flagsFallbackProvider: fallbackProviders.redis(),
-});
-
-await client.initialize();
-```
-
-##### S3 provider
-
-The built-in S3 provider works out of the box using the AWS SDK's default credential chain and region resolution. It stores the snapshot object under the configured `keyPrefix` and uses the filename `flags-fallback-<secretKeyHash.slice(0, 16)>.json`.
-
-Without a `keyPrefix` set, it will default to the object key `reflag/flags-fallback/flags-fallback-<secretKeyHash.slice(0, 16)>.json`. When you provide a custom `keyPrefix`, any trailing `/` is trimmed before the filename is appended.
-
-```typescript
-import { ReflagClient, fallbackProviders } from "@reflag/node-sdk";
-
-const client = new ReflagClient({
-  secretKey: process.env.REFLAG_SECRET_KEY,
-  flagsFallbackProvider: fallbackProviders.s3({
-    bucket: "reflag-fallback-bucket",
-  }),
-});
-
-await client.initialize();
-```
-
-##### GCS provider
-
-The built-in GCS provider works out of the box using Google Cloud's default application credentials. It stores the snapshot object under the configured `keyPrefix` and uses the filename `flags-fallback-<secretKeyHash.slice(0, 16)>.json`.
-
-Without a `keyPrefix` set, it will default to the object key `reflag/flags-fallback/flags-fallback-<secretKeyHash.slice(0, 16)>.json`. When you provide a custom `keyPrefix`, any trailing `/` is trimmed before the filename is appended.
-
-```typescript
-import { ReflagClient, fallbackProviders } from "@reflag/node-sdk";
-
-const client = new ReflagClient({
-  secretKey: process.env.REFLAG_SECRET_KEY,
-  flagsFallbackProvider: fallbackProviders.gcs({
-    bucket: "reflag-fallback-bucket",
-  }),
-});
-
-await client.initialize();
-```
-
-#### Testing fallback startup locally
-
-To test fallback startup in your own app, first run it once with a working Reflag connection so a snapshot is saved. Then restart it with the same secret key and fallback provider configuration, but set `apiBaseUrl` (or set the `REFLAG_API_BASE_URL` environment variable) to `http://127.0.0.1:65535`. That forces the live fetch to fail and lets you verify that the SDK initializes from the saved snapshot instead.
-
-#### Writing a custom provider
-
-If you just store definitions in your database or similar, a custom provider can be very small:
-
-```typescript
-import type {
-  FlagsFallbackProvider,
-  FlagsFallbackSnapshot,
-} from "@reflag/node-sdk";
-
-export const customFallbackProvider: FlagsFallbackProvider = {
-  async load(context) {
-    // load snapshot from database
-    // optionally, look up the snapshot using the context.secretKeyHash as a key
-    return snapshot;
-  },
-
-  async save(context, snapshot) {
-    const serialized = JSON.stringify(snapshot);
-    // write serialized snapshot to database, optionally using context.secretKeyHash as a key
-  },
-};
-```
-
-## Bootstrapping client-side applications
-
-The `getFlagsForBootstrap()` method is useful whenever you need to pass flag data to another runtime or serialize it without wrapper functions. Server-side rendering (SSR) is a common example, but it is also useful for other bootstrapping and hydration flows.
-
-```typescript
-const client = new ReflagClient();
-await client.initialize();
-
-// Get bootstrapped state with full context
-const bootstrappedState = client.getFlagsForBootstrap({
-  user: {
-    id: "user123",
-    name: "John Doe",
-    email: "john@acme.com",
-  },
-  company: {
-    id: "company456",
-    name: "Acme Inc",
-    plan: "enterprise",
-  },
-  other: {
-    source: "web",
-    platform: "desktop",
-  },
-});
-
-// Pass this data to your client-side application
-console.log(bootstrappedState);
-// {
-//   context: { ... },
-//   flags: {
-//     "huddle": {
-//       "key": "huddle",
-//       "isEnabled": true,
-//       "config": {
-//         "key": "enhanced",
-//         "payload": { "maxParticipants": 50, "videoQuality": "hd" },
-//       }
-//     }
-//   },
-//   flagStateVersion: 42
-// }
-```
-
-You can also use a bound client for simpler API:
-
-```typescript
-const boundClient = client.bindClient({
-  user: { id: "user123", name: "John Doe", email: "john@acme.com" },
-  company: { id: "company456", name: "Acme Inc", plan: "enterprise" },
-});
-
-const bootstrappedState = boundClient.getFlagsForBootstrap();
-```
-
-### Key differences from `getFlags()`
-
-- **Raw data**: Returns plain objects without `track()` functions, making them JSON serializable
-- **Context included**: Returns both the evaluated flags and the context used for evaluation
-- **Version included**: Returns `flagStateVersion` when known so bootstrapped clients can avoid redundant live-update refreshes
-- **Bootstrapping focus**: Designed specifically for passing data to client-side applications
-
-## Edge-runtimes like Cloudflare Workers
-
-To use the Reflag NodeSDK with Cloudflare workers, set the `node_compat` flag [in your wrangler file](https://developers.cloudflare.com/workers/runtime-apis/nodejs/#get-started).
-
-Instead of using `ReflagClient`, use `EdgeClient` and make sure you call `ctx.waitUntil(reflag.flush());` before returning from your worker function.
-
-```typescript
-import { EdgeClient } from "@reflag/node-sdk";
-
-// set the REFLAG_SECRET_KEY environment variable or pass the secret key in the constructor
-const reflag = new EdgeClient();
-
-export default {
-  async fetch(request, _env, ctx): Promise<Response> {
-    // initialize the client and wait for it to complete
-    // if the client was initialized on a previous invocation, this is a no-op.
-    await reflag.initialize();
-    const flags = reflag.getFlags({
-      user: { id: "userId" },
-      company: { id: "companyId" },
-    });
-
-    // ensure all events are flushed and any requests to refresh the flag cache
-    // have completed after the response is sent
-    ctx.waitUntil(reflag.flush());
-
-    return new Response(
-      `Flags for user ${userId} and company ${companyId}: ${JSON.stringify(flags, null, 2)}`,
-    );
-  },
-};
-```
-
-See [examples/cloudflare-worker](https://github.com/reflagcom/javascript/tree/main/packages/node-sdk/examples/cloudflare-worker/src/index.ts) for a deployable example.
-
-Reflag maintains a cached set of flag definitions in the memory of your worker which it uses to decide which flags to turn on for which users/companies.
-
-The SDK caches flag definitions in memory for fast performance. The first request to a new worker instance fetches definitions from Reflag's servers, while subsequent requests use the cache. When the cache expires, it's updated in the background. `ctx.waitUntil(reflag.flush())` ensures completion of the background work, so response times are not affected. This background work may increase wall-clock time for your worker, but it will not measurably increase billable CPU time on platforms like Cloudflare.
-
-`EdgeClient` uses `flagsSyncMode: "in-request"`. Refresh fetch starts are throttled to at most once per second, and Cloudflare Workers cannot rely on delayed timer callbacks to run follow-up refreshes later. That means `refreshFlags()` calls made during the throttle window only mark a refresh as pending, so the call itself may resolve before the fetch runs. The queued refresh runs on the next request/access or `refreshFlags()` call after the throttle window expires.
-
-## Error Handling
-
-The SDK is designed to fail gracefully and never throw exceptions to the caller. Instead, it logs errors and provides
-fallback behavior:
-
-1. **Flag Evaluation Failures**:
-
-   ```typescript
-   const { isEnabled } = client.getFlag("my-flag");
-   // If flag evaluation fails, isEnabled will be false
-   ```
-
-2. **Network Errors**:
-
-   ```typescript
-   // Network errors during tracking are logged but don't affect your application
-   const { isEnabled, track } = client.getFlag("my-flag");
-   if (isEnabled) {
-     // network errors are caught internally and logged and never bubbled up to your application
-     // no need to try/catch around "track" or "getFlag"
-     await track();
-   }
-   ```
-
-3. **Missing Context**:
-
-   ```typescript
-   // The SDK tracks missing context fields but continues operation
-   const flags = client.getFlags({
-     user: { id: "user123" },
-     // Missing company context will be logged but won't cause errors
-   });
-   ```
-
-4. **Offline Mode**:
-
-   ```typescript
-   // In offline mode, the SDK uses explicit local configuration only.
-   // It does not fetch from Reflag or use flagsFallbackProvider.
-   const client = new ReflagClient({
-     offline: true,
-     flagOverrides: () => ({
-       "my-flag": true,
-     }),
-   });
-   ```
-
-The SDK logs all errors with appropriate severity levels. You can customize logging by providing your own logger:
-
-```typescript
-const client = new ReflagClient({
-  logger: {
-    debug: (msg) => console.debug(msg),
-    info: (msg) => console.info(msg),
-    warn: (msg) => console.warn(msg),
-    error: (msg, error) => {
-      console.error(msg, error);
-      // Send to your error tracking service
-      errorTracker.capture(error);
-    },
-  },
-});
-```
-
-## Remote config
-
-Remote config is a dynamic and flexible approach to configuring flag behavior outside of your app – without needing to re-deploy it.
-
-Similar to `isEnabled`, each flag has a `config` property. This configuration is managed from within Reflag.
-It is managed similar to the way access to flags is managed, but instead of the binary `isEnabled` you can have
-multiple configuration values which are given to different user/companies.
+Create one client per process and initialize it before reading flags. Obtain your environment's secret key from Reflag's environment settings; complete flag definitions must remain server-side.
 
 ```ts
-const flags = reflagClient.getFlags();
-// {
-//   huddle: {
-//     isEnabled: true,
-//     targetingVersion: 42,
-//     config: {
-//       key: "gpt-3.5",
-//       payload: { maxTokens: 10000, model: "gpt-3.5-beta1" }
-//     }
-//   }
-// }
-```
-
-`key` is mandatory for a config, but if a flag has no config or no config value was matched against the context, the `key` will be `undefined`. Make sure to check against this case when trying to use the configuration in your application. `payload` is an optional JSON value for arbitrary configuration needs.
-
-Just as `isEnabled`, accessing `config` on the object returned by `getFlags` does not automatically
-generate a `check` event, contrary to the `config` property on the object returned by `getFlag`.
-
-## Configuring
-
-The Reflag `Node.js` SDK can be configured through environment variables,
-a configuration file on disk or by passing options to the `ReflagClient`
-constructor. By default, the SDK searches for `reflag.config.json` in the
-current working directory.
-
-| Option                  | Type                                  | Description                                                                                                                                                                                                                                         | Env Var                                     |
-| ----------------------- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| `secretKey`             | string                                | The secret key used for authentication with Reflag's servers.                                                                                                                                                                                       | REFLAG_SECRET_KEY                           |
-| `logLevel`              | string                                | The log level for the SDK (e.g., `"DEBUG"`, `"INFO"`, `"WARN"`, `"ERROR"`). Default: `INFO`                                                                                                                                                         | REFLAG_LOG_LEVEL                            |
-| `offline`               | boolean                               | Operate in offline mode. Default: `false`, except in tests it will default to `true` based off of the `TEST` env. var. In offline mode the SDK does not fetch from Reflag and does not use `flagsFallbackProvider`.                                 | REFLAG_OFFLINE                              |
-| `apiBaseUrl`            | string                                | The base API URL for the Reflag servers.                                                                                                                                                                                                            | REFLAG_API_BASE_URL                         |
-| `flagOverrides`         | Record<string, boolean>               | An object specifying flag overrides for testing or local development. See [examples/express/app.test.ts](https://github.com/reflagcom/javascript/tree/main/packages/node-sdk/examples/express/app.test.ts) for how to use `flagOverrides` in tests. | REFLAG_FLAGS_ENABLED, REFLAG_FLAGS_DISABLED |
-| `flagsFallbackProvider` | `FlagsFallbackProvider`               | Optional provider used to load and save raw flag definitions for fallback startup when the initial live fetch fails. Available only through the constructor. Ignored in offline mode.                                                               | -                                           |
-| `flagsSyncMode`         | `"polling" \| "in-request" \| "push"` | Flag-definition sync mode. `push` subscribes to live updates, `polling` uses periodic background refresh, and `in-request` refreshes stale flags during request handling. Default: `"push"`.                                                        | -                                           |
-| `flagsPushUrl`          | string                                | Push endpoint used when `flagsSyncMode: "push"`. The SDK opens it as an authenticated streaming GET. Default: `https://front.reflag.com/sse/server`.                                                                                                | -                                           |
-| `configFile`            | string                                | Load this config file from disk. Default: `reflag.config.json`                                                                                                                                                                                      | REFLAG_CONFIG_FILE                          |
-
-> [!NOTE]
->
-> `REFLAG_FLAGS_ENABLED` and `REFLAG_FLAGS_DISABLED` are comma separated lists of flags which will be enabled or disabled respectively.
-
-`reflag.config.json` example:
-
-```json
-{
-  "secretKey": "...",
-  "logLevel": "warn",
-  "offline": true,
-  "apiBaseUrl": "https://proxy.slick-demo.com",
-  "flagOverrides": {
-    "huddles": true,
-    "voiceChat": { "isEnabled": false },
-    "aiAssist": {
-      "isEnabled": true,
-      "config": {
-        "key": "gpt-4.0",
-        "payload": {
-          "maxTokens": 50000
-        }
-      }
-    }
-  }
-}
-```
-
-When using a `reflag.config.json` for local development, make sure you add it to your
-`.gitignore` file. You can also set these options directly in the `ReflagClient`
-constructor. The precedence for configuration options is as follows, listed in the
-order of importance:
-
-1. Options passed along to the constructor directly,
-2. Environment variable,
-3. The config file.
-
-## Type safe flags
-
-To get type checked flags, install the Reflag CLI:
-
-```sh
-npm i --save-dev @reflag/cli
-```
-
-then generate the types:
-
-```sh
-npx reflag flags types
-```
-
-This will generate a `reflag.d.ts` containing all your flags.
-Any flag look ups will now be checked against the flags that exist in Reflag.
-
-Here's an example of a failed type check:
-
-```typescript
-import { ReflagClient } from "@reflag/node-sdk";
-
-export const reflagClient = new ReflagClient();
-
-reflagClient.initialize().then(() => {
-  console.log("Reflag initialized!");
-
-  // TypeScript will catch this error: "invalid-flag" doesn't exist
-  reflagClient.getFlag("invalid-flag");
-
-  const {
-    isEnabled,
-    config: { payload },
-  } = reflagClient.getFlag("create-todos");
-});
-```
-
-![Type check failed](docs/type-check-failed.png "Type check failed")
-
-This is an example of a failed config payload check:
-
-```typescript
-reflagClient.initialize().then(() => {
-  // TypeScript will catch this error as well: "minLength" is not part of the payload.
-  if (isEnabled && todo.length > config.payload.minLength) {
-    // ...
-  }
-});
-```
-
-![Config type check failed](docs/type-check-payload-failed.png "Remote config type check failed")
-
-## Testing with flag overrides
-
-When writing tests that cover code with flags, you can toggle flags on/off programmatically to test different behavior. For tests, you will often want to run the client in offline mode:
-
-`reflag.ts`:
-
-```typescript
 import { ReflagClient } from "@reflag/node-sdk";
 
 export const reflag = new ReflagClient({
-  offline: true,
+  secretKey: process.env.REFLAG_SECRET_KEY,
+});
+await reflag.initialize();
+```
+
+## Direct values, immediate checks
+
+```ts
+const context = {
+  user: { id: "user-1" },
+  company: { id: "acme", plan: "enterprise" },
+};
+
+const enabled = reflag.getFlag(context, "new-editor"); // boolean; implicit false
+const model = reflag.getFlag(context, "model", "quick"); // string
+const limits = reflag.getFlag(context, "limits", { maxItems: 10 }); // { maxItems: number }
+```
+
+**`getFlag()` returns the value itself**, not a flag object. There is no `.value`, `.isEnabled`, `.config`, or flag `.track()` wrapper. Without a default it is a Boolean read: unavailable or non-Boolean values return `false`, never a truthy object. With a positional default, missing values use that default. Valid `false`, `0`, empty strings, arrays, and objects are preserved rather than replaced by truthiness checks.
+
+Non-null defaults specify the expected JSON category: Boolean, number, string, array, or object. A category mismatch logs a warning without the payload and returns the default. This is not nested payload validation: object properties and array elements must still match your authored schema. Use an explicit `null` default for arbitrary JSON or nullable/off selections, and narrow the result before accessing object fields:
+
+```ts
+const payload = reflag.getFlag(context, "nullable-settings", null); // FlagValue
+// Authored null is preserved, as are any other valid JSON values. Missing uses null.
+```
+
+Defaults infer useful types without generated declarations, including widening primitive literals. Readonly defaults are accepted; results and defaults are returned as independent copies. Defaults are ordinary JSON payloads, with no reserved property names.
+
+Each call immediately registers a check for the requested root, including when you do not subsequently use its return value. Dependencies traversed internally do not register extra checks. Delivery is buffered and rate-limited. A check records the selected **variant key**, never the JSON payload:
+
+```ts
+{
+  type: "feature-flag-event",
+  action: "check",
+  key: "model",
+  evalResult: "quality",
+  sourceVersionId: "version-id",
+  flagStateVersion: 42,
+  evalContext: { company: { id: "acme", plan: "enterprise" } },
+}
+```
+
+Boolean selections send `"true"` / `"false"` while returning Boolean values. Caller defaults, including category-mismatch defaults, do not claim an authored selection: their checks omit `evalResult` and `sourceVersionId`. Check deduplication includes normalized context, selection identity, root version, and snapshot version. Equal-valued variants are not interchangeable selections. Batch `getFlags()` remains a raw value record, without per-root caller defaults; unavailable batch values may be `undefined`.
+
+```ts
+const values = reflag.getFlags(context); // value record; checks each returned root
+const bound = reflag.bindClient(context);
+const value = bound.getFlag("model", "quick");
+const allValues = bound.getFlags();
+
+// Ordinary usage tracking is separate from flag checks.
+await bound.track("Document created", { attributes: { source: "editor" } });
+await reflag.flush();
+```
+
+`enableTracking: false` disables checks, context synchronization, and bound-client usage tracking. Explicit calls to the root client's `track()`, `updateUser()`, and `updateCompany()` remain separate operations.
+
+## Evaluation and synchronization
+
+The SDK fetches a complete `{ flags, segments }` graph from secret-key-only `GET /flags`. Definitions are validated and prepared before the flags, segments, and snapshot version replace the current cache together. Malformed graphs and stale responses cannot replace last-known-good state.
+
+`getFlag()` evaluates only its root and dependencies. `getFlags()` evaluates the collection. References are reevaluated on every traversal: there is **no context/dependency-result caching**. Only immutable definition preparation is retained. Returned objects are independent copies, so changing a value cannot mutate the saved definitions.
+
+Synchronization modes:
+
+- `push` (default): authenticated SSE updates with reconnect handling.
+- `polling`: periodic background refreshes.
+- `in-request`: request-driven refreshes, suitable for constrained runtimes.
+
+```ts
+await reflag.refreshFlags();
+await reflag.refreshFlags(42); // request at least this snapshot version
+const definitions = reflag.getFlagDefinitions(); // { flags, segments }, not an array
+```
+
+Refreshes are throttled. In-request mode can queue a refresh during the throttle window until a later access; a refresh call is not an unconditional synchronization barrier.
+
+## Fallback providers
+
+```ts
+import { ReflagClient, fallbackProviders } from "@reflag/node-sdk";
+
+const client = new ReflagClient({
+  secretKey: process.env.REFLAG_SECRET_KEY,
+  flagsFallbackProvider: fallbackProviders.file({ directory: ".reflag" }),
+});
+await client.initialize();
+```
+
+Live state is primary. When the initial live fetch fails, the SDK can load a saved complete collection. Later outages retain the in-memory graph rather than reloading older fallback state. Accepted live snapshots are saved in order; `flush()` also waits for pending saves.
+
+Available providers: `static`, `file`, `redis`, `s3`, and `gcs`, plus custom `FlagsFallbackProvider` implementations. A v2 snapshot contains:
+
+```ts
+{
+  version: 2,
+  savedAt: "2026-01-01T00:00:00.000Z",
+  flagStateVersion: 42,
+  flags: [/* compiled flags */],
+  segments: [/* compiled segment predicates */],
+}
+```
+
+V1 flag-only snapshots are incompatible and are not automatically expanded or converted. Built-in files/S3/GCS objects use `flags-fallback-v2-<hash-prefix>.json`; Redis uses `<keyPrefix>:v2:<hash-prefix>`. This keeps v1 and v2 processes from overwriting each other's fallback state.
+
+A static fallback can contain any JSON values:
+
+```ts
+fallbackProviders.static({
+  flags: { "new-editor": false, model: "quick", limits: null },
 });
 ```
 
-There are a few ways to programmatically manipulate the overrides which are appropriate when testing:
+Static values, `fallbackFlags`, and overrides do not identify authored variants. Their checks omit `evalResult` and `sourceVersionId`; they must not claim exposure to an authored selection. Restored real collection snapshots retain their real selection/version metadata. Providers are not loaded in offline mode.
 
-### Base overrides
+## Overrides and tests
 
-You can set base overrides for a test run by passing `flagOverrides` in the constructor, replacing them later with `setFlagOverrides()` and clearing them with `clearFlagOverrides()`:
-
-```typescript
-// pass directly in the constructor
+```ts
 const client = new ReflagClient({
   offline: true,
-  flagOverrides: { myFlag: true },
+  flagOverrides: { "new-editor": true, limits: { maxItems: 5 } },
 });
-
-// or replace the base overrides at a later time
-client.setFlagOverrides({ myFlag: false });
-
-// clear only the base overrides
+await client.initialize();
+client.setFlagOverrides({ model: "quick" });
+const remove = client.pushFlagOverrides((context) => ({
+  model: context.company?.id === "qa" ? "quality" : "quick",
+}));
+remove();
 client.clearFlagOverrides();
 ```
 
-`app.test.ts`:
+Overrides are direct JSON values. Pushed layers win over base overrides and can be removed independently. They apply **after evaluation**, so overriding a dependency's returned value does not rewrite dependent flag evaluations. Offline mode does not fetch, load a provider, or send tracking events.
 
-```typescript
-import { reflag } from "./reflag.ts";
+## Typed flags
 
-beforeAll(async () => await reflag.initialize());
-afterEach(() => {
-  reflag.clearFlagOverrides();
-});
+Generated declarations are optional. Singular reads infer their return type from the default, or return Boolean when no default is supplied. Optionally augment `Flags` to constrain keys and type batch records:
 
-describe("API Tests", () => {
-  it("should return 200 for the root endpoint", async () => {
-    reflag.setFlagOverrides({
-      "show-todo": true,
-    });
-
-    const response = await request(app).get("/");
-    expect(response.status).toBe(200);
-    expect(response.body).toEqual({ message: "Ready to manage some TODOs!" });
-  });
-});
-```
-
-### Layering overrides
-
-`pushFlagOverrides()` serves a different purpose: it adds a temporary layer on top of the base overrides and returns a remove function that removes only that layer. This is useful for nested tests:
-
-```typescript
-export const flag = function (name: string, enabled: boolean): void {
-  let remove: (() => void) | undefined;
-
-  beforeEach(function () {
-    remove = reflagClient.pushFlagOverrides({ [name]: enabled });
-  });
-
-  afterEach(function () {
-    remove?.();
-    remove = undefined;
-  });
-};
-
-describe("foo", () => {
-  describe("with new search ranking enabled", () => {
-    flag("search-ranking-v2", true);
-
-    describe("with summaries enabled", () => {
-      flag("smart-summaries", true);
-
-      // ...
-    });
-  });
-});
-```
-
-The precedence is:
-
-1. Base overrides from the constructor or `setFlagOverrides()`
-2. Temporary layers added by `pushFlagOverrides()`
-
-If the same flag is set in both places, the pushed override wins until its remove function is called.
-
-### Context dependent overrides
-
-`setFlagOverrides()` and `pushFlagOverrides()` also accept a function if the override depends on the evaluation context:
-
-```typescript
-const remove = client.pushFlagOverrides((context) => ({
-  "smart-summaries": context.user?.id === "qa-user",
-}));
-
-// ...
-
-remove();
-```
-
-### Additional ways to provide flag overrides
-
-You also have these additional ways to provide overrides, which can be helpful when testing out locally:
-
-1. Through environment variables:
-
-```bash
-REFLAG_FLAGS_ENABLED=flag1,flag2
-REFLAG_FLAGS_DISABLED=flag3,flag4
-```
-
-1. Through `reflag.config.json`:
-
-```json
-{
-  "flagOverrides": {
-    "delete-todos": {
-      "isEnabled": true,
-      "config": {
-        "key": "dev-config",
-        "payload": {
-          "requireConfirmation": true,
-          "maxDeletionsPerDay": 5
-        }
-      }
-    }
-  }
-}
-```
-
-## Remote Flag Evaluation
-
-In addition to local flag evaluation, Reflag supports remote evaluation using stored context. This is useful when you want to evaluate flags using user/company attributes that were previously sent to Reflag:
-
-```typescript
-// First, update user and company attributes
-await client.updateUser("user123", {
-  attributes: {
-    role: "admin",
-    subscription: "premium",
-  },
-});
-
-await client.updateCompany("company456", {
-  attributes: {
-    tier: "enterprise",
-    employees: 1000,
-  },
-});
-
-// Later, evaluate flags remotely using stored context.
-// Note: the argument order is (userId, companyId, additionalContext?)
-const userId = "user123";
-const companyId = "company456";
-
-const flags = await client.getFlagsRemote(userId, companyId);
-// Or evaluate a single flag
-const flag = await client.getFlagRemote("create-todos", userId, companyId);
-
-// You can also provide additional context
-const flagsWithContext = await client.getFlagsRemote(userId, companyId, {
-  other: {
-    location: "US",
-    platform: "mobile",
-  },
-});
-```
-
-Remote evaluation is particularly useful when:
-
-- You want to use the most up-to-date user/company attributes stored in Reflag
-- You don't want to pass all context attributes with every evaluation
-- You need to ensure consistent flag evaluation across different services
-
-## Using with Express
-
-A popular way to integrate the Reflag Node.js SDK is through an express middleware.
-
-```typescript
-import reflag from "./reflag";
-import express from "express";
-import { BoundReflagClient } from "@reflag/node-sdk";
-
-// Augment the Express types to include a `boundReflagClient` property on the
-// `res.locals` object.
-// This will allow us to access the ReflagClient instance in our route handlers
-// without having to pass it around manually
-declare global {
-  namespace Express {
-    interface Locals {
-      boundReflagClient: BoundReflagClient;
-    }
+```ts
+declare module "@reflag/node-sdk" {
+  interface Flags {
+    "new-editor": boolean;
+    model: "quick" | "quality";
+    limits: { maxItems: number } | null;
   }
 }
 
-// Add express middleware
-app.use((req, res, next) => {
-  // Extract the user and company IDs from the request
-  // You'll want to use a proper authentication and identification
-  // mechanism in a real-world application
-  const user = {
-    id: req.user?.id,
-    name: req.user?.name,
-    email: req.user?.email
-  }
-
-  const company = {
-    id: req.user?.companyId,
-    name: req.user?.companyName
-  }
-
-  // Create a new BoundReflagClient instance by calling the `bindClient`
-  // method on a `ReflagClient` instance
-  // This will create a new instance that is bound to the user/company given.
-  const boundReflagClient = reflag.bindClient({ user, company });
-
-  // Store the BoundReflagClient instance in the `res.locals` object so we
-  // can access it in our route handlers
-  res.locals.boundReflagClient = boundReflagClient;
-  next();
-});
-
-// Now use res.locals.boundReflagClient in your handlers
-app.get("/todos", async (_req, res) => {
-  const { track, isEnabled } = res.locals.boundReflagClient.getFlag("show-todos");
-
-  if (!isEnabled) {
-    res.status(403).send({"error": "flag inaccessible"})
-    return
-  }
-
-  ...
-}
+const model = reflag.getFlag(context, "model", "quick"); // string
+const models = reflag.getFlags(context); // models.model: "quick" | "quality" | undefined
 ```
 
-See [examples/express/app.ts](https://github.com/reflagcom/javascript/tree/main/packages/node-sdk/example/express/app.ts) for a full example.
+Augmentation does not change the bare-key Boolean contract or validate JSON payloads. The legacy CLI-generated config-wrapper types are not a v2 value schema. Update declarations when migrating. Both destructuring `.isEnabled` and accessing it through an assigned singular value fail type checking, including without generated declarations. See the Express example for a typed direct-value integration.
 
-## Remote flag evaluation with stored context
+## Bootstrap state
 
-If you don't want to provide context each time when evaluating flags but
-rather you would like to utilize the attributes you sent to Reflag previously
-(by calling `updateCompany` and `updateUser`) you can do so by calling `getFlagsRemote`
-(or `getFlagRemote` for a specific flag) with just `userId` and `companyId`
-in that order.
-These methods will call Reflag's servers and flags will be evaluated remotely
-using the stored attributes.
-
-```typescript
-// Update user and company attributes
-client.updateUser("john_doe", {
-  attributes: {
-    name: "John O.",
-    role: "admin",
-  },
-});
-
-client.updateCompany("acme_inc", {
-  attributes: {
-    name: "Acme, Inc",
-    tier: "premium"
-  },
-});
-...
-
-// This will evaluate flags using the stored attributes for the user/company pair
-const flags = await client.getFlagsRemote("john_doe", "acme_inc");
+```ts
+const bootstrap = reflag.getFlagsForBootstrap(context);
+// { protocolVersion: 2, context, flags: { model: { resolved, value,
+//     variantKey, sourceVersionId, matchedRuleId, ruleResults, errors, ... } },
+//   flagStateVersion }
 ```
 
-> [!IMPORTANT]
-> User and company attribute updates are processed asynchronously, so there might
-> be a small delay between when attributes are updated and when they are available
-> for evaluation.
+Bootstrap uses batch evaluation and preserves selection metadata and raw context. It does **not** register browser checks. Local overrides/value-only fallbacks carry their values without fabricated authored-selection metadata.
 
-## Opting out of tracking
+**This is a v2 bootstrap contract, not the existing v1 Browser/React/Vue bootstrap shape.** Those consumers require a coordinated migration before accepting this state. Likewise, the current OpenFeature provider deliberately remains on published Node SDK v1 until its separate migration.
 
-There are use cases in which you not want to be sending `user`, `company` and
-`track` events to [Reflag.com](https://reflag.com). These are usually cases where you could be impersonating
-another user in the system and do not want to interfere with the data being
-collected by Reflag.
+## Remote evaluation
 
-To disable tracking, bind the client using `bindClient()` as follows:
-
-```typescript
-// binds the client to a given user and company and set `enableTracking` to `false`.
-const boundClient = client.bindClient({ user, company, enableTracking: false });
-
-boundClient.track("some event"); // this will not actually send the event to Reflag.
-
-// the following code will not update the `user` nor `company` in Reflag and will
-// not send `track` events either.
-const { isEnabled, track } = boundClient.getFlag("user-menu");
-if (isEnabled) {
-  track();
-}
-```
-
-Another way way to disable tracking without employing a bound client is to call `getFlag()`
-or `getFlags()` by supplying `enableTracking: false` in the arguments passed to
-these functions.
-
-> [!IMPORTANT]
-> Note, however, that calling `track()`, `updateCompany()` or `updateUser()` in the `ReflagClient`
-> will still send tracking data. As such, it is always recommended to use `bindClient()`
-> when using this SDK.
-
-## Flushing
-
-ReflagClient employs a batching technique to minimize the number of calls that are sent to
-Reflag's servers.
-
-By default, the SDK automatically subscribes to process exit signals and attempts to flush
-any pending events. This behavior is controlled by the `flushOnExit` option in the client configuration:
-
-```typescript
-const client = new ReflagClient({
-  batchOptions: {
-    flushOnExit: false, // disable automatic flushing on exit
-  },
+```ts
+const enabled = await reflag.getFlagRemote(
+  "new-editor",
+  undefined,
+  "user-1",
+  "acme",
+);
+const model = await reflag.getFlagRemote("model", "quick", "user-1", "acme");
+const boundModel = await reflag
+  .bindClient(context)
+  .getFlagRemote("model", "quick");
+const values = await reflag.getFlagsRemote("user-1", "acme", {
+  other: { region: "eu" },
 });
 ```
 
-## Tracking custom events and setting custom attributes
+These methods use `/flags/evaluated` and return direct values. Singular remote reads use the same defaults, category checks, and JSON validation as local reads. The root `getFlagRemote(key, defaultValue, userId?, companyId?, context?)` places the default second; use `undefined` for an implicit Boolean read when passing explicit IDs. This moves the old positional IDs one place to the right. `getFlagsRemote()` keeps its existing argument order and returns a raw value record.
 
-Tracking allows events and updating user/company attributes in Reflag.
-For example, if a customer changes their plan, you'll want Reflag to know about it,
-in order to continue to provide up-do-date targeting information in the Reflag interface.
+Each requested singular root registers a check, including a default after a failed/missing remote evaluation, unless tracking is disabled. Only accepted authored selections retain the server's selection/version metadata. Explicit IDs, including numeric zero, take precedence over IDs in additional context. Stored attribute updates are asynchronous; remote evaluation need not immediately observe a just-sent update.
 
-The following example shows how to register a new user, associate it with a company
-and finally update the plan they are on.
+## Edge runtimes
 
-```typescript
-// registers the user with Reflag using the provided unique ID, and
-// providing a set of custom attributes (can be anything)
-client.updateUser("user_id", {
-  attributes: { longTimeUser: true, payingCustomer: false },
-});
-client.updateCompany("company_id", { userId: "user_id" });
+Use `EdgeClient` with Node compatibility enabled. It selects in-request synchronization. Call `ctx.waitUntil(client.flush())` before returning from a Worker so queued events and refresh work can complete.
 
-// the user started a voice huddle
-client.track("user_id", "huddle", { attributes: { voice: true } });
-```
+## Configuration
 
-It's also possible to achieve the same through a bound client in the following manner:
+Configuration precedence is constructor options, environment variables, then `reflag.config.json`. Supported environment variables include `REFLAG_SECRET_KEY`, `REFLAG_API_BASE_URL`, `REFLAG_LOG_LEVEL`, `REFLAG_OFFLINE`, `REFLAG_CONFIG_FILE`, and Boolean override lists `REFLAG_FLAGS_ENABLED` / `REFLAG_FLAGS_DISABLED`.
 
-```typescript
-const boundClient = client.bindClient({
-  user: { id: "user_id", longTimeUser: true, payingCustomer: false },
-  company: { id: "company_id" },
-});
+Constructor options also include a custom `logger` / `httpClient`, `flagsSyncMode`, `flagsPushUrl`, `fetchTimeoutMs`, `flagsFetchRetries`, `flagsFallbackProvider`, direct-value `flagOverrides`, and `batchOptions` (`maxSize`, `intervalMs`, `flushOnExit`). `emitEvaluationEvents` is deprecated and has no effect.
 
-boundClient.track("huddle", { attributes: { voice: true } });
-```
-
-Some attributes are used by Reflag to improve the UI, and are recommended
-to provide for easier navigation:
-
-- `name` -- display name for `user`/`company`,
-- `email` -- the email of the user,
-- `avatar` -- the URL for `user`/`company` avatar image.
-
-Attributes cannot be nested (multiple levels) and must be either strings,
-integers or booleans.
-
-## Managing `Last seen`
-
-By default `updateUser`/`updateCompany` calls automatically update the given
-user/company `Last seen` property on Reflag servers.
-
-You can control if `Last seen` should be updated when the events are sent by setting
-`meta.active = false`. This is often useful if you
-have a background job that goes through a set of companies just to update their
-attributes but not their activity.
-
-Example:
-
-```typescript
-client.updateUser("john_doe", {
-  attributes: { name: "John O." },
-  meta: { active: true },
-});
-
-client.updateCompany("acme_inc", {
-  attributes: { name: "Acme, Inc" },
-  meta: { active: false },
-});
-```
-
-`bindClient()` updates attributes on the Reflag servers but does not automatically
-update `Last seen`.
-
-## Zero PII
-
-The Reflag SDK doesn't collect any metadata and HTTP IP addresses are _not_ being
-stored. For tracking individual users, we recommend using something like database
-ID as userId, as it's unique and doesn't include any PII (personal identifiable
-information). If, however, you're using e.g. email address as userId, but prefer
-not to send any PII to Reflag, you can hash the sensitive data before sending
-it to Reflag:
-
-```typescript
-import { sha256 } from 'crypto-hash';
-
-client.updateUser({ userId: await sha256("john_doe"), ... });
-```
-
-## Migrating from Bucket SDK
-
-If you have been using the Bucket SDKs previously, the following list will help you migrate to Reflag SDK:
-
-- `Bucket*` classes, and types have been renamed to `Reflag*` (e.g. `BucketClient` is now `ReflagClient`)
-- `Feature*` classes, and types have been renamed to `Flag*` (e.g. `Feature` is now `Flag`, `RawFeatures` is now `RawFlags`)
-- When using strongly-typed flags, the new `Flags` interface replaced `Features` interface
-- All methods that contained `feature` in the name have been renamed to use the `flag` terminology (e.g. `getFeature` is `getFlag`)
-- All environment variables that were prefixed with `BUCKET_` are now prefixed with `REFLAG_`
-- The `BUCKET_HOST` environment variable and `host` option have been removed from `ReflagClient` constructor, use `REFLAG_API_BASE_URL` instead
-- The `BUCKET_FEATURES_ENABLED` and `BUCKET_FEATURES_DISABLED` have been renamed to `REFLAG_FLAGS_ENABLED` and `REFLAG_FLAGS_DISABLED`
-- The default configuration file has been renamed from `bucketConfig.json` to `reflag.config.json`
-- The `fallbackFeatures` property in client constructor and configuration files has been renamed to `fallbackFlags`
-- `featureKey` has been renamed to `flagKey` in all methods that accepts that argument
-- The SDKs will not emit `evaluate` and `evaluate-config` events anymore
-
-## Typescript
-
-Types are bundled together with the library and exposed automatically when importing
-through a package manager.
+Invalid options/context or non-JSON defaults can throw. Network or definition-refresh failures are logged and retain usable state. Singular reads use their caller default (implicit `false`) without fabricating an authored false selection; batch reads retain raw values/`undefined`. Call `await client.flush()` before shutting down, then `client.destroy()` to stop background work.
 
 ## License
 
-> MIT License
-> Copyright (c) 2025 Bucket ApS
+MIT License. Copyright (c) 2025 Bucket ApS.

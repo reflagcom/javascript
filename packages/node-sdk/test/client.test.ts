@@ -1,3697 +1,924 @@
-import { mkdtempSync, rmSync, writeFileSync } from "fs";
-import os from "os";
-import path from "path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import flushPromises from "flush-promises";
 import {
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  test,
-  vi,
-} from "vitest";
-
-import { BoundReflagClient, fallbackProviders, ReflagClient } from "../src";
+  fallbackProviders,
+  ReflagClient,
+  type ClientOptions,
+  type FlagsFallbackSnapshot,
+  type HttpClient,
+} from "../src";
 import {
-  API_BASE_URL,
-  API_TIMEOUT_MS,
-  BATCH_INTERVAL_MS,
-  BATCH_MAX_SIZE,
   FLAG_EVENT_RATE_LIMITER_WINDOW_SIZE_MS,
-  FLAGS_REFETCH_MS,
   SDK_VERSION,
   SDK_VERSION_HEADER_NAME,
 } from "../src/config";
-import fetchClient from "../src/fetch-http-client";
-import { subscribe as triggerOnExit } from "../src/flusher";
-import { newRateLimiter } from "../src/rate-limiter";
-import {
-  ClientOptions,
-  Context,
-  FlagsAPIResponse,
-  FlagsFallbackProvider,
-} from "../src/types";
+import { definition, graph, snapshot } from "./fixtures";
 
-const BULK_ENDPOINT = "https://api.example.com/bulk";
-
-const missingContextFieldError = (field: string) => ({
-  code: "MISSING_CONTEXT_FIELD",
-  field,
-  message: `Context field "${field}" is required to evaluate targeting rules.`,
-});
-
-vi.mock("../src/rate-limiter", async (importOriginal) => {
-  const original = (await importOriginal()) as any;
-
-  return {
-    ...original,
-    newRateLimiter: vi.fn(original.newRateLimiter),
+vi.mock("../src/flusher", () => ({ subscribe: vi.fn() }));
+const clients: ReflagClient[] = [];
+const company = { id: "acme", plan: "enterprise" };
+function harness(response: unknown = graph(), options: ClientOptions = {}) {
+  const state = { response };
+  const logger = {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   };
+  const httpClient = {
+    get: vi.fn(
+      async (
+        _url: string,
+        _headers: Record<string, string>,
+        _timeoutMs: number,
+      ) => ({
+        status: 200,
+        ok: true,
+        body: { success: true, ...(state.response as object) },
+      }),
+    ),
+    post: vi.fn(
+      async (
+        _url: string,
+        _headers: Record<string, string>,
+        _body: unknown[],
+      ) => ({ status: 200, ok: true, body: { success: true } }),
+    ),
+  };
+  const client = new ReflagClient({
+    secretKey: "validSecretKeyWithMoreThan22Chars",
+    apiBaseUrl: "https://api.example.com/",
+    offline: false,
+    flagsFetchRetries: 0,
+    flagsSyncMode: "in-request",
+    logger,
+    httpClient: httpClient as unknown as HttpClient,
+    batchOptions: { intervalMs: 1e9, flushOnExit: false },
+    ...options,
+  });
+  clients.push(client);
+  const events = () =>
+    httpClient.post.mock.calls.flatMap(
+      (call) =>
+        (
+          call as unknown as [
+            string,
+            unknown,
+            { type: string; [key: string]: unknown }[],
+          ]
+        )[2],
+    );
+  return {
+    client,
+    state,
+    logger,
+    httpClient,
+    events,
+    checks: () =>
+      events().filter((event) => event.type === "feature-flag-event"),
+  };
+}
+async function nextRefresh(client: ReflagClient, version?: number) {
+  await vi.advanceTimersByTimeAsync(1001);
+  await client.refreshFlags(version);
+}
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+afterEach(() => {
+  for (const client of clients.splice(0)) client.destroy();
+  vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
-vi.mock("../src/flusher", () => ({
-  subscribe: vi.fn(),
-}));
-
-// Mock NextJS headers module for dynamic import
-vi.mock("next/headers", () => ({
-  cookies: vi.fn(),
-}));
-
-const user = {
-  id: "user123",
-  age: 1,
-  name: "John",
-};
-
-const company = {
-  id: "company123",
-  employees: 100,
-  name: "Acme Inc.",
-};
-
-const event = {
-  event: "flag-event",
-  attrs: { key: "value" },
-};
-
-const otherContext = { custom: "context", key: "value" };
-const logger = {
-  debug: vi.fn(),
-  info: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
-};
-const httpClient = { post: vi.fn(), get: vi.fn() };
-
-const fallbackFlags = ["key"];
-
-const validOptions: ClientOptions = {
-  secretKey: "validSecretKeyWithMoreThan22Chars",
-  apiBaseUrl: "https://api.example.com/",
-  logger,
-  httpClient,
-  fallbackFlags,
-  flagsFetchRetries: 2,
-  batchOptions: {
-    maxSize: 99,
-    intervalMs: 10001,
-    flushOnExit: false,
-  },
-  flagsSyncMode: "polling",
-  offline: false,
-};
-
-const expectedHeaders = {
-  [SDK_VERSION_HEADER_NAME]: SDK_VERSION,
-  "Content-Type": "application/json",
-  Authorization: `Bearer ${validOptions.secretKey}`,
-};
-
-function createSSEMessageStream(data: object) {
-  const encoder = new TextEncoder();
-  return new ReadableStream<Uint8Array>({
-    start(controller) {
-      controller.enqueue(
-        encoder.encode(`event: message\ndata: ${JSON.stringify(data)}\n\n`),
-      );
-    },
+describe("direct flag values", () => {
+  it.each([
+    false,
+    true,
+    null,
+    0,
+    42,
+    "",
+    "quality",
+    [false, "a"],
+    { nested: { enabled: false } },
+  ])("returns %j itself, without a wrapper", async (value) => {
+    const h = harness(snapshot([definition("flag", value)]));
+    await h.client.initialize();
+    expect(h.client.getFlag({ company }, "flag", null)).toEqual(value);
+    await h.client.flush();
+    expect(h.checks()).toEqual([
+      expect.objectContaining({
+        action: "check",
+        key: "flag",
+        evalResult: "default",
+        sourceVersionId: "version:flag",
+        flagStateVersion: 1,
+        evalContext: { company },
+      }),
+    ]);
+    expect(h.checks()[0]).not.toHaveProperty("value");
   });
-}
-
-function createFailingSSEStream(error = new Error("stream failed")) {
-  return new ReadableStream<Uint8Array>({
-    start(controller) {
-      controller.error(error);
-    },
-  });
-}
-
-function createIdleSSEStream() {
-  return new ReadableStream<Uint8Array>({
-    start() {
-      // keep the stream open without sending messages
-    },
-  });
-}
-
-const flagDefinitions: FlagsAPIResponse = {
-  flagStateVersion: 1,
-  features: [
-    {
-      key: "flag1",
-      description: "Flag 1",
-      targeting: {
-        version: 1,
-        rules: [
-          {
-            filter: {
-              type: "context" as const,
-              field: "company.id",
-              operator: "IS",
-              values: ["company123"],
-            },
-          },
-        ],
-      },
-      config: {
-        version: 1,
-        variants: [
-          {
-            filter: {
-              type: "context",
-              field: "company.id",
-              operator: "IS",
-              values: ["company123"],
-            },
-            key: "config-1",
-            payload: { something: "else" },
-          },
-        ],
-      },
-    },
-    {
-      key: "flag2",
-      description: "Flag 2",
-      targeting: {
-        version: 2,
-        rules: [
-          {
-            filter: {
-              type: "group" as const,
-              operator: "and",
-              filters: [
-                {
-                  type: "context" as const,
-                  field: "company.id",
-                  operator: "IS",
-                  values: ["company123"],
-                },
-                {
-                  partialRolloutThreshold: 0.5,
-                  partialRolloutAttribute: "attributeKey",
-                  type: "rolloutPercentage" as const,
-                  key: "flag2",
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  ],
-};
-
-describe("ReflagClient", () => {
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
-
-  describe("constructor", () => {
-    it("should initialize with no options", async () => {
-      const secretKeyEnv = process.env.REFLAG_SECRET_KEY;
-      process.env.REFLAG_SECRET_KEY = "validSecretKeyWithMoreThan22Chars";
-      try {
-        const reflagInstance = new ReflagClient();
-        expect(reflagInstance).toBeInstanceOf(ReflagClient);
-      } finally {
-        process.env.REFLAG_SECRET_KEY = secretKeyEnv;
-      }
-    });
-
-    it("should accept fallback flags as an array", async () => {
-      const reflagInstance = new ReflagClient({
-        secretKey: "validSecretKeyWithMoreThan22Chars",
-        fallbackFlags: ["flag1", "flag2"],
-      });
-
-      expect(reflagInstance["_config"].fallbackFlags).toEqual({
-        flag1: {
-          isEnabled: true,
-          key: "flag1",
-        },
-        flag2: {
-          isEnabled: true,
-          key: "flag2",
-        },
-      });
-    });
-
-    it("should accept fallback flags as an object", async () => {
-      const reflagInstance = new ReflagClient({
-        secretKey: "validSecretKeyWithMoreThan22Chars",
-        fallbackFlags: {
-          flag1: true,
-          flag2: {
-            isEnabled: true,
-            config: {
-              key: "config1",
-              payload: { value: true },
-            },
-          },
-        },
-      });
-
-      expect(reflagInstance["_config"].fallbackFlags).toStrictEqual({
-        flag1: {
-          key: "flag1",
-          config: undefined,
-          isEnabled: true,
-        },
-        flag2: {
-          key: "flag2",
-          isEnabled: true,
-          config: {
-            key: "config1",
-            payload: { value: true },
-          },
-        },
-      });
-    });
-
-    it("should use the REFLAG_CONFIG_FILE path when set", () => {
-      const tempDir = mkdtempSync(path.join(os.tmpdir(), "reflag-node-sdk-"));
-      const originalConfigFile = process.env.REFLAG_CONFIG_FILE;
-      const customConfigFile = path.join(tempDir, "custom.reflag.config.json");
-
-      writeFileSync(
-        customConfigFile,
-        JSON.stringify({ apiBaseUrl: "https://custom-config.example/" }),
-      );
-
-      process.env.REFLAG_CONFIG_FILE = customConfigFile;
-
-      try {
-        const client = new ReflagClient({
-          offline: true,
-        });
-
-        expect(client["_config"].apiBaseUrl).toBe(
-          "https://custom-config.example/",
-        );
-      } finally {
-        if (originalConfigFile === undefined) {
-          delete process.env.REFLAG_CONFIG_FILE;
-        } else {
-          process.env.REFLAG_CONFIG_FILE = originalConfigFile;
-        }
-        rmSync(tempDir, { recursive: true, force: true });
-      }
-    });
-
-    it("should create a client instance with valid options", () => {
-      const client = new ReflagClient(validOptions);
-
-      expect(client).toBeInstanceOf(ReflagClient);
-      expect(client["_config"].apiBaseUrl).toBe("https://api.example.com/");
-      expect(client["_config"].refetchInterval).toBe(FLAGS_REFETCH_MS);
-      expect(client.logger).toBeDefined();
-      expect(client.httpClient).toBe(validOptions.httpClient);
-      expect(client["_config"].headers).toEqual(expectedHeaders);
-      expect(client["batchBuffer"]).toMatchObject({
-        maxSize: 99,
-        intervalMs: 10001,
-      });
-
-      expect(client["_config"].fallbackFlags).toEqual({
-        key: {
-          key: "key",
-          isEnabled: true,
-        },
-      });
-      expect(client["_config"].flagsFetchRetries).toBe(2);
-    });
-
-    it("should route messages to the supplied logger", () => {
-      const client = new ReflagClient(validOptions);
-
-      const actualLogger = client.logger!;
-      actualLogger.debug("debug message");
-      actualLogger.info("info message");
-      actualLogger.warn("warn message");
-      actualLogger.error("error message");
-
-      expect(logger.debug).toHaveBeenCalledWith(
-        expect.stringMatching("debug message"),
-      );
-      expect(logger.info).toHaveBeenCalledWith(
-        expect.stringMatching("info message"),
-      );
-      expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringMatching("warn message"),
-      );
-      expect(logger.error).toHaveBeenCalledWith(
-        expect.stringMatching("error message"),
-      );
-    });
-
-    it("should create a client instance with default values for optional fields", () => {
-      const client = new ReflagClient({
-        secretKey: "validSecretKeyWithMoreThan22Chars",
-      });
-
-      expect(client["_config"].apiBaseUrl).toBe(API_BASE_URL);
-      expect(client["_config"].refetchInterval).toBe(FLAGS_REFETCH_MS);
-      expect(client["_config"].flagsSyncMode).toBe("push");
-      expect(client["_config"].flagsPushUrl).toBe(
-        "https://front.reflag.com/sse/server",
-      );
-      expect(client.httpClient).toBe(fetchClient);
-      expect(client["_config"].headers).toEqual(expectedHeaders);
-      expect(client["_config"].fallbackFlags).toBeUndefined();
-      expect(client["batchBuffer"]).toMatchObject({
-        maxSize: BATCH_MAX_SIZE,
-        intervalMs: BATCH_INTERVAL_MS,
-      });
-    });
-
-    it("should strip legacy channels from custom push URLs", () => {
-      const client = new ReflagClient({
-        secretKey: "validSecretKeyWithMoreThan22Chars",
-        flagsPushUrl: "https://example.com/sse?channels=legacy&foo=bar",
-      });
-
-      expect(client["_config"].flagsPushUrl).toBe(
-        "https://example.com/sse?foo=bar",
-      );
-    });
-
-    it("should map deprecated cacheStrategy values to sync modes", () => {
-      const inRequestClient = new ReflagClient({
-        secretKey: "validSecretKeyWithMoreThan22Chars",
-        cacheStrategy: "in-request",
-      });
-      const pollingClient = new ReflagClient({
-        secretKey: "validSecretKeyWithMoreThan22Chars",
-        cacheStrategy: "periodically-update",
-      });
-
-      expect(inRequestClient["_config"].flagsSyncMode).toBe("in-request");
-      expect(pollingClient["_config"].flagsSyncMode).toBe("polling");
-    });
-
-    it("should throw an error if options are invalid", () => {
-      let invalidOptions: any = null;
-      expect(() => new ReflagClient(invalidOptions)).toThrow(
-        "options must be an object",
-      );
-
-      invalidOptions = { ...validOptions, secretKey: "shortKey" };
-      expect(() => new ReflagClient(invalidOptions)).toThrow(
-        "invalid secretKey specified",
-      );
-
-      invalidOptions = { ...validOptions, host: 123 };
-      expect(() => new ReflagClient(invalidOptions)).toThrow(
-        "host must be a string",
-      );
-
-      invalidOptions = {
-        ...validOptions,
-        logger: "invalidLogger" as any,
-      };
-      expect(() => new ReflagClient(invalidOptions)).toThrow(
-        "logger must be an object",
-      );
-
-      invalidOptions = {
-        ...validOptions,
-        httpClient: "invalidHttpClient" as any,
-      };
-      expect(() => new ReflagClient(invalidOptions)).toThrow(
-        "httpClient must be an object",
-      );
-
-      invalidOptions = {
-        ...validOptions,
-        batchOptions: "invalid" as any,
-      };
-      expect(() => new ReflagClient(invalidOptions)).toThrow(
-        "batchOptions must be an object",
-      );
-
-      invalidOptions = {
-        ...validOptions,
-        fallbackFlags: "invalid" as any,
-      };
-      expect(() => new ReflagClient(invalidOptions)).toThrow(
-        "fallbackFlags must be an array or object",
-      );
-
-      invalidOptions = {
-        ...validOptions,
-        flagsFallbackProvider: {} as any,
-      };
-      expect(() => new ReflagClient(invalidOptions)).toThrow(
-        "flagsFallbackProvider must be an object with load/save functions",
-      );
-    });
-
-    it("should create a new flag events rate-limiter", () => {
-      const client = new ReflagClient(validOptions);
-
-      expect(client["rateLimiter"]).toBeDefined();
-      expect(newRateLimiter).toHaveBeenCalledWith(
-        FLAG_EVENT_RATE_LIMITER_WINDOW_SIZE_MS,
-      );
-    });
-
-    it("should not register an exit flush handler if `batchOptions.flushOnExit` is false", () => {
-      new ReflagClient({
-        ...validOptions,
-        batchOptions: { ...validOptions.batchOptions, flushOnExit: false },
-      });
-
-      expect(triggerOnExit).not.toHaveBeenCalled();
-    });
-
-    it("should not register an exit flush handler if `offline` is true", () => {
-      new ReflagClient({
-        ...validOptions,
-        offline: true,
-      });
-
-      expect(triggerOnExit).not.toHaveBeenCalled();
-    });
-
-    it.each([undefined, true])(
-      "should register an exit flush handler if `batchOptions.flushOnExit` is `%s`",
-      (flushOnExit) => {
-        new ReflagClient({
-          ...validOptions,
-          batchOptions: { ...validOptions.batchOptions, flushOnExit },
-        });
-
-        expect(triggerOnExit).toHaveBeenCalledWith(expect.any(Function));
-      },
-    );
-
-    it.each([
-      ["https://api.example.com", "https://api.example.com/bulk"],
-      ["https://api.example.com/", "https://api.example.com/bulk"],
-      ["https://api.example.com/path", "https://api.example.com/path/bulk"],
-      ["https://api.example.com/path/", "https://api.example.com/path/bulk"],
-    ])(
-      "should build the URLs correctly %s -> %s",
-      async (apiBaseUrl, expectedUrl) => {
-        const client = new ReflagClient({
-          ...validOptions,
-          apiBaseUrl,
-        });
-
-        await client.updateUser("user_id");
-        await client.flush();
-
-        expect(httpClient.post).toHaveBeenCalledWith(
-          expectedUrl,
-          expect.any(Object),
-          expect.any(Object),
-        );
-      },
+  it("fetches one complete /flags collection with SDK authentication", async () => {
+    const h = harness();
+    await h.client.initialize();
+    await h.client.initialize();
+    expect(h.httpClient.get).toHaveBeenCalledTimes(1);
+    expect(h.httpClient.get).toHaveBeenCalledWith(
+      "https://api.example.com/flags",
+      expect.objectContaining({
+        Authorization: "Bearer validSecretKeyWithMoreThan22Chars",
+        [SDK_VERSION_HEADER_NAME]: SDK_VERSION,
+      }),
+      expect.any(Number),
     );
   });
-
-  describe("bindClient", () => {
-    const client = new ReflagClient(validOptions);
-    const context = {
-      user,
-      company,
-      other: otherContext,
-    };
-
-    beforeEach(() => {
-      vi.mocked(httpClient.post).mockResolvedValue({ body: { success: true } });
-      client["rateLimiter"].clearStale(true);
-    });
-
-    it("should return a new client instance with the `user`, `company` and `other` set", async () => {
-      const newClient = client.bindClient(context);
-      await client.flush();
-
-      expect(newClient.user).toEqual(user);
-      expect(newClient.company).toEqual(company);
-      expect(newClient.otherContext).toEqual(otherContext);
-
-      expect(newClient).toBeInstanceOf(BoundReflagClient);
-      expect(newClient).not.toBe(client); // Ensure a new instance is returned
-      expect(newClient["_options"]).toEqual({
-        enableTracking: true,
-        ...context,
-      });
-    });
-
-    it("should update user in Reflag when called", async () => {
-      client.bindClient({ user: context.user });
-      await client.flush();
-
-      const { id: _, ...attributes } = context.user;
-
-      expect(httpClient.post).toHaveBeenCalledWith(
-        BULK_ENDPOINT,
-        expectedHeaders,
-        [
-          {
-            type: "user",
-            userId: user.id,
-            attributes: attributes,
-            context: undefined,
-          },
-        ],
-      );
-
-      expect(httpClient.post).toHaveBeenCalledOnce();
-    });
-
-    it("should update company in Reflag when called", async () => {
-      client.bindClient({ company: context.company, meta: { active: true } });
-      await client.flush();
-
-      const { id: _, ...attributes } = context.company;
-
-      expect(httpClient.post).toHaveBeenCalledWith(
-        BULK_ENDPOINT,
-        expectedHeaders,
-        [
-          {
-            type: "company",
-            companyId: company.id,
-            attributes: attributes,
-            context: {
-              active: true,
-            },
-          },
-        ],
-      );
-
-      expect(httpClient.post).toHaveBeenCalledOnce();
-    });
-
-    it("should not update `company` or `user` in Reflag when `enableTracking` is `false`", async () => {
-      client.bindClient({
-        user: context.user,
-        company: context.company,
-        enableTracking: false,
-      });
-
-      await client.flush();
-
-      expect(httpClient.post).not.toHaveBeenCalled();
-    });
-
-    it("should throw an error if `user` is invalid", () => {
-      expect(() =>
-        client.bindClient({ user: "bad_attributes" as any }),
-      ).toThrow("validation failed: user must be an object if given");
-      expect(() => client.bindClient({ user: { id: {} as any } })).toThrow(
-        "validation failed: user.id must be a string or number if given",
-      );
-    });
-
-    it("should throw an error if `company` is invalid", () => {
-      expect(() =>
-        client.bindClient({ company: "bad_attributes" as any }),
-      ).toThrow("validation failed: company must be an object if given");
-      expect(() => client.bindClient({ company: { id: {} as any } })).toThrow(
-        "validation failed: company.id must be a string or number if given",
-      );
-    });
-
-    it("should throw an error if `other` is invalid", () => {
-      expect(() =>
-        client.bindClient({ other: "bad_attributes" as any }),
-      ).toThrow("validation failed: other must be an object");
-    });
-
-    it("should throw an error if `enableTracking` is invalid", () => {
-      expect(() =>
-        client.bindClient({ enableTracking: "bad_attributes" as any }),
-      ).toThrow("validation failed: enableTracking must be a boolean");
-    });
-
-    it("should allow context without id", () => {
-      const c = client.bindClient({
-        user: { id: undefined, name: "userName" },
-        company: { id: undefined, name: "companyName" },
-      });
-      expect(c.user?.id).toBeUndefined();
-      expect(c.company?.id).toBeUndefined();
-    });
+  it("checks only the requested root, even when the caller ignores its value", async () => {
+    const h = harness();
+    await h.client.initialize();
+    h.client.getFlag({ company }, "dependent");
+    await h.client.flush();
+    expect(h.checks()).toEqual([
+      expect.objectContaining({ key: "dependent", evalResult: "true" }),
+    ]);
   });
-
-  describe("updateUser", () => {
-    const client = new ReflagClient(validOptions);
-
-    beforeEach(() => {
-      client["rateLimiter"].clearStale(true);
+  it("batch-evaluates roots and returns a value record", async () => {
+    const h = harness();
+    await h.client.initialize();
+    expect(h.client.getFlags({ company })).toEqual({
+      model: "quality",
+      dependent: true,
     });
-
-    // try with both string and number IDs
-    test.each([
-      { id: "user123", age: 1, name: "John" },
-      { id: 42, age: 1, name: "John" },
-    ])("should successfully update the user", async (testUser) => {
-      const response = { status: 200, body: { success: true } };
-      httpClient.post.mockResolvedValue(response);
-
-      await client.updateUser(testUser.id, {
-        attributes: { age: 2, brave: false },
-        meta: {
-          active: true,
-        },
-      });
-
-      await client.flush();
-
-      expect(httpClient.post).toHaveBeenCalledWith(
-        BULK_ENDPOINT,
-        expectedHeaders,
-        [
-          {
-            type: "user",
-            userId: testUser.id,
-            attributes: { age: 2, brave: false },
-            context: { active: true },
-          },
-        ],
-      );
-
-      expect(logger.debug).toHaveBeenCalledWith(
-        expect.stringMatching("post request to "),
-        response,
-      );
-    });
-
-    it("should log an error if the post request throws", async () => {
-      const error = new Error("Network error");
-      httpClient.post.mockRejectedValue(error);
-
-      await client.updateUser(user.id);
-      await client.flush();
-
-      expect(logger.warn).toHaveBeenCalledWith(
-        "flush of buffered items failed; discarding items",
-        expect.objectContaining({
-          count: 1,
-          error: expect.objectContaining({
-            message: "failed to send bulk events",
-          }),
-        }),
-      );
-    });
-
-    it("should log if API call returns false", async () => {
-      const response = { status: 200, body: { success: false } };
-
-      httpClient.post.mockResolvedValue(response);
-
-      await client.updateUser(user.id);
-      await client.flush();
-
-      expect(logger.warn).toHaveBeenCalledWith(
-        "flush of buffered items failed; discarding items",
-        expect.objectContaining({
-          count: 1,
-          error: expect.objectContaining({
-            message: "failed to send bulk events",
-          }),
-        }),
-      );
-      expect(logger.error).not.toHaveBeenCalled();
-    });
-
-    it("should throw an error if opts are not valid or the user is not set", async () => {
-      await expect(
-        client.updateUser(user.id, "bad_opts" as any),
-      ).rejects.toThrow("validation failed: options must be an object");
-
-      await expect(
-        client.updateUser(user.id, { attributes: "bad_attributes" as any }),
-      ).rejects.toThrow("attributes must be an object");
-
-      await expect(
-        client.updateUser(user.id, { meta: "bad_meta" as any }),
-      ).rejects.toThrow("meta must be an object");
-    });
+    await h.client.flush();
+    expect(h.checks().map((event) => event.evalResult)).toEqual([
+      "quality",
+      "true",
+    ]);
   });
-
-  describe("updateCompany", () => {
-    const client = new ReflagClient(validOptions);
-
-    beforeEach(() => {
-      client["rateLimiter"].clearStale(true);
-    });
-
-    test.each([
-      {
-        id: "company123",
-        employees: 100,
-        name: "Acme Inc.",
-        userId: "user123",
+  it("keeps successive evaluations scoped to their contexts", async () => {
+    const h = harness();
+    await h.client.initialize();
+    expect(h.client.getFlag({ company }, "dependent")).toBe(true);
+    expect(
+      h.client.getFlag({ company: { id: "small", plan: "free" } }, "dependent"),
+    ).toBe(false);
+    expect(h.client.getFlag({ company }, "dependent")).toBe(true);
+  });
+  it("single evaluation does not diagnose unrelated roots", async () => {
+    const collection = graph();
+    const unrelated = definition("unrelated", false);
+    unrelated.rules.unshift({
+      id: "requires-context",
+      filter: {
+        type: "context",
+        field: "other.missing",
+        operator: "IS",
+        values: ["yes"],
       },
-      { id: 42, employees: 100, name: "Acme Inc.", userId: 42 },
-    ])(`should successfully update the company`, async (testCompany) => {
-      const response = { status: 200, body: { success: true } };
-      httpClient.post.mockResolvedValue(response);
-
-      await client.updateCompany(testCompany.id, {
-        attributes: { employees: 200, bankrupt: false },
-        meta: { active: true },
-        userId: testCompany.userId,
-      });
-
-      await client.flush();
-
-      expect(httpClient.post).toHaveBeenCalledWith(
-        BULK_ENDPOINT,
-        expectedHeaders,
-        [
-          {
-            type: "company",
-            companyId: testCompany.id,
-            attributes: { employees: 200, bankrupt: false },
-            context: { active: true },
-            userId: testCompany.userId,
-          },
-        ],
-      );
-
-      expect(logger.debug).toHaveBeenCalledWith(
-        expect.stringMatching("post request to .*"),
-        response,
-      );
+      result: { type: "variant", variantKey: "default" },
     });
-
-    it("should log an error if the post request throws", async () => {
-      const error = new Error("Network error");
-      httpClient.post.mockRejectedValue(error);
-
-      await client.updateCompany(company.id, {});
-      await client.flush();
-
-      expect(logger.warn).toHaveBeenCalledWith(
-        "flush of buffered items failed; discarding items",
+    collection.flags.push(unrelated);
+    const h = harness(collection);
+    await h.client.initialize();
+    h.client.getFlag({ company }, "dependent");
+    await h.client.flush();
+    expect(h.checks()).toHaveLength(1);
+    expect(h.logger.warn).not.toHaveBeenCalled();
+  });
+  it("preserves diagnostic provenance with a successful fallback selection", async () => {
+    const h = harness();
+    await h.client.initialize();
+    expect(h.client.getFlag({}, "dependent")).toBe(false);
+    await h.client.flush();
+    expect(h.checks()[0]).toMatchObject({
+      evalResult: "false",
+      evalErrors: [
         expect.objectContaining({
-          count: 1,
-          error: expect.objectContaining({
-            message: "failed to send bulk events",
-          }),
+          code: "MISSING_CONTEXT_FIELD",
+          field: "company.plan",
+          source: { type: "segment", key: "enterprise" },
         }),
-      );
-    });
-
-    it("should log an error if API responds with success: false", async () => {
-      const response = {
-        status: 200,
-        body: { success: false },
-      };
-
-      httpClient.post.mockResolvedValue(response);
-
-      await client.updateCompany(company.id, {});
-      await client.flush();
-
-      expect(logger.warn).toHaveBeenCalledWith(
-        "flush of buffered items failed; discarding items",
-        expect.objectContaining({
-          count: 1,
-          error: expect.objectContaining({
-            message: "failed to send bulk events",
-          }),
-        }),
-      );
-      expect(logger.error).not.toHaveBeenCalled();
-    });
-
-    it("should throw an error if company is not valid", async () => {
-      await expect(
-        client.updateCompany(company.id, "bad_opts" as any),
-      ).rejects.toThrow("validation failed: options must be an object");
-
-      await expect(
-        client.updateCompany(company.id, {
-          attributes: "bad_attributes" as any,
-        }),
-      ).rejects.toThrow("attributes must be an object");
-
-      await expect(
-        client.updateCompany(company.id, { meta: "bad_meta" as any }),
-      ).rejects.toThrow("meta must be an object");
+      ],
     });
   });
-
-  describe("track", () => {
-    const client = new ReflagClient(validOptions);
-
-    beforeEach(() => {
-      client["rateLimiter"].clearStale(true);
+  it("does not let callers mutate cached variant payloads", async () => {
+    const h = harness(snapshot([definition("flag", { enabled: false })]));
+    await h.client.initialize();
+    const value = h.client.getFlag({}, "flag", { enabled: false });
+    value.enabled = true;
+    expect(h.client.getFlag({}, "flag", { enabled: true })).toEqual({
+      enabled: false,
     });
-
-    test.each([
-      { id: "user123", age: 1, name: "John" },
-      { id: 42, age: 1, name: "John" },
-    ])("should successfully track the flag usage", async (testUser) => {
-      const response = {
-        status: 200,
-        body: { success: true },
-      };
-      httpClient.post.mockResolvedValue(response);
-
-      await client.bindClient({ user: testUser, company }).track(event.event, {
-        attributes: event.attrs,
-        meta: { active: true },
-      });
-
-      await client.flush();
-      expect(httpClient.post).toHaveBeenCalledWith(
-        BULK_ENDPOINT,
-        expectedHeaders,
-        [
-          expect.objectContaining({
-            type: "company",
-          }),
-          expect.objectContaining({
-            type: "user",
-          }),
-          {
-            attributes: {
-              key: "value",
-            },
-            context: {
-              active: true,
-            },
-            event: "flag-event",
-            type: "event",
-            userId: testUser.id,
-            companyId: company.id,
-          },
-        ],
-      );
-
-      expect(logger.debug).toHaveBeenCalledWith(
-        expect.stringMatching("post request to"),
-        response,
-      );
-    });
-
-    it("should successfully track the flag usage including user and company", async () => {
-      httpClient.post.mockResolvedValue({
-        status: 200,
-        body: { success: true },
-      });
-
-      await client.bindClient({ user }).track(event.event, {
-        companyId: "otherCompanyId",
-        attributes: event.attrs,
-        meta: { active: true },
-      });
-
-      await client.flush();
-      expect(httpClient.post).toHaveBeenCalledWith(
-        BULK_ENDPOINT,
-        expectedHeaders,
-        [
-          expect.objectContaining({
-            type: "user",
-          }),
-          {
-            attributes: {
-              key: "value",
-            },
-            context: {
-              active: true,
-            },
-            event: "flag-event",
-            companyId: "otherCompanyId",
-            type: "event",
-            userId: "user123",
-          },
-        ],
-      );
-    });
-
-    it("should log an error if the post request fails", async () => {
-      const error = new Error("Network error");
-      httpClient.post.mockRejectedValue(error);
-
-      await client.bindClient({ user }).track(event.event);
-      await client.flush();
-
-      expect(logger.warn).toHaveBeenCalledWith(
-        "flush of buffered items failed; discarding items",
-        expect.objectContaining({
-          count: 2,
-          error: expect.objectContaining({
-            message: "failed to send bulk events",
-          }),
-        }),
-      );
-    });
-
-    it("should log if the API call returns false", async () => {
-      const response = {
-        status: 200,
-        body: { success: false },
-      };
-
-      httpClient.post.mockResolvedValue(response);
-
-      await client.bindClient({ user }).track(event.event);
-      await client.flush();
-
-      expect(logger.warn).toHaveBeenCalledWith(
-        "flush of buffered items failed; discarding items",
-        expect.objectContaining({
-          count: 2,
-          error: expect.objectContaining({
-            message: "failed to send bulk events",
-          }),
-        }),
-      );
-      expect(logger.error).not.toHaveBeenCalled();
-    });
-
-    it("should log if user is not set", async () => {
-      const boundClient = client.bindClient({ company });
-
-      await boundClient.track("hello");
-
-      expect(httpClient.post).not.toHaveBeenCalled();
-      expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringMatching("no user set, cannot track event"),
-      );
-    });
-
-    it("should throw an error if event is invalid", async () => {
-      const boundClient = client.bindClient({ company, user });
-
-      await expect(boundClient.track(undefined as any)).rejects.toThrow(
-        "event must be a string",
-      );
-      await expect(boundClient.track(1 as any)).rejects.toThrow(
-        "event must be a string",
-      );
-
-      await expect(
-        boundClient.track(event.event, "bad_opts" as any),
-      ).rejects.toThrow("validation failed: options must be an object");
-
-      await expect(
-        boundClient.track(event.event, {
-          attributes: "bad_attributes" as any,
-        }),
-      ).rejects.toThrow("attributes must be an object");
-
-      await expect(
-        boundClient.track(event.event, { meta: "bad_meta" as any }),
-      ).rejects.toThrow("meta must be an object");
+    const batch = h.client.getFlags({ enableTracking: false });
+    (batch.flag as { enabled: boolean }).enabled = true;
+    expect(h.client.getFlag({}, "flag", { enabled: true })).toEqual({
+      enabled: false,
     });
   });
-
-  describe("user", () => {
-    it("should return the undefined if user was not set", () => {
-      const client = new ReflagClient(validOptions).bindClient({ company });
-      expect(client.user).toBeUndefined();
-    });
-
-    it("should return the user if user was associated", () => {
-      const client = new ReflagClient(validOptions).bindClient({ user });
-
-      expect(client.user).toEqual(user);
-    });
+  it("captures check context before the caller mutates it", async () => {
+    const h = harness();
+    await h.client.initialize();
+    const mutable = { id: "acme", plan: "enterprise" };
+    h.client.getFlag({ company: mutable }, "dependent");
+    mutable.plan = "free";
+    h.client.getFlag({ company: mutable }, "dependent");
+    await h.client.flush();
+    expect(h.checks()).toEqual([
+      expect.objectContaining({
+        evalResult: "true",
+        evalContext: { company: { id: "acme", plan: "enterprise" } },
+      }),
+      expect.objectContaining({
+        evalResult: "false",
+        evalContext: { company: { id: "acme", plan: "free" } },
+      }),
+    ]);
   });
-
-  describe("company", () => {
-    it("should return the undefined if company was not set", () => {
-      const client = new ReflagClient(validOptions).bindClient({ user });
-      expect(client.company).toBeUndefined();
-    });
-
-    it("should return the user if company was associated", () => {
-      const client = new ReflagClient(validOptions).bindClient({ company });
-
-      expect(client.company).toEqual(company);
-    });
-  });
-
-  describe("otherContext", () => {
-    it("should return the undefined if custom context was not set", () => {
-      const client = new ReflagClient(validOptions).bindClient({ company });
-      expect(client.otherContext).toBeUndefined();
-    });
-
-    it("should return the user if custom context was associated", () => {
-      const client = new ReflagClient(validOptions).bindClient({
-        other: otherContext,
-      });
-
-      expect(client.otherContext).toEqual(otherContext);
-    });
-  });
-
-  describe("initialize", () => {
-    it("should initialize the client", async () => {
-      const client = new ReflagClient(validOptions);
-
-      const get = vi
-        .spyOn(client["flagsCache"], "get")
-        .mockReturnValue(undefined);
-      const refresh = vi
-        .spyOn(client["flagsCache"], "refresh")
-        .mockResolvedValue(undefined);
-
-      await client.initialize();
-      await client.initialize();
-      await client.initialize();
-
-      expect(refresh).toHaveBeenCalledTimes(1);
-      expect(get).not.toHaveBeenCalled();
-    });
-
-    it("should call the backend to obtain flags", async () => {
-      const client = new ReflagClient(validOptions);
-
-      httpClient.get.mockResolvedValue({
-        ok: true,
-        status: 200,
-      });
-
-      await client.initialize();
-
-      expect(httpClient.get).toHaveBeenCalledWith(
-        `https://api.example.com/features`,
-        expectedHeaders,
-        API_TIMEOUT_MS,
-      );
-    });
-
-    it("should refresh features with waitForVersion when receiving push updates", async () => {
-      const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue(
-        new Response(
-          createSSEMessageStream({
-            id: "flags-state:test:0",
-            timestamp: 1774605839478,
-            name: "flags-updated",
-            clientId: "reflag-backend",
-            channel: "flags-state:test",
-            action: 0,
-            encoding: "json",
-            data: JSON.stringify({
-              envId: "endbMeqfmcgLyZ",
-              flagStateVersion: 22,
-            }),
-          }),
-          {
-            status: 200,
-            headers: {
-              "Content-Type": "text/event-stream",
-            },
-          },
-        ),
-      );
-
-      try {
-        httpClient.get.mockResolvedValue({
-          ok: true,
-          status: 200,
-          body: {
-            success: true,
-            ...flagDefinitions,
-          },
-        });
-
-        const client = new ReflagClient({
-          ...validOptions,
-          flagsSyncMode: "push",
-        });
-
-        await client.initialize();
-
-        await vi.waitFor(() => {
-          expect(httpClient.get).toHaveBeenCalledWith(
-            "https://api.example.com/features?waitForVersion=22",
-            expectedHeaders,
-            API_TIMEOUT_MS,
-          );
-        });
-
-        const [calledUrl, calledInit] = fetchMock.mock.calls[0] ?? [];
-        const url = new URL(String(calledUrl));
-        expect(url.origin).toBe("https://front.reflag.com");
-        expect(url.pathname).toBe("/sse/server");
-        expect(url.searchParams.has("channels")).toBe(false);
-        expect(calledInit).toMatchObject({
-          method: "GET",
-          headers: {
-            ...expectedHeaders,
-            Accept: "text/event-stream",
-            "Cache-Control": "no-cache",
-          },
-        });
-        expect(calledInit?.body).toBeUndefined();
-        expect(calledInit?.signal).toBeDefined();
-
-        client.destroy();
-      } finally {
-        fetchMock.mockRestore();
-      }
-    });
-
-    it("should refresh features after push reconnects", async () => {
-      const fetchMock = vi
-        .spyOn(global, "fetch")
-        .mockResolvedValueOnce(
-          new Response(createFailingSSEStream(), {
-            status: 200,
-            headers: {
-              "Content-Type": "text/event-stream",
-            },
-          }),
-        )
-        .mockResolvedValueOnce(
-          new Response(createIdleSSEStream(), {
-            status: 200,
-            headers: {
-              "Content-Type": "text/event-stream",
-            },
-          }),
-        );
-
-      vi.useFakeTimers();
-      try {
-        httpClient.get.mockResolvedValue({
-          ok: true,
-          status: 200,
-          body: {
-            success: true,
-            ...flagDefinitions,
-          },
-        });
-
-        const client = new ReflagClient({
-          ...validOptions,
-          flagsSyncMode: "push",
-        });
-
-        await client.initialize();
-        await vi.runOnlyPendingTimersAsync();
-
-        await vi.waitFor(() => {
-          expect(httpClient.get).toHaveBeenCalledTimes(2);
-        });
-
-        expect(httpClient.get).toHaveBeenNthCalledWith(
-          2,
-          "https://api.example.com/features",
-          expectedHeaders,
-          API_TIMEOUT_MS,
-        );
-
-        client.destroy();
-      } finally {
-        vi.useRealTimers();
-        fetchMock.mockRestore();
-      }
-    });
-
-    it("should load flag definitions from flagsFallbackProvider when live fetch fails", async () => {
-      const savedAt = "2026-03-09T00:00:00.000Z";
-      const flagsFallbackProvider: FlagsFallbackProvider = {
-        load: vi.fn().mockResolvedValue({
-          version: 1,
-          savedAt,
-          flags: flagDefinitions.features,
-        }),
-        save: vi.fn(),
-      };
-
-      httpClient.get.mockResolvedValue({ success: false });
-
-      const client = new ReflagClient({
-        ...validOptions,
-        flagsFallbackProvider,
-        flagsFetchRetries: 0,
-      });
-
-      vi.useFakeTimers();
-      vi.setSystemTime(new Date("2026-03-09T00:20:00.000Z"));
-      try {
-        await client.initialize();
-
-        expect(flagsFallbackProvider.load).toHaveBeenCalledWith(
-          expect.objectContaining({
-            secretKeyHash: expect.any(String),
-          }),
-        );
-        expect(logger.warn).toHaveBeenCalledTimes(1);
-        expect(logger.warn).toHaveBeenCalledWith(
-          `remote flags unavailable, using fallback flags fetched 20m ago (${savedAt})`,
-        );
-
-        expect(
-          client.getFlag({ company, user, other: otherContext }, "flag1"),
-        ).toStrictEqual({
-          key: "flag1",
-          isEnabled: true,
-          config: {
-            key: "config-1",
-            payload: { something: "else" },
-          },
-          track: expect.any(Function),
-        });
-      } finally {
-        vi.useRealTimers();
-      }
-    });
-
-    it("should load static fallback flag definitions when live fetch fails", async () => {
-      httpClient.get.mockResolvedValue({ success: false });
-
-      const client = new ReflagClient({
-        ...validOptions,
-        flagsFallbackProvider: fallbackProviders.static({
-          flags: {
-            huddle: true,
-            "smart-summaries": false,
-          },
-        }),
-        flagsFetchRetries: 0,
-      });
-
-      await client.initialize();
-
-      expect(client.getFlag({}, "huddle")).toStrictEqual({
-        key: "huddle",
-        isEnabled: true,
-        config: {
-          key: undefined,
-          payload: undefined,
-        },
-        track: expect.any(Function),
-      });
-      expect(client.getFlag({}, "smart-summaries")).toStrictEqual({
-        key: "smart-summaries",
-        isEnabled: false,
-        config: {
-          key: undefined,
-          payload: undefined,
-        },
-        track: expect.any(Function),
-      });
-    });
-
-    it("should log remote flag fetch failures at debug level when using fallback definitions", async () => {
-      const error = new Error("fetch failed");
-      const savedAt = "2026-03-09T00:00:00.000Z";
-      const flagsFallbackProvider: FlagsFallbackProvider = {
-        load: vi.fn().mockResolvedValue({
-          version: 1,
-          savedAt,
-          flags: flagDefinitions.features,
-        }),
-        save: vi.fn(),
-      };
-
-      httpClient.get.mockRejectedValue(error);
-
-      const client = new ReflagClient({
-        ...validOptions,
-        flagsFallbackProvider,
-        flagsFetchRetries: 0,
-      });
-
-      vi.useFakeTimers();
-      vi.setSystemTime(new Date("2026-03-09T00:20:00.000Z"));
-      try {
-        await client.initialize();
-
-        expect(logger.debug).toHaveBeenCalledWith(
-          'get request to "features" failed with error after 0 retries',
-          error,
-        );
-        expect(logger.warn).toHaveBeenCalledWith(
-          `remote flags unavailable, using fallback flags fetched 20m ago (${savedAt})`,
-        );
-        expect(logger.error).not.toHaveBeenCalled();
-      } finally {
-        vi.useRealTimers();
-      }
-    });
-
-    it("should include the cause when warning that flag fetch will retry", async () => {
-      const error = new Error("fetch failed");
-      httpClient.get.mockRejectedValue(error);
-
-      const client = new ReflagClient({
-        ...validOptions,
-        flagsSyncMode: "in-request",
-        flagsFetchRetries: 1,
-      });
-
-      vi.useFakeTimers();
-      try {
-        const initializePromise = client.initialize();
-        await vi.runAllTimersAsync();
-        await initializePromise;
-
-        expect(logger.warn).toHaveBeenCalledWith(
-          "failed to fetch flags, will retry",
-          error,
-        );
-      } finally {
-        vi.useRealTimers();
-      }
-    });
-
-    it("should warn when live fetch fails and flagsFallbackProvider has no saved snapshot", async () => {
-      const flagsFallbackProvider: FlagsFallbackProvider = {
-        load: vi.fn().mockResolvedValue(undefined),
-        save: vi.fn(),
-      };
-
-      httpClient.get.mockResolvedValue({ success: false });
-
-      const client = new ReflagClient({
-        ...validOptions,
-        flagsFallbackProvider,
-        flagsFetchRetries: 0,
-      });
-
-      await client.initialize();
-
-      expect(flagsFallbackProvider.load).toHaveBeenCalledWith(
-        expect.objectContaining({
-          secretKeyHash: expect.any(String),
-        }),
-      );
-      expect(logger.warn).toHaveBeenCalledWith(
-        "remote flags unavailable, no fallback flags found in flagsFallbackProvider",
-      );
-    });
-
-    it("should save fetched flag definitions to flagsFallbackProvider", async () => {
-      const flagsFallbackProvider: FlagsFallbackProvider = {
-        load: vi.fn(),
-        save: vi.fn().mockResolvedValue(undefined),
-      };
-
-      httpClient.get.mockResolvedValue({
-        ok: true,
-        status: 200,
-        body: {
-          success: true,
-          ...flagDefinitions,
-        },
-      });
-
-      const client = new ReflagClient({
-        ...validOptions,
-        flagsFallbackProvider,
-      });
-
-      await client.initialize();
-      await flushPromises();
-
-      expect(flagsFallbackProvider.save).toHaveBeenCalledWith(
-        expect.objectContaining({
-          secretKeyHash: expect.any(String),
-        }),
-        expect.objectContaining({
-          version: 1,
-          flags: flagDefinitions.features,
-          savedAt: expect.any(String),
-        }),
-      );
-    });
-
-    it("should not fail initialize when flagsFallbackProvider.save fails", async () => {
-      const error = new Error("save failed");
-      const flagsFallbackProvider: FlagsFallbackProvider = {
-        load: vi.fn(),
-        save: vi.fn().mockRejectedValue(error),
-      };
-
-      httpClient.get.mockResolvedValue({
-        ok: true,
-        status: 200,
-        body: {
-          success: true,
-          ...flagDefinitions,
-        },
-      });
-
-      const client = new ReflagClient({
-        ...validOptions,
-        flagsFallbackProvider,
-      });
-
-      await client.initialize();
-      await flushPromises();
-
-      expect(logger.error).toHaveBeenCalledWith(
-        "flagsFallbackProvider: failed to save flag definitions",
-        error,
-      );
-    });
-  });
-
-  describe("flush", () => {
-    it("should flush all bulk data", async () => {
-      const client = new ReflagClient(validOptions);
-
-      await client.updateUser(user.id, { attributes: { age: 2 } });
-      await client.updateUser(user.id, { attributes: { age: 3 } });
-      await client.updateUser(user.id, { attributes: { name: "Jane" } });
-
-      await client.flush();
-
-      expect(httpClient.post).toHaveBeenCalledWith(
-        BULK_ENDPOINT,
-        expectedHeaders,
-        [
-          {
-            type: "user",
-            userId: user.id,
-            attributes: { age: 2 },
-          },
-          {
-            type: "user",
-            userId: user.id,
-            attributes: { age: 3 },
-          },
-          {
-            type: "user",
-            userId: user.id,
-            attributes: { name: "Jane" },
-          },
-        ],
-      );
-    });
-
-    it("should not flush all bulk data if `offline` is true", async () => {
-      const client = new ReflagClient({
-        ...validOptions,
-        offline: true,
-      });
-
-      await client.updateUser(user.id, { attributes: { age: 2 } });
-      await client.flush();
-
-      expect(httpClient.post).not.toHaveBeenCalled();
-    });
-  });
-
-  describe("refreshFlags", () => {
-    it("should call flagsCache.refresh()", async () => {
-      const client = new ReflagClient(validOptions);
-
-      const refresh = vi
-        .spyOn(client["flagsCache"], "refresh")
-        .mockResolvedValue(undefined);
-
-      await client.refreshFlags();
-
-      expect(refresh).toHaveBeenCalledTimes(1);
-    });
-
-    it("should call flagsCache.refresh() on each invocation", async () => {
-      const client = new ReflagClient(validOptions);
-
-      const refresh = vi
-        .spyOn(client["flagsCache"], "refresh")
-        .mockResolvedValue(undefined);
-
-      await client.refreshFlags();
-      await client.refreshFlags();
-      await client.refreshFlags();
-
-      expect(refresh).toHaveBeenCalledTimes(3);
-    });
-  });
-
-  describe("getFlag", () => {
-    let client: ReflagClient;
-
-    beforeEach(async () => {
-      httpClient.get.mockResolvedValue({
-        ok: true,
-        status: 200,
-        body: {
-          success: true,
-          ...flagDefinitions,
-        },
-      });
-
-      client = new ReflagClient(validOptions);
-
-      httpClient.post.mockResolvedValue({
-        status: 200,
-        body: { success: true },
-      });
-    });
-
-    it("returns a flag", async () => {
-      await client.initialize();
-      const flag = client.getFlag(
-        {
-          company,
-          user,
-          other: otherContext,
-        },
-        "flag1",
-      );
-
-      expect(flag).toStrictEqual({
-        key: "flag1",
-        isEnabled: true,
-        config: {
-          key: "config-1",
-          payload: { something: "else" },
-        },
-        track: expect.any(Function),
-      });
-    });
-
-    it("evaluates percentage rollouts using user.id", async () => {
-      const userRolloutDefinitions: FlagsAPIResponse = {
-        flagStateVersion: 2,
-        features: [
-          {
-            key: "test-flag",
-            description: "User rollout",
-            targeting: {
-              version: 1,
-              rules: [
-                {
-                  filter: {
-                    type: "rolloutPercentage",
-                    key: "test-flag",
-                    partialRolloutAttribute: "user.id",
-                    partialRolloutThreshold: 50000,
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      };
-      httpClient.get.mockResolvedValue({
-        ok: true,
-        status: 200,
-        body: { success: true, ...userRolloutDefinitions },
-      });
-
-      await client.initialize();
-
-      expect(
-        client.getFlag(
-          {
-            user: { id: "user-1" },
-            company,
-            enableTracking: false,
-          },
-          "test-flag",
-        ).isEnabled,
-      ).toBe(true);
-      expect(
-        client.getFlag(
-          {
-            user: { id: "user-2" },
-            company,
-            enableTracking: false,
-          },
-          "test-flag",
-        ).isEnabled,
-      ).toBe(false);
-    });
-
-    it("`track` sends all expected events when `enableTracking` is `true`", async () => {
-      const context = {
-        company,
-        user,
-        other: otherContext,
-      };
-
-      // test that the flag is returned
-      await client.initialize();
-      const flag = client.getFlag(
-        {
-          ...context,
-          meta: {
-            active: true,
-          },
-          enableTracking: true,
-        },
-        "flag1",
-      );
-
-      await flag.track();
-      await client.flush();
-
-      expect(httpClient.post).toHaveBeenCalledWith(
-        BULK_ENDPOINT,
-        expectedHeaders,
-        [
-          {
-            attributes: {
-              employees: 100,
-              name: "Acme Inc.",
-            },
-            companyId: "company123",
-            context: {
-              active: true,
-            },
-            type: "company",
-            userId: user.id,
-          },
-          {
-            attributes: {
-              age: 1,
-              name: "John",
-            },
-            context: {
-              active: true,
-            },
-            type: "user",
-            userId: "user123",
-          },
-          {
-            type: "event",
-            event: "flag1",
-            userId: user.id,
-            companyId: company.id,
-          },
-        ],
-      );
-    });
-
-    it("`isEnabled` sends `check` event", async () => {
-      const context = {
-        company,
-        user,
-        other: otherContext,
-      };
-
-      // test that the flag is returned
-      await client.initialize();
-      const flag = client.getFlag(context, "flag1");
-
-      // trigger `check` event
-      expect(flag.isEnabled).toBe(true);
-
-      await client.flush();
-      const checkEvents = httpClient.post.mock.calls
-        .flatMap((call) => call[2])
-        .filter((e) => e.action === "check");
-
-      expect(checkEvents).toStrictEqual([
-        {
-          type: "feature-flag-event",
-          action: "check",
-          key: "flag1",
-          targetingVersion: 1,
-          evalResult: true,
-          evalContext: context,
-          evalRuleResults: [true],
-          evalMissingFields: [],
-        },
-      ]);
-    });
-
-    it("`isEnabled` warns about missing context fields", async () => {
-      const context = {
-        company,
-        user,
-        other: otherContext,
-      };
-
-      // test that the flag is returned
-      await client.initialize();
-      const flag = client.getFlag(context, "flag2");
-
-      // trigger the warning
-      expect(flag.isEnabled).toBe(false);
-
-      expect(logger.warn).toHaveBeenCalledWith(
-        "flag targeting rules could not be fully evaluated.",
-        {
-          flag2: [
-            {
-              code: "MISSING_CONTEXT_FIELD",
-              field: "attributeKey",
-              message:
-                'Context field "attributeKey" is required to evaluate targeting rules.',
-            },
-          ],
-        },
-      );
-
-      const sameErrorForAnotherUser = client.getFlag(
-        { ...context, user: { ...context.user, id: "another-user" } },
-        "flag2",
-      );
-      expect(sameErrorForAnotherUser.isEnabled).toBe(false);
-      expect(logger.warn).toHaveBeenCalledTimes(1);
-    });
-
-    it.each(["CONTAINS", "NOT_CONTAINS", "IS", "IS_NOT"] as const)(
-      "evaluates array %s for targeting and config without warnings",
-      async (operator) => {
-        const filter = {
-          type: "context" as const,
-          field: "user.roles",
-          operator,
-          values: ["admin"],
-        };
-        const definitions: FlagsAPIResponse = {
-          flagStateVersion: 2,
-          features: [
-            {
-              key: "array-membership",
-              description: "Array membership",
-              targeting: { version: 1, rules: [{ filter }] },
-              config: {
-                version: 1,
-                variants: [
-                  { key: "matched", payload: { access: true }, filter },
-                ],
-              },
-            },
-          ],
-        };
-        httpClient.get.mockResolvedValue({
-          ok: true,
-          status: 200,
-          body: { success: true, ...definitions },
-        });
-        await client.initialize();
-
-        for (const [roles, contains, equals] of [
-          [["admin"], true, true],
-          [["admin", "editor"], true, false],
-          [["admin", "admin"], true, false],
-          [["superadmin"], false, false],
-          [["Admin"], false, false],
-          [[], false, false],
-          // Scalars retain substring matching and exact equality respectively.
-          ["SUPERADMIN", true, false],
-          ["admin", true, true],
-        ] as const) {
-          const flag = client.getFlag(
-            { user: { id: "user123", roles } },
-            "array-membership",
-          );
-          const positiveMatch =
-            operator === "IS" || operator === "IS_NOT" ? equals : contains;
-          const expected =
-            operator === "CONTAINS" || operator === "IS"
-              ? positiveMatch
-              : !positiveMatch;
-          expect(flag.isEnabled).toBe(expected);
-          expect(flag.config).toEqual(
-            expected
-              ? { key: "matched", payload: { access: true } }
-              : { key: undefined, payload: undefined },
-          );
-        }
-        expect(logger.warn).not.toHaveBeenCalled();
-      },
+  it("supports prototype-like keys without polluting records", async () => {
+    const h = harness(
+      snapshot([definition("__proto__", 3), definition("constructor", null)]),
     );
-
-    it("`isEnabled` warns about unsupported array operators", async () => {
-      const arrayDefinitions: FlagsAPIResponse = {
-        flagStateVersion: 2,
-        features: [
-          {
-            key: "array-flag",
-            description: "Array flag",
-            targeting: {
-              version: 1,
-              rules: [
-                {
-                  filter: {
-                    type: "context",
-                    field: "user.roles",
-                    operator: "GT",
-                    values: ["admin"],
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      };
-      httpClient.get.mockResolvedValue({
-        ok: true,
-        status: 200,
-        body: { success: true, ...arrayDefinitions },
-      });
-
-      await client.initialize();
-      const flag = client.getFlag(
-        { user: { id: "user123", roles: ["admin"] } },
-        "array-flag",
-      );
-
-      expect(flag.isEnabled).toBe(false);
-      expect(logger.warn).toHaveBeenCalledWith(
-        "flag targeting rules could not be fully evaluated.",
-        {
-          "array-flag": [
-            {
-              code: "UNSUPPORTED_ARRAY_OPERATOR",
-              field: "user.roles",
-              operator: "GT",
-              message:
-                'Operator GT does not support array-valued context field "user.roles".',
-            },
-          ],
-        },
-      );
-
-      const sameErrorForAnotherUser = client.getFlag(
-        { user: { id: "another-user", roles: ["admin"] } },
-        "array-flag",
-      );
-      expect(sameErrorForAnotherUser.isEnabled).toBe(false);
-      expect(logger.warn).toHaveBeenCalledTimes(1);
-    });
-
-    it("`config` warns about unsupported array operators", async () => {
-      const arrayConfigDefinitions: FlagsAPIResponse = {
-        flagStateVersion: 2,
-        features: [
-          {
-            key: "array-config",
-            description: "Array config",
-            targeting: {
-              version: 1,
-              rules: [{ filter: { type: "constant", value: true } }],
-            },
-            config: {
-              version: 1,
-              variants: [
-                {
-                  key: "admin",
-                  payload: { access: true },
-                  filter: {
-                    type: "context",
-                    field: "user.roles",
-                    operator: "GT",
-                    values: ["admin"],
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      };
-      httpClient.get.mockResolvedValue({
-        ok: true,
-        status: 200,
-        body: { success: true, ...arrayConfigDefinitions },
-      });
-
-      await client.initialize();
-      const flag = client.getFlag(
-        { user: { id: "user123", roles: ["admin"] } },
-        "array-config",
-      );
-
-      expect(flag.config).toEqual({ key: undefined, payload: undefined });
-      expect(logger.warn).toHaveBeenCalledWith(
-        "flag targeting rules could not be fully evaluated.",
-        {
-          "array-config.config": [
-            {
-              code: "UNSUPPORTED_ARRAY_OPERATOR",
-              field: "user.roles",
-              operator: "GT",
-              message:
-                'Operator GT does not support array-valued context field "user.roles".',
-            },
-          ],
-        },
-      );
-    });
-
-    it("`isEnabled` should not warn about missing context fields if not needed", async () => {
-      const context = {
-        company,
-        user,
-        other: otherContext,
-      };
-
-      // test that the flag is returned
-      await client.initialize();
-      const flag = client.getFlag(context, "flag1");
-
-      // should not trigger the warning
-      expect(flag.isEnabled).toBe(true);
-
-      expect(logger.warn).not.toHaveBeenCalled();
-    });
-
-    it("`config` sends `check` event", async () => {
-      const context = {
-        company,
-        user,
-        other: otherContext,
-      };
-
-      // test that the flag is returned
-      await client.initialize();
-      const flag = client.getFlag(context, "flag1");
-
-      // trigger `check` event
-      expect(flag.config).toBeDefined();
-
-      await client.flush();
-
-      const checkEvents = httpClient.post.mock.calls
-        .flatMap((call) => call[2])
-        .filter((e) => e.action === "check-config");
-
-      expect(checkEvents).toStrictEqual([
-        {
-          type: "feature-flag-event",
-          action: "check-config",
-          key: "flag1",
-          evalResult: {
-            key: "config-1",
-            payload: {
-              something: "else",
-            },
-          },
-          targetingVersion: 1,
-          evalContext: context,
-          evalRuleResults: [true],
-          evalMissingFields: [],
-        },
-      ]);
-    });
-
-    it("sends events for unknown flags", async () => {
-      const context: Context = {
-        company,
-        user,
-        other: otherContext,
-      };
-
-      // test that the flag is returned
-      await client.initialize();
-      const flag = client.getFlag(context, "unknown-flag");
-
-      // trigger `check` event
-      expect(flag.isEnabled).toBe(false);
-      await flag.track();
-      await client.flush();
-
-      const checkEvents = httpClient.post.mock.calls
-        .flatMap((call) => call[2])
-        .filter((e) => e.type === "feature-flag-event");
-
-      expect(checkEvents).toStrictEqual([
-        {
-          type: "feature-flag-event",
-          action: "check",
-          key: "unknown-flag",
-          targetingVersion: undefined,
-          evalContext: context,
-          evalResult: false,
-          evalRuleResults: undefined,
-          evalMissingFields: undefined,
-        },
-      ]);
-    });
-
-    it("sends company/user and track events", async () => {
-      const context: Context = {
-        company,
-        user,
-        other: otherContext,
-      };
-
-      // test that the flag is returned
-      await client.initialize();
-      const flag = client.getFlag(context, "flag1");
-
-      // trigger `check` event
-      await flag.track();
-      await client.flush();
-
-      const checkEvents = httpClient.post.mock.calls
-        .flatMap((call) => call[2])
-        .filter(
-          (e) =>
-            e.type === "company" || e.type === "user" || e.type === "event",
-        );
-
-      expect(checkEvents).toStrictEqual([
-        {
-          type: "company",
-          companyId: "company123",
-          attributes: {
-            employees: 100,
-            name: "Acme Inc.",
-          },
-          userId: user.id,
-          context: undefined,
-        },
-        {
-          type: "user",
-          userId: "user123",
-          attributes: {
-            age: 1,
-            name: "John",
-          },
-          context: undefined,
-        },
-        {
-          type: "event",
-          event: "flag1",
-          userId: user.id,
-          companyId: company.id,
-          context: undefined,
-          attributes: undefined,
-        },
-      ]);
-    });
-  });
-
-  describe("getFlags", () => {
-    let client: ReflagClient;
-
-    beforeEach(async () => {
-      httpClient.get.mockResolvedValue({
-        ok: true,
-        status: 200,
-        body: {
-          success: true,
-          ...flagDefinitions,
-        },
-      });
-
-      client = new ReflagClient(validOptions);
-
-      client["rateLimiter"].clearStale(true);
-
-      httpClient.post.mockResolvedValue({
-        ok: true,
-        status: 200,
-        body: { success: true },
-      });
-    });
-
-    it("should return evaluated flags", async () => {
-      httpClient.post.mockClear(); // not interested in updates
-
-      await client.initialize();
-      const result = client.getFlags({
-        company,
-        user,
-        other: otherContext,
-      });
-
-      expect(result).toStrictEqual({
-        flag1: {
-          key: "flag1",
-          isEnabled: true,
-          config: {
-            key: "config-1",
-            payload: {
-              something: "else",
-            },
-          },
-          track: expect.any(Function),
-        },
-        flag2: {
-          key: "flag2",
-          isEnabled: false,
-          config: { key: undefined, payload: undefined },
-          track: expect.any(Function),
-        },
-      });
-
-      await client.flush();
-
-      expect(httpClient.post).toHaveBeenCalledTimes(1);
-    });
-
-    it("should properly define the rate limiter key", async () => {
-      const isAllowedSpy = vi.spyOn(client["rateLimiter"], "isAllowed");
-
-      await client.initialize();
-      client.getFlags({ user, company, other: otherContext });
-
-      expect(isAllowedSpy).toHaveBeenNthCalledWith(
-        1,
-        "5Zt35h50IPRNU8yXAj/YbPME/qE=",
-      );
-      expect(isAllowedSpy).toHaveBeenNthCalledWith(
-        2,
-        "J3G4oF56f2t+T6xYzES6inc78+c=",
-      );
-    });
-
-    it("should return evaluated flags when only user is defined", async () => {
-      httpClient.post.mockClear(); // not interested in updates
-
-      await client.initialize();
-      const flags = client.getFlags({ user });
-
-      expect(flags).toStrictEqual({
-        flag1: {
-          isEnabled: false,
-          key: "flag1",
-          config: {
-            key: undefined,
-            payload: undefined,
-          },
-          track: expect.any(Function),
-        },
-        flag2: {
-          key: "flag2",
-          isEnabled: false,
-          config: { key: undefined, payload: undefined },
-          track: expect.any(Function),
-        },
-      });
-
-      await client.flush();
-
-      expect(httpClient.post).toHaveBeenCalledTimes(1);
-    });
-
-    it("should return evaluated flags when only company is defined", async () => {
-      await client.initialize();
-      const flags = client.getFlags({ company });
-
-      // expect will trigger the `isEnabled` getter and send a `check` event
-      expect(flags).toStrictEqual({
-        flag1: {
-          isEnabled: true,
-          key: "flag1",
-          config: {
-            key: "config-1",
-            payload: {
-              something: "else",
-            },
-          },
-          track: expect.any(Function),
-        },
-        flag2: {
-          key: "flag2",
-          isEnabled: false,
-          config: { key: undefined, payload: undefined },
-          track: expect.any(Function),
-        },
-      });
-
-      await client.flush();
-
-      expect(httpClient.post).toHaveBeenCalledTimes(1);
-    });
-
-    it("should not send flag events when `enableTracking` is `false`", async () => {
-      await client.initialize();
-      const flags = client.getFlags({ company, enableTracking: false });
-
-      // expect will trigger the `isEnabled` getter and send a `check` event
-      expect(flags).toStrictEqual({
-        flag1: {
-          isEnabled: true,
-          key: "flag1",
-          config: {
-            key: "config-1",
-            payload: {
-              something: "else",
-            },
-          },
-          track: expect.any(Function),
-        },
-        flag2: {
-          key: "flag2",
-          isEnabled: false,
-          config: { key: undefined, payload: undefined },
-          track: expect.any(Function),
-        },
-      });
-
-      await client.flush();
-
-      expect(httpClient.post).not.toHaveBeenCalled();
-    });
-
-    it("should return evaluated flags when only other context is defined", async () => {
-      await client.initialize();
-      const flags = client.getFlags({ other: otherContext });
-
-      expect(flags).toStrictEqual({
-        flag1: {
-          isEnabled: false,
-          key: "flag1",
-          config: {
-            key: undefined,
-            payload: undefined,
-          },
-          track: expect.any(Function),
-        },
-        flag2: {
-          key: "flag2",
-          isEnabled: false,
-          config: { key: undefined, payload: undefined },
-          track: expect.any(Function),
-        },
-      });
-
-      await client.flush();
-    });
-
-    it("should send `track` with user and company if provided", async () => {
-      await client.initialize();
-      const flags = client.getFlags({ company, user });
-      await client.flush();
-
-      await flags.flag1.track();
-      await client.flush();
-
-      expect(httpClient.post).toHaveBeenCalledTimes(2);
-      // second call includes the track event
-      const events = httpClient.post.mock.calls[1][2].filter(
-        (e: any) => e.type === "event",
-      );
-
-      expect(events).toStrictEqual([
-        {
-          event: "flag1",
-          type: "event",
-          userId: "user123",
-          companyId: "company123",
-          attributes: undefined,
-          context: undefined,
-        },
-      ]);
-    });
-
-    it("should send `track` with user if provided", async () => {
-      await client.initialize();
-      const flags = client.getFlags({ user });
-
-      await client.flush();
-      await flags.flag1.track();
-      await client.flush();
-
-      expect(httpClient.post).toHaveBeenCalledTimes(2);
-
-      const emptyEvents = httpClient.post.mock.calls[0][2].filter(
-        (e: any) => e.type === "event",
-      );
-
-      expect(emptyEvents).toStrictEqual([]);
-
-      // second call includes the track event
-      const events = httpClient.post.mock.calls[1][2].filter(
-        (e: any) => e.type === "event",
-      );
-
-      expect(events).toStrictEqual([
-        {
-          event: "flag1",
-          type: "event",
-          userId: "user123",
-          companyId: undefined,
-          attributes: undefined,
-          context: undefined,
-        },
-      ]);
-    });
-
-    it("should not send `track` with only company if no user is provided", async () => {
-      // we do not accept track events without a userId
-      await client.initialize();
-      const flag = client.getFlags({ company });
-
-      await flag.flag1.track();
-      await client.flush();
-
-      expect(httpClient.post).toHaveBeenCalledTimes(1);
-      const events = httpClient.post.mock.calls[0][2].filter(
-        (e: any) => e.type === "event",
-      );
-
-      expect(events).toStrictEqual([]);
-    });
-
-    it("`isEnabled` does not send `check` event", async () => {
-      const context = {
-        company,
-        user,
-        other: otherContext,
-      };
-
-      // test that the flag is returned
-      await client.initialize();
-      const flag = client.getFlags(context);
-
-      // trigger `check` event
-      expect(flag.flag1.isEnabled).toBe(true);
-
-      await client.flush();
-      const checkEvents = httpClient.post.mock.calls
-        .flatMap((call) => call[2])
-        .filter((e) => e.action === "check");
-
-      expect(checkEvents).toStrictEqual([]);
-    });
-
-    it("`config` does not send `check` event", async () => {
-      const context = {
-        company,
-        user,
-        other: otherContext,
-      };
-
-      // test that the flag is returned
-      await client.initialize();
-      const flag = client.getFlags(context);
-
-      // attempt to trigger `check` event
-      expect(flag.flag1.config).toBeDefined();
-
-      await client.flush();
-
-      const checkEvents = httpClient.post.mock.calls
-        .flatMap((call) => call[2])
-        .filter((e) => e.action === "check-config");
-
-      expect(checkEvents).toStrictEqual([]);
-    });
-
-    it("sends company/user events", async () => {
-      const context: Context = {
-        company,
-        user,
-        other: otherContext,
-      };
-
-      // test that the flag is returned
-      await client.initialize();
-      client.getFlags(context);
-
-      // trigger `check` event
-      await client.flush();
-
-      const checkEvents = httpClient.post.mock.calls
-        .flatMap((call) => call[2])
-        .filter(
-          (e) =>
-            e.type === "company" || e.type === "user" || e.type === "event",
-        );
-
-      expect(checkEvents).toStrictEqual([
-        {
-          type: "company",
-          companyId: "company123",
-          attributes: {
-            employees: 100,
-            name: "Acme Inc.",
-          },
-          userId: user.id,
-          context: undefined,
-        },
-        {
-          type: "user",
-          userId: "user123",
-          attributes: {
-            age: 1,
-            name: "John",
-          },
-          context: undefined,
-        },
-      ]);
-    });
-
-    it("should use fallback flags when `getFlagDefinitions` returns `undefined`", async () => {
-      httpClient.get.mockResolvedValue({
-        success: false,
-      });
-
-      await client.initialize();
-      const result = client.getFlag(
-        { user: { id: "user123" }, enableTracking: true },
-        "key",
-      );
-
-      expect(result).toStrictEqual({
-        key: "key",
-        isEnabled: true,
-        config: { key: undefined, payload: undefined },
-        track: expect.any(Function),
-      });
-
-      expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringMatching(
-          "no flag definitions available, using fallback flags",
-        ),
-      );
-
-      await client.flush();
-
-      expect(httpClient.post).toHaveBeenCalledTimes(1);
-      expect(httpClient.post).toHaveBeenCalledWith(
-        BULK_ENDPOINT,
-        expectedHeaders,
-        [
-          expect.objectContaining({ type: "user" }),
-          expect.objectContaining({
-            type: "feature-flag-event",
-            action: "check-config",
-            key: "key",
-          }),
-          expect.objectContaining({
-            type: "feature-flag-event",
-            action: "check",
-            key: "key",
-            evalResult: true,
-          }),
-        ],
-      );
-    });
-
-    it("should not fail if sendFlagEvent fails to send check event", async () => {
-      httpClient.post.mockResolvedValue({
-        status: 200,
-        body: { success: true },
-      });
-
-      await client.initialize();
-      httpClient.post.mockRejectedValue(new Error("Network error"));
-      const context = { user, company, other: otherContext };
-
-      const result = client.getFlags(context);
-
-      // Trigger a flag check
-      expect(result.flag1).toStrictEqual({
-        key: "flag1",
-        isEnabled: true,
-        track: expect.any(Function),
-        config: {
-          key: "config-1",
-          payload: {
-            something: "else",
-          },
-        },
-      });
-
-      await client.flush();
-
-      expect(logger.warn).toHaveBeenCalledWith(
-        "flush of buffered items failed; discarding items",
-        expect.objectContaining({
-          count: 2,
-          error: expect.objectContaining({
-            message: "failed to send bulk events",
-          }),
-        }),
-      );
-    });
-
-    it("should use base flag overrides", async () => {
-      await client.initialize();
-      const context = { user, company, other: otherContext };
-
-      const pristineResults = client.getFlags(context);
-      expect(pristineResults).toStrictEqual({
-        flag1: {
-          key: "flag1",
-          isEnabled: true,
-          config: {
-            key: "config-1",
-            payload: {
-              something: "else",
-            },
-          },
-          track: expect.any(Function),
-        },
-        flag2: {
-          key: "flag2",
-          isEnabled: false,
-          config: { key: undefined, payload: undefined },
-          track: expect.any(Function),
-        },
-      });
-
-      client.setFlagOverrides({
-        flag1: false,
-      });
-      const flags = client.getFlags(context);
-
-      expect(flags).toStrictEqual({
-        flag1: {
-          key: "flag1",
-          isEnabled: false,
-          config: { key: undefined, payload: undefined },
-          track: expect.any(Function),
-        },
-        flag2: {
-          key: "flag2",
-          isEnabled: false,
-          config: { key: undefined, payload: undefined },
-          track: expect.any(Function),
-        },
-      });
-
-      client.clearFlagOverrides();
-      const flags2 = client.getFlags(context);
-
-      expect(flags2).toStrictEqual({
-        ...pristineResults,
-        flag1: {
-          ...pristineResults.flag1,
-          track: expect.any(Function),
-        },
-        flag2: {
-          ...pristineResults.flag2,
-          track: expect.any(Function),
-        },
-      });
-    });
-
-    it("should use base flag overrides from function", async () => {
-      await client.initialize();
-      const context = { user, company, other: otherContext };
-
-      const pristineResults = client.getFlags(context);
-      expect(pristineResults).toStrictEqual({
-        flag1: {
-          key: "flag1",
-          isEnabled: true,
-          config: {
-            key: "config-1",
-            payload: {
-              something: "else",
-            },
-          },
-          track: expect.any(Function),
-        },
-        flag2: {
-          key: "flag2",
-          isEnabled: false,
-          config: { key: undefined, payload: undefined },
-          track: expect.any(Function),
-        },
-      });
-
-      client.setFlagOverrides((_context: Context) => {
-        expect(context).toStrictEqual(context);
-        return {
-          flag1: { isEnabled: false },
-          flag2: true,
-          flag3: {
-            isEnabled: true,
-            config: {
-              key: "config-1",
-              payload: { something: "else" },
-            },
-          },
-        };
-      });
-      const flags = client.getFlags(context);
-
-      expect(flags).toStrictEqual({
-        flag1: {
-          key: "flag1",
-          isEnabled: false,
-          config: { key: undefined, payload: undefined },
-          track: expect.any(Function),
-        },
-        flag2: {
-          key: "flag2",
-          isEnabled: true,
-          config: { key: undefined, payload: undefined },
-          track: expect.any(Function),
-        },
-        flag3: {
-          key: "flag3",
-          isEnabled: true,
-          config: {
-            key: "config-1",
-            payload: { something: "else" },
-          },
-          track: expect.any(Function),
-        },
-      });
-    });
-
-    it("should push and restore layered flag overrides", async () => {
-      await client.initialize();
-      const context = { user, company, other: otherContext };
-
-      expect(client.getFlag(context, "flag1").isEnabled).toBe(true);
-      expect(client.getFlag(context, "flag2").isEnabled).toBe(false);
-
-      const removeFlag1 = client.pushFlagOverrides({
-        flag1: false,
-      });
-
-      expect(client.getFlag(context, "flag1").isEnabled).toBe(false);
-      expect(client.getFlag(context, "flag2").isEnabled).toBe(false);
-
-      const removeFlag2 = client.pushFlagOverrides({
-        flag2: true,
-      });
-
-      expect(client.getFlag(context, "flag1").isEnabled).toBe(false);
-      expect(client.getFlag(context, "flag2").isEnabled).toBe(true);
-
-      removeFlag2();
-
-      expect(client.getFlag(context, "flag1").isEnabled).toBe(false);
-      expect(client.getFlag(context, "flag2").isEnabled).toBe(false);
-
-      removeFlag1();
-
-      expect(client.getFlag(context, "flag1").isEnabled).toBe(true);
-      expect(client.getFlag(context, "flag2").isEnabled).toBe(false);
-    });
-
-    it("should compose pushed flag overrides with existing override functions", async () => {
-      await client.initialize();
-      const context = { user, company, other: otherContext };
-
-      client.setFlagOverrides(() => ({
-        flag1: false,
-      }));
-
-      const remove = client.pushFlagOverrides((overrideContext: Context) => {
-        expect(overrideContext).toStrictEqual({
-          user,
-          company,
-          other: otherContext,
-        });
-
-        return {
-          flag2: true,
-        };
-      });
-
-      expect(client.getFlag(context, "flag1").isEnabled).toBe(false);
-      expect(client.getFlag(context, "flag2").isEnabled).toBe(true);
-
-      remove();
-      remove();
-
-      expect(client.getFlag(context, "flag1").isEnabled).toBe(false);
-      expect(client.getFlag(context, "flag2").isEnabled).toBe(false);
-    });
-
-    it("should keep pushed overrides layered on top when replacing base overrides", async () => {
-      await client.initialize();
-      const context = { user, company, other: otherContext };
-
-      client.setFlagOverrides({
-        flag1: false,
-      });
-
-      const remove = client.pushFlagOverrides({
-        flag1: true,
-      });
-
-      expect(client.getFlag(context, "flag1").isEnabled).toBe(true);
-
-      client.setFlagOverrides({
-        flag1: false,
-        flag2: true,
-      });
-
-      expect(client.getFlag(context, "flag1").isEnabled).toBe(true);
-      expect(client.getFlag(context, "flag2").isEnabled).toBe(true);
-
-      remove();
-
-      expect(client.getFlag(context, "flag1").isEnabled).toBe(false);
-      expect(client.getFlag(context, "flag2").isEnabled).toBe(true);
-    });
-
-    it("should only clear the base overrides", async () => {
-      await client.initialize();
-      const context = { user, company, other: otherContext };
-
-      client.setFlagOverrides({
-        flag1: false,
-      });
-
-      const remove = client.pushFlagOverrides({
-        flag2: true,
-      });
-
-      client.clearFlagOverrides();
-
-      expect(client.getFlag(context, "flag1").isEnabled).toBe(true);
-      expect(client.getFlag(context, "flag2").isEnabled).toBe(true);
-
-      remove();
-
-      expect(client.getFlag(context, "flag1").isEnabled).toBe(true);
-      expect(client.getFlag(context, "flag2").isEnabled).toBe(false);
-    });
-  });
-
-  describe("getFlagsForBootstrap", () => {
-    let client: ReflagClient;
-
-    beforeEach(async () => {
-      httpClient.get.mockResolvedValue({
-        ok: true,
-        status: 200,
-        body: {
-          success: true,
-          ...flagDefinitions,
-        },
-      });
-
-      client = new ReflagClient(validOptions);
-
-      client["rateLimiter"].clearStale(true);
-
-      httpClient.post.mockResolvedValue({
-        ok: true,
-        status: 200,
-        body: { success: true },
-      });
-    });
-
-    it("should return raw flags without wrapper functions", async () => {
-      httpClient.post.mockClear(); // not interested in updates
-
-      await client.initialize();
-      const result = client.getFlagsForBootstrap({
-        company,
-        user,
-        other: otherContext,
-        enableTracking: true,
-      });
-
-      expect(result).toStrictEqual({
-        context: {
-          company,
-          user,
-          other: otherContext,
-          enableTracking: true,
-        },
-        flags: {
-          flag1: {
-            key: "flag1",
-            isEnabled: true,
-            targetingVersion: 1,
-            config: {
-              key: "config-1",
-              payload: {
-                something: "else",
-              },
-              targetingVersion: 1,
-              missingContextFields: [],
-              ruleEvaluationResults: [true],
-            },
-            ruleEvaluationResults: [true],
-            missingContextFields: [],
-          },
-          flag2: {
-            key: "flag2",
-            isEnabled: false,
-            targetingVersion: 2,
-            config: {
-              key: undefined,
-              payload: undefined,
-              targetingVersion: undefined,
-              missingContextFields: [],
-              ruleEvaluationResults: [],
-            },
-            ruleEvaluationResults: [false],
-            missingContextFields: ["attributeKey"],
-            evaluationErrors: [missingContextFieldError("attributeKey")],
-          },
-        },
-        flagStateVersion: 1,
-      });
-
-      // Should not have track function like regular getFlags
-      expect(result.flags.flag1).not.toHaveProperty("track");
-      expect(result.flags.flag2).not.toHaveProperty("track");
-
-      await client.flush();
-
-      expect(httpClient.post).toHaveBeenCalledTimes(1);
-    });
-
-    it("should return raw flags when only user is defined", async () => {
-      httpClient.post.mockClear(); // not interested in updates
-
-      await client.initialize();
-      const flags = client.getFlagsForBootstrap({ user });
-
-      expect(flags).toStrictEqual({
-        context: {
-          user,
-          enableTracking: true,
-        },
-        flags: {
-          flag1: {
-            key: "flag1",
-            isEnabled: false,
-            targetingVersion: 1,
-            config: {
-              key: undefined,
-              payload: undefined,
-              targetingVersion: 1,
-              missingContextFields: ["company.id"],
-              evaluationErrors: [missingContextFieldError("company.id")],
-              ruleEvaluationResults: [false],
-            },
-            ruleEvaluationResults: [false],
-            missingContextFields: ["company.id"],
-            evaluationErrors: [missingContextFieldError("company.id")],
-          },
-          flag2: {
-            key: "flag2",
-            isEnabled: false,
-            targetingVersion: 2,
-            config: {
-              key: undefined,
-              payload: undefined,
-              targetingVersion: undefined,
-              missingContextFields: [],
-              ruleEvaluationResults: [],
-            },
-            ruleEvaluationResults: [false],
-            missingContextFields: ["company.id"],
-            evaluationErrors: [missingContextFieldError("company.id")],
-          },
-        },
-        flagStateVersion: 1,
-      });
-
-      // Should not have track function
-      expect(flags.flags.flag1).not.toHaveProperty("track");
-      expect(flags.flags.flag2).not.toHaveProperty("track");
-
-      await client.flush();
-
-      expect(httpClient.post).toHaveBeenCalledTimes(1);
-    });
-
-    it("should return raw flags when only company is defined", async () => {
-      await client.initialize();
-      const flags = client.getFlagsForBootstrap({ company });
-
-      expect(flags).toStrictEqual({
-        context: {
-          company,
-          enableTracking: true,
-        },
-        flags: {
-          flag1: {
-            key: "flag1",
-            isEnabled: true,
-            targetingVersion: 1,
-            config: {
-              key: "config-1",
-              payload: {
-                something: "else",
-              },
-              targetingVersion: 1,
-              missingContextFields: [],
-              ruleEvaluationResults: [true],
-            },
-            ruleEvaluationResults: [true],
-            missingContextFields: [],
-          },
-          flag2: {
-            key: "flag2",
-            isEnabled: false,
-            targetingVersion: 2,
-            config: {
-              key: undefined,
-              payload: undefined,
-              targetingVersion: undefined,
-              missingContextFields: [],
-              ruleEvaluationResults: [],
-            },
-            ruleEvaluationResults: [false],
-            missingContextFields: ["attributeKey"],
-            evaluationErrors: [missingContextFieldError("attributeKey")],
-          },
-        },
-        flagStateVersion: 1,
-      });
-
-      // Should not have track function
-      expect(flags.flags.flag1).not.toHaveProperty("track");
-      expect(flags.flags.flag2).not.toHaveProperty("track");
-    });
-
-    it("should return raw flags when only other context is defined", async () => {
-      await client.initialize();
-      const flags = client.getFlagsForBootstrap({ other: otherContext });
-
-      expect(flags).toStrictEqual({
-        context: {
-          other: otherContext,
-          enableTracking: true,
-        },
-        flags: {
-          flag1: {
-            key: "flag1",
-            isEnabled: false,
-            targetingVersion: 1,
-            config: {
-              key: undefined,
-              payload: undefined,
-              targetingVersion: 1,
-              missingContextFields: ["company.id"],
-              evaluationErrors: [missingContextFieldError("company.id")],
-              ruleEvaluationResults: [false],
-            },
-            ruleEvaluationResults: [false],
-            missingContextFields: ["company.id"],
-            evaluationErrors: [missingContextFieldError("company.id")],
-          },
-          flag2: {
-            key: "flag2",
-            isEnabled: false,
-            targetingVersion: 2,
-            config: {
-              key: undefined,
-              payload: undefined,
-              targetingVersion: undefined,
-              missingContextFields: [],
-              ruleEvaluationResults: [],
-            },
-            ruleEvaluationResults: [false],
-            missingContextFields: ["company.id"],
-            evaluationErrors: [missingContextFieldError("company.id")],
-          },
-        },
-        flagStateVersion: 1,
-      });
-
-      // Should not have track function
-      expect(flags.flags.flag1).not.toHaveProperty("track");
-      expect(flags.flags.flag2).not.toHaveProperty("track");
-    });
-
-    it("should return fallback flags when client is not initialized", async () => {
-      const flags = client.getFlagsForBootstrap({
-        company,
-        user,
-        other: otherContext,
-        enableTracking: true,
-      });
-
-      // Should return the fallback flags defined in validOptions
-      expect(flags).toStrictEqual({
-        context: {
-          company,
-          user,
-          other: otherContext,
-          enableTracking: true,
-        },
-        flags: {
-          key: {
-            isEnabled: true,
-            key: "key",
-          },
-        },
-      });
-    });
-
-    it("should return fallback flags when flag definitions are not available", async () => {
-      httpClient.get.mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        body: {
-          success: true,
-          flagStateVersion: 1,
-          features: [], // No flag definitions
-        },
-      });
-
-      await client.initialize();
-      const flags = client.getFlagsForBootstrap({
-        company,
-        user,
-        other: otherContext,
-      });
-
-      expect(flags).toStrictEqual({
-        context: {
-          company,
-          user,
-          other: otherContext,
-          enableTracking: true,
-        },
-        flags: {},
-        flagStateVersion: 1,
-      });
-    });
-
-    it("should handle enableTracking parameter", async () => {
-      await client.initialize();
-
-      // Test with enableTracking: true (default)
-      const flagsWithTracking = client.getFlagsForBootstrap({
-        company,
-        user,
-        other: otherContext,
-        enableTracking: true,
-      });
-
-      // Test with enableTracking: false
-      const flagsWithoutTracking = client.getFlagsForBootstrap({
-        company,
-        user,
-        other: otherContext,
-        enableTracking: true,
-      });
-
-      // Both should return the same raw flag structure
-      expect(flagsWithTracking).toStrictEqual(flagsWithoutTracking);
-
-      // Neither should have track functions
-      expect(flagsWithTracking.flags.flag1).not.toHaveProperty("track");
-      expect(flagsWithoutTracking.flags.flag1).not.toHaveProperty("track");
-    });
-
-    it("should properly define the rate limiter key", async () => {
-      const isAllowedSpy = vi.spyOn(client["rateLimiter"], "isAllowed");
-
-      await client.initialize();
-      client.getFlagsForBootstrap({ user, company, other: otherContext });
-
-      expect(isAllowedSpy).toHaveBeenNthCalledWith(
-        1,
-        "5Zt35h50IPRNU8yXAj/YbPME/qE=",
-      );
-      expect(isAllowedSpy).toHaveBeenNthCalledWith(
-        2,
-        "J3G4oF56f2t+T6xYzES6inc78+c=",
-      );
-    });
-
-    it("should work in offline mode", async () => {
-      const offlineClient = new ReflagClient({
-        ...validOptions,
-        offline: true,
-      });
-
-      const flags = offlineClient.getFlagsForBootstrap({
-        company,
-        user,
-        other: otherContext,
-        enableTracking: true,
-      });
-
-      expect(flags).toStrictEqual({
-        context: {
-          company,
-          user,
-          other: otherContext,
-          enableTracking: true,
-        },
-        flags: {},
-      });
-    });
-
-    it("should use fallback flags when provided and no definitions available", async () => {
-      const fallbackTestFlags = {
-        fallbackFlag: {
-          key: "fallbackFlag",
-          isEnabled: true,
-          config: { key: "fallback-config", payload: { test: "data" } },
-        },
-      };
-
-      const clientWithFallback = new ReflagClient({
-        ...validOptions,
-        fallbackFlags: fallbackTestFlags,
-      });
-
-      // Don't initialize to simulate no flag definitions
-      const flags = clientWithFallback.getFlagsForBootstrap({
-        company,
-        user,
-        other: otherContext,
-        enableTracking: true,
-      });
-
-      expect(flags).toStrictEqual({
-        context: {
-          company,
-          user,
-          other: otherContext,
-          enableTracking: true,
-        },
-        flags: fallbackTestFlags,
-      });
-    });
+    await h.client.initialize();
+    expect(h.client.getFlag({}, "__proto__", 0)).toBe(3);
+    expect(h.client.getFlags({ enableTracking: false })).toEqual(
+      JSON.parse('{"__proto__":3,"constructor":null}'),
+    );
   });
 });
 
-describe("getFlagsRemote", () => {
-  let client: ReflagClient;
-
-  beforeEach(async () => {
-    httpClient.get.mockResolvedValue({
-      ok: true,
-      status: 200,
-      body: {
-        success: true,
-        remoteContextUsed: true,
-        features: {
-          flag1: {
-            key: "flag1",
-            targetingVersion: 1,
-            isEnabled: true,
-            config: {
-              key: "config-1",
-              version: 3,
-              default: true,
-              payload: { something: "else" },
-              missingContextFields: ["funny"],
-            },
-            missingContextFields: ["something", "funny"],
-          },
-          flag2: {
-            key: "flag2",
-            targetingVersion: 2,
-            isEnabled: false,
-            missingContextFields: ["another"],
-          },
-          flag3: {
-            key: "flag3",
-            targetingVersion: 5,
-            isEnabled: true,
-          },
-        },
-      },
-    });
-
-    client = new ReflagClient(validOptions);
+describe("default-value reads", () => {
+  it("distinguishes authored Boolean false from an identical implicit default", async () => {
+    const h = harness(snapshot([definition("release", false, "false")]));
+    await h.client.initialize();
+    expect(h.client.getFlag({}, "release")).toBe(false);
+    expect(h.client.getFlag({}, "missing")).toBe(false);
+    await h.client.flush();
+    expect(h.checks()).toEqual([
+      expect.objectContaining({
+        key: "release",
+        evalResult: "false",
+        sourceVersionId: "version:release",
+      }),
+      expect.objectContaining({ key: "missing", action: "check" }),
+    ]);
+    expect(h.checks()[1]).not.toHaveProperty("evalResult");
+    expect(h.checks()[1]).not.toHaveProperty("sourceVersionId");
   });
 
-  afterEach(() => {
-    httpClient.get.mockClear();
-  });
-
-  it("should return evaluated flags", async () => {
-    const result = await client.getFlagsRemote("c1", "u1", {
-      other: otherContext,
-    });
-
-    expect(result).toStrictEqual({
-      flag1: {
-        key: "flag1",
-        isEnabled: true,
-        config: {
-          key: "config-1",
-          payload: { something: "else" },
-        },
-        track: expect.any(Function),
-      },
-      flag2: {
-        key: "flag2",
-        isEnabled: false,
-        config: { key: undefined, payload: undefined },
-        track: expect.any(Function),
-      },
-      flag3: {
-        key: "flag3",
-        isEnabled: true,
-        config: { key: undefined, payload: undefined },
-        track: expect.any(Function),
-      },
-    });
-
-    expect(httpClient.get).toHaveBeenCalledTimes(1);
-
-    expect(httpClient.get).toHaveBeenCalledWith(
-      `https://api.example.com/features/evaluated?${new URLSearchParams({
-        contextJson:
-          '{"company":{"id":"u1"},"other":{"custom":"context","key":"value"},"user":{"id":"c1"}}',
-      })}`,
-      expectedHeaders,
-      API_TIMEOUT_MS,
-    );
-  });
-
-  it("sends array context as canonical JSON", async () => {
-    await client.getFlagsRemote(undefined, undefined, {
-      other: {
-        z: { second: 2, first: 1 },
-        roles: ["admin", "editor"],
-        a: true,
-      },
-    });
-
-    const requestUrl = new URL(httpClient.get.mock.calls[0][0]);
-    expect(requestUrl.searchParams.get("contextJson")).toBe(
-      '{"other":{"a":true,"roles":["admin","editor"],"z":{"first":1,"second":2}}}',
-    );
-    expect(requestUrl.searchParams.has("context.other.roles.0")).toBe(false);
+  it("uses an explicit default for a missing bound read without authored provenance", async () => {
+    const h = harness(snapshot());
+    await h.client.initialize();
+    expect(
+      h.client.bindClient({}).getFlag("settings", { model: "Swift" }),
+    ).toEqual({ model: "Swift" });
+    await h.client.flush();
+    expect(h.checks()).toEqual([expect.objectContaining({ key: "settings" })]);
+    expect(h.checks()[0]).not.toHaveProperty("evalResult");
+    expect(h.checks()[0]).not.toHaveProperty("sourceVersionId");
   });
 
   it.each([
-    ["absent", undefined],
-    ["effectively empty", { other: { nested: { value: undefined } } }],
-  ])("does not append %s context", async (_case, additionalContext) => {
-    await client.getFlagsRemote(undefined, undefined, additionalContext);
-
-    expect(httpClient.get).toHaveBeenCalledTimes(1);
-
-    expect(httpClient.get).toHaveBeenCalledWith(
-      "https://api.example.com/features/evaluated",
-      expectedHeaders,
-      API_TIMEOUT_MS,
-    );
-  });
-});
-
-describe("getFlagRemote", () => {
-  let client: ReflagClient;
-
-  beforeEach(async () => {
-    httpClient.get.mockResolvedValue({
-      ok: true,
-      status: 200,
-      body: {
-        success: true,
-        remoteContextUsed: true,
-        features: {
-          flag1: {
-            key: "flag1",
-            targetingVersion: 1,
-            isEnabled: true,
-            config: {
-              key: "config-1",
-              version: 3,
-              default: true,
-              payload: { something: "else" },
-              missingContextFields: ["two"],
-            },
-            missingContextFields: ["one", "two"],
-          },
-        },
-      },
-    });
-
-    client = new ReflagClient(validOptions);
-  });
-
-  afterEach(() => {
-    httpClient.get.mockClear();
-  });
-
-  it("should return evaluated flag", async () => {
-    const result = await client.getFlagRemote("flag1", "c1", "u1", {
-      other: otherContext,
-    });
-
-    expect(result).toStrictEqual({
-      key: "flag1",
-      isEnabled: true,
-      track: expect.any(Function),
-      config: {
-        key: "config-1",
-        payload: { something: "else" },
-      },
-    });
-
-    expect(httpClient.get).toHaveBeenCalledTimes(1);
-
-    expect(httpClient.get).toHaveBeenCalledWith(
-      `https://api.example.com/features/evaluated?${new URLSearchParams({
-        contextJson:
-          '{"company":{"id":"u1"},"other":{"custom":"context","key":"value"},"user":{"id":"c1"}}',
-        key: "flag1",
-      })}`,
-      expectedHeaders,
-      API_TIMEOUT_MS,
-    );
-  });
-
-  it("should not try to append the context if it's empty", async () => {
-    await client.getFlagRemote("flag1");
-
-    expect(httpClient.get).toHaveBeenCalledWith(
-      "https://api.example.com/features/evaluated?key=flag1",
-      expectedHeaders,
-      API_TIMEOUT_MS,
-    );
-  });
-});
-
-describe("offline mode", () => {
-  let client: ReflagClient;
-
-  beforeEach(async () => {
-    client = new ReflagClient({
-      ...validOptions,
-      offline: true,
-    });
-    await client.initialize();
-  });
-
-  it("should send not send or fetch anything", async () => {
-    client.getFlags({});
-
-    expect(httpClient.get).toHaveBeenCalledTimes(0);
-    expect(httpClient.post).toHaveBeenCalledTimes(0);
-  });
-});
-
-describe("BoundReflagClient", () => {
-  beforeAll(() => {
-    const response = {
-      status: 200,
-      body: { success: true },
-    };
-
-    httpClient.post.mockResolvedValue(response);
-
-    httpClient.get.mockResolvedValue({
-      ok: true,
-      status: 200,
-      body: {
-        success: true,
-        ...flagDefinitions,
-      },
-    });
-  });
-  const client = new ReflagClient(validOptions);
-
-  beforeEach(async () => {
-    await flushPromises();
-    await client.flush();
-
-    vi.mocked(httpClient.post).mockClear();
-    client["rateLimiter"].clearStale(true);
-  });
-
-  it("should create a client instance", () => {
-    expect(client).toBeInstanceOf(ReflagClient);
-  });
-
-  it("should return a new client instance with merged attributes", () => {
-    const userOverride = { sex: "male", age: 30 };
-    const companyOverride = { employees: 200, bankrupt: false };
-    const otherOverride = { key: "new-value" };
-    const other = { key: "value" };
-
-    const newClient = client
-      .bindClient({
-        user,
-        company,
-        other,
-      })
-      .bindClient({
-        user: { id: user.id, ...userOverride },
-        company: { id: company.id, ...companyOverride },
-        other: otherOverride,
+    [false, true],
+    [0, 42],
+    ["", "fallback"],
+    [[], [1]],
+    [{}, { model: "Swift" }],
+  ])(
+    "preserves a selected falsy/empty value %j rather than the default",
+    async (value, defaultValue) => {
+      const h = harness(snapshot([definition("flag", value)]));
+      await h.client.initialize();
+      expect(h.client.getFlag({}, "flag", defaultValue)).toEqual(value);
+      await h.client.flush();
+      expect(h.checks()[0]).toMatchObject({
+        evalResult: "default",
+        sourceVersionId: "version:flag",
       });
+    },
+  );
 
-    expect(newClient["_options"]).toEqual({
-      user: { ...user, ...userOverride },
-      company: { ...company, ...companyOverride },
-      other: { ...other, ...otherOverride },
-      enableTracking: true,
-    });
+  it.each([
+    [null, { model: "Swift" }],
+    [[1], { model: "Swift" }],
+  ])(
+    "uses the default for a category mismatch without claiming a selected variant %#",
+    async (value, defaultValue) => {
+      const h = harness(snapshot([definition("flag", value)]));
+      await h.client.initialize();
+      expect(h.client.getFlag({}, "flag", defaultValue)).toEqual(defaultValue);
+      await h.client.flush();
+      expect(h.checks()).toEqual([expect.objectContaining({ key: "flag" })]);
+      expect(h.checks()[0]).not.toHaveProperty("evalResult");
+      expect(h.checks()[0]).not.toHaveProperty("sourceVersionId");
+    },
+  );
+
+  it("keeps null as an explicit arbitrary-JSON read, including authored null", async () => {
+    const h = harness(snapshot([definition("flag", null)]));
+    await h.client.initialize();
+    expect(h.client.getFlag({}, "flag", null)).toBeNull();
+    expect(h.client.getFlag({}, "missing", null)).toBeNull();
+    await h.client.flush();
+    expect(h.checks()[0]).toMatchObject({ evalResult: "default" });
+    expect(h.checks()[1]).not.toHaveProperty("evalResult");
   });
 
-  it("should preserve existing user and company when omitted on rebind", () => {
-    const reboundClient = client
-      .bindClient({ user, company })
-      .bindClient({ other: otherContext });
-
-    expect(reboundClient["_options"]).toEqual({
-      user,
-      company,
-      other: otherContext,
-      enableTracking: true,
+  it("keeps Boolean defaults separate from authored payloads and dependent selections", async () => {
+    const collection = graph();
+    collection.flags[0].variants.quality = { secret: "do-not-log-payload" };
+    const h = harness(collection);
+    await h.client.initialize();
+    expect(h.client.getFlag({ company }, "model")).toBe(false);
+    expect(h.client.getFlag({ company }, "dependent")).toBe(true);
+    await h.client.flush();
+    expect(h.checks()[0]).not.toHaveProperty("evalResult");
+    expect(h.checks()[0]).not.toHaveProperty("sourceVersionId");
+    expect(h.checks()[1]).toMatchObject({
+      key: "dependent",
+      evalResult: "true",
     });
-  });
-
-  it("should preserve existing other context when omitted on rebind", () => {
-    const reboundClient = client
-      .bindClient({ other: otherContext })
-      .bindClient({ user });
-
-    expect(reboundClient["_options"]).toEqual({
-      user,
-      other: otherContext,
-      enableTracking: true,
-    });
-  });
-
-  it("should allow using expected methods when bound to user", async () => {
-    const boundClient = client.bindClient({ user });
-    expect(boundClient.user).toEqual(user);
-
-    expect(
-      boundClient.bindClient({ other: otherContext }).otherContext,
-    ).toEqual(otherContext);
-
-    boundClient.getFlags();
-
-    await boundClient.track("flag");
-    await client.flush();
-
-    expect(httpClient.post).toHaveBeenCalledWith(
-      BULK_ENDPOINT,
-      expectedHeaders,
-      [
-        expect.objectContaining({ type: "user" }),
-        {
-          event: "flag",
-          type: "event",
-          userId: "user123",
-        },
-      ],
+    expect(h.logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining("Using the default value"),
+    );
+    expect(JSON.stringify(h.logger.warn.mock.calls)).not.toContain(
+      "do-not-log-payload",
     );
   });
 
-  it("should add company ID from the context if not explicitly supplied", async () => {
-    const boundClient = client.bindClient({ user, company });
-
-    boundClient.getFlags();
-    await boundClient.track("flag");
-
-    await client.flush();
-
-    expect(httpClient.post).toHaveBeenCalledWith(
-      BULK_ENDPOINT,
-      expectedHeaders,
-      [
-        expect.objectContaining({ type: "company" }),
-        expect.objectContaining({ type: "user" }),
-        {
-          companyId: "company123",
-          event: "flag",
-          type: "event",
-          userId: "user123",
-        },
-      ],
-    );
+  it("returns independent mutable copies of caller defaults", async () => {
+    const h = harness(snapshot());
+    await h.client.initialize();
+    const fallback = { nested: { model: "Swift" }, items: [1] };
+    const value = h.client.getFlag({}, "missing", fallback);
+    value.nested.model = "changed";
+    value.items.push(2);
+    expect(fallback).toEqual({ nested: { model: "Swift" }, items: [1] });
+    const frozen = Object.freeze({ model: "Swift", items: Object.freeze([1]) });
+    expect(h.client.getFlag({}, "missing", frozen)).toEqual({
+      model: "Swift",
+      items: [1],
+    });
   });
 
-  it("should disable tracking within the client if `enableTracking` is `false`", async () => {
-    const boundClient = client.bindClient({
-      user,
-      company,
-      enableTracking: false,
-    });
-
-    const { track } = boundClient.getFlag("flag2");
-    await track();
-    await boundClient.track("flag1");
-
-    await client.flush();
-
-    expect(httpClient.post).not.toHaveBeenCalled();
+  it("validates local and remote defaults before evaluation or HTTP", async () => {
+    const h = harness();
+    const defaultValue = { nested: undefined };
+    expect(() =>
+      Reflect.apply(h.client.getFlag, h.client, [{}, "flag", defaultValue]),
+    ).toThrow("JSON value");
+    await expect(
+      Reflect.apply(h.client.getFlagRemote, h.client, ["flag", defaultValue]),
+    ).rejects.toThrow("JSON value");
+    expect(h.httpClient.get).not.toHaveBeenCalled();
+    await h.client.flush();
+    expect(h.checks()).toEqual([]);
   });
 
-  it("should allow using expected methods", async () => {
-    const boundClient = client.bindClient({ other: { key: "value" } });
-    expect(boundClient.otherContext).toEqual({
-      key: "value",
-    });
-
-    await client.initialize();
-
-    boundClient.getFlags();
-    boundClient.getFlag("flag1");
-
-    await boundClient.flush();
-  });
-
-  it("should return raw flags for bootstrap from bound client", async () => {
-    // Ensure client is properly initialized
-    await client.initialize();
-    const boundClient = client.bindClient({
-      user,
-      company,
-      other: otherContext,
-      enableTracking: true,
-    });
-
-    const result = boundClient.getFlagsForBootstrap();
-
-    expect(result).toStrictEqual({
-      context: {
-        user,
-        company,
-        other: otherContext,
-        enableTracking: true,
-      },
+  it("applies remote defaults without authenticating a fabricated selection", async () => {
+    const h = harness({
+      protocolVersion: 2,
+      flagStateVersion: 7,
       flags: {
-        flag1: {
-          key: "flag1",
-          isEnabled: true,
-          targetingVersion: 1,
-          config: {
-            key: "config-1",
-            payload: {
-              something: "else",
-            },
-            targetingVersion: 1,
-            missingContextFields: [],
-            ruleEvaluationResults: [true],
-          },
-          ruleEvaluationResults: [true],
-          missingContextFields: [],
-        },
-        flag2: {
-          key: "flag2",
-          isEnabled: false,
-          targetingVersion: 2,
-          config: {
-            key: undefined,
-            payload: undefined,
-            targetingVersion: undefined,
-            missingContextFields: [],
-            ruleEvaluationResults: [],
-          },
-          ruleEvaluationResults: [false],
-          missingContextFields: ["attributeKey"],
-          evaluationErrors: [missingContextFieldError("attributeKey")],
+        model: {
+          value: { model: "Reasoner" },
+          variantKey: "quality",
+          sourceVersionId: "remote-version",
+          matchedRuleId: "r",
+          ruleResults: [],
+          errors: [],
         },
       },
+    });
+    expect(await h.client.getFlagRemote("model")).toBe(false);
+    expect(
+      await h.client.bindClient({}).getFlagRemote("model", { model: "Swift" }),
+    ).toEqual({ model: "Reasoner" });
+    expect(await h.client.getFlagRemote("missing", { model: "Swift" })).toEqual(
+      { model: "Swift" },
+    );
+    await h.client.flush();
+    expect(h.checks()).toHaveLength(3);
+    expect(h.checks()[0]).not.toHaveProperty("evalResult");
+    expect(h.checks()[1]).toMatchObject({
+      evalResult: "quality",
+      sourceVersionId: "remote-version",
+      flagStateVersion: 7,
+    });
+    expect(h.checks()[2]).not.toHaveProperty("sourceVersionId");
+  });
+
+  it("uses local defaults and overrides for offline remote reads without tracking", async () => {
+    const h = harness(graph(), {
+      offline: true,
+      flagOverrides: { model: { model: "Swift" } },
+    });
+    await h.client.initialize();
+    expect(
+      await h.client.getFlagRemote("model", { model: "Reasoner" }),
+    ).toEqual({ model: "Swift" });
+    expect(await h.client.bindClient({}).getFlagRemote("missing")).toBe(false);
+    expect(h.httpClient.get).not.toHaveBeenCalled();
+    expect(h.checks()).toEqual([]);
+  });
+});
+
+describe("check identity and context", () => {
+  it("deduplicates equivalent normalized contexts within the check window", async () => {
+    const h = harness();
+    await h.client.initialize();
+    h.client.getFlag({ company, other: { n: 1 } }, "model", "quick");
+    h.client.getFlag(
+      { other: { n: "1" }, company: { plan: "enterprise", id: "acme" } },
+      "model",
+      "quick",
+    );
+    await h.client.flush();
+    expect(h.checks()).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(
+      FLAG_EVENT_RATE_LIMITER_WINDOW_SIZE_MS + 1,
+    );
+    h.client.getFlag({ company, other: { n: 1 } }, "model", "quick");
+    await h.client.flush();
+    expect(h.checks()).toHaveLength(2);
+  });
+  it("distinguishes equal-valued variants for the same normalized context", async () => {
+    const flag = definition("flag", null, "first");
+    flag.variants.second = null;
+    const response = snapshot([flag]);
+    const h = harness(response);
+    await h.client.initialize();
+    h.client.getFlag({}, "flag", null);
+    // Simulate a new immutable accepted definition with an unchanged snapshot number.
+    const changed = structuredClone(response);
+    changed.flags[0].rules[0].result = {
+      type: "variant",
+      variantKey: "second",
+    };
+    h.state.response = changed;
+    await nextRefresh(h.client);
+    h.client.getFlag({}, "flag", null);
+    await h.client.flush();
+    expect(h.checks().map((event) => event.evalResult)).toEqual([
+      "first",
+      "second",
+    ]);
+  });
+  it("includes the snapshot version when only a dependency changes", async () => {
+    const h = harness();
+    await h.client.initialize();
+    expect(h.client.getFlag({ company }, "dependent")).toBe(true);
+    const changed = graph();
+    changed.flagStateVersion = 2;
+    changed.segments[0].filter = { type: "constant", value: false };
+    h.state.response = changed;
+    await nextRefresh(h.client, 2);
+    expect(h.client.getFlag({ company }, "dependent")).toBe(false);
+    await h.client.flush();
+    expect(h.checks()).toEqual([
+      expect.objectContaining({
+        sourceVersionId: "version:dependent",
+        flagStateVersion: 1,
+        evalResult: "true",
+      }),
+      expect.objectContaining({
+        sourceVersionId: "version:dependent",
+        flagStateVersion: 2,
+        evalResult: "false",
+      }),
+    ]);
+  });
+  it("registers a new check when only the definition version changes", async () => {
+    const h = harness();
+    await h.client.initialize();
+    h.client.getFlag({ company }, "model", "quick");
+    const changed = graph();
+    changed.flags[0].sourceVersionId = "updated";
+    h.state.response = changed;
+    await nextRefresh(h.client);
+    h.client.getFlag({ company }, "model", "quick");
+    await h.client.flush();
+    expect(h.checks().map((event) => event.sourceVersionId)).toEqual([
+      "version:model",
+      "updated",
+    ]);
+  });
+  it("disables both context synchronization and checks when requested", async () => {
+    const h = harness();
+    await h.client.initialize();
+    h.client.getFlag(
+      { company, user: { id: "u" }, enableTracking: false },
+      "model",
+      "quick",
+    );
+    h.client.getFlags({ company, enableTracking: false });
+    await h.client.flush();
+    expect(h.events()).toEqual([]);
+  });
+  it("preserves numeric zero IDs for ordinary tracking", async () => {
+    const h = harness();
+    await h.client.initialize();
+    h.client.getFlag(
+      {
+        company: { id: 0, plan: "free" },
+        user: { id: 0 },
+        meta: { active: false },
+      },
+      "model",
+      "quick",
+    );
+    await h.client.track(0, "clicked", { companyId: 0 });
+    await h.client.flush();
+    expect(h.events()).toContainEqual(
+      expect.objectContaining({
+        type: "company",
+        companyId: 0,
+        userId: 0,
+        context: { active: false },
+      }),
+    );
+    expect(h.events()).toContainEqual(
+      expect.objectContaining({ type: "event", userId: 0, companyId: 0 }),
+    );
+  });
+});
+
+describe("bootstrap, bound clients, and overrides", () => {
+  it("bootstraps selections and version without registering checks", async () => {
+    const h = harness();
+    await h.client.initialize();
+    const bootstrap = h.client.getFlagsForBootstrap({
+      company,
+      other: { raw: 42 },
+    });
+    expect(bootstrap).toMatchObject({
+      protocolVersion: 2,
+      flagStateVersion: 1,
+      context: { company, other: { raw: 42 } },
+      flags: {
+        model: { resolved: true, value: "quality", variantKey: "quality" },
+      },
+    });
+    await h.client.flush();
+    expect(h.checks()).toEqual([]);
+  });
+  it("binds and merges context while preserving direct values and ordinary track", async () => {
+    const h = harness();
+    await h.client.initialize();
+    const bound = h.client
+      .bindClient({ company: { id: "acme", plan: "free" }, user: { id: 0 } })
+      .bindClient({ company });
+    expect(bound.getFlag("model", "quick")).toBe("quality");
+    expect(bound.getFlags()).toEqual({ model: "quality", dependent: true });
+    expect(bound.getFlagsForBootstrap().context).toMatchObject({
+      user: { id: 0 },
+      company,
+    });
+    await bound.track("selected");
+    await bound.flush();
+    expect(h.events()).toContainEqual(
+      expect.objectContaining({
+        type: "event",
+        userId: 0,
+        companyId: "acme",
+        event: "selected",
+      }),
+    );
+  });
+  it.each([false, null, { payload: 1 }, [1, 2], "override"])(
+    "returns a direct override %j without claiming an authored selection",
+    async (value) => {
+      const h = harness(graph(), { flagOverrides: { model: value } });
+      await h.client.initialize();
+      expect(h.client.getFlag({ company }, "model", null)).toEqual(value);
+      // Overrides remain post-evaluation; they do not rewrite dependency results.
+      expect(h.client.getFlag({ company }, "dependent")).toBe(true);
+      await h.client.flush();
+      expect(h.checks()[0]).not.toHaveProperty("evalResult");
+      expect(h.checks()[0]).not.toHaveProperty("sourceVersionId");
+    },
+  );
+  it("retains explicit tracking disablement when merged options are undefined", async () => {
+    const h = harness();
+    await h.client.initialize();
+    const bound = h.client
+      .bindClient({ company, enableTracking: false })
+      .bindClient({ enableTracking: undefined, other: { n: 1 } });
+    expect(bound.getFlag("model", "quick")).toBe("quality");
+    await bound.flush();
+    expect(h.events()).toEqual([]);
+  });
+  it("supports context functions and disposable override layers", async () => {
+    const h = harness(graph(), {
+      flagOverrides: (context) => ({
+        model: context.company?.id === "acme" ? 1 : 0,
+      }),
+    });
+    await h.client.initialize();
+    const pop = h.client.pushFlagOverrides({ model: null, extra: false });
+    expect(h.client.getFlags({ company, enableTracking: false })).toMatchObject(
+      { model: null, extra: false },
+    );
+    pop();
+    pop();
+    expect(h.client.getFlag({ company }, "model", 0)).toBe(1);
+    h.client.setFlagOverrides({ model: "base" });
+    expect(h.client.getFlag({ company }, "model", "quick")).toBe("base");
+    h.client.clearFlagOverrides();
+    expect(h.client.getFlag({ company }, "model", "quick")).toBe("quality");
+  });
+  it("keeps prototype-like override keys", async () => {
+    const h = harness(snapshot(), {
+      flagOverrides: JSON.parse('{"__proto__":false}'),
+    });
+    await h.client.initialize();
+    expect(h.client.getFlag({}, "__proto__")).toBe(false);
+  });
+  it("works offline without fetching, checks, or ordinary tracking", async () => {
+    const h = harness(graph(), {
+      offline: true,
+      flagOverrides: { model: null },
+    });
+    await h.client.initialize();
+    expect(h.client.getFlag({ company }, "model", null)).toBeNull();
+    await h.client.track(0, "event");
+    await h.client.flush();
+    expect(h.httpClient.get).not.toHaveBeenCalled();
+    expect(h.events()).toEqual([]);
+  });
+});
+
+describe("atomic refresh and complete fallback snapshots", () => {
+  it("replaces flags, segments, and version together", async () => {
+    const h = harness();
+    await h.client.initialize();
+    const changed = graph();
+    changed.flagStateVersion = 2;
+    changed.segments[0].filter = { type: "constant", value: false };
+    changed.flags[0].variants.quick = "new";
+    h.state.response = changed;
+    await nextRefresh(h.client, 2);
+    expect(h.client.getFlags({ company, enableTracking: false })).toEqual({
+      model: "new",
+      dependent: false,
+    });
+    expect(h.client.getFlagsForBootstrap({ company }).flagStateVersion).toBe(2);
+    expect(h.httpClient.get).toHaveBeenLastCalledWith(
+      "https://api.example.com/flags?waitForVersion=2",
+      expect.anything(),
+      expect.any(Number),
+    );
+  });
+  it("rejects stale responses before saving them to a fallback provider", async () => {
+    const save = vi.fn();
+    const h = harness(snapshot([], [], 5), {
+      flagsFallbackProvider: { load: vi.fn(), save },
+    });
+    await h.client.initialize();
+    h.state.response = graph();
+    await nextRefresh(h.client);
+    await h.client.flush();
+    expect(h.client.getFlagDefinitions()).toEqual({ flags: [], segments: [] });
+    expect(h.client.getFlagsForBootstrap({}).flagStateVersion).toBe(5);
+    expect(save).toHaveBeenCalledTimes(1);
+  });
+  it.each([
+    { protocolVersion: 2, flagStateVersion: 2, flags: [] },
+    { ...snapshot(), flagStateVersion: -1 },
+    { ...snapshot(), protocolVersion: 1 },
+    snapshot(
+      [definition("bad", 1)],
+      [{ key: "segment", filter: { type: "segment", key: "missing" } }],
+      2,
+    ),
+  ])(
+    "retains a last-known-good graph after invalid refresh %#",
+    async (invalid) => {
+      const h = harness();
+      await h.client.initialize();
+      h.state.response = invalid;
+      await nextRefresh(h.client);
+      expect(
+        h.client.getFlag({ company, enableTracking: false }, "dependent"),
+      ).toBe(true);
+      expect(h.client.getFlagsForBootstrap({ company }).flagStateVersion).toBe(
+        1,
+      );
+    },
+  );
+  it("does not expose mutable definitions or its prepared evaluator", async () => {
+    const h = harness();
+    await h.client.initialize();
+    const definitions = h.client.getFlagDefinitions();
+    definitions.segments.length = 0;
+    expect(
+      h.client.getFlag({ company, enableTracking: false }, "dependent"),
+    ).toBe(true);
+    expect(definitions).not.toHaveProperty("evaluator");
+  });
+  it("persists and restores the full graph and snapshot version", async () => {
+    let saved: FlagsFallbackSnapshot | undefined;
+    const provider = {
+      load: vi.fn(async () => saved),
+      save: vi.fn(async (_context: unknown, next: FlagsFallbackSnapshot) => {
+        saved = next;
+      }),
+    };
+    const live = harness(graph(), { flagsFallbackProvider: provider });
+    await live.client.initialize();
+    await live.client.flush();
+    expect(saved).toMatchObject({
+      version: 2,
+      flagStateVersion: 1,
+      flags: graph().flags,
+      segments: graph().segments,
+    });
+    const fallback = harness(undefined, { flagsFallbackProvider: provider });
+    fallback.state.response = undefined;
+    await fallback.client.initialize();
+    expect(fallback.client.getFlag({ company }, "dependent")).toBe(true);
+    await fallback.client.flush();
+    expect(fallback.checks()[0]).toMatchObject({
+      evalResult: "true",
+      sourceVersionId: "version:dependent",
       flagStateVersion: 1,
     });
-
-    // Should not have track function like regular getFlags
-    expect(result.flags.flag1).not.toHaveProperty("track");
-    expect(result.flags.flag2).not.toHaveProperty("track");
+    expect(provider.save).toHaveBeenCalledTimes(1);
   });
-
-  describe("getFlagRemote/getFlagsRemote", () => {
-    beforeEach(async () => {
-      httpClient.get.mockClear();
-      httpClient.get.mockResolvedValue({
-        ok: true,
-        status: 200,
-        body: {
-          success: true,
-          remoteContextUsed: true,
-          features: {
-            flag1: {
-              key: "flag1",
-              targetingVersion: 1,
-              isEnabled: true,
-              config: {
-                key: "config-1",
-                version: 3,
-                default: true,
-                payload: { something: "else" },
-                missingContextFields: ["else"],
-              },
-            },
-            flag2: {
-              key: "flag2",
-              targetingVersion: 2,
-              isEnabled: false,
-              missingContextFields: ["something"],
-            },
+  it.each([1, 2])(
+    "rejects incomplete or legacy fallback snapshots (version %i)",
+    async (version) => {
+      const h = harness(
+        {},
+        {
+          flagsFallbackProvider: {
+            load: vi.fn(
+              async () =>
+                ({
+                  version,
+                  savedAt: new Date().toISOString(),
+                  flags: graph().flags,
+                }) as FlagsFallbackSnapshot,
+            ),
+            save: vi.fn(),
           },
         },
-      });
-    });
-
-    it("should return evaluated flags", async () => {
-      const boundClient = client.bindClient({
-        user,
-        company,
-        other: otherContext,
-      });
-
-      const result = await boundClient.getFlagsRemote();
-
-      expect(result).toStrictEqual({
-        flag1: {
-          key: "flag1",
-          isEnabled: true,
-          config: { key: "config-1", payload: { something: "else" } },
-          track: expect.any(Function),
-        },
-        flag2: {
-          key: "flag2",
-          isEnabled: false,
-          config: { key: undefined, payload: undefined },
-          track: expect.any(Function),
-        },
-      });
-
-      expect(httpClient.get).toHaveBeenCalledTimes(1);
-
-      expect(httpClient.get).toHaveBeenCalledWith(
-        `https://api.example.com/features/evaluated?${new URLSearchParams({
-          contextJson:
-            '{"company":{"employees":100,"id":"company123","name":"Acme Inc."},"other":{"custom":"context","key":"value"},"user":{"age":1,"id":"user123","name":"John"}}',
-        })}`,
-        expectedHeaders,
-        API_TIMEOUT_MS,
       );
-    });
-
-    it("should return evaluated flag", async () => {
-      const boundClient = client.bindClient({
-        user,
-        company,
-        other: otherContext,
+      await h.client.initialize();
+      expect(h.client.getFlagDefinitions()).toEqual({
+        flags: [],
+        segments: [],
       });
-
-      const result = await boundClient.getFlagRemote("flag1");
-
-      expect(result).toStrictEqual({
-        key: "flag1",
-        isEnabled: true,
-        config: { key: "config-1", payload: { something: "else" } },
-        track: expect.any(Function),
-      });
-
-      expect(httpClient.get).toHaveBeenCalledTimes(1);
-
-      expect(httpClient.get).toHaveBeenCalledWith(
-        `https://api.example.com/features/evaluated?${new URLSearchParams({
-          contextJson:
-            '{"company":{"employees":100,"id":"company123","name":"Acme Inc."},"other":{"custom":"context","key":"value"},"user":{"age":1,"id":"user123","name":"John"}}',
-          key: "flag1",
-        })}`,
-        expectedHeaders,
-        API_TIMEOUT_MS,
-      );
+    },
+  );
+  it("does not reload stale fallback state after a successful live refresh", async () => {
+    const load = vi.fn();
+    const h = harness(graph(), {
+      flagsFallbackProvider: { load, save: vi.fn() },
     });
+    await h.client.initialize();
+    h.state.response = {};
+    await nextRefresh(h.client);
+    expect(load).not.toHaveBeenCalled();
+  });
+  it("uses static JSON fallback values without an authored variant claim", async () => {
+    const h = harness(
+      {},
+      {
+        flagsFallbackProvider: fallbackProviders.static({
+          flags: { model: null, bool: false },
+        }),
+      },
+    );
+    await h.client.initialize();
+    expect(h.client.getFlag({ company }, "model", null)).toBeNull();
+    expect(h.client.getFlag({}, "bool")).toBe(false);
+    await h.client.flush();
+    for (const event of h.checks()) {
+      expect(event).not.toHaveProperty("evalResult");
+      expect(event).not.toHaveProperty("sourceVersionId");
+    }
+  });
+  it("uses value-only configured fallbacks without an authored variant claim", async () => {
+    const h = harness({}, { fallbackFlags: { flag: false } });
+    await h.client.initialize();
+    expect(h.client.getFlag({}, "flag")).toBe(false);
+    await h.client.flush();
+    expect(h.checks()[0]).not.toHaveProperty("evalResult");
+  });
+  it("serializes fallback saves", async () => {
+    let finish!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const save = vi
+      .fn()
+      .mockImplementationOnce(() => pending)
+      .mockResolvedValue(undefined);
+    const h = harness(graph(), {
+      flagsFallbackProvider: { load: vi.fn(), save },
+    });
+    await h.client.initialize();
+    h.state.response = snapshot([], [], 2);
+    await nextRefresh(h.client, 2);
+    expect(save).toHaveBeenCalledTimes(1);
+    finish();
+    await h.client.flush();
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(save.mock.calls[1][1]).toMatchObject({
+      flagStateVersion: 2,
+      flags: [],
+      segments: [],
+    });
+  });
+});
+
+describe("remote values", () => {
+  it("returns direct values, preserves explicit zero IDs, and registers selected keys", async () => {
+    const result = {
+      value: null,
+      variantKey: "quality",
+      sourceVersionId: "remote-version",
+      matchedRuleId: "r",
+      ruleResults: [],
+      errors: [],
+    };
+    const h = harness({
+      protocolVersion: 2,
+      flagStateVersion: 9,
+      flags: { model: result },
+      remoteContextUsed: false,
+    });
+    expect(await h.client.getFlagRemote("model", null, 0, 0)).toBeNull();
+    await h.client.flush();
+    expect(h.checks()[0]).toMatchObject({
+      evalResult: "quality",
+      sourceVersionId: "remote-version",
+      flagStateVersion: 9,
+      evalContext: { user: { id: 0 }, company: { id: 0 } },
+    });
+    const url = new URL(h.httpClient.get.mock.calls[0][0]);
+    expect(url.pathname).toBe("/flags/evaluated");
+    expect(JSON.parse(url.searchParams.get("contextJson")!)).toEqual({
+      user: { id: 0 },
+      company: { id: 0 },
+    });
+  });
+  it("honors bound enableTracking=false for remote calls", async () => {
+    const h = harness({
+      protocolVersion: 2,
+      flagStateVersion: 1,
+      flags: {
+        model: {
+          value: false,
+          variantKey: "false",
+          sourceVersionId: "v",
+          matchedRuleId: "r",
+          ruleResults: [],
+          errors: [],
+        },
+      },
+    });
+    expect(
+      await h.client
+        .bindClient({ company, enableTracking: false })
+        .getFlagRemote("model"),
+    ).toBe(false);
+    await h.client.flush();
+    expect(h.checks()).toEqual([]);
+  });
+  it.each([
+    { ruleResults: [null] },
+    { errors: [null] },
+    { sourceVersionId: "" },
+    { variantKey: "" },
+  ])("rejects malformed remote selection metadata %#", async (invalid) => {
+    const h = harness({
+      protocolVersion: 2,
+      flagStateVersion: 1,
+      flags: {
+        model: {
+          value: false,
+          variantKey: "false",
+          sourceVersionId: "v",
+          matchedRuleId: "r",
+          ruleResults: [],
+          errors: [],
+          ...invalid,
+        },
+      },
+    });
+    expect(await h.client.getFlagRemote("model")).toBe(false);
+    await h.client.flush();
+    expect(h.checks()).toEqual([expect.objectContaining({ key: "model" })]);
+    expect(h.checks()[0]).not.toHaveProperty("evalResult");
+    expect(h.checks()[0]).not.toHaveProperty("sourceVersionId");
+  });
+  it("returns false without fabricating a remote selection after failure", async () => {
+    const h = harness({});
+    expect(await h.client.getFlagRemote("missing")).toBe(false);
+    await h.client.flush();
+    expect(h.checks()).toEqual([expect.objectContaining({ key: "missing" })]);
+    expect(h.checks()[0]).not.toHaveProperty("evalResult");
+    expect(h.checks()[0]).not.toHaveProperty("sourceVersionId");
   });
 });
