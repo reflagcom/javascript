@@ -47,15 +47,16 @@ const fetchClient: HttpClient = {
       signal: AbortSignal.timeout(timeoutMs),
       // We must use no-cache to avoid services such as Next.js from caching the response indefinitely.
       // We also can't use no-store because of Next.js error withRetry https://github.com/vercel/next.js/discussions/54036.
-      // We also have local caching in the SDKs, so we don't need to cache the response.
+      // The SDK caches definitions and explicitly revalidates them using ETags.
       cache: "no-cache",
     });
 
-    const json = await response.json();
+    const body = response.status === 304 ? undefined : await response.json();
     return {
       ok: response.ok,
       status: response.status,
-      body: json as TResponse,
+      body: body as TResponse | undefined,
+      etag: response.headers.get("etag") ?? undefined,
     };
   },
 };

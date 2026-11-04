@@ -173,6 +173,10 @@ afterAll(() => server.close());
 beforeAll(() => {
   vi.spyOn(ReflagClient.prototype, "initialize");
   vi.spyOn(ReflagClient.prototype, "stop");
+  // Prevent Preact toolbar renders from outliving the jsdom test environment.
+  vi.spyOn(ReflagClient.prototype, "showToolbarToggle").mockImplementation(
+    () => undefined,
+  );
 });
 
 beforeEach(() => {

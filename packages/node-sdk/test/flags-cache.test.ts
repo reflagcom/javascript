@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { FlagsCache } from "../src/flags-cache";
+import { FlagsCache, type FlagsCacheSnapshot } from "../src/flags-cache";
 
 function createDefinitions(key: string) {
   return [{ key }] as any;
@@ -8,13 +8,11 @@ function createDefinitions(key: string) {
 
 function createDeferred<T>() {
   let resolve!: (value: T) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((innerResolve, innerReject) => {
+  const promise = new Promise<T>((innerResolve) => {
     resolve = innerResolve;
-    reject = innerReject;
   });
 
-  return { promise, resolve, reject };
+  return { promise, resolve };
 }
 
 function scheduleTrailingRefresh(delayMs: number, callback: () => void) {
@@ -49,6 +47,7 @@ describe("FlagsCache", () => {
 
     void cache.refresh(21);
     void cache.refresh(22);
+    void cache.refresh();
 
     firstRefresh.resolve({
       definitions: createDefinitions("first"),
@@ -61,6 +60,7 @@ describe("FlagsCache", () => {
     });
 
     await refreshPromise;
+    expect(fetchFlags).toHaveBeenCalledTimes(2);
     expect(cache.get()).toEqual(createDefinitions("newest"));
   });
 
@@ -107,6 +107,95 @@ describe("FlagsCache", () => {
     await cache.refresh();
 
     expect(cache.get()).toEqual(createDefinitions("newer"));
+  });
+
+  it("does not let a 304 satisfy a pending newer version", async () => {
+    const revalidation = createDeferred<any>();
+    const fetchFlags = vi
+      .fn()
+      .mockResolvedValueOnce({
+        definitions: createDefinitions("first"),
+        flagStateVersion: 1,
+        etag: '"v1"',
+      })
+      .mockImplementationOnce(() => revalidation.promise)
+      .mockResolvedValueOnce({
+        definitions: createDefinitions("newer"),
+        flagStateVersion: 2,
+        etag: '"v2"',
+      });
+    const cache = new FlagsCache(fetchFlags, { minRefreshIntervalMs: 0 });
+    await cache.refresh();
+    const refreshPromise = cache.refresh();
+    const versionPromise = cache.refresh(2);
+    revalidation.resolve({ notModified: true });
+    await Promise.all([refreshPromise, versionPromise]);
+
+    expect(fetchFlags).toHaveBeenCalledTimes(3);
+    expect(fetchFlags).toHaveBeenNthCalledWith(3, 2);
+    expect(cache.getFlagStateVersion()).toBe(2);
+    expect(cache.getETag()).toBe('"v2"');
+  });
+
+  it.each([
+    ["succeeds", '"old"'],
+    ["fails", undefined],
+  ])(
+    "does not replace a newer validator when an older save %s",
+    async (_, etag) => {
+      const definitions = createDefinitions("unchanged");
+      const older: FlagsCacheSnapshot = {
+        definitions,
+        flagStateVersion: 1,
+      };
+      const fetchFlags = vi
+        .fn()
+        .mockResolvedValueOnce(older)
+        .mockResolvedValueOnce({
+          definitions,
+          flagStateVersion: 2,
+          etag: '"newer"',
+        });
+      const cache = new FlagsCache(fetchFlags, { minRefreshIntervalMs: 0 });
+      await cache.refresh();
+      expect(cache.getETag()).toBeUndefined();
+      await cache.refresh();
+      older.etag = etag;
+
+      expect(cache.getFlagStateVersion()).toBe(2);
+      expect(cache.getETag()).toBe('"newer"');
+    },
+  );
+
+  it("does not restore a late validator after destruction", async () => {
+    const snapshot: FlagsCacheSnapshot = {
+      definitions: createDefinitions("first"),
+      flagStateVersion: 1,
+    };
+    const cache = new FlagsCache(async () => snapshot);
+    await cache.refresh();
+    cache.destroy();
+    snapshot.etag = '"first"';
+
+    expect(cache.get()).toBeUndefined();
+    expect(cache.getETag()).toBeUndefined();
+  });
+
+  it("does not apply a refresh or validator after destruction", async () => {
+    const response = createDeferred<any>();
+    const cache = new FlagsCache(() => response.promise);
+    const refreshPromise = cache.refresh();
+    cache.destroy();
+    response.resolve({
+      definitions: createDefinitions("late"),
+      flagStateVersion: 1,
+      etag: '"late"',
+    });
+    await refreshPromise;
+
+    expect(cache.get()).toBeUndefined();
+    expect(cache.getETag()).toBeUndefined();
+    expect(cache.getLastRefreshAt()).toBeUndefined();
   });
 
   it("throttles refreshes and runs one trailing refresh when scheduling is supported", async () => {

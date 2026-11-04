@@ -248,7 +248,7 @@ The command will guide you through:
 
 _**Note: The setup uses [mcp-remote](https://github.com/geelen/mcp-remote) as a compatibility layer allowing the remote hosted Reflag MCP server to work with all editors/clients that support MCP STDIO servers. If your editor/client supports HTTP Streaming with OAuth you can connect to the Reflag MCP server directly.**_
 
-## Using in CI/CD Pipelines (Beta)
+## Using in CI/CD Pipelines
 
 The Reflag CLI is designed to work seamlessly in CI/CD pipelines. For automated environments where interactive login is not possible, use the `--api-key` option or specify the API key in the `REFLAG_API_KEY` environment variable.
 

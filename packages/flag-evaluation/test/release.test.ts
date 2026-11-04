@@ -18,7 +18,7 @@ describe("v1/v2 release isolation", () => {
   it("keeps the unchanged Node SDK off the v2 workspace dependency", () => {
     expect(nodeSdk.dependencies).not.toHaveProperty("@reflag/flag-evaluation");
     expect(nodeSdk.dependencies["@reflag/flag-evaluation-v1"]).toBe(
-      "npm:@reflag/flag-evaluation@1.1.1",
+      "npm:@reflag/flag-evaluation@1.1.2",
     );
   });
 });

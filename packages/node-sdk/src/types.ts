@@ -60,8 +60,19 @@ export type FlagEvent = {
 
   /**
    * The missing fields in the evaluation context (optional).
+   * @deprecated Use `evalErrors` and check for `MISSING_CONTEXT_FIELD`.
    **/
   evalMissingFields?: string[];
+
+  /**
+   * Non-fatal diagnostics produced while evaluating the flag (optional).
+   **/
+  evalErrors?: Array<{
+    code: string;
+    field: string;
+    operator?: string;
+    message: string;
+  }>;
 };
 
 /**
@@ -505,6 +516,12 @@ export type HttpClientResponse<TResponse> = {
    * The body of the response if available.
    **/
   body: TResponse | undefined;
+
+  /**
+   * The response's ETag, if available. Return its exact value to enable
+   * conditional flag-definition refreshes with a custom HTTP client.
+   **/
+  etag?: string;
 };
 
 /**
@@ -612,7 +629,10 @@ export type BatchBufferOptions<T> = {
   intervalMs?: number;
 
   /**
-   * Whether to flush the buffer on exit.
+   * Whether to flush the buffer on natural process exit (`beforeExit`).
+   * This does not install signal handlers. For signal-driven shutdown or an
+   * explicit `process.exit()`, await `client.flush()` in your application's
+   * shutdown hook before exiting.
    *
    * @defaultValue `true`
    */

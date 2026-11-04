@@ -1,5 +1,29 @@
 # @reflag/browser-sdk
 
+## 1.7.4
+
+### Patch Changes
+
+- 0840683: Avoid reporting `CLIENT_NOT_INITIALIZED` when a flag is evaluated from the initial flag state while client initialization is completing.
+
+## 1.7.3
+
+### Patch Changes
+
+- e8a0e10: Unsubscribe toolbar flag listeners when the toolbar is unmounted or switches clients.
+
+## 1.7.2
+
+### Patch Changes
+
+- 4649418: Preserve the response body returned by `setOptIn()` on HTTP errors so callers can read error details. Clarify opt-in loading, retry, and mutation result handling in the SDK documentation.
+
+## 1.7.1
+
+### Patch Changes
+
+- df37a58: Include non-fatal flag evaluation diagnostics in check events sent by the Node, browser, React, and Vue SDKs, including when flags are evaluated before client initialization.
+
 ## 1.7.0
 
 ### Minor Changes

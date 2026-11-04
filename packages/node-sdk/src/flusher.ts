@@ -1,11 +1,7 @@
-import { constants } from "os";
-
 import { END_FLUSH_TIMEOUT_MS } from "./config";
 import { TimeoutError, withTimeout } from "./utils";
 
 type Callback = () => Promise<void>;
-
-const killSignals = ["SIGINT", "SIGTERM", "SIGHUP", "SIGBREAK"] as const;
 
 export function subscribe(
   callback: Callback,
@@ -38,22 +34,12 @@ export function subscribe(
     state = true;
   };
 
-  killSignals.forEach((signal) => {
-    const hasListeners = process.listenerCount(signal) > 0;
-
-    if (hasListeners) {
-      process.prependListener(signal, wrappedCallback);
-    } else {
-      process.on(signal, async () => {
-        await wrappedCallback();
-        process.exit(0x80 + constants.signals[signal]);
-      });
-    }
-  });
-
+  // Signal listeners suppress Node's default termination behavior. Leave signals
+  // and shutdown coordination to the application; only flush on natural exit.
   process.on("beforeExit", wrappedCallback);
   process.on("exit", () => {
-    if (!state) {
+    // If beforeExit never ran, the application may have flushed explicitly.
+    if (state === false) {
       console.error(
         "[Reflag SDK] Failed to finalize the flushing of events on process exit.",
       );

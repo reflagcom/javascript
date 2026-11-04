@@ -129,7 +129,10 @@ export function useFlag<TKey extends FlagKey>(key: TKey): TypedFlags[TKey] {
  *
  * The loading state is only used with `ReflagBootstrappedProvider` while
  * opt-in metadata is fetched on demand. Regular providers load opt-in metadata
- * with the initial flags.
+ * with the initial flags; use {@link useIsLoading} for their loading state.
+ *
+ * If fetching opt-in metadata fails, loading ends without exposing an error.
+ * Call `refresh()` on the client returned by {@link useClient} to retry.
  */
 export function useOptInFlags(): UseOptInFlagsResult {
   const client = useClient();
@@ -160,6 +163,11 @@ export function useOptInFlags(): UseOptInFlagsResult {
 
 /**
  * Vue composable for setting whether the current user or company has opted into a flag.
+ *
+ * Check the returned Response's `ok` property and catch promise rejections.
+ * HTTP failures return a non-OK Response; offline mode, invalid arguments, or
+ * missing scoped context return undefined. Confirmation failures can reject
+ * after the membership changed remotely. See {@link ReflagClient.setOptIn}.
  */
 export function useSetOptIn() {
   const client = useClient();

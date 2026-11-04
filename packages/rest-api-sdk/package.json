@@ -1,6 +1,6 @@
 {
   "name": "@reflag/rest-api-sdk",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "Deprecated alias package for @reflag/management-sdk",
   "license": "MIT",
   "repository": {
@@ -27,6 +27,6 @@
     "access": "public"
   },
   "dependencies": {
-    "@reflag/management-sdk": "0.0.4"
+    "@reflag/management-sdk": "0.1.0"
   }
 }

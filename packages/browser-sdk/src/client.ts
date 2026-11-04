@@ -402,6 +402,22 @@ const defaultConfig: Config = {
   bootstrapped: false,
 };
 
+const CLIENT_NOT_INITIALIZED_EVALUATION_ERROR = {
+  code: "CLIENT_NOT_INITIALIZED",
+  field: "",
+  message:
+    "ReflagClient was not initialized before this flag was evaluated. Call initialize() before evaluating flags.",
+} as const;
+
+function withClientInitializationDiagnostic(
+  errors: CheckEvent["evaluationErrors"],
+  evaluatedBeforeInitialization: boolean,
+): CheckEvent["evaluationErrors"] {
+  return evaluatedBeforeInitialization
+    ? [...(errors ?? []), CLIENT_NOT_INITIALIZED_EVALUATION_ERROR]
+    : errors;
+}
+
 /**
  * A remotely managed configuration value for a flag.
  */
@@ -420,7 +436,7 @@ export type FlagRemoteConfig =
   | { key: undefined; payload: undefined };
 
 /**
- * Represents a flag.
+ * Options for changing the current user or company's opt-in membership.
  */
 export type SetOptInOptions = {
   /**
@@ -1254,6 +1270,12 @@ export class ReflagClient {
 
   /**
    * Set whether the current user or company has opted into a flag.
+   *
+   * A successful Response is returned after the refreshed flag state confirms
+   * the membership change. HTTP failures return a non-OK Response without
+   * refreshing flags. Offline mode, invalid arguments, or missing scoped context
+   * return undefined. Network and confirmation failures reject the promise;
+   * a confirmation failure may occur after membership changed remotely.
    */
   async setOptIn(
     flagKey: string,
@@ -1333,7 +1355,7 @@ export class ReflagClient {
     if (!res.ok) {
       await logResponseError({
         logger: this.logger,
-        res,
+        res: res.clone(),
         message: "set opt-in request failed",
         extra: { flagKey, optedIn: options.optedIn, scope },
       });
@@ -1397,6 +1419,8 @@ export class ReflagClient {
    */
   getFlag(flagKey: string): Flag {
     const f = this.getFlags()[flagKey];
+    const evaluatedBeforeInitialization =
+      !this.flagsClient.hasFlagState() && !this.config.offline;
 
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this;
@@ -1417,6 +1441,10 @@ export class ReflagClient {
             version: f?.targetingVersion,
             ruleEvaluationResults: f?.ruleEvaluationResults,
             missingContextFields: f?.missingContextFields,
+            evaluationErrors: withClientInitializationDiagnostic(
+              f?.evaluationErrors,
+              evaluatedBeforeInitialization,
+            ),
             value,
           })
           .catch(() => {
@@ -1432,6 +1460,10 @@ export class ReflagClient {
             version: f?.config?.version,
             ruleEvaluationResults: f?.config?.ruleEvaluationResults,
             missingContextFields: f?.config?.missingContextFields,
+            evaluationErrors: withClientInitializationDiagnostic(
+              f?.config?.evaluationErrors,
+              evaluatedBeforeInitialization,
+            ),
             value: f?.config && {
               key: f.config.key,
               payload: f.config.payload,

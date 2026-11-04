@@ -180,7 +180,19 @@ This behavior is built in and does not currently require configuration.
 
 Flag definitions include the rules needed to determine which flags should be enabled and which config values should be applied to any given user/company.
 Flag definitions are automatically fetched when calling `initialize()`.
-They are then cached and refreshed in the background.
+They are then cached and refreshed in the background. Ordinary refreshes use
+ETags to avoid downloading unchanged definitions. A `304 Not Modified` response
+keeps the cached definitions and resets their freshness without recompiling
+rules or writing a new fallback snapshot. Initial fetches and refreshes with a
+`waitForVersion` target remain unconditional. When a fallback provider is
+configured, the SDK retains the ETag only after the snapshot is saved
+successfully. A failed or pending save keeps ordinary refreshes unconditional
+so persistence can recover, without delaying flag availability.
+
+Custom HTTP clients can enable this optimization by returning the exact ETag
+value in `HttpClientResponse.etag` and returning 304 responses with
+`body: undefined`. Clients that omit the ETag continue using full fetches.
+
 It's also possible to get the currently in use flag definitions:
 
 ```typescript
@@ -986,8 +998,8 @@ these functions.
 ReflagClient employs a batching technique to minimize the number of calls that are sent to
 Reflag's servers.
 
-By default, the SDK automatically subscribes to process exit signals and attempts to flush
-any pending events. This behavior is controlled by the `flushOnExit` option in the client configuration:
+By default, the SDK attempts to flush pending events when the Node.js event loop empties
+(the `beforeExit` event). This behavior is controlled by the `flushOnExit` option in the client configuration:
 
 ```typescript
 const client = new ReflagClient({
@@ -996,6 +1008,13 @@ const client = new ReflagClient({
   },
 });
 ```
+
+Node.js does not emit `beforeExit` for unhandled termination signals (such as `SIGTERM` or
+`SIGINT`) or explicit `process.exit()` calls. For these shutdown paths, **await `client.flush()`
+in your application's existing graceful shutdown hook**, after stopping incoming work and
+waiting for in-flight requests or jobs to finish, and before exiting. This ensures events
+produced during shutdown are included. Automatic flushing is best-effort and does not replace
+an application-managed shutdown hook.
 
 ## Tracking custom events and setting custom attributes
 

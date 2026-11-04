@@ -1,5 +1,34 @@
 # @reflag/vue-sdk
 
+## 1.5.7
+
+### Patch Changes
+
+- Updated dependencies [0840683]
+  - @reflag/browser-sdk@1.7.4
+
+## 1.5.6
+
+### Patch Changes
+
+- Updated dependencies [e8a0e10]
+  - @reflag/browser-sdk@1.7.3
+
+## 1.5.5
+
+### Patch Changes
+
+- Updated dependencies [4649418]
+  - @reflag/browser-sdk@1.7.2
+
+## 1.5.4
+
+### Patch Changes
+
+- df37a58: Include non-fatal flag evaluation diagnostics in check events sent by the Node, browser, React, and Vue SDKs, including when flags are evaluated before client initialization.
+- Updated dependencies [df37a58]
+  - @reflag/browser-sdk@1.7.1
+
 ## 1.5.3
 
 ### Patch Changes

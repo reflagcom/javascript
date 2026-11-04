@@ -20,7 +20,7 @@ import {
   SDK_VERSION_HEADER_NAME,
 } from "./config";
 import fetchClient, { withRetry } from "./fetch-http-client";
-import { FlagsCache } from "./flags-cache";
+import { FlagsCache, type FlagsCacheSnapshot } from "./flags-cache";
 import {
   createFlagsSyncController,
   FlagsSyncController,
@@ -86,6 +86,22 @@ function evaluationErrorsRateLimitKey(errors: EvaluationError[]): string {
     .join("\n");
 }
 
+const CLIENT_NOT_INITIALIZED_EVALUATION_ERROR = {
+  code: "CLIENT_NOT_INITIALIZED",
+  field: "",
+  message:
+    "ReflagClient was not initialized before this flag was evaluated. Call initialize() before evaluating flags.",
+} as const;
+
+function withClientInitializationDiagnostic(
+  errors: FlagEvent["evalErrors"],
+  evaluatedBeforeInitialization: boolean,
+): FlagEvent["evalErrors"] {
+  return evaluatedBeforeInitialization
+    ? [...(errors ?? []), CLIENT_NOT_INITIALIZED_EVALUATION_ERROR]
+    : errors;
+}
+
 type PartialBy<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
 type FlagOverrideLayer = {
   id: number;
@@ -145,19 +161,7 @@ type BulkEvent =
       attributes?: Attributes;
       context?: TrackingMeta;
     }
-  | {
-      type: "feature-flag-event";
-      action: "check" | "check-config";
-      key: string;
-      targetingVersion?: number;
-      evalResult:
-        | boolean
-        | { key: string; payload: any }
-        | { key: undefined; payload: undefined };
-      evalContext?: Record<string, any>;
-      evalRuleResults?: boolean[];
-      evalMissingFields?: string[];
-    }
+  | ({ type: "feature-flag-event" } & FlagEvent)
   | {
       type: "event";
       event: string;
@@ -288,6 +292,7 @@ export class ReflagClient {
   private flagsSyncController: FlagsSyncController;
   private initializationFinished = false;
   private canLoadFlagsFallbackProvider = true;
+  private flagsFallbackSavePromise = Promise.resolve();
   private _initialize = once(async () => {
     const start = Date.now();
     if (!this._config.offline) {
@@ -532,10 +537,20 @@ export class ReflagClient {
             ? "features"
             : `features?waitForVersion=${encodeURIComponent(String(waitForVersion))}`;
 
-        const res = await this.get<FlagsAPIResponse>(
+        // A 304 cannot prove that a newer requested version was reached.
+        // Keep version-targeted fetches unconditional.
+        const etag =
+          waitForVersion === undefined ? this.flagsCache.getETag() : undefined;
+        const response = await this.getResponse<FlagsAPIResponse>(
           path,
           this._config.flagsFetchRetries,
+          { etag },
         );
+        if (response?.status === 304) {
+          return { notModified: true };
+        }
+
+        const res = response?.body;
         const flagStateVersion = res?.flagStateVersion;
         if (
           !isObject(res) ||
@@ -550,12 +565,21 @@ export class ReflagClient {
             : undefined;
         }
 
-        void this.saveFlagsFallbackDefinitions(res.features);
-        this.canLoadFlagsFallbackProvider = false;
-        return {
+        if (flagStateVersion < (this.flagsCache.getFlagStateVersion() ?? -1)) {
+          return undefined;
+        }
+
+        const snapshot: FlagsCacheSnapshot = {
           definitions: compileFlagDefinitions(res.features),
           flagStateVersion,
         };
+        this.saveFlagsFallbackDefinitions(
+          res.features,
+          snapshot,
+          response?.etag,
+        );
+        this.canLoadFlagsFallbackProvider = false;
+        return snapshot;
       },
       {
         logger: this.logger,
@@ -623,23 +647,33 @@ export class ReflagClient {
     }
   }
 
-  private async saveFlagsFallbackDefinitions(flags: FlagAPIResponse[]) {
-    const provider = this._config.flagsFallbackProvider;
-    if (!provider) {
-      return;
-    }
-
-    try {
-      await provider.save(
-        this._config.flagsFallbackProviderContext,
-        createFlagsFallbackSnapshot(flags),
-      );
-    } catch (error) {
-      this.logger.error(
-        "flagsFallbackProvider: failed to save flag definitions",
-        error,
-      );
-    }
+  private saveFlagsFallbackDefinitions(
+    flags: FlagAPIResponse[],
+    snapshot: FlagsCacheSnapshot,
+    etag?: string,
+  ) {
+    // Serialize background writes so an older save cannot overwrite a newer one.
+    this.flagsFallbackSavePromise = this.flagsFallbackSavePromise.then(
+      async () => {
+        try {
+          const provider = this._config.flagsFallbackProvider;
+          if (provider) {
+            await provider.save(
+              this._config.flagsFallbackProviderContext,
+              createFlagsFallbackSnapshot(flags),
+            );
+          }
+          // Enable revalidation only after saving. A late save updates only its
+          // own snapshot, never a replacement or destroyed cache.
+          snapshot.etag = etag;
+        } catch (error) {
+          this.logger.error(
+            "flagsFallbackProvider: failed to save flag definitions",
+            error,
+          );
+        }
+      },
+    );
   }
 
   /**
@@ -918,7 +952,10 @@ export class ReflagClient {
    * It is recommended to call this method when the application is shutting down to ensure all events are sent
    * before the process exits.
    *
-   * This method is automatically called when the process exits if `batchOptions.flushOnExit` is `true` in the options (default).
+   * This method is automatically called on natural process exit (`beforeExit`) if
+   * `batchOptions.flushOnExit` is `true` in the options (default). For signal-driven
+   * shutdown or an explicit `process.exit()`, await this method in your application's
+   * shutdown hook before exiting. The SDK does not install signal handlers.
    */
   public async flush() {
     if (this._config.offline) {
@@ -1173,18 +1210,41 @@ export class ReflagClient {
    * @returns The response from the server.
    * @throws An error if the path is invalid.
    **/
-  private async get<TResponse>(path: string, retries: number = 3) {
+  private async getResponse<TResponse>(
+    path: string,
+    retries: number = 3,
+    revalidation?: { etag?: string },
+  ) {
     ok(typeof path === "string" && path.length > 0, "path must be a string");
 
     try {
       const url = this.buildUrl(path);
+      const etag = revalidation?.etag;
+      const headers = etag
+        ? { ...this._config.headers, "If-None-Match": etag }
+        : this._config.headers;
+      let recoveryAvailable = Boolean(revalidation && !etag);
+      const request = async (requestHeaders: Record<string, string>) => {
+        const response = await this.httpClient.get<
+          TResponse & { success: boolean }
+        >(url, requestHeaders, this._config.fetchTimeoutMs);
+        this.logger.debug(`get request to "${url}"`, response);
+        return response;
+      };
+
       return await withRetry(
         async () => {
-          const response = await this.httpClient.get<
-            TResponse & { success: boolean }
-          >(url, this._config.headers, this._config.fetchTimeoutMs);
+          let response = await request(headers);
+          if (response.status === 304 && etag) {
+            return response;
+          }
 
-          this.logger.debug(`get request to "${url}"`, response);
+          // An unconditional definition request should not receive a 304.
+          // Recover once before falling back to normal error handling.
+          if (response.status === 304 && recoveryAvailable) {
+            recoveryAvailable = false;
+            response = await request(this._config.headers);
+          }
 
           if (
             !response.ok ||
@@ -1195,8 +1255,7 @@ export class ReflagClient {
               `invalid response received from server for "${url}": ${JSON.stringify(response.body)}`,
             );
           }
-          const { success: _, ...result } = response.body;
-          return result as TResponse;
+          return response;
         },
         (error) => {
           this.logger.warn("failed to fetch flags, will retry", error);
@@ -1250,6 +1309,7 @@ export class ReflagClient {
    * @param event.evalContext - The evaluation context of the flag to send.
    * @param event.evalRuleResults - The evaluation rule results of the flag to send.
    * @param event.evalMissingFields - The evaluation missing fields of the flag to send.
+   * @param event.evalErrors - The non-fatal evaluation diagnostics of the flag to send.
    *
    * @throws An error if the event is invalid.
    *
@@ -1290,6 +1350,10 @@ export class ReflagClient {
         Array.isArray(event.evalMissingFields),
       "event missing fields must be an array",
     );
+    ok(
+      event.evalErrors === undefined || Array.isArray(event.evalErrors),
+      "event evaluation errors must be an array",
+    );
 
     const contextKey = new URLSearchParams(
       flattenJSON(event.evalContext || {}),
@@ -1315,13 +1379,7 @@ export class ReflagClient {
 
     await this.batchBuffer.add({
       type: "feature-flag-event",
-      action: event.action,
-      key: event.key,
-      targetingVersion: event.targetingVersion,
-      evalContext: event.evalContext,
-      evalResult: event.evalResult,
-      evalRuleResults: event.evalRuleResults,
-      evalMissingFields: event.evalMissingFields,
+      ...event,
     });
   }
 
@@ -1467,7 +1525,7 @@ export class ReflagClient {
   ): RawFlags | RawFlag | undefined {
     checkContextWithTracking(options);
 
-    if (!this.initializationFinished) {
+    if (!this.initializationFinished && !this._config.offline) {
       this.logger.error("getFlag(s): ReflagClient is not initialized yet.");
     }
 
@@ -1581,6 +1639,16 @@ export class ReflagClient {
     const simplifiedConfig = config
       ? { key: config.key, payload: config.payload }
       : { key: undefined, payload: undefined };
+    const evaluatedBeforeInitialization =
+      !this.initializationFinished && !this._config.offline;
+    const flagEvaluationErrors = withClientInitializationDiagnostic(
+      flag.evaluationErrors,
+      evaluatedBeforeInitialization,
+    );
+    const configEvaluationErrors = withClientInitializationDiagnostic(
+      config?.evaluationErrors,
+      evaluatedBeforeInitialization,
+    );
 
     return {
       get isEnabled() {
@@ -1596,6 +1664,7 @@ export class ReflagClient {
               evalContext: context,
               evalRuleResults: flag.ruleEvaluationResults,
               evalMissingFields: flag.missingContextFields,
+              evalErrors: flagEvaluationErrors,
             })
             .catch((err) => {
               client.logger?.error(
@@ -1619,6 +1688,7 @@ export class ReflagClient {
               evalContext: context,
               evalRuleResults: config?.ruleEvaluationResults,
               evalMissingFields: config?.missingContextFields,
+              evalErrors: configEvaluationErrors,
             })
             .catch((err) => {
               client.logger?.error(
@@ -1691,9 +1761,10 @@ export class ReflagClient {
     }
 
     const query = params.toString();
-    const res = await this.get<EvaluatedFlagsAPIResponse>(
+    const response = await this.getResponse<EvaluatedFlagsAPIResponse>(
       `features/evaluated${query ? `?${query}` : ""}`,
     );
+    const res = response?.body;
 
     if (key) {
       const flag = res?.features[key];
