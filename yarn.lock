@@ -6739,6 +6739,7 @@ __metadata:
     postcss-nesting: "npm:^12.0.2"
     postcss-preset-env: "npm:^9.3.0"
     preact: "npm:^10.22.1"
+    react-native-sse: "npm:^1.2.1"
     typescript: "npm:^5.7.3"
     vite: "npm:^6.4.2"
     vite-plugin-dts: "npm:^4.0.0-beta.1"

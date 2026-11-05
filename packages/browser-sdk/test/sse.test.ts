@@ -424,7 +424,7 @@ describe("custom transport retries", () => {
     expect(sse.isActive()).toBe(false);
   });
 
-  test("does not reset the retry budget when an asynchronous attempt fails", async () => {
+  test("preserves retries after repeated asynchronous custom transport failures", async () => {
     const sources: MockEventSource[] = [];
     const factory = vi.fn(() => {
       const source = new MockEventSource();
@@ -440,16 +440,20 @@ describe("custom transport retries", () => {
     );
 
     sse.open({ retryInterval: 100, retryCount: 1 });
-    sources[0].emit("error", 0);
-    await vi.advanceTimersByTimeAsync(100);
-    sources[1].emit("error", 0);
-    await vi.advanceTimersByTimeAsync(250);
+    for (let attempt = 0; attempt < 10; attempt++) {
+      sources[attempt].emit("error", 0);
+      await vi.advanceTimersByTimeAsync(100);
+    }
 
-    expect(factory).toHaveBeenCalledTimes(2);
+    expect(factory).toHaveBeenCalledTimes(11);
+    expect(sse.isActive()).toBe(true);
+    sse.close();
+    await vi.advanceTimersByTimeAsync(250);
+    expect(factory).toHaveBeenCalledTimes(11);
     expect(sse.isActive()).toBe(false);
   });
 
-  test("resets the custom transport retry budget only after an open event", async () => {
+  test("reconnects a custom transport after opening and stops on close", async () => {
     const sources: MockEventSource[] = [];
     const factory = vi.fn(() => {
       const source = new MockEventSource();

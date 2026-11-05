@@ -21,8 +21,6 @@ export class AblySSEChannel {
   private isOpen = false;
   private eventSource: EventSourceLike | null = null;
   private retryInterval: ReturnType<typeof setInterval> | null = null;
-  private retryCount = 3;
-  private retriesRemaining = 3;
   private logger: Logger;
 
   constructor(
@@ -84,7 +82,6 @@ export class AblySSEChannel {
 
   private onOpen(e: Event) {
     this.isOpen = true;
-    this.retriesRemaining = this.retryCount;
     this.logger.debug("event source connection opened", e);
   }
 
@@ -185,12 +182,15 @@ export class AblySSEChannel {
       return;
     }
 
-    this.retryCount = options?.retryCount ?? 3;
-    this.retriesRemaining = this.retryCount;
+    const retryCount = options?.retryCount ?? 3;
+    let retriesRemaining = retryCount;
 
     const tryConnect = async () => {
       try {
         await this.connect();
+        // Preserve the custom transport policy: only setup failures exhaust
+        // this budget. Async failures must recover after long mobile outages.
+        retriesRemaining = retryCount;
       } catch (e) {
         this.logger.warn("failed to create event source connection", e);
       }
@@ -206,13 +206,13 @@ export class AblySSEChannel {
     this.retryInterval = setInterval(
       () => {
         if (!this.eventSource && this.retryInterval) {
-          if (this.retriesRemaining <= 0) {
+          if (retriesRemaining <= 0) {
             clearInterval(this.retryInterval);
             this.retryInterval = null;
             return;
           }
 
-          this.retriesRemaining--;
+          retriesRemaining--;
           void tryConnect();
         }
       },

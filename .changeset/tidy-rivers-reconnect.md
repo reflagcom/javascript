@@ -2,4 +2,4 @@
 "@reflag/browser-sdk": patch
 ---
 
-Let the browser's EventSource handle SSE reconnection and respect terminal failures instead of recreating rejected connections indefinitely. Preserve bounded SDK retries for custom transports, resetting their retry budget only when the connection opens.
+Let the browser's EventSource handle SSE reconnection and respect terminal failures instead of recreating rejected connections indefinitely. Leave the existing custom transport retry policy unchanged so React Native can still recover after prolonged network outages.
