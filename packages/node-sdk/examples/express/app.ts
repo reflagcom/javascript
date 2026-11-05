@@ -71,7 +71,7 @@ app.post("/todos", (req, res) => {
     res.locals.reflagUser.getFlag("create-todos");
 
   // Check if the user has the "create-todos" feature enabled
-  if (isEnabled) {
+  if (isEnabled && config.payload) {
     // Check if the todo is at least N characters long
     if (todo.length < config.payload.minimumLength) {
       return res

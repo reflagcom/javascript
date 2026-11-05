@@ -9,8 +9,7 @@ export const booleanish = z.preprocess((value) => {
     return value === "true" || value === "1";
   }
   return Boolean(value);
-}, z.boolean().describe("Boolean value that can be parsed from strings like 'true' or '1'")) as z.ZodEffects<
-  z.ZodBoolean,
+}, z.boolean().describe("Boolean value that can be parsed from strings like 'true' or '1'")) as z.ZodType<
   boolean,
   boolean
 >;
