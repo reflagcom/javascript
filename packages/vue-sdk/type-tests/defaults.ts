@@ -16,8 +16,16 @@ export function DefaultContracts() {
   const { isEnabled: _isEnabled } = useFlag("release");
   // @ts-expect-error Boolean refs do not contain legacy wrapper fields
   void enabled.value.isEnabled;
-  // @ts-expect-error JSON defaults cannot contain undefined
-  useFlag("settings", { invalid: undefined });
+  interface Settings {
+    model: string;
+    limits: number[];
+  }
+  const fallback: Settings = { model: "quick", limits: [1] };
+  const _interface: ShallowRef<Settings> = useFlag("settings", fallback);
+  const _explicit: ShallowRef<Settings> = useFlag<Settings>(
+    "settings",
+    fallback,
+  );
   // @ts-expect-error literal defaults widen
   const _literal: ShallowRef<"quick"> = useFlag("model", "quick");
 }

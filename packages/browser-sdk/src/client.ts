@@ -1378,7 +1378,7 @@ export class ReflagClient {
 
   /** Boolean-first reads; positional defaults select other top-level JSON categories. */
   getFlag(key: string, defaultValue?: undefined): boolean;
-  getFlag<Default extends FlagDefaultValue>(
+  getFlag<Default extends FlagDefaultValue | object>(
     key: string,
     defaultValue: Default,
   ): FlagValueFromDefault<Default>;

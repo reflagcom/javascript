@@ -19,6 +19,7 @@ import {
   InitOptions,
   Logger,
   OptInFlag as BrowserOptInFlag,
+  FlagDefaultFor,
   FlagDefaultValue,
   FlagValue,
   FlagValueFromDefault,
@@ -610,8 +611,12 @@ export type UseOptInFlagsResult = {
 
 /** Boolean-first, non-suspending reads. Supply a positional default for JSON values. */
 export function useFlag(key: FlagKey, defaultValue?: undefined): boolean;
-export function useFlag<Default extends FlagDefaultValue>(
-  key: FlagKey,
+export function useFlag<
+  Key extends FlagKey,
+  Default extends FlagDefaultFor<Flags, Key>,
+>(key: Key, defaultValue: Default): FlagValueFromDefault<Default>;
+export function useFlag<Default extends FlagDefaultValue | object>(
+  key: keyof Flags extends never ? string : never,
   defaultValue: Default,
 ): FlagValueFromDefault<Default>;
 export function useFlag(
@@ -626,8 +631,12 @@ export function useFlagSuspense(
   key: FlagKey,
   defaultValue?: undefined,
 ): boolean;
-export function useFlagSuspense<Default extends FlagDefaultValue>(
-  key: FlagKey,
+export function useFlagSuspense<
+  Key extends FlagKey,
+  Default extends FlagDefaultFor<Flags, Key>,
+>(key: Key, defaultValue: Default): FlagValueFromDefault<Default>;
+export function useFlagSuspense<Default extends FlagDefaultValue | object>(
+  key: keyof Flags extends never ? string : never,
   defaultValue: Default,
 ): FlagValueFromDefault<Default>;
 export function useFlagSuspense(

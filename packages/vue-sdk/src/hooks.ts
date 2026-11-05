@@ -22,6 +22,8 @@ import {
   FlagKey,
   OptInFlag,
   ProviderContextType,
+  Flags,
+  FlagDefaultFor,
   FlagDefaultValue,
   FlagValue,
   FlagValueFromDefault,
@@ -75,8 +77,12 @@ export function useFlag(
   key: FlagKey,
   defaultValue?: undefined,
 ): ShallowRef<boolean>;
-export function useFlag<Default extends FlagDefaultValue>(
-  key: FlagKey,
+export function useFlag<
+  Key extends FlagKey,
+  Default extends FlagDefaultFor<Flags, Key>,
+>(key: Key, defaultValue: Default): ShallowRef<FlagValueFromDefault<Default>>;
+export function useFlag<Default extends FlagDefaultValue | object>(
+  key: keyof Flags extends never ? string : never,
   defaultValue: Default,
 ): ShallowRef<FlagValueFromDefault<Default>>;
 export function useFlag(

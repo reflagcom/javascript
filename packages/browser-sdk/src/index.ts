@@ -49,6 +49,7 @@ export type {
 } from "./flag/flags";
 export type {
   FlagValue,
+  FlagDefaultFor,
   FlagDefaultValue,
   FlagValueFromDefault,
 } from "./flag/values";

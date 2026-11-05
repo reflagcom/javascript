@@ -14,7 +14,11 @@ const _values: Record<string, FlagValue | undefined> = client.getFlags();
 
 // @ts-expect-error bare reads no longer return wrappers
 const { isEnabled: _isEnabled } = client.getFlag("release");
-// @ts-expect-error JSON defaults cannot contain undefined
-client.getFlag("settings", { invalid: undefined });
+interface Settings {
+  model: string;
+  limits: number[];
+}
+const fallback: Settings = { model: "quick", limits: [1] };
+const _interface: Settings = client.getFlag("settings", fallback);
 // @ts-expect-error literal defaults widen to string, not a specific authored variant
 const _literal: "quick" = client.getFlag("model", "quick");

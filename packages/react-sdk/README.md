@@ -2,7 +2,7 @@
 
 Direct-value feature flags for React, backed by [Browser SDK v2](../browser-sdk/README.md).
 
-> Breaking prerelease: requires compatible v2 server endpoints and **Node SDK v2** for bootstrap. The existing CLI's wrapper-shaped output has not been migrated; useful default-based inference does not require generated declarations. React Native remains on published React/Browser v1 in this repository.
+> Breaking prerelease: requires compatible v2 server endpoints and **Node SDK v2** for bootstrap. The v2 CLI generates direct-value declarations; regenerate legacy wrapper-shaped output when migrating. Useful default-based inference does not require generated declarations. React Native remains on published React/Browser v1 in this repository.
 
 ## Setup
 
@@ -102,7 +102,7 @@ declare module "@reflag/react-sdk" {
 }
 ```
 
-Registration constrains keys. It does not change a bare singular read into a wrapper or infer a multivariate return type without a default. The positional default determines the returned type. Existing legacy generated wrapper declarations cannot restore `.isEnabled` access on a Boolean read; replace them with direct-value declarations when updating generation.
+Registration constrains keys and checks non-null defaults against the registered value schema, including required and nested properties. Named-interface and readonly defaults are supported. Explicit `null` remains an arbitrary-JSON request; bare/`undefined` reads remain Boolean. The positional default still determines the widened return type, and generated declarations do not add nested runtime validation. The same rules apply to `useFlagSuspense`. The v2 CLI generates direct-value declarations from current production-environment variants; regenerate legacy wrapper declarations when migrating.
 
 ## Bootstrap and SSR
 

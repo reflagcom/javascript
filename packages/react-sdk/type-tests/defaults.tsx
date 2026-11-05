@@ -19,8 +19,17 @@ export function DefaultContracts() {
   const release = useFlag("release");
   // @ts-expect-error assigned reads cannot use legacy wrapper fields either
   void release.isEnabled;
-  // @ts-expect-error JSON defaults cannot contain undefined
-  useFlag("settings", { invalid: undefined });
+  interface Settings {
+    model: string;
+    limits: number[];
+  }
+  const fallback: Settings = { model: "quick", limits: [1] };
+  const _interface: Settings = useFlag("settings", fallback);
+  const _explicit: Settings = useFlag<Settings>("settings", fallback);
+  const _explicitReady: Settings = useFlagSuspense<Settings>(
+    "settings",
+    fallback,
+  );
   // @ts-expect-error literals widen
   const _literal: "quick" = useFlag("model", "quick");
   return null;

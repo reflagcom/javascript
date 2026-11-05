@@ -27,7 +27,7 @@
     "dev": "vite",
     "build": "tsc --project tsconfig.build.json && vite build",
     "test": "yarn test:types && vitest run",
-    "test:types": "tsc --project tsconfig.type-tests.json && tsc --project tsconfig.type-tests-defaults.json",
+    "test:types": "tsc --project tsconfig.type-tests.json && tsc --project tsconfig.type-tests-defaults.json && tsc --project tsconfig.type-tests-registered.json",
     "test:watch": "vitest",
     "test:ci": "yarn test --reporter=default --reporter=junit --outputFile=junit.xml",
     "coverage": "yarn test --coverage",

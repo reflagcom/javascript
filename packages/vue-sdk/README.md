@@ -2,7 +2,7 @@
 
 Reactive direct-value flags for Vue 3, backed by [Browser SDK v2](../browser-sdk/README.md).
 
-> Breaking prerelease: requires the compatible v2 server protocol. Bootstrap must come from **Node SDK v2**, not v1. Generated declarations are optional; existing CLI wrapper-shaped generation has not been migrated.
+> Breaking prerelease: requires the compatible v2 server protocol. Bootstrap must come from **Node SDK v2**, not v1. Generated declarations are optional; the v2 CLI supports `--format vue` and direct-value schemas. Regenerate legacy wrapper-shaped declarations when migrating.
 
 ## Setup
 
@@ -122,6 +122,6 @@ declare module "@reflag/vue-sdk" {
 }
 ```
 
-Registration constrains keys, not bare singular return types. Positional defaults determine inferred direct-value types. Old generated wrappers cannot restore wrapper semantics.
+Registration constrains keys and checks non-null defaults against the registered value schema, including required and nested properties. Named-interface and readonly defaults are supported. Explicit `null` remains an arbitrary-JSON request; bare/`undefined` reads remain Boolean refs. Positional defaults still determine widened direct-value types, and generated declarations do not add nested runtime validation. The v2 CLI generates these schemas from current production-environment variants with `--format vue`; regenerate old wrapper declarations when migrating.
 
 Replace `const { isEnabled } = useFlag(key)` with `const enabled = useFlag(key)` (then `enabled.value` in script). Replace remote-config wrappers with separately authored multivariate flags and positional defaults, and move usage/feedback into their separate composables. Bootstrap both ends with v2. This branch does not publish SDKs or deploy the required server changes.

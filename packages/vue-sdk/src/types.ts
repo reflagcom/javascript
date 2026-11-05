@@ -7,6 +7,7 @@ import type {
   Logger,
   OptInFlag as BrowserOptInFlag,
   FlagValue,
+  FlagDefaultFor,
   FlagDefaultValue,
   FlagValueFromDefault,
   ReflagClient,
@@ -15,7 +16,12 @@ import type {
   UserContext,
 } from "@reflag/browser-sdk";
 
-export type { FlagValue, FlagDefaultValue, FlagValueFromDefault };
+export type {
+  FlagValue,
+  FlagDefaultFor,
+  FlagDefaultValue,
+  FlagValueFromDefault,
+};
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface Flags {}

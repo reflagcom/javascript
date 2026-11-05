@@ -19,7 +19,7 @@ export default defineConfig({
   },
   plugins: [
     vue(),
-    dts({ insertTypesEntry: true, exclude: ["dev"] }),
+    dts({ insertTypesEntry: true, exclude: ["dev"], aliasesExclude: ["vue"] }),
     preserveDirectives(),
   ],
   build: {
