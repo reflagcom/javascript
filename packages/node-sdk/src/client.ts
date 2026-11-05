@@ -36,7 +36,9 @@ import type {
   ContextWithTracking,
   EvaluatedFlagsAPIResponse,
   FlagCollection,
+  FlagDefaultFor,
   FlagDefaultValue,
+  Flags,
   FlagEvent,
   FlagOverrides,
   FlagOverridesFn,
@@ -94,21 +96,21 @@ type BulkEvent =
 function normalizeOverrides(
   overrides?: FlagOverrides | FlagOverridesFn,
 ): FlagOverridesFn {
+  if (typeof overrides === "function") {
+    return (context) => {
+      const result = overrides(context);
+      ok(
+        isObject(result) && isFlagValue(result),
+        "flagOverrides must return a JSON value map",
+      );
+      return result;
+    };
+  }
   ok(
-    overrides === undefined ||
-      typeof overrides === "function" ||
-      (isObject(overrides) && isFlagValue(overrides)),
+    overrides === undefined || (isObject(overrides) && isFlagValue(overrides)),
     "flagOverrides must be a JSON value map or function",
   );
-  if (typeof overrides !== "function") return () => overrides ?? {};
-  return (context) => {
-    const result = overrides(context);
-    ok(
-      isObject(result) && isFlagValue(result),
-      "flagOverrides must return a JSON value map",
-    );
-    return result;
-  };
+  return () => overrides ?? {};
 }
 function scheduleRefresh(delayMs: number, callback: () => void) {
   const timer = setTimeout(callback, delayMs);
@@ -420,7 +422,10 @@ export class ReflagClient {
     key: Key,
     defaultValue?: undefined,
   ): boolean;
-  public getFlag<Key extends TypedFlagKey, Default extends FlagDefaultValue>(
+  public getFlag<
+    Key extends TypedFlagKey,
+    Default extends FlagDefaultFor<Flags, Key>,
+  >(
     options: ContextWithTracking,
     key: Key,
     defaultValue: Default,
@@ -628,7 +633,7 @@ export class ReflagClient {
   ): Promise<boolean>;
   public getFlagRemote<
     Key extends TypedFlagKey,
-    Default extends FlagDefaultValue,
+    Default extends FlagDefaultFor<Flags, Key>,
   >(
     key: Key,
     defaultValue: Default,
@@ -876,23 +881,28 @@ export class BoundReflagClient {
     key: Key,
     defaultValue?: undefined,
   ): boolean;
-  public getFlag<Key extends TypedFlagKey, Default extends FlagDefaultValue>(
-    key: Key,
-    defaultValue: Default,
-  ): FlagValueFromDefault<Default>;
+  public getFlag<
+    Key extends TypedFlagKey,
+    Default extends FlagDefaultFor<Flags, Key>,
+  >(key: Key, defaultValue: Default): FlagValueFromDefault<Default>;
   public getFlag(
     key: TypedFlagKey,
     defaultValue: FlagDefaultValue = false,
   ): FlagValue {
-    return this.client.getFlag(this.options, key, defaultValue);
+    // The public overload already checked the key/default relationship.
+    return this.client.getFlag(
+      this.options,
+      key,
+      defaultValue as FlagDefaultFor<Flags, typeof key>,
+    ) as FlagValue;
   }
-  public getFlags() {
+  public getFlags(): TypedFlags {
     return this.client.getFlags(this.options);
   }
   public getFlagsForBootstrap() {
     return this.client.getFlagsForBootstrap(this.options);
   }
-  public async getFlagsRemote() {
+  public async getFlagsRemote(): Promise<TypedFlags> {
     return this.client.getFlagsRemote(undefined, undefined, this.options);
   }
   public getFlagRemote<Key extends TypedFlagKey>(
@@ -901,19 +911,20 @@ export class BoundReflagClient {
   ): Promise<boolean>;
   public getFlagRemote<
     Key extends TypedFlagKey,
-    Default extends FlagDefaultValue,
+    Default extends FlagDefaultFor<Flags, Key>,
   >(key: Key, defaultValue: Default): Promise<FlagValueFromDefault<Default>>;
   public getFlagRemote(
     key: TypedFlagKey,
     defaultValue: FlagDefaultValue = false,
   ): Promise<FlagValue> {
+    // Preserve the relationship checked by the bound public overload.
     return this.client.getFlagRemote(
       key,
-      defaultValue,
+      defaultValue as FlagDefaultFor<Flags, typeof key>,
       undefined,
       undefined,
       this.options,
-    );
+    ) as Promise<FlagValue>;
   }
   public bindClient(next: ContextWithTracking) {
     return new BoundReflagClient(this.client, {
