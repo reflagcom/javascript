@@ -35,6 +35,7 @@ export type {
   ContextWithTracking,
   FlagCollection,
   FlagDefinition,
+  FlagDefaultFor,
   FlagDefaultValue,
   FlagEvent,
   FlagOverrides,

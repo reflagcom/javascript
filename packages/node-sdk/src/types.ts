@@ -22,6 +22,23 @@ export type FlagDefaultValue =
   | readonly FlagDefaultValue[]
   | { readonly [key: string]: FlagDefaultValue };
 
+// Keep arbitrary JSON opaque instead of recursively expanding its index signature.
+type ReadonlyFlagValue<T> = FlagValue extends T
+  ? FlagDefaultValue | object
+  : T extends object
+    ? { readonly [Key in keyof T]: ReadonlyFlagValue<T[Key]> }
+    : T;
+
+/** Registered defaults match the value schema; null explicitly requests arbitrary JSON. */
+export type FlagDefaultFor<
+  Registry,
+  Key extends PropertyKey,
+> = keyof Registry extends never
+  ? FlagDefaultValue | object
+  : Key extends keyof Registry
+    ? ReadonlyFlagValue<Registry[Key]> | null
+    : never;
+
 /** Infer values from defaults, widening literals. Null explicitly requests arbitrary JSON. */
 export type FlagValueFromDefault<T> = T extends null
   ? FlagValue

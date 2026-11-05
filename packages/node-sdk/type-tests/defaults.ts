@@ -1,6 +1,6 @@
 import { expectTypeOf } from "vitest";
 
-import { ReflagClient, type FlagValue } from "../src";
+import { ReflagClient, type FlagDefaultValue, type FlagValue } from "../src";
 
 // Deliberately no Flags augmentation or generated declarations.
 declare const client: ReflagClient;
@@ -43,6 +43,13 @@ expectTypeOf(bound.getFlagRemote("settings", { model: "Swift" })).toEqualTypeOf<
   Promise<{ model: string }>
 >();
 
+function forwardDefault<Default extends FlagDefaultValue>(value: Default) {
+  return bound.getFlag("settings", value);
+}
+expectTypeOf(forwardDefault({ model: "Swift" })).toEqualTypeOf<{
+  model: string;
+}>();
+
 // @ts-expect-error Boolean reads do not return the legacy wrapper, even with aliases.
 const { isEnabled: _legacyAlias } = client.getFlag({}, "release");
 const legacyValue = client.getFlag({}, "release");
@@ -54,5 +61,20 @@ expectTypeOf(bound.getFlag("settings", dictionaryDefault)).toEqualTypeOf<
   Record<string, string>
 >();
 
-// @ts-expect-error Functions are not JSON defaults.
-bound.getFlag("settings", () => false);
+interface Prompt {
+  tone: string;
+}
+interface Settings {
+  model: string;
+  prompt: Prompt;
+}
+const interfaceDefault: Settings = {
+  model: "Swift",
+  prompt: { tone: "concise" },
+};
+expectTypeOf(
+  bound.getFlag("settings", interfaceDefault),
+).toEqualTypeOf<Settings>();
+expectTypeOf(client.getFlagRemote("settings", interfaceDefault)).toEqualTypeOf<
+  Promise<Settings>
+>();

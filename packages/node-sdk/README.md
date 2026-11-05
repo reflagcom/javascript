@@ -152,7 +152,7 @@ Overrides are direct JSON values. Pushed layers win over base overrides and can 
 
 ## Typed flags
 
-Generated declarations are optional. Singular reads infer their return type from the default, or return Boolean when no default is supplied. Optionally augment `Flags` to constrain keys and type batch records:
+Generated declarations are optional. Singular reads infer their return type from the default, or return Boolean when no default is supplied. Optionally augment `Flags` to constrain keys, check non-null defaults against each key's value schema, and type batch records:
 
 ```ts
 declare module "@reflag/node-sdk" {
@@ -167,7 +167,7 @@ const model = reflag.getFlag(context, "model", "quick"); // string
 const models = reflag.getFlags(context); // models.model: "quick" | "quality" | undefined
 ```
 
-Augmentation does not change the bare-key Boolean contract or validate JSON payloads. The legacy CLI-generated config-wrapper types are not a v2 value schema. Update declarations when migrating. Both destructuring `.isEnabled` and accessing it through an assigned singular value fail type checking, including without generated declarations. See the Express example for a typed direct-value integration.
+Augmentation rejects defaults with the wrong category, missing required properties, or incompatible nested types. Named-interface and readonly defaults are supported. Explicit `null` remains an arbitrary-JSON request, and bare/`undefined` reads still return Boolean. Return types continue to be inferred and widened from the default; generated types do not add nested runtime validation. The v2 CLI generates direct-value schemas from current production-environment variants. Regenerate old CLI wrapper declarations when migrating. Both destructuring `.isEnabled` and accessing it through an assigned singular value fail type checking, including without generated declarations. See the Express example for a typed direct-value integration.
 
 ## Bootstrap state
 
