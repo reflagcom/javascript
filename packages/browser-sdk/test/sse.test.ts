@@ -6,6 +6,18 @@ import { testLogger } from "./testLogger";
 const sseHost = "https://ssehost.com/path";
 const channel = "channel";
 
+class MockEventSource extends EventTarget {
+  readyState = 0;
+  close = vi.fn(() => {
+    this.readyState = 2;
+  });
+
+  emit(type: "open" | "error", readyState: number) {
+    this.readyState = readyState;
+    this.dispatchEvent(new Event(type));
+  }
+}
+
 function createSSEChannel(
   callback: (message: any) => void = vi.fn(),
   channels: string[] = [channel],
@@ -195,43 +207,26 @@ describe("connection handling", () => {
     expect(callback).toHaveBeenCalledWith({ data: "plain-text" });
   });
 
-  test("opens and connects, then closes", async () => {
-    const addEventListener = vi.fn();
-    const close = vi.fn();
-
-    mockEventSource({ addEventListener, close });
+  test("is connected only after the open event, then closes", async () => {
+    const source = new MockEventSource();
+    const addEventListener = vi.fn(source.addEventListener.bind(source));
+    mockEventSource({ addEventListener, close: source.close });
 
     const sse = createSSEChannel();
-
     await sse.connect();
 
     expect(addEventListener).toHaveBeenCalledTimes(3);
+    expect(sse.isConnected()).toBe(false);
+    expect(sse.isActive()).toBe(true);
+
+    source.emit("open", 1);
     expect(sse.isConnected()).toBe(true);
 
     sse.disconnect();
 
-    expect(close).toHaveBeenCalledTimes(1);
+    expect(source.close).toHaveBeenCalledTimes(1);
     expect(sse.isConnected()).toBe(false);
-  });
-
-  test("disconnects on event source errors", async () => {
-    const close = vi.fn();
-    let errorCallback: ((e: Event) => void) | undefined;
-
-    mockEventSource({
-      addEventListener: (event: string, cb: (e: Event) => void) => {
-        if (event === "error") errorCallback = cb;
-      },
-      close,
-    });
-
-    const sse = createSSEChannel();
-    await sse.connect();
-
-    errorCallback!({} as any);
-
-    expect(close).toHaveBeenCalledTimes(1);
-    expect(sse.isConnected()).toBe(false);
+    expect(sse.isActive()).toBe(false);
   });
 
   test("openAblySSEChannel opens immediately", () => {
@@ -285,7 +280,122 @@ describe("connection handling", () => {
   });
 });
 
-describe("automatic retries", () => {
+describe("native reconnection", () => {
+  let source: MockEventSource;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.clearAllMocks();
+    source = new MockEventSource();
+    mockEventSource({
+      addEventListener: source.addEventListener.bind(source),
+      close: source.close,
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test("lets EventSource reconnect after a recoverable error", async () => {
+    const sse = createSSEChannel();
+    sse.open();
+    source.emit("open", 1);
+    source.emit("error", 0);
+
+    expect(source.close).not.toHaveBeenCalled();
+    expect(sse.isConnected()).toBe(false);
+    expect(sse.isActive()).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(90_000);
+    expect(window.EventSource).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+
+    source.emit("open", 1);
+    expect(sse.isConnected()).toBe(true);
+    sse.close();
+  });
+
+  test.each([false, true])(
+    "does not recreate a terminal connection (previously open: %s)",
+    async (previouslyOpen) => {
+      const sse = createSSEChannel();
+      sse.open();
+      if (previouslyOpen) source.emit("open", 1);
+      source.emit("error", 2);
+
+      await vi.advanceTimersByTimeAsync(90_000);
+
+      expect(window.EventSource).toHaveBeenCalledTimes(1);
+      expect(source.close).toHaveBeenCalledTimes(1);
+      expect(sse.isConnected()).toBe(false);
+      expect(sse.isActive()).toBe(false);
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  test("does not create duplicate connections while connecting or reconnecting", () => {
+    const sse = createSSEChannel();
+    sse.open();
+    sse.open();
+    source.emit("error", 0);
+    sse.open();
+
+    expect(window.EventSource).toHaveBeenCalledTimes(1);
+    sse.close();
+  });
+
+  test("closes a pending connection and ignores late events", async () => {
+    const callback = vi.fn();
+    const sse = createSSEChannel(callback);
+    sse.open();
+    sse.close();
+    source.emit("open", 1);
+    source.dispatchEvent(new MessageEvent("message", { data: '{"data":1}' }));
+    source.emit("error", 0);
+    await vi.advanceTimersByTimeAsync(90_000);
+
+    expect(source.close).toHaveBeenCalledTimes(1);
+    expect(window.EventSource).toHaveBeenCalledTimes(1);
+    expect(callback).not.toHaveBeenCalled();
+    expect(sse.isConnected()).toBe(false);
+    expect(sse.isActive()).toBe(false);
+  });
+
+  test("allows an explicit reopen without accepting events from the old source", () => {
+    const sse = createSSEChannel();
+    sse.open();
+    source.emit("error", 2);
+
+    const replacement = new MockEventSource();
+    mockEventSource({
+      addEventListener: replacement.addEventListener.bind(replacement),
+      close: replacement.close,
+    });
+    sse.open();
+    replacement.emit("open", 1);
+    source.emit("error", 2);
+
+    expect(window.EventSource).toHaveBeenCalledTimes(2);
+    expect(sse.isConnected()).toBe(true);
+    expect(replacement.close).not.toHaveBeenCalled();
+    sse.close();
+  });
+
+  test("does not retry synchronous native construction failures", async () => {
+    const sse = createSSEChannel();
+    const connect = vi
+      .spyOn(sse, "connect")
+      .mockRejectedValue(new Error("boom"));
+    sse.open();
+    await vi.advanceTimersByTimeAsync(90_000);
+
+    expect(connect).toHaveBeenCalledTimes(1);
+    expect(sse.isActive()).toBe(false);
+  });
+});
+
+describe("custom transport retries", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
@@ -295,34 +405,102 @@ describe("automatic retries", () => {
     vi.useRealTimers();
   });
 
-  test("retries after a failed connection attempt", async () => {
-    const sse = createSSEChannel();
-    const connect = vi
-      .spyOn(sse, "connect")
-      .mockRejectedValueOnce(new Error("boom"))
-      .mockResolvedValueOnce(undefined);
-    vi.spyOn(sse, "isConnected")
-      .mockReturnValueOnce(false)
-      .mockReturnValue(true);
+  test("bounds retries for synchronous factory failures", async () => {
+    const factory = vi.fn(() => {
+      throw new Error("boom");
+    });
+    const sse = new AblySSEChannel(
+      [channel],
+      sseHost,
+      vi.fn(),
+      testLogger,
+      factory,
+    );
 
     sse.open({ retryInterval: 100, retryCount: 1 });
     await vi.advanceTimersByTimeAsync(250);
-    sse.close();
 
-    expect(connect).toHaveBeenCalledTimes(2);
+    expect(factory).toHaveBeenCalledTimes(2);
+    expect(sse.isActive()).toBe(false);
   });
 
-  test("stops retrying when no retries remain", async () => {
-    const sse = createSSEChannel();
-    const connect = vi
-      .spyOn(sse, "connect")
-      .mockRejectedValue(new Error("boom"));
+  test("does not reset the retry budget when an asynchronous attempt fails", async () => {
+    const sources: MockEventSource[] = [];
+    const factory = vi.fn(() => {
+      const source = new MockEventSource();
+      sources.push(source);
+      return source;
+    });
+    const sse = new AblySSEChannel(
+      [channel],
+      sseHost,
+      vi.fn(),
+      testLogger,
+      factory,
+    );
+
+    sse.open({ retryInterval: 100, retryCount: 1 });
+    sources[0].emit("error", 0);
+    await vi.advanceTimersByTimeAsync(100);
+    sources[1].emit("error", 0);
+    await vi.advanceTimersByTimeAsync(250);
+
+    expect(factory).toHaveBeenCalledTimes(2);
+    expect(sse.isActive()).toBe(false);
+  });
+
+  test("resets the custom transport retry budget only after an open event", async () => {
+    const sources: MockEventSource[] = [];
+    const factory = vi.fn(() => {
+      const source = new MockEventSource();
+      sources.push(source);
+      return source;
+    });
+    const sse = new AblySSEChannel(
+      [channel],
+      sseHost,
+      vi.fn(),
+      testLogger,
+      factory,
+    );
+
+    sse.open({ retryInterval: 100, retryCount: 1 });
+    sources[0].emit("error", 0);
+    await vi.advanceTimersByTimeAsync(100);
+    sources[1].emit("open", 1);
+    sources[1].emit("error", 0);
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(factory).toHaveBeenCalledTimes(3);
+    sources[2].emit("open", 1);
+    expect(sse.isConnected()).toBe(true);
+    sse.close();
+    await vi.advanceTimersByTimeAsync(250);
+    expect(factory).toHaveBeenCalledTimes(3);
+    expect(sse.isActive()).toBe(false);
+  });
+
+  test("does not spend retries while a custom transport is still connecting", async () => {
+    const source = new MockEventSource();
+    const factory = vi.fn(() => source);
+    const sse = new AblySSEChannel(
+      [channel],
+      sseHost,
+      vi.fn(),
+      testLogger,
+      factory,
+    );
 
     sse.open({ retryInterval: 100, retryCount: 1 });
     await vi.advanceTimersByTimeAsync(250);
+    expect(factory).toHaveBeenCalledTimes(1);
+    expect(sse.isActive()).toBe(true);
+    expect(sse.isConnected()).toBe(false);
 
-    expect(connect).toHaveBeenCalledTimes(2);
-    expect(sse.isActive()).toBe(false);
+    source.emit("error", 0);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(factory).toHaveBeenCalledTimes(2);
+    sse.close();
   });
 
   test("does not start retries when EventSource is unavailable", async () => {
@@ -336,7 +514,7 @@ describe("automatic retries", () => {
       const sse = createSSEChannel();
       const connect = vi.spyOn(sse, "connect");
 
-      sse.open({ retryInterval: 100, retryCount: 1 });
+      sse.open();
       await vi.advanceTimersByTimeAsync(250);
 
       expect(connect).not.toHaveBeenCalled();
