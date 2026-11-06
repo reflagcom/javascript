@@ -681,33 +681,50 @@ for (const source of ["widget", "prompt"] as const) {
       });
     }
 
-    test("waits for an in-flight score save after closing", async ({
-      page,
-    }) => {
-      const pendingSave = deferred<void>();
-      let saving = false;
-      await page.route(`${API_HOST}/feedback`, async (route) => {
-        saving = true;
-        await pendingSave.promise;
-        await route.fulfill({
-          status: 200,
-          body: JSON.stringify({ feedbackId: "123" }),
-          contentType: "application/json",
+    for (const action of ["closing", "replacement"] as const) {
+      test(`waits for an in-flight score save after ${action}`, async ({
+        page,
+      }) => {
+        const pendingSave = deferred<void>();
+        let saving = false;
+        await page.route(`${API_HOST}/feedback`, async (route) => {
+          saving = true;
+          await pendingSave.promise;
+          await route.fulfill({ json: { feedbackId: "123" } });
         });
-      });
-      const container = await getOpenedWidgetContainer(page, {}, source);
-      await setScore(container, 4);
-      await expect.poll(() => saving).toBe(true);
-      await container.locator(".dialog .close").click();
-      expect(await page.evaluate(() => window.feedbackSubmissions)).toEqual([]);
+        const container = await getOpenedWidgetContainer(page, {}, source);
+        await setScore(container, 4);
+        await expect.poll(() => saving).toBe(true);
+        if (action === "replacement") {
+          await page.evaluate(() => window.requestTestFeedback());
+          await expect(
+            container.locator("#reflag-feedback-score-4"),
+          ).not.toBeChecked();
+        } else {
+          await container.locator(".dialog .close").click();
+        }
+        expect(await page.evaluate(() => window.feedbackSubmissions)).toEqual(
+          [],
+        );
 
-      pendingSave.resolve();
-      await expect
-        .poll(() => page.evaluate(() => window.feedbackSubmissions))
-        .toEqual([
-          { question: "baz", score: 4, feedbackId: "123", comment: "" },
-        ]);
-    });
+        pendingSave.resolve();
+        await expect
+          .poll(() => page.evaluate(() => window.feedbackSubmissions))
+          .toEqual([
+            { question: "baz", score: 4, feedbackId: "123", comment: "" },
+          ]);
+
+        if (action === "replacement") {
+          await expect(
+            container.locator("#reflag-feedback-score-4"),
+          ).not.toBeChecked();
+          await container.locator(".dialog .close").click();
+          expect(
+            await page.evaluate(() => window.feedbackSubmissions),
+          ).toHaveLength(1);
+        }
+      });
+    }
 
     test("notifies when a saved response is replaced by a new form", async ({
       page,
