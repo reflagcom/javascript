@@ -41,6 +41,19 @@ export interface OpenFeedbackFormOptions {
   openWithCommentVisible?: boolean;
 
   onSubmit: (data: FeedbackSubmission) => Promise<void> | void;
+
+  /**
+   * Handle a copy of submitted feedback, for example to send it to analytics
+   * or your own CRM. Called once per form: after submitting the form, or when
+   * it closes with a saved score without a form submission.
+   *
+   * On close, includes the latest saved score and an empty comment. Comment
+   * text that was not submitted is never included. If a save is in flight,
+   * the callback waits for it to finish. Closing without feedback does not
+   * call the callback.
+   */
+  onAfterSubmit?: (data: FeedbackSubmission) => void;
+
   onScoreSubmit?: (
     data: FeedbackScoreSubmission,
   ) => Promise<OnScoreSubmitResult>;

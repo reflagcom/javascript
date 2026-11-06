@@ -12,11 +12,7 @@ import {
 } from "./prompts";
 import * as feedbackLib from "./ui";
 import { DEFAULT_POSITION } from "./ui";
-import {
-  FeedbackSubmission,
-  FeedbackTranslations,
-  OpenFeedbackFormOptions,
-} from "./ui/types";
+import { FeedbackTranslations, OpenFeedbackFormOptions } from "./ui/types";
 
 const INITIAL_FETCH_RETRY_DELAYS_MS = [0, 5000];
 
@@ -58,17 +54,6 @@ export type RequestFeedbackData = Omit<
    * Company ID from your own application.
    */
   companyId?: string;
-
-  /**
-   * Allows you to handle a copy of the already submitted
-   * feedback.
-   *
-   * This can be used for side effects, such as storing a
-   * copy of the feedback in your own application or CRM.
-   *
-   * @param {Object} data
-   */
-  onAfterSubmit?: (data: FeedbackSubmission) => void;
 
   /**
    * Flag key.
@@ -436,7 +421,6 @@ export class AutoFeedback {
           },
           onSubmit: async (data) => {
             await replyCallback(data);
-            options.onAfterSubmit?.(data);
           },
           onDismiss: () => replyCallback(null),
           position: this.position,

@@ -1186,6 +1186,7 @@ export class ReflagClient {
         openWithCommentVisible: options.openWithCommentVisible,
         onClose: options.onClose,
         onDismiss: options.onDismiss,
+        onAfterSubmit: options.onAfterSubmit,
         onScoreSubmit: async (data) => {
           const res = await this.feedback({
             ...feedbackData,
@@ -1204,8 +1205,6 @@ export class ReflagClient {
             ...feedbackData,
             ...data,
           });
-
-          options.onAfterSubmit?.(data);
         },
       });
     }, 1);
