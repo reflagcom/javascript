@@ -27,6 +27,10 @@ jobs:
       - name: Restore Node.js dependencies
         run: yarn install --immutable
       - name: Audit dependencies
+        # Accepted exception: npm 1243505 / GHSA-gcqx-w48m-w2h4 (deepmerge).
+        # Only Expo/RN config and CLI checks in private development apps; no upstream fix.
+        # Owner: @roncohen. Accepted: 2026-11-06. Review by: 2027-02-04, or when a fix ships.
+        # audit:ci ignores this advisory only; unfiltered audits still report it.
         run: yarn audit:ci
       - name: Restore package.json
         # This step is necessary because the previous step may have updated package.json

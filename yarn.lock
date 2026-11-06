@@ -6269,12 +6269,6 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@reflag/tooling-deepmerge@workspace:tools/deepmerge, deepmerge@workspace:tools/deepmerge":
-  version: 0.0.0-use.local
-  resolution: "@reflag/tooling-deepmerge@workspace:tools/deepmerge"
-  languageName: unknown
-  linkType: soft
-
 "@reflag/tsconfig@npm:0.0.2, @reflag/tsconfig@npm:^0.0.2, @reflag/tsconfig@npm:~0.0.2, @reflag/tsconfig@workspace:packages/tsconfig":
   version: 0.0.0-use.local
   resolution: "@reflag/tsconfig@workspace:packages/tsconfig"
@@ -10285,6 +10279,13 @@ __metadata:
   version: 0.6.0
   resolution: "deep-extend@npm:0.6.0"
   checksum: 10c0/1c6b0abcdb901e13a44c7d699116d3d4279fdb261983122a3783e7273844d5f2537dc2e1c454a23fcf645917f93fbf8d07101c1d03c015a87faa662755212566
+  languageName: node
+  linkType: hard
+
+"deepmerge@npm:^4.3.0, deepmerge@npm:^4.3.1":
+  version: 4.3.1
+  resolution: "deepmerge@npm:4.3.1"
+  checksum: 10c0/e53481aaf1aa2c4082b5342be6b6d8ad9dfe387bc92ce197a66dea08bd4265904a087e75e464f14d1347cf2ac8afe1e4c16b266e0561cc5df29382d3c5f80044
   languageName: node
   linkType: hard
 

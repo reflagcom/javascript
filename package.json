@@ -5,7 +5,6 @@
   "license": "MIT",
   "workspaces": [
     "packages/*",
-    "tools/*",
     "packages/management-sdk/examples/*",
     "packages/react-sdk/dev/*",
     "packages/react-native-sdk/dev/*",
@@ -18,7 +17,7 @@
     "build": "lerna run build --stream",
     "test:ci": "yarn test:tooling && lerna run test:ci --stream",
     "test:tooling": "node --test scripts/dependency-compat.test.cjs",
-    "audit:ci": "yarn npm audit --all --recursive --no-deprecations",
+    "audit:ci": "yarn npm audit --all --recursive --no-deprecations --ignore 1243505",
     "test": "lerna run test --stream",
     "format": "yarn fmt:fix && yarn lint:fix",
     "lint": "yarn oxlint .",
@@ -49,7 +48,6 @@
   },
   "resolutions": {
     "basic-ftp@npm:^5.3.1": "npm:6.2.6",
-    "deepmerge": "workspace:tools/deepmerge",
     "glob@npm:13.0.6": "npm:14.0.4",
     "glob@npm:^10.3.10": "npm:14.0.4",
     "glob@npm:^10.4.1": "npm:14.0.4",

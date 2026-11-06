@@ -93,12 +93,8 @@ test("TypeDoc negated globs recurse through ordinary directories", async (t) => 
   );
 });
 
-test("RN CLI uses the private merge implementation and preserves array replacement", () => {
+test("RN CLI preserves nested config and array replacement", () => {
   const cliRequire = from("@react-native-community/cli-config");
-  assert.equal(
-    cliRequire("deepmerge"),
-    require("../tools/deepmerge/index.cjs"),
-  );
   const { default: merge } = cliRequire("./merge.js");
   assert.deepEqual(
     merge(
@@ -109,7 +105,7 @@ test("RN CLI uses the private merge implementation and preserves array replaceme
   );
 });
 
-test("Expo config modifications use the private merge implementation", async (t) => {
+test("Expo config modifications preserve nested config", async (t) => {
   const directory = await temporaryDirectory(t);
   await fs.writeFile(
     path.join(directory, "package.json"),
@@ -125,11 +121,6 @@ test("Expo config modifications use the private merge implementation", async (t)
         extra: { first: 1 },
       },
     }),
-  );
-  const expoRequire = from("@expo/config");
-  assert.equal(
-    expoRequire("deepmerge"),
-    require("../tools/deepmerge/index.cjs"),
   );
   const { modifyConfigAsync } = require("@expo/config");
   await modifyConfigAsync(directory, { extra: { second: 2 } });
