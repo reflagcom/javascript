@@ -246,10 +246,13 @@ test("Opens a feedback widget in the bottom right by default", async ({
 
   await expect(container).toBeAttached();
 
-  const bbox = await container.locator(".dialog").boundingBox();
-  expect(bbox?.x).toEqual(WINDOW_WIDTH - bbox!.width - 16);
-  expect(bbox?.y).toBeGreaterThan(WINDOW_HEIGHT - bbox!.height - 30); // Account for browser differences
-  expect(bbox?.y).toBeLessThan(WINDOW_HEIGHT - bbox!.height);
+  // Attachment happens before the entrance animation has reached its position.
+  await expect(async () => {
+    const bbox = await container.locator(".dialog").boundingBox();
+    expect(bbox?.x).toEqual(WINDOW_WIDTH - bbox!.width - 16);
+    expect(bbox?.y).toBeGreaterThan(WINDOW_HEIGHT - bbox!.height - 30); // Account for browser differences
+    expect(bbox?.y).toBeLessThan(WINDOW_HEIGHT - bbox!.height);
+  }).toPass({ timeout: 5000 });
 });
 
 test("Opens a feedback widget in the correct position when overridden", async ({
@@ -268,10 +271,12 @@ test("Opens a feedback widget in the correct position when overridden", async ({
 
   await expect(container).toBeAttached();
 
-  const bbox = await container.locator(".dialog").boundingBox();
-  expect(bbox?.x).toEqual(16);
-  expect(bbox?.y).toBeGreaterThan(0); // Account for browser differences
-  expect(bbox?.y).toBeLessThanOrEqual(16);
+  await expect(async () => {
+    const bbox = await container.locator(".dialog").boundingBox();
+    expect(bbox?.x).toEqual(16);
+    expect(bbox?.y).toBeGreaterThan(0); // Account for browser differences
+    expect(bbox?.y).toBeLessThanOrEqual(16);
+  }).toPass({ timeout: 5000 });
 });
 
 test("Opens a feedback widget with the correct translations", async ({

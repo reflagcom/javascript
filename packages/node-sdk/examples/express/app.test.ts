@@ -42,6 +42,20 @@ describe("API Tests", () => {
     expect(response.body).toEqual({ todos });
   });
 
+  it("denies todo creation when the enabled flag has no config payload", async () => {
+    const remove = reflag.pushFlagOverrides({
+      "create-todos": { isEnabled: true },
+    });
+    try {
+      const response = await request(app)
+        .post("/todos")
+        .send({ todo: "A sufficiently long todo" });
+      expect(response.status).toBe(403);
+    } finally {
+      remove();
+    }
+  });
+
   describe("with show-todos temporarily disabled", () => {
     flag("show-todos", false);
 

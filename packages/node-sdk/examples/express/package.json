@@ -5,20 +5,22 @@
   "main": "serve.ts",
   "scripts": {
     "start": "tsx serve.ts",
-    "test": "vitest"
+    "build": "tsc --noEmit",
+    "test": "vitest",
+    "test:ci": "vitest run"
   },
   "dependencies": {
     "@reflag/node-sdk": "workspace:*",
-    "express": "^4.20.0",
-    "tsx": "^4.16.2",
+    "express": "^4.22.3",
+    "tsx": "^4.23.15",
     "typescript": "^5.5.3",
-    "wrangler": "^4.59.1"
+    "wrangler": "^4.158.0"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
     "@types/supertest": "^6.0.2",
     "supertest": "^7.0.0",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.12"
   },
   "packageManager": "yarn@4.10.3"
 }
