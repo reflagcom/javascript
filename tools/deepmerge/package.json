@@ -1,0 +1,11 @@
+{
+  "name": "@reflag/tooling-deepmerge",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Private security-maintained deepmerge 4 compatibility fork for native development tooling",
+  "license": "MIT",
+  "main": "index.cjs",
+  "scripts": {
+    "test:ci": "node --test index.test.cjs"
+  }
+}

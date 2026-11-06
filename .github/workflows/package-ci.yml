@@ -26,6 +26,8 @@ jobs:
           cache-dependency-path: "**/yarn.lock"
       - name: Restore Node.js dependencies
         run: yarn install --immutable
+      - name: Audit dependencies
+        run: yarn audit:ci
       - name: Restore package.json
         # This step is necessary because the previous step may have updated package.json
         run: git checkout -- package.json packages/*/package.json
@@ -43,7 +45,16 @@ jobs:
       - name: Check standalone examples
         run: |
           for example in packages/node-sdk/examples/cloudflare-worker packages/openfeature-node-provider/example; do
-            (cd "$example" && yarn install --immutable && yarn build && yarn test:ci)
+            (cd "$example" && yarn install --immutable && yarn npm audit --recursive --no-deprecations && yarn build && yarn test:ci)
+          done
+      - name: Check native development tooling
+        run: |
+          yarn workspace reflag-react-native-sdk-bare-rn react-native config > "$RUNNER_TEMP/native-config.json"
+          yarn tsc --project packages/react-native-sdk/dev/bare-rn/tsconfig.json --noEmit
+          yarn tsc --project packages/react-native-sdk/dev/expo/tsconfig.json --noEmit
+          for platform in ios android; do
+            yarn workspace reflag-react-native-sdk-bare-rn react-native bundle --platform "$platform" --dev false --entry-file index.js --bundle-output "$RUNNER_TEMP/bare-$platform.bundle" --assets-dest "$RUNNER_TEMP/bare-$platform-assets" --max-workers 2
+            yarn workspace reflag-react-sdk-expo expo export --platform "$platform" --output-dir "$RUNNER_TEMP/expo-$platform" --max-workers 2
           done
       - name: Report test results
         uses: dorny/test-reporter@v1.6.0

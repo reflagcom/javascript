@@ -9,6 +9,7 @@
   "updateInternalDependencies": "patch",
   "ignore": [
     "@reflag/tsconfig",
+    "@reflag/tooling-deepmerge",
     "customer-admin-panel",
     "nextjs-bootstrap-demo",
     "nextjs-flag-demo",
