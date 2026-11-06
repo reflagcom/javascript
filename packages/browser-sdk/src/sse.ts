@@ -81,18 +81,26 @@ export class AblySSEChannel {
   }
 
   private onOpen(e: Event) {
+    this.isOpen = true;
     this.logger.debug("event source connection opened", e);
   }
 
   private onError(e: Event) {
+    this.isOpen = false;
     const connectionState = (e as any)?.target?.readyState;
 
+    if (!this.eventSourceFactory && connectionState !== 2) {
+      // Native EventSource reconnects recoverable failures itself. Calling
+      // close() here would cancel that reconnect, including its retry delay.
+      this.logger.debug("event source reconnecting", e);
+      return;
+    }
+
     if (connectionState === 2) {
+      // Native terminal errors (including HTTP 403) must not be retried.
       this.logger.debug("event source connection closed", e);
-    } else if (connectionState === 1) {
-      this.logger.warn("event source connection failed to open", e);
     } else {
-      this.logger.warn("event source unexpected error occurred", e);
+      this.logger.warn("event source connection failed", e);
     }
 
     this.disconnect();
@@ -116,61 +124,57 @@ export class AblySSEChannel {
   }
 
   public async connect() {
-    if (this.isOpen) {
-      this.logger.warn("channel connection already open");
+    if (this.eventSource) {
+      this.logger.warn("channel connection already active");
       return;
     }
 
-    this.isOpen = true;
-    try {
-      const url = new URL(this.path, this.sseBaseUrl);
-      if (this.channels.length > 0) {
-        url.searchParams.append("v", "1.2");
-        url.searchParams.append("channels", this.channels.join(","));
-        url.searchParams.append("rewind", "1");
-      }
-      if (this.publishableKey) {
-        url.searchParams.append("publishableKey", this.publishableKey);
-      }
-      if (this.sdkVersion) {
-        url.searchParams.append(SDK_VERSION_HEADER_NAME, this.sdkVersion);
-      }
-      const serializedContext = canonicalContextJSONStringify(this.context);
-      if (serializedContext) {
-        url.searchParams.append("contextJson", serializedContext);
-      }
-
-      this.eventSource = this.createEventSource(url.toString()) ?? null;
-      if (!this.eventSource) {
-        return;
-      }
-
-      this.eventSource.addEventListener("error", (e) => this.onError(e));
-      this.eventSource.addEventListener("open", (e) => this.onOpen(e));
-      this.eventSource.addEventListener("message", (m) => this.onMessage(m));
-
-      this.logger.debug("channel connection opened");
-    } finally {
-      this.isOpen = !!this.eventSource;
+    const url = new URL(this.path, this.sseBaseUrl);
+    if (this.channels.length > 0) {
+      url.searchParams.append("v", "1.2");
+      url.searchParams.append("channels", this.channels.join(","));
+      url.searchParams.append("rewind", "1");
     }
+    if (this.publishableKey) {
+      url.searchParams.append("publishableKey", this.publishableKey);
+    }
+    if (this.sdkVersion) {
+      url.searchParams.append(SDK_VERSION_HEADER_NAME, this.sdkVersion);
+    }
+    const serializedContext = canonicalContextJSONStringify(this.context);
+    if (serializedContext) {
+      url.searchParams.append("contextJson", serializedContext);
+    }
+
+    const eventSource = this.createEventSource(url.toString());
+    if (!eventSource) return;
+    this.eventSource = eventSource;
+
+    eventSource.addEventListener("error", (e) => {
+      if (this.eventSource === eventSource) this.onError(e);
+    });
+    eventSource.addEventListener("open", (e) => {
+      if (this.eventSource === eventSource) this.onOpen(e);
+    });
+    eventSource.addEventListener("message", (m) => {
+      if (this.eventSource === eventSource) this.onMessage(m);
+    });
+
+    this.logger.debug("opening channel connection");
   }
 
   public disconnect() {
-    if (!this.isOpen) {
-      return;
-    }
-
-    if (this.eventSource) {
-      this.eventSource.close();
-      this.eventSource = null;
-
+    const eventSource = this.eventSource;
+    this.eventSource = null;
+    this.isOpen = false;
+    if (eventSource) {
+      eventSource.close();
       this.logger.debug("channel connection closed");
     }
-
-    this.isOpen = false;
   }
 
   public open(options?: { retryInterval?: number; retryCount?: number }) {
+    if (this.isActive()) return;
     if (!this.eventSourceFactory && typeof EventSource === "undefined") {
       this.logger.warn(
         "EventSource is not available in this environment; SSE channel cannot be opened",
@@ -178,40 +182,42 @@ export class AblySSEChannel {
       return;
     }
 
-    const retryInterval = options?.retryInterval ?? 1000 * 30;
     const retryCount = options?.retryCount ?? 3;
     let retriesRemaining = retryCount;
 
     const tryConnect = async () => {
       try {
         await this.connect();
+        // Preserve the custom transport policy: only setup failures exhaust
+        // this budget. Async failures must recover after long mobile outages.
         retriesRemaining = retryCount;
       } catch (e) {
-        if (retriesRemaining > 0) {
-          this.logger.warn(
-            `failed to connect, ${retriesRemaining} retries remaining`,
-            e,
-          );
-        } else {
-          this.logger.warn(`failed to connect, no retries remaining`, e);
-        }
+        this.logger.warn("failed to create event source connection", e);
       }
     };
 
     void tryConnect();
 
-    this.retryInterval = setInterval(() => {
-      if (!this.isConnected() && this.retryInterval) {
-        if (retriesRemaining <= 0) {
-          clearInterval(this.retryInterval);
-          this.retryInterval = null;
-          return;
-        }
+    // Native EventSource owns reconnection and terminal failure handling.
+    // Keep the SDK fallback for custom transports such as React Native's,
+    // which disables its own reconnect loop.
+    if (!this.eventSourceFactory) return;
 
-        retriesRemaining--;
-        void tryConnect();
-      }
-    }, retryInterval);
+    this.retryInterval = setInterval(
+      () => {
+        if (!this.eventSource && this.retryInterval) {
+          if (retriesRemaining <= 0) {
+            clearInterval(this.retryInterval);
+            this.retryInterval = null;
+            return;
+          }
+
+          retriesRemaining--;
+          void tryConnect();
+        }
+      },
+      options?.retryInterval ?? 1000 * 30,
+    );
   }
 
   public close() {
@@ -224,7 +230,7 @@ export class AblySSEChannel {
   }
 
   public isActive() {
-    return !!this.retryInterval;
+    return !!this.eventSource || !!this.retryInterval;
   }
 
   public isConnected() {
