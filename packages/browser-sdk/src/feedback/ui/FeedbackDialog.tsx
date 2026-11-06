@@ -1,5 +1,5 @@
 import { Fragment, FunctionComponent, h } from "preact";
-import { useCallback, useState } from "preact/hooks";
+import { useCallback, useLayoutEffect, useRef, useState } from "preact/hooks";
 
 import { feedbackContainerId } from "../../ui/constants";
 import { Dialog, useDialog } from "../../ui/Dialog";
@@ -40,7 +40,19 @@ export const FeedbackDialog: FunctionComponent<FeedbackDialogProps> = ({
     "idle" | "submitting" | "submitted"
   >("idle");
 
-  const { isOpen, close } = useDialog({ onClose, initialValue: true });
+  const closed = useRef(false);
+  const notifyClose = useCallback(() => {
+    if (closed.current) return;
+    closed.current = true;
+    onClose?.();
+  }, [onClose]);
+
+  // Replacing a form unmounts it. Notify on that path too, but not again after an explicit close.
+  useLayoutEffect(() => notifyClose, [notifyClose]);
+  const { isOpen, close } = useDialog({
+    onClose: notifyClose,
+    initialValue: true,
+  });
 
   const autoClose = useTimer({
     enabled: position.type === "DIALOG",

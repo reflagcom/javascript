@@ -45,7 +45,8 @@ export interface OpenFeedbackFormOptions {
   /**
    * Handle a copy of submitted feedback, for example to send it to analytics
    * or your own CRM. Called once per form: after submitting the form, or when
-   * it closes with a saved score without a form submission.
+   * it closes with a saved score without a form submission. Replacing the
+   * form with another feedback form also counts as closing it.
    *
    * On close, includes the latest saved score and an empty comment. Comment
    * text that was not submitted is never included. If a save is in flight,
