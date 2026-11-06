@@ -31,7 +31,7 @@ playwright-report/
 playwright/.cache/
 
 .pnp.*
-.yarn
+**/.yarn/*
 !.yarn/patches
 !.yarn/plugins
 !.yarn/releases
