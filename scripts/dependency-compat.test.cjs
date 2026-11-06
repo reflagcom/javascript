@@ -70,6 +70,29 @@ test("TypeDoc directory discovery supports the current minimatch API", async (t)
   assert.deepEqual(glob(`${directory}/**/*.ts`, directory), [expected]);
 });
 
+test("TypeDoc negated globs recurse through ordinary directories", async (t) => {
+  const directory = await temporaryDirectory(t);
+  const included = ["root.ts", "src/nested/entry.ts"];
+  for (const file of [
+    ...included,
+    "node_modules/ignored.ts",
+    "src/node_modules/ignored.ts",
+  ]) {
+    const absolute = path.join(directory, file);
+    await fs.mkdir(path.dirname(absolute), { recursive: true });
+    await fs.writeFile(absolute, "");
+  }
+  const utility = path.join(
+    path.dirname(require.resolve("typedoc")),
+    "lib/utils/fs.js",
+  );
+  const { glob } = await import(pathToFileURL(utility).href);
+  assert.deepEqual(
+    glob("!**/node_modules/**", directory).sort(),
+    included.map((file) => path.join(directory, file)).sort(),
+  );
+});
+
 test("RN CLI uses the private merge implementation and preserves array replacement", () => {
   const cliRequire = from("@react-native-community/cli-config");
   assert.equal(

@@ -19499,7 +19499,7 @@ __metadata:
 
 "typedoc@patch:typedoc@npm%3A0.27.6#~/.yarn/patches/typedoc-npm-0.27.6-baed42df20.patch":
   version: 0.27.6
-  resolution: "typedoc@patch:typedoc@npm%3A0.27.6#~/.yarn/patches/typedoc-npm-0.27.6-baed42df20.patch::version=0.27.6&hash=57bc33"
+  resolution: "typedoc@patch:typedoc@npm%3A0.27.6#~/.yarn/patches/typedoc-npm-0.27.6-baed42df20.patch::version=0.27.6&hash=f86947"
   dependencies:
     "@gerrit0/mini-shiki": "npm:^1.24.0"
     lunr: "npm:^2.3.9"
@@ -19510,7 +19510,7 @@ __metadata:
     typescript: 5.0.x || 5.1.x || 5.2.x || 5.3.x || 5.4.x || 5.5.x || 5.6.x || 5.7.x
   bin:
     typedoc: bin/typedoc
-  checksum: 10c0/7643f546f51036627d84366866bd19a97537dcf7620340885662e271c759d58bb0d5e16769c3a46f0e663d7906c88a2eb53d810e7ede6d960769b66735ae9013
+  checksum: 10c0/8203b65d3bbc39aa565f497d3075ff0ba038500c53cb3d272cb05c1941c95024aafda694f6a5799cb67771ecfd83ea82482fc07ada643afd24025176ec0ea315
   languageName: node
   linkType: hard
 
