@@ -1199,11 +1199,13 @@ export class ReflagClient {
           return { feedbackId: undefined };
         },
         onSubmit: async (data) => {
-          // Default onSubmit handler
-          await this.feedback({
+          const res = await this.feedback({
             ...feedbackData,
             ...data,
           });
+          if (!res?.ok) {
+            throw new Error("Couldn't submit feedback. Please try again.");
+          }
 
           options.onAfterSubmit?.(data);
         },
