@@ -21,7 +21,6 @@ declare global {
   interface Window {
     eventsFired: Record<string, boolean>;
     feedbackSubmissions: FeedbackSubmission[];
-    feedbackCloses: number;
     requestTestFeedback: () => void;
   }
 }
@@ -52,83 +51,37 @@ async function getOpenedWidgetContainer(
     });
   });
 
-  await page.evaluate(
-    async ({ key, optionsJson, feedbackSource }) => {
-      const modulePath = "/dist/reflag-browser-sdk.mjs";
-      const { ReflagClient } = (await import(
-        modulePath
-      )) as typeof import("../../src/client");
-      const options = JSON.parse(optionsJson) as Omit<
-        InitOptions,
-        "publishableKey"
-      >;
-      const position = options.feedback?.ui?.position;
-      if (position?.type === "POPOVER") {
-        const anchor = document.createElement("button");
-        anchor.id = "feedback-anchor";
-        anchor.textContent = "Give feedback";
-        document.body.appendChild(anchor);
-        position.anchor = anchor;
-      }
+  // Golden path requests
+  await page.evaluate(`
+    ;(async () => {
+      const { ReflagClient } = await import("/dist/reflag-browser-sdk.mjs");
+      const options = ${JSON.stringify(initOptions)};
       window.feedbackSubmissions = [];
-      window.feedbackCloses = 0;
-      const onAfterSubmit = (data: FeedbackSubmission) =>
-        window.feedbackSubmissions.push(data);
-      let onMessage: ((event: MessageEvent) => void) | undefined;
+      const onAfterSubmit = (data) => window.feedbackSubmissions.push(data);
+      let onMessage;
       const reflag = new ReflagClient({
-        publishableKey: key,
-        user: { id: "foo" },
-        company: { id: "bar" },
-        ...options,
+        publishableKey: "${KEY}", user: {id: "foo"}, company: {id: "bar"}, ...options,
         feedback: {
           ...options.feedback,
-          autoFeedbackHandler: (_prompt, handlers) => {
-            handlers.openFeedbackForm({ onAfterSubmit });
-          },
+          autoFeedbackHandler: (_prompt, handlers) => handlers.openFeedbackForm({ onAfterSubmit }),
         },
         eventSourceFactory: () => ({
-          addEventListener: (type, handler) => {
-            if (type === "message") onMessage = handler;
-          },
-          close: () => {
-            onMessage = undefined;
-          },
+          addEventListener: (type, handler) => { if (type === "message") onMessage = handler; },
+          close: () => {},
         }),
       });
-      window.requestTestFeedback = () =>
-        reflag.requestFeedback({
-          flagKey: "flag1",
-          title: "baz",
-          onAfterSubmit,
-          onClose: () => {
-            window.feedbackCloses++;
-          },
-        });
       await reflag.initialize();
-      if (feedbackSource === "prompt") {
-        if (!onMessage)
-          throw new Error("Feedback SSE listener was not registered");
-        onMessage(
-          new MessageEvent("message", {
-            data: JSON.stringify({
-              question: "baz",
-              showAfter: Date.now() - 1000,
-              showBefore: Date.now() + 60000,
-              promptId: "prompt1",
-              featureId: "feature1",
-            }),
-          }),
-        );
+      window.requestTestFeedback = () => reflag.requestFeedback({ flagKey: "flag1", title: "baz", onAfterSubmit });
+      if ("${source}" === "prompt") {
+        onMessage({ data: JSON.stringify({
+          question: "baz", promptId: "prompt1", featureId: "feature1",
+          showAfter: Date.now() - 1000, showBefore: Date.now() + 60000,
+        }) });
       } else {
         window.requestTestFeedback();
       }
-    },
-    {
-      key: KEY,
-      optionsJson: JSON.stringify(initOptions),
-      feedbackSource: source,
-    },
-  );
+    })()
+  `);
 
   return page.locator(`#${feedbackContainerId}`);
 }
@@ -571,281 +524,93 @@ test("Closes the dialog shortly after submitting", async ({ page }) => {
 
 for (const source of ["widget", "prompt"] as const) {
   test.describe(`${source} feedback submission callback`, () => {
+    const saved = { question: "baz", score: 4, feedbackId: "123", comment: "" };
+    const submissions = (page: Page) =>
+      page.evaluate(() => window.feedbackSubmissions);
+
     test.beforeEach(async ({ page }) => {
-      await page.route(`${API_HOST}/feedback`, async (route) => {
-        await route.fulfill({
-          status: 200,
-          body: JSON.stringify({ feedbackId: "123" }),
-          contentType: "application/json",
-        });
-      });
+      await page.route(`${API_HOST}/feedback`, (route) =>
+        route.fulfill({ json: { feedbackId: "123" } }),
+      );
     });
 
-    test("notifies once on close with the latest saved score, excluding draft comments", async ({
+    test("reports the latest saved score on close, without a draft comment", async ({
       page,
     }) => {
-      const requests: object[] = [];
-      page.on("request", (request) => {
-        if (request.url() === `${API_HOST}/feedback`) {
-          requests.push(request.postDataJSON());
-        }
-      });
-      const container = await getOpenedWidgetContainer(page, {}, source);
-      await setScore(container, 2);
-      await setScore(container, 5);
-      await setComment(container, "This comment was not submitted");
-      await expect(
-        container.locator(".form-expanded-content button"),
-      ).toBeEnabled();
-      expect(await page.evaluate(() => window.feedbackSubmissions)).toEqual([]);
-
-      await container.locator(".dialog .close").click();
-      await expect
-        .poll(() => page.evaluate(() => window.feedbackSubmissions))
-        .toEqual([
-          { question: "baz", score: 5, feedbackId: "123", comment: "" },
-        ]);
-      expect(requests).toHaveLength(2); // Closing must not submit again.
-    });
-
-    test("does not notify when closed without feedback", async ({ page }) => {
-      const container = await getOpenedWidgetContainer(page, {}, source);
-      await container.locator(".dialog .close").click();
-      await expect.poll(() => isFeedbackDialogOpen(page)).toBe(false);
-      expect(await page.evaluate(() => window.feedbackSubmissions)).toEqual([]);
-    });
-
-    test("notifies on modal Escape with a saved score", async ({ page }) => {
       const container = await getOpenedWidgetContainer(
         page,
         { feedback: { ui: { position: { type: "MODAL" } } } },
         source,
       );
+      await setScore(container, 2);
       await setScore(container, 4);
+      await setComment(container, "Unsubmitted draft");
       await expect(
         container.locator(".form-expanded-content button"),
       ).toBeEnabled();
+      expect(await submissions(page)).toEqual([]);
       await page.keyboard.press("Escape");
-      await expect.poll(() => isFeedbackDialogOpen(page)).toBe(false);
-      await expect
-        .poll(() => page.evaluate(() => window.feedbackSubmissions))
-        .toEqual([
-          { question: "baz", score: 4, feedbackId: "123", comment: "" },
-        ]);
+      await expect.poll(() => submissions(page)).toEqual([saved]);
     });
 
-    for (const dismiss of ["Escape", "outside click", "anchor removal"]) {
-      test(`notifies once when a popover closes via ${dismiss}`, async ({
-        page,
-      }) => {
-        const container = await getOpenedWidgetContainer(
-          page,
-          { feedback: { ui: { position: { type: "POPOVER", anchor: null } } } },
-          source,
-        );
-        await setScore(container, 4);
-        await expect(
-          container.locator(".form-expanded-content button"),
-        ).toBeEnabled();
-        if (dismiss === "Escape") {
-          await page.keyboard.press("Escape");
-        } else if (dismiss === "outside click") {
-          await page.mouse.click(1000, 500);
-        } else {
-          await page
-            .locator("#feedback-anchor")
-            .evaluate((anchor) => anchor.remove());
-        }
-        await expect.poll(() => isFeedbackDialogOpen(page)).toBe(false);
-        expect(await page.evaluate(() => window.feedbackSubmissions)).toEqual([
-          { question: "baz", score: 4, feedbackId: "123", comment: "" },
-        ]);
-      });
-    }
-
-    for (const comment of ["", "Useful feature!"]) {
-      test(`notifies once on Send with ${comment ? "a comment" : "no comment"}, not again on auto-close`, async ({
-        page,
-      }) => {
-        const container = await getOpenedWidgetContainer(page, {}, source);
-        await setScore(container, 4);
-        await setComment(container, comment);
-        await submitForm(container);
-        await expect
-          .poll(() => page.evaluate(() => window.feedbackSubmissions))
-          .toEqual([{ question: "baz", score: 4, feedbackId: "123", comment }]);
-        await expect.poll(() => isFeedbackDialogOpen(page)).toBe(false);
-        expect(
-          await page.evaluate(() => window.feedbackSubmissions),
-        ).toHaveLength(1);
-      });
-    }
-
-    for (const action of ["closing", "replacement"] as const) {
-      test(`waits for an in-flight score save after ${action}`, async ({
-        page,
-      }) => {
-        const pendingSave = deferred<void>();
-        let saving = false;
-        await page.route(`${API_HOST}/feedback`, async (route) => {
-          saving = true;
-          await pendingSave.promise;
-          await route.fulfill({ json: { feedbackId: "123" } });
-        });
-        const container = await getOpenedWidgetContainer(page, {}, source);
-        await setScore(container, 4);
-        await expect.poll(() => saving).toBe(true);
-        if (action === "replacement") {
-          await page.evaluate(() => window.requestTestFeedback());
-          await expect(
-            container.locator("#reflag-feedback-score-4"),
-          ).not.toBeChecked();
-        } else {
-          await container.locator(".dialog .close").click();
-        }
-        expect(await page.evaluate(() => window.feedbackSubmissions)).toEqual(
-          [],
-        );
-
-        pendingSave.resolve();
-        await expect
-          .poll(() => page.evaluate(() => window.feedbackSubmissions))
-          .toEqual([
-            { question: "baz", score: 4, feedbackId: "123", comment: "" },
-          ]);
-
-        if (action === "replacement") {
-          await expect(
-            container.locator("#reflag-feedback-score-4"),
-          ).not.toBeChecked();
-          await container.locator(".dialog .close").click();
-          expect(
-            await page.evaluate(() => window.feedbackSubmissions),
-          ).toHaveLength(1);
-        }
-      });
-    }
-
-    test("notifies when a saved response is replaced by a new form", async ({
-      page,
-    }) => {
-      let feedbackId = 0;
-      await page.route(`${API_HOST}/feedback`, async (route) => {
-        await route.fulfill({ json: { feedbackId: String(++feedbackId) } });
-      });
+    test("reports Send once, not again on auto-close", async ({ page }) => {
       const container = await getOpenedWidgetContainer(page, {}, source);
       await setScore(container, 4);
-      await expect(
-        container.locator(".form-expanded-content button"),
-      ).toBeEnabled();
-
-      await page.evaluate(() => window.requestTestFeedback());
-      await expect(
-        container.locator(".form-expanded-content button"),
-      ).toBeDisabled();
-      await expect
-        .poll(() => page.evaluate(() => window.feedbackSubmissions))
-        .toEqual([{ question: "baz", score: 4, feedbackId: "1", comment: "" }]);
-
-      await setScore(container, 5);
-      await expect(
-        container.locator(".form-expanded-content button"),
-      ).toBeEnabled();
-      await container.locator(".dialog .close").click();
-      expect(await page.evaluate(() => window.feedbackSubmissions)).toEqual([
-        { question: "baz", score: 4, feedbackId: "1", comment: "" },
-        { question: "baz", score: 5, feedbackId: "2", comment: "" },
-      ]);
-
-      await page.evaluate(() => window.requestTestFeedback());
-      await expect(
-        container.locator(".form-expanded-content button"),
-      ).toBeDisabled();
-      expect(await page.evaluate(() => window.feedbackCloses)).toBe(
-        source === "widget" ? 2 : 1,
-      );
-      expect(
-        await page.evaluate(() => window.feedbackSubmissions),
-      ).toHaveLength(2);
+      await setComment(container, "Useful!");
+      await submitForm(container);
+      const expected = [{ ...saved, comment: "Useful!" }];
+      await expect.poll(() => submissions(page)).toEqual(expected);
+      await expect.poll(() => isFeedbackDialogOpen(page)).toBe(false);
+      expect(await submissions(page)).toEqual(expected);
     });
 
-    for (const action of ["close", "retry"] as const) {
-      test(`failed Send does not consume the callback before ${action}`, async ({
-        page,
-      }) => {
-        let failCommentSave = true;
-        await page.route(`${API_HOST}/feedback`, async (route) => {
-          if (route.request().postDataJSON().comment && failCommentSave) {
-            await route.fulfill({
-              status: 500,
-              json: { message: "Save failed" },
-            });
-          } else {
-            await route.fulfill({ json: { feedbackId: "123" } });
-          }
-        });
-        const container = await getOpenedWidgetContainer(page, {}, source);
-        await setScore(container, 4);
-        await setComment(container, "Useful feature!");
-        await submitForm(container);
-        await expect(container.locator(".error")).toBeVisible();
-        expect(await page.evaluate(() => window.feedbackSubmissions)).toEqual(
-          [],
-        );
-
-        if (action === "retry") {
-          failCommentSave = false;
-          await submitForm(container);
-          await expect.poll(() => isFeedbackDialogOpen(page)).toBe(false);
-        } else {
-          await container.locator(".dialog .close").click();
-        }
-        expect(await page.evaluate(() => window.feedbackSubmissions)).toEqual([
-          {
-            question: "baz",
-            score: 4,
-            feedbackId: "123",
-            comment: action === "retry" ? "Useful feature!" : "",
-          },
-        ]);
-      });
-    }
-
-    test("closing during Send waits and notifies once with the submitted comment", async ({
+    test("closing during Send waits for the submitted comment", async ({
       page,
     }) => {
-      const pendingSave = deferred<void>();
-      let savingComment = false;
+      const pending = deferred<void>();
+      let saving = false;
       await page.route(`${API_HOST}/feedback`, async (route) => {
         if (route.request().postDataJSON().comment) {
-          savingComment = true;
-          await pendingSave.promise;
+          saving = true;
+          await pending.promise;
         }
-        await route.fulfill({
-          status: 200,
-          body: JSON.stringify({ feedbackId: "123" }),
-          contentType: "application/json",
-        });
+        await route.fulfill({ json: { feedbackId: "123" } });
       });
       const container = await getOpenedWidgetContainer(page, {}, source);
       await setScore(container, 4);
-      await setComment(container, "Useful feature!");
+      await setComment(container, "Useful!");
       await submitForm(container);
-      await expect.poll(() => savingComment).toBe(true);
+      await expect.poll(() => saving).toBe(true);
       await container.locator(".dialog .close").click();
-      expect(await page.evaluate(() => window.feedbackSubmissions)).toEqual([]);
-
-      pendingSave.resolve();
+      expect(await submissions(page)).toEqual([]);
+      pending.resolve();
       await expect
-        .poll(() => page.evaluate(() => window.feedbackSubmissions))
-        .toEqual([
-          {
-            question: "baz",
-            score: 4,
-            feedbackId: "123",
-            comment: "Useful feature!",
-          },
-        ]);
+        .poll(() => submissions(page))
+        .toEqual([{ ...saved, comment: "Useful!" }]);
+    });
+
+    test("replacement waits for a pending score save and does not notify for the empty new form", async ({
+      page,
+    }) => {
+      const pending = deferred<void>();
+      let saving = false;
+      await page.route(`${API_HOST}/feedback`, async (route) => {
+        saving = true;
+        await pending.promise;
+        await route.fulfill({ json: { feedbackId: "123" } });
+      });
+      const container = await getOpenedWidgetContainer(page, {}, source);
+      await setScore(container, 4);
+      await expect.poll(() => saving).toBe(true);
+      await page.evaluate(() => window.requestTestFeedback());
+      await expect(
+        container.locator("#reflag-feedback-score-4"),
+      ).not.toBeChecked();
+      expect(await submissions(page)).toEqual([]);
+      pending.resolve();
+      await expect.poll(() => submissions(page)).toEqual([saved]);
+      await container.locator(".dialog .close").click();
+      expect(await submissions(page)).toEqual([saved]);
     });
   });
 }

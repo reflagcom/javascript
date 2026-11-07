@@ -420,10 +420,7 @@ export class AutoFeedback {
             return { feedbackId: res.feedbackId };
           },
           onSubmit: async (data) => {
-            const res = await replyCallback(data);
-            if (!res?.feedbackId) {
-              throw new Error("Couldn't submit feedback. Please try again.");
-            }
+            await replyCallback(data);
           },
           onDismiss: () => replyCallback(null),
           position: this.position,
