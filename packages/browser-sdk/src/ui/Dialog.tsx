@@ -239,6 +239,10 @@ export const Dialog: FunctionComponent<OpenDialogOptions> = ({
           ref={setDiagRef}
           class={classes}
           style={anchor ? floatingStyles : unanchoredPosition}
+          onCancel={(event) => {
+            event.preventDefault();
+            dismiss();
+          }}
         >
           {children && <Fragment>{children}</Fragment>}
 

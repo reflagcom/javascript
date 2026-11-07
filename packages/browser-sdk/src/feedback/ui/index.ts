@@ -4,6 +4,7 @@ import { feedbackContainerId, propagatedEvents } from "../../ui/constants";
 import { Position } from "../../ui/types";
 import { FeedbackDialog } from "./FeedbackDialog";
 import { OpenFeedbackFormOptions } from "./types";
+import { withFeedbackSubmissionCallback } from "./withFeedbackSubmissionCallback";
 
 export const DEFAULT_POSITION: Position = {
   type: "DIALOG",
@@ -79,7 +80,11 @@ export function openFeedbackForm(options: OpenFeedbackFormOptions): void {
   openInstances++;
 
   render(
-    h(FeedbackDialog, { ...options, position, key: openInstances.toString() }),
+    h(FeedbackDialog, {
+      ...withFeedbackSubmissionCallback(options),
+      position,
+      key: openInstances.toString(),
+    }),
     shadowRoot,
   );
 }
