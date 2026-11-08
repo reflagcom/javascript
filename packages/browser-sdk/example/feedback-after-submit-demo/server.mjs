@@ -8,6 +8,9 @@ import http from "node:http";
 // - GET  /log, POST /reset     ground truth for what the server actually received,
 //                              independent of whatever the browser tab believes happened
 
+const MIN_DELAY_MS = 0;
+const MAX_DELAY_MS = 20_000;
+
 const state = {
   delayMs: 1500,
   received: [],
@@ -79,8 +82,15 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === "POST" && url.pathname === "/config") {
     const body = await readBody(req);
-    if (Number.isFinite(body.delayMs)) {
-      state.delayMs = Math.max(0, Math.min(20000, body.delayMs));
+    const requestedDelay = body.delayMs;
+    // Reject anything out of range rather than clamping it, so the value
+    // the timer below ever sees is always one we validated ourselves.
+    if (
+      Number.isFinite(requestedDelay) &&
+      requestedDelay >= MIN_DELAY_MS &&
+      requestedDelay <= MAX_DELAY_MS
+    ) {
+      state.delayMs = requestedDelay;
     }
     return send(res, 200, { delayMs: state.delayMs });
   }

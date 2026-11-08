@@ -270,7 +270,7 @@ document.querySelector("#run-danger")!.addEventListener("click", () => {
   logLine(`→ sent attempt ${id.slice(0, 8)}, navigating away in 30ms…`, "pending");
 
   setTimeout(() => {
-    location.href = `gone.html?attempt=${id}&return=${encodeURIComponent("./")}`;
+    location.href = `gone.html?attempt=${id}`;
   }, 30);
 });
 

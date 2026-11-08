@@ -23,13 +23,14 @@
     </p>
     <p>Returning to the demo in a few seconds to check what the server saw…</p>
     <script type="module">
+      // Always return to this demo's own index page — never follow a
+      // caller-supplied destination, to avoid turning this into an open
+      // redirect.
       const params = new URLSearchParams(location.search);
-      const back = params.get("return") || "./";
-      const query = params.get("attempt")
-        ? `?checkAttempt=${encodeURIComponent(params.get("attempt"))}`
-        : "";
+      const attempt = params.get("attempt");
+      const query = attempt ? `?checkAttempt=${encodeURIComponent(attempt)}` : "";
       setTimeout(() => {
-        location.href = back + query;
+        location.href = "./" + query;
       }, 3000);
     </script>
   </body>
