@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
-import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { createServer } from "vite";
 
@@ -10,7 +10,9 @@ const api = spawn(process.execPath, [path.join(dir, "server.mjs")], {
   stdio: "inherit",
 });
 
-const vite = await createServer({ configFile: path.join(dir, "vite.config.mjs") });
+const vite = await createServer({
+  configFile: path.join(dir, "vite.config.mjs"),
+});
 await vite.listen();
 vite.printUrls();
 

@@ -7,8 +7,7 @@
     <style>
       :root {
         color-scheme: light;
-        font-family:
-          -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
       body {
         max-width: 780px;
@@ -134,10 +133,9 @@
     <h1>Does <code>onAfterSubmit</code> survive the user closing the tab?</h1>
     <p>
       <code>onAfterSubmit</code> only fires once the feedback POST to Reflag
-      resolves, which means there is a real gap between the user clicking
-      Send/a score and the callback actually running. This page makes that gap
-      visible, and then proves what happens if the tab goes away before it
-      closes.
+      resolves, which means there is a real gap between the user clicking Send/a
+      score and the callback actually running. This page makes that gap visible,
+      and then proves what happens if the tab goes away before it closes.
     </p>
 
     <section>
@@ -172,31 +170,30 @@
     <section>
       <h2>3. Prove it: navigate away mid-submit</h2>
       <p>
-        This calls the exact same <code>feedback()</code> request the
-        widget's Send button triggers, then navigates away a moment later —
-        simulating the user closing the tab (or clicking a link) right after
-        submitting, before the response comes back. "Server actually received
-        it?" is ground truth from the mock API's own log, independent of
-        anything the browser tab believes happened.
+        This calls the exact same <code>feedback()</code> request the widget's
+        Send button triggers, then navigates away a moment later — simulating
+        the user closing the tab (or clicking a link) right after submitting,
+        before the response comes back. "Server actually received it?" is ground
+        truth from the mock API's own log, independent of anything the browser
+        tab believes happened.
       </p>
       <p>
         <small
-          >On localhost, the request body is tiny and the round-trip to
-          the mock server is near-instant, so it often finishes sending
-          before the navigation can interrupt it — the row below may well
-          show the server received it either way. On a real network, with
-          real latency, that's not guaranteed: without `keepalive`, closing
-          the tab can lose the request outright. What <em>is</em> guaranteed,
-          every time, is the other column: the client never sees
-          <code>onAfterSubmit</code> fire, because the page that would have
-          run it is gone.</small
+          >On localhost, the request body is tiny and the round-trip to the mock
+          server is near-instant, so it often finishes sending before the
+          navigation can interrupt it — the row below may well show the server
+          received it either way. On a real network, with real latency, that's
+          not guaranteed: without `keepalive`, closing the tab can lose the
+          request outright. What <em>is</em> guaranteed, every time, is the
+          other column: the client never sees <code>onAfterSubmit</code> fire,
+          because the page that would have run it is gone.</small
         >
       </p>
       <div class="controls">
         <label
           ><input id="use-keepalive" type="checkbox" /> send with
-          <code>keepalive: true</code> instead (bypasses the SDK, to show what
-          a fix could look like)</label
+          <code>keepalive: true</code> instead (bypasses the SDK, to show what a
+          fix could look like)</label
         >
       </div>
       <div class="controls">
@@ -222,8 +219,8 @@
         <small
           >Every row here is a deliberately interrupted attempt — that's the
           point of this button. "Client saw onAfterSubmit?" reproduces the
-          widget's own await-then-notify sequence; "no" means the page was
-          gone before that sequence could finish.</small
+          widget's own await-then-notify sequence; "no" means the page was gone
+          before that sequence could finish.</small
         >
       </p>
     </section>

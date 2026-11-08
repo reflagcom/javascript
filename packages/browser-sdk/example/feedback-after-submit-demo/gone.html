@@ -16,10 +16,10 @@
   <body>
     <h1>💥 This page just replaced the one that submitted feedback</h1>
     <p>
-      Exactly like closing the tab or clicking a link right after hitting
-      Send: whatever JavaScript was waiting on the feedback response is gone
-      now. No <code>onAfterSubmit</code> can fire here &mdash; there is no
-      callback left to call it on.
+      Exactly like closing the tab or clicking a link right after hitting Send:
+      whatever JavaScript was waiting on the feedback response is gone now. No
+      <code>onAfterSubmit</code> can fire here &mdash; there is no callback left
+      to call it on.
     </p>
     <p>Returning to the demo in a few seconds to check what the server saw…</p>
     <script type="module">
@@ -28,7 +28,9 @@
       // redirect.
       const params = new URLSearchParams(location.search);
       const attempt = params.get("attempt");
-      const query = attempt ? `?checkAttempt=${encodeURIComponent(attempt)}` : "";
+      const query = attempt
+        ? `?checkAttempt=${encodeURIComponent(attempt)}`
+        : "";
       setTimeout(() => {
         location.href = "./" + query;
       }, 3000);

@@ -27,7 +27,8 @@ function openRiskWindow() {
   requestInFlight = true;
   bannerEl.className = "pending";
   tickBanner();
-  if (bannerTimer === undefined) bannerTimer = window.setInterval(tickBanner, 50);
+  if (bannerTimer === undefined)
+    bannerTimer = window.setInterval(tickBanner, 50);
 }
 
 function onFeedbackRequestSettled() {
@@ -69,7 +70,8 @@ function closeRiskWindow(fired: boolean) {
 const originalFetch = window.fetch.bind(window);
 window.fetch = (input, init) => {
   const url = String(input instanceof Request ? input.url : input);
-  const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+  const method =
+    init?.method ?? (input instanceof Request ? input.method : "GET");
   const isFeedbackSubmit = url.endsWith("/api/feedback") && method === "POST";
 
   if (isFeedbackSubmit) {
@@ -169,7 +171,9 @@ function saveAttempts(attempts: Attempt[]) {
   localStorage.setItem(ATTEMPTS_STORAGE_KEY, JSON.stringify(attempts));
 }
 
-function renderAttempts(serverReceived: { attemptId: string | null; receivedAt: number }[]) {
+function renderAttempts(
+  serverReceived: { attemptId: string | null; receivedAt: number }[],
+) {
   const attempts = loadAttempts();
   const tbody = document.querySelector("#attempts tbody")!;
   tbody.innerHTML = "";
@@ -189,10 +193,12 @@ function renderAttempts(serverReceived: { attemptId: string | null; receivedAt: 
       verdict = "delivered, callback fired";
       verdictClass = "verdict-ok";
     } else if (!clientOk && serverOk) {
-      verdict = "server got it, but onAfterSubmit never ran — don't rely on it for anything that must survive navigation";
+      verdict =
+        "server got it, but onAfterSubmit never ran — don't rely on it for anything that must survive navigation";
       verdictClass = "verdict-partial";
     } else {
-      verdict = "feedback lost entirely — the request itself was killed by the navigation";
+      verdict =
+        "feedback lost entirely — the request itself was killed by the navigation";
       verdictClass = "verdict-lost";
     }
 
@@ -229,7 +235,8 @@ function markClientConfirmed(id: string) {
 
 document.querySelector("#run-danger")!.addEventListener("click", () => {
   const id = crypto.randomUUID();
-  const useKeepalive = document.querySelector<HTMLInputElement>("#use-keepalive")!.checked;
+  const useKeepalive =
+    document.querySelector<HTMLInputElement>("#use-keepalive")!.checked;
   const comment = `[demo:${id}] sent right before navigating away`;
 
   const attempts = loadAttempts();
@@ -267,7 +274,10 @@ document.querySelector("#run-danger")!.addEventListener("click", () => {
 
   request.then(() => markClientConfirmed(id));
 
-  logLine(`→ sent attempt ${id.slice(0, 8)}, navigating away in 30ms…`, "pending");
+  logLine(
+    `→ sent attempt ${id.slice(0, 8)}, navigating away in 30ms…`,
+    "pending",
+  );
 
   setTimeout(() => {
     location.href = `gone.html?attempt=${id}`;
