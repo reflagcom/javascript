@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Tab closed (simulated)</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        max-width: 560px;
+        margin: 4rem auto;
+        text-align: center;
+        color: #1a1a1a;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>💥 This page just replaced the one that submitted feedback</h1>
+    <p>
+      Exactly like closing the tab or clicking a link right after hitting
+      Send: whatever JavaScript was waiting on the feedback response is gone
+      now. No <code>onAfterSubmit</code> can fire here &mdash; there is no
+      callback left to call it on.
+    </p>
+    <p>Returning to the demo in a few seconds to check what the server saw…</p>
+    <script type="module">
+      const params = new URLSearchParams(location.search);
+      const back = params.get("return") || "./";
+      const query = params.get("attempt")
+        ? `?checkAttempt=${encodeURIComponent(params.get("attempt"))}`
+        : "";
+      setTimeout(() => {
+        location.href = back + query;
+      }, 3000);
+    </script>
+  </body>
+</html>
