@@ -41,6 +41,38 @@ export function assertSuccessfulChecks(pages, sha) {
       check.name === "Build & Test" && check.app?.slug === "github-actions",
   );
   assert.ok(builds.length, "No Package CI Build & Test check found");
+  for (const [name, app] of [
+    ["CodeQL", "github-advanced-security"],
+    ["Oneleet Code Security Scan", "oneleet-code"],
+  ]) {
+    assert.ok(
+      checks.some(
+        (check) =>
+          check.name === name &&
+          check.app?.slug === app &&
+          check.conclusion === "success",
+      ),
+      `Missing successful ${name} security check`,
+    );
+  }
+  // Copilot's reviewer-agent execution is not a validation check or an approval.
+  // Its operational failure is omitted by GitHub's PR check rollup as well.
+  const validationChecks = checks.filter(
+    (check) =>
+      !(
+        check.name === "copilot-pull-request-reviewer" &&
+        check.app?.slug === "github-actions"
+      ),
+  );
+  assert.ok(
+    validationChecks.every(
+      (check) =>
+        check.head_sha === sha &&
+        check.status === "completed" &&
+        ["success", "neutral", "skipped"].includes(check.conclusion),
+    ),
+    "Every reported CI/security check must finish without failure",
+  );
   assert.ok(
     builds.every(
       (check) =>

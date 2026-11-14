@@ -84,7 +84,7 @@ test("only explicit next versions and immutable commit SHAs are accepted", () =>
   }
 });
 
-test("requires successful GitHub Actions Build & Test checks for the exact SHA", () => {
+test("requires successful builds and no pending or failed source/security checks on the exact SHA", () => {
   const check = {
     name: "Build & Test",
     app: { slug: "github-actions" },
@@ -92,9 +92,36 @@ test("requires successful GitHub Actions Build & Test checks for the exact SHA",
     status: "completed",
     conclusion: "success",
   };
+  const security = [
+    { ...check, name: "CodeQL", app: { slug: "github-advanced-security" } },
+    {
+      ...check,
+      name: "Oneleet Code Security Scan",
+      app: { slug: "oneleet-code" },
+    },
+  ];
   assertSuccessfulChecks(
-    [{ check_runs: [check] }, { check_runs: [check] }],
+    [{ check_runs: [check, ...security] }, { check_runs: [check] }],
     sha,
+  );
+  assert.throws(
+    () => assertSuccessfulChecks([{ check_runs: [check] }], sha),
+    /security check/,
+  );
+  assert.throws(
+    () =>
+      assertSuccessfulChecks(
+        [
+          {
+            check_runs: [
+              check,
+              ...security.map((item) => ({ ...item, conclusion: "skipped" })),
+            ],
+          },
+        ],
+        sha,
+      ),
+    /security check/,
   );
   for (const checks of [
     [],
@@ -103,9 +130,34 @@ test("requires successful GitHub Actions Build & Test checks for the exact SHA",
     [{ ...check, status: "in_progress", conclusion: null }],
     [check, { ...check, conclusion: "failure" }],
     [{ ...check, conclusion: "skipped" }],
+    [check, { ...check, name: "CodeQL", conclusion: "failure" }],
+    [
+      check,
+      { ...check, name: "Oneleet", status: "in_progress", conclusion: null },
+    ],
   ]) {
-    assert.throws(() => assertSuccessfulChecks([{ check_runs: checks }], sha));
+    assert.throws(() =>
+      assertSuccessfulChecks([{ check_runs: [...security, ...checks] }], sha),
+    );
   }
+  assertSuccessfulChecks(
+    [
+      {
+        check_runs: [
+          check,
+          ...security,
+          {
+            ...check,
+            name: "copilot-pull-request-reviewer",
+            conclusion: "failure",
+          },
+          { ...check, name: "dependabot-merge", conclusion: "skipped" },
+          { ...check, name: "informational", conclusion: "neutral" },
+        ],
+      },
+    ],
+    sha,
+  );
 });
 
 test("publishing requires an existing environment with required reviewers", () => {
@@ -358,6 +410,17 @@ test("workflow is manually dispatched, defaults to artifact-only and fixes the n
   assert.equal(workflow.on.workflow_dispatch.inputs.version.default, version);
   assert.deepEqual(workflow.permissions, { contents: "read" });
   assert.equal(workflow.concurrency["cancel-in-progress"], false);
+  for (const job of Object.values(workflow.jobs)) {
+    assert.ok(
+      job.steps.every((step) => !step.uses?.startsWith("actions/cache@")),
+    );
+    for (const setup of job.steps.filter((step) =>
+      step.uses?.startsWith("actions/setup-node@"),
+    )) {
+      assert.equal(setup.with.cache, undefined);
+      assert.equal(setup.with["package-manager-cache"], false);
+    }
+  }
   const prepareJob = workflow.jobs.prepare;
   const publish = workflow.jobs.publish;
   assert.equal(prepareJob.permissions["id-token"], undefined);

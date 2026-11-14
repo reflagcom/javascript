@@ -74,8 +74,8 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version-file: release-tools/.nvmrc
-          cache: yarn
-          cache-dependency-path: candidate/yarn.lock
+          # Never save candidate-controlled dependencies into main's cache scope.
+          package-manager-cache: false
       - name: Build, test and verify the actual packed package
         id: prepare
         env:
@@ -112,6 +112,7 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
+          package-manager-cache: false
           registry-url: https://registry.npmjs.org
           scope: "@reflag"
       - uses: actions/download-artifact@v4
