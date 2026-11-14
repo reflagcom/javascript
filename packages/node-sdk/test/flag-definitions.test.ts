@@ -90,6 +90,64 @@ describe("collection preparation", () => {
     });
     expect(() => prepareFlagCollection(value)).toThrow();
   });
+  it.each([
+    [33.333, 33.333, 33.334],
+    [12.345, 87.655],
+    [0, 0.001, 99.999],
+    [0.29, 99.71],
+  ])("accepts thousandth-percent allocations %j", (...percentages) => {
+    const value = snapshot([
+      definition("a", true),
+      definition("unrelated", false),
+    ]);
+    value.flags[0].rules.unshift({
+      id: "split",
+      filter: { type: "constant", value: true },
+      result: {
+        type: "percentageDistribution",
+        key: "split",
+        attribute: "company.id",
+        allocations: percentages.map((percentage) => ({
+          percentage,
+          destination: { type: "variant", variantKey: "default" },
+        })),
+      },
+    });
+    const prepared = prepareFlagCollection(value);
+    const result = prepared.evaluator.evaluateAll({ company: { id: "acme" } });
+    expect(result.flags.a).toMatchObject({
+      resolved: true,
+      value: true,
+      errors: [],
+    });
+    expect(result.flags.unrelated).toMatchObject({
+      resolved: true,
+      value: false,
+    });
+  });
+  it.each([
+    [33.3333, 33.3333, 33.3334],
+    [50.0001, 49.9999],
+    [33.333, 33.333, 33.333],
+    [NaN, 100],
+    [Infinity, 0],
+  ])("rejects invalid fractional allocations %j", (...percentages) => {
+    const value = snapshot([definition("a", true)]);
+    value.flags[0].rules.unshift({
+      id: "split",
+      filter: { type: "constant", value: true },
+      result: {
+        type: "percentageDistribution",
+        key: "split",
+        attribute: "company.id",
+        allocations: percentages.map((percentage) => ({
+          percentage,
+          destination: { type: "variant", variantKey: "default" },
+        })),
+      },
+    });
+    expect(() => prepareFlagCollection(value)).toThrow("invalid compiled rule");
+  });
   it("requires a fixed catch-all and unique rule identities", () => {
     const value = graph();
     value.flags[0].rules.pop();

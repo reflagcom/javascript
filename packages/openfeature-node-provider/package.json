@@ -1,6 +1,6 @@
 {
   "name": "@reflag/openfeature-node-provider",
-  "version": "1.2.5",
+  "version": "1.2.8",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -36,7 +36,7 @@
     "fmt:fix": "oxfmt --write ."
   },
   "dependencies": {
-    "@reflag/node-sdk-v1": "npm:@reflag/node-sdk@1.8.0"
+    "@reflag/node-sdk-v1": "npm:@reflag/node-sdk@1.8.3"
   },
   "devDependencies": {
     "@babel/core": "~7.29.6",
@@ -48,8 +48,8 @@
     "ts-node": "~10.9.2",
     "typescript": "^5.7.3",
     "vite": "~6.4.2",
-    "vite-plugin-dts": "~3.9.1",
-    "vitest": "~1.6.0"
+    "vite-plugin-dts": "^4.5.4",
+    "vitest": "~4.1.12"
   },
   "peerDependencies": {
     "@openfeature/server-sdk": ">=1.16.1"

@@ -266,21 +266,28 @@ export class ReflagClient {
       triggerOnExit(() => this.flush());
     this.flagsCache = new FlagsCache(
       async (waitForVersion) => {
-        const response = await this.get<FlagsAPIResponse>(
+        // A 304 cannot establish that a requested newer version was reached.
+        const etag =
+          waitForVersion === undefined ? this.flagsCache.getETag() : undefined;
+        const response = await this.getResponse<FlagsAPIResponse>(
           `flags${waitForVersion === undefined ? "" : `?waitForVersion=${encodeURIComponent(waitForVersion)}`}`,
           this.config.flagsFetchRetries,
+          { etag },
         );
+        if (response?.status === 304) return { notModified: true };
+        const body = response?.body;
         try {
           if (
-            !response ||
-            response.protocolVersion !== 2 ||
-            !Number.isSafeInteger(response.flagStateVersion) ||
-            response.flagStateVersion < 0
+            !body ||
+            body.protocolVersion !== 2 ||
+            !Number.isSafeInteger(body.flagStateVersion) ||
+            body.flagStateVersion < 0
           )
             throw new Error("invalid v2 flag response");
           return {
-            definitions: prepareFlagCollection(response),
-            flagStateVersion: response.flagStateVersion,
+            definitions: prepareFlagCollection(body),
+            flagStateVersion: body.flagStateVersion,
+            etag: response?.etag,
           };
         } catch (error) {
           this.logger.debug("flag collection unavailable or invalid", error);
@@ -291,10 +298,17 @@ export class ReflagClient {
         logger: this.logger,
         scheduleTrailingRefresh:
           flagsSyncMode === "in-request" ? undefined : scheduleRefresh,
-        onApply: ({ definitions, flagStateVersion, fallback }) => {
+        onApply: (accepted) => {
+          const { definitions, flagStateVersion, fallback, etag } = accepted;
+          // Publish this snapshot's validator only after persistence succeeds.
+          // A late save must never change a replacement or destroyed cache.
+          accepted.etag = undefined;
           if (fallback) return;
           this.canLoadFallback = false;
-          if (!this.config.flagsFallbackProvider) return;
+          if (!this.config.flagsFallbackProvider) {
+            accepted.etag = etag;
+            return;
+          }
           // Persist only accepted snapshots, and serialize saves to prevent an old
           // slow write from overwriting a newer collection in external storage.
           const snapshot: FlagsFallbackSnapshot = structuredClone({
@@ -310,6 +324,7 @@ export class ReflagClient {
                 this.config.fallbackContext,
                 snapshot,
               );
+              accepted.etag = etag;
             } catch (error) {
               this.logger.error(
                 "flagsFallbackProvider: failed to save flag definitions",
@@ -402,7 +417,11 @@ export class ReflagClient {
     };
   }
   public bindClient(options: ContextWithTracking) {
-    return new BoundReflagClient(this, options);
+    const bound = new BoundReflagClient(this, options);
+    void this.syncContext(options).catch((error) =>
+      this.logger.error("failed to synchronize context", error),
+    );
+    return bound;
   }
 
   /** Complete definitions, including segments needed for offline evaluation. */
@@ -451,6 +470,7 @@ export class ReflagClient {
       flags: RawFlags;
       context: Context;
       flagStateVersion?: number;
+      evaluatedBeforeInitialization?: boolean;
     },
     enableTracking: boolean,
   ): FlagValue {
@@ -473,6 +493,7 @@ export class ReflagClient {
         checkResult,
         evaluation.context,
         evaluation.flagStateVersion,
+        evaluation.evaluatedBeforeInitialization,
       );
     }
     return structuredClone(selected.value);
@@ -550,8 +571,18 @@ export class ReflagClient {
       flags[key] = localResult(key, undefined);
     if (checks && enableTracking)
       for (const [flagKey, result] of Object.entries(flags))
-        this.registerCheck(flagKey, result, context, flagStateVersion);
-    return { flags, flagStateVersion };
+        this.registerCheck(
+          flagKey,
+          result,
+          context,
+          flagStateVersion,
+          !this.initialized,
+        );
+    return {
+      flags,
+      flagStateVersion,
+      evaluatedBeforeInitialization: !this.initialized,
+    };
   }
 
   private registerCheck(
@@ -559,8 +590,17 @@ export class ReflagClient {
     result: RawFlag,
     context: Context,
     flagStateVersion?: number,
+    evaluatedBeforeInitialization = false,
   ) {
     if (this.config.offline) return;
+    const evalErrors: NonNullable<FlagEvent["evalErrors"]> = [...result.errors];
+    if (evaluatedBeforeInitialization)
+      evalErrors.push({
+        code: "CLIENT_NOT_INITIALIZED",
+        field: "",
+        message:
+          "ReflagClient was not initialized before this flag was evaluated. Call initialize() before evaluating flags.",
+      });
     const event: FlagEvent = {
       action: "check",
       key,
@@ -576,7 +616,7 @@ export class ReflagClient {
         unknown
       >,
       evalRuleResults: result.ruleResults.map((rule) => rule.matched),
-      ...(result.errors.length ? { evalErrors: result.errors } : {}),
+      ...(evalErrors.length ? { evalErrors } : {}),
     };
     // Include selection/version identity: equal JSON payloads are not the same variant.
     const identity = {
@@ -683,9 +723,11 @@ export class ReflagClient {
       contextJson: canonicalContextJSONStringify(context) ?? "{}",
     });
     if (key !== undefined) query.set("key", key);
-    const response = await this.get<EvaluatedFlagsAPIResponse>(
-      `flags/evaluated?${query}`,
-    );
+    const response = (
+      await this.getResponse<EvaluatedFlagsAPIResponse>(
+        `flags/evaluated?${query}`,
+      )
+    )?.body;
     const flags: RawFlags = Object.create(null);
     if (
       !response ||
@@ -823,17 +865,33 @@ export class ReflagClient {
     if (!response.ok || !response.body?.success)
       throw new Error("invalid response sending bulk events");
   }
-  private async get<Response>(
+  private async getResponse<Response>(
     path: string,
     retries = this.config.flagsFetchRetries,
-  ): Promise<Response | undefined> {
+    revalidation?: { etag?: string },
+  ) {
     const url = new URL(path, this.config.apiBaseUrl).toString();
+    const etag = revalidation?.etag;
+    const headers = etag
+      ? { ...this.config.headers, "If-None-Match": etag }
+      : this.config.headers;
+    let recoveryAvailable = Boolean(revalidation && !etag);
+    const request = (requestHeaders: Record<string, string>) =>
+      this.httpClient.get<Response & { success: boolean }>(
+        url,
+        requestHeaders,
+        this.config.fetchTimeoutMs,
+      );
     try {
       return await withRetry(
         async () => {
-          const response = await this.httpClient.get<
-            Response & { success: boolean }
-          >(url, this.config.headers, this.config.fetchTimeoutMs);
+          let response = await request(headers);
+          if (response.status === 304 && etag) return response;
+          // Recover once from an unexpected unconditional 304 across retries.
+          if (response.status === 304 && recoveryAvailable) {
+            recoveryAvailable = false;
+            response = await request(this.config.headers);
+          }
           if (
             !response.ok ||
             !isObject(response.body) ||
@@ -842,8 +900,7 @@ export class ReflagClient {
             throw new Error(
               `invalid response received from server for "${url}"`,
             );
-          const { success: _, ...body } = response.body;
-          return body as Response;
+          return response;
         },
         (error) => this.logger.warn("failed to fetch flags, will retry", error),
         retries,
@@ -927,7 +984,7 @@ export class BoundReflagClient {
     ) as Promise<FlagValue>;
   }
   public bindClient(next: ContextWithTracking) {
-    return new BoundReflagClient(this.client, {
+    return this.client.bindClient({
       ...this.options,
       ...next,
       enableTracking: next.enableTracking ?? this.options.enableTracking,
@@ -954,8 +1011,8 @@ export class BoundReflagClient {
     }
     if (this.options.enableTracking === false) return;
     await this.client.track(this.user.id, event, {
-      companyId: this.company?.id,
       ...options,
+      companyId: options?.companyId ?? this.company?.id,
     });
   }
   public async flush() {

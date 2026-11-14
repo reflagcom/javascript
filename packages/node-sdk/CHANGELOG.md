@@ -1,5 +1,29 @@
 # @reflag/node-sdk
 
+## 1.8.3
+
+### Patch Changes
+
+- d7078e0: Keep the existing Node SDK on evaluator 1.1.2 through the `@reflag/flag-evaluation-v1` npm alias. This preserves its legacy protocol and prevents the evaluator's v2 workspace release from automatically upgrading its dependency before SDK migration.
+
+## 1.8.2
+
+### Patch Changes
+
+- 9d213c0: Use ETags when refreshing flag definitions to avoid downloading and recompiling unchanged flags. Custom HTTP clients can opt in by returning the response ETag.
+- Updated dependencies [aa47838]
+  - @reflag/flag-evaluation@1.1.2
+
+## 1.8.1
+
+### Patch Changes
+
+- c69ee92: Stop installing process signal handlers and forcing process termination after flushing. This prevents the SDK from interrupting application-managed graceful shutdown, including handlers registered after SDK initialization.
+
+  `batchOptions.flushOnExit` now only flushes automatically on natural event-loop shutdown (`beforeExit`). Applications must await `client.flush()` in their own shutdown hooks to flush before signal-driven termination or an explicit `process.exit()`.
+
+- df37a58: Include non-fatal flag evaluation diagnostics in check events sent by the Node, browser, React, and Vue SDKs, including when flags are evaluated before client initialization.
+
 ## 1.8.0
 
 ### Minor Changes
