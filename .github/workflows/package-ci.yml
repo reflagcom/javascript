@@ -29,6 +29,8 @@ jobs:
       - name: Restore package.json
         # This step is necessary because the previous step may have updated package.json
         run: git checkout -- package.json packages/*/package.json
+      - name: Test prerelease safeguards
+        run: yarn test:release
       - name: Install Playwright Browsers
         run: yarn playwright install --with-deps
         working-directory: ./packages/browser-sdk

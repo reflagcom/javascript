@@ -17,6 +17,8 @@
     "build": "lerna run build --stream",
     "test:ci": "lerna run test:ci --stream",
     "test": "lerna run test --stream",
+    "test:release": "node --test scripts/node-sdk-prerelease.test.mjs",
+    "prerelease:node": "node scripts/node-sdk-prerelease.mjs",
     "format": "yarn fmt:fix && yarn lint:fix",
     "lint": "yarn oxlint .",
     "lint:ci": "yarn oxlint .",
@@ -42,7 +44,8 @@
     "typedoc-plugin-frontmatter": "^1.1.2",
     "typedoc-plugin-markdown": "^4.4.2",
     "typedoc-plugin-mdn-links": "^4.0.7",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "yaml": "^2.8.3"
   },
   "resolutions": {
     "minimatch@npm:9.0.1": "npm:9.0.9",
