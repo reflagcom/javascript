@@ -32,6 +32,13 @@ export type FlagKey = keyof Flags extends never
   ? string
   : Extract<keyof Flags, string>;
 
+/**
+ * An opt-in-enabled flag for the generated Vue SDK flag definitions.
+ *
+ * Includes all fields from {@link BrowserOptInFlag}: `name`, `description`,
+ * `isEnabled`, `userOptedIn`, `companyOptedIn`, and `isOptedIn`.
+ * Only `key` is narrowed to the generated {@link FlagKey} type.
+ */
 export type OptInFlag = Omit<BrowserOptInFlag, "key"> & {
   key: FlagKey;
 };

@@ -117,20 +117,24 @@ await reflag.initialize();
 const enabled = reflag.getFlag("release");
 ```
 
-The payload includes `protocolVersion: 2`, context, evaluated diagnostics/selections and an optional snapshot version. V1 payloads and the old `bootstrappedFlags` option are rejected. Preserve the entire envelope; do not pass just its `flags` property. A version is required for bootstrapped live updates. Never embed secrets or server-only context in public bootstrap data. Later refreshes use browser-visible context and can differ from server-only evaluation; disable live updates when that is inappropriate.
+The payload includes `protocolVersion: 2`, context, evaluated diagnostics/selections and an optional snapshot version. V1 payloads and the old `bootstrappedFlags` option are rejected. Preserve the entire envelope; do not pass just its `flags` property. A version is required for bootstrapped live updates. Never embed secrets or server-only context in public bootstrap data. Later refreshes use browser-visible context and can differ from server-only evaluation; disable live updates when that is inappropriate. Requesting missing opt-in metadata still makes a browser-side request even when live updates are disabled.
 
 ## End-user opt-in
 
 ```ts
 const options = reflag.getOptInFlags();
 const loading = reflag.getIsLoadingOptInFlags();
-await reflag.setOptIn("huddles", { optedIn: true });
-await reflag.setOptIn("huddles", { optedIn: false, scope: "company" });
+try {
+  const response = await reflag.setOptIn("huddles", { optedIn: true });
+  if (!response?.ok) console.error("Could not update opt-in");
+} catch (error) {
+  console.error("Could not update opt-in", error);
+}
 ```
 
 The list contains presentation/membership metadata (`key`, `name`, `description`, `isEnabled`, `userOptedIn`, `companyOptedIn`, `isOptedIn`); this is not the ordinary flag getter API. User/company grants remain independent. The selected scope requires its ID. Successful mutations wait for versioned evaluation and membership confirmation.
 
-Metadata arrives with ordinary `/flags/evaluated` responses and is cached with the evaluated snapshot. Bootstrapped clients whose snapshot lacks metadata fetch it on demand from the same v2 endpoint, without replacing server-derived values or provenance with browser-context evaluations. Loading settles on success or failure, including an empty list. Opt-in mutations confirm values and membership together in one versioned refresh. `optInFlagsLoadingUpdated` and `flagsUpdated` support UI subscriptions.
+Metadata arrives with ordinary `/flags/evaluated` responses and is cached with the evaluated snapshot. Bootstrapped clients whose snapshot lacks metadata fetch it on demand from the same v2 endpoint, without replacing server-derived values or provenance with browser-context evaluations. Loading settles on success or failure, including an empty list. Opt-in mutations confirm values and membership together in one versioned refresh. `optInFlagsLoadingUpdated` and `flagsUpdated` support UI subscriptions. Failed metadata requests settle loading without exposing an error; call `reflag.refresh()` to retry. Check the mutation's returned `Response.ok` and catch promise rejections: HTTP failures return a readable non-OK response without refreshing, skipped calls return undefined, and confirmation can fail after membership changed remotely.
 
 ## Tracking, feedback and events
 

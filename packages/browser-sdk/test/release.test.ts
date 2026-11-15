@@ -24,8 +24,8 @@ describe("framework v1/v2 release isolation", () => {
   });
 
   test("keeps unchanged React Native and OpenFeature Browser consumers on published v1", () => {
-    expect(native.dependencies["@reflag/react-sdk"]).toBe("1.7.0");
-    expect(openfeature.dependencies["@reflag/browser-sdk"]).toBe("1.7.0");
+    expect(native.dependencies["@reflag/react-sdk"]).toBe("1.7.4");
+    expect(openfeature.dependencies["@reflag/browser-sdk"]).toBe("1.7.4");
     expect(nativeRequire.resolve("@reflag/react-sdk")).not.toBe(
       resolve(__dirname, "../../react-sdk/dist/reflag-react-sdk.umd.js"),
     );

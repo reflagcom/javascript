@@ -404,8 +404,15 @@ const defaultConfig: Config = {
   bootstrapped: false,
 };
 
+const CLIENT_NOT_INITIALIZED_EVALUATION_ERROR = {
+  code: "CLIENT_NOT_INITIALIZED",
+  field: "",
+  message:
+    "ReflagClient was not initialized before this flag was evaluated. Call initialize() before evaluating flags.",
+} as const;
+
 /**
- * Represents a flag.
+ * Options for changing the current user or company's opt-in membership.
  */
 export type SetOptInOptions = {
   /**
@@ -1250,6 +1257,12 @@ export class ReflagClient {
 
   /**
    * Set whether the current user or company has opted into a flag.
+   *
+   * A successful Response is returned after the refreshed flag state confirms
+   * the membership change. HTTP failures return a readable non-OK Response
+   * without refreshing flags. Offline mode, invalid arguments, or missing scoped
+   * context return undefined. Network and confirmation failures reject; a
+   * confirmation failure may occur after membership changed remotely.
    */
   async setOptIn(
     flagKey: string,
@@ -1329,7 +1342,7 @@ export class ReflagClient {
     if (!res.ok) {
       await logResponseError({
         logger: this.logger,
-        res,
+        res: res.clone(),
         message: "set opt-in request failed",
         extra: { flagKey, optedIn: options.optedIn, scope },
       });
@@ -1423,7 +1436,9 @@ export class ReflagClient {
           ? [error.field]
           : [],
       ),
-      evalErrors: result?.errors,
+      evalErrors: this.flagsClient.hasFlagState()
+        ? result?.errors
+        : [...(result?.errors ?? []), CLIENT_NOT_INITIALIZED_EVALUATION_ERROR],
     };
     void this.sendCheckEvent(event).catch((error) =>
       this.logger.warn("failed to register flag check", error),

@@ -1,4 +1,4 @@
-# Reflag Vue SDK v2 (beta)
+# Reflag Vue SDK v2
 
 Reactive direct-value flags for Vue 3, backed by [Browser SDK v2](../browser-sdk/README.md).
 
@@ -86,7 +86,7 @@ const flags = serverClient.getFlagsForBootstrap(context);
 </ReflagBootstrappedProvider>
 ```
 
-Pass the entire envelope (`protocolVersion: 2`, context, evaluated flags and optional snapshot version). Legacy v1 bootstrap is rejected. A snapshot version is required for live updates. Never expose secret keys/server-only attributes in bootstrap data; later refreshes use browser-visible context, so disable live updates when they must not replace server-only evaluations.
+Pass the entire envelope (`protocolVersion: 2`, context, evaluated flags and optional snapshot version). Legacy v1 bootstrap is rejected. A snapshot version is required for live updates. Never expose secret keys/server-only attributes in bootstrap data; later refreshes use browser-visible context, so disable live updates when they must not replace server-only evaluations. Requesting missing opt-in metadata still makes a browser-side request even when live updates are disabled.
 
 `ReflagClientProvider` accepts an externally initialized Browser v2 client. Its lifecycle belongs to the application.
 
@@ -95,8 +95,12 @@ Pass the entire envelope (`protocolVersion: 2`, context, evaluated flags and opt
 ```ts
 const { flags, isLoading } = useOptInFlags(); // refs to metadata/list loading
 const setOptIn = useSetOptIn();
-await setOptIn("huddles", { optedIn: true });
-await setOptIn("huddles", { optedIn: false, scope: "company" });
+try {
+  const response = await setOptIn("huddles", { optedIn: true });
+  if (!response?.ok) console.error("Could not update opt-in");
+} catch (error) {
+  console.error("Could not update opt-in", error);
+}
 
 const track = useTrack();
 await track("Started huddle", { button: "cta" });
@@ -106,7 +110,7 @@ const sendFeedback = useSendFeedback();
 await sendFeedback({ flagKey: "huddles", score: 5 });
 ```
 
-Opt-in metadata arrives with ordinary `/flags/evaluated` responses. Bootstrapped providers fetch missing metadata on demand from the same v2 endpoint without replacing server-derived values or provenance; loading settles on success or failure. User/company grants remain independent; successful mutations confirm versioned evaluation and membership in a single refresh. The metadata list retains presentation/membership fields such as `isEnabled`; ordinary reads remain direct values.
+Opt-in metadata arrives with ordinary `/flags/evaluated` responses. Bootstrapped providers fetch missing metadata on demand from the same v2 endpoint without replacing server-derived values or provenance; loading settles on success or failure. User/company grants remain independent; successful mutations confirm versioned evaluation and membership in a single refresh. The metadata list retains presentation/membership fields such as `isEnabled`; ordinary reads remain direct values. Check the returned `Response.ok` and catch rejections; a confirmation failure can occur after membership changed remotely, and skipped calls return undefined. Failed metadata requests settle loading without exposing an error; use `useClient().refresh()` to retry.
 
 `enableTracking: false` disables checks and ordinary tracking. Offline mode skips HTTP/tracking. See [Browser feedback documentation](../browser-sdk/FEEDBACK.md) for prompting/UI options.
 

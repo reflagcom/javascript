@@ -40,6 +40,11 @@ jobs:
       - id: test
         name: Test the project
         run: yarn test:ci
+      - name: Check standalone examples
+        run: |
+          for example in packages/node-sdk/examples/cloudflare-worker packages/openfeature-node-provider/example; do
+            (cd "$example" && yarn install --immutable && yarn build && yarn test:ci)
+          done
       - name: Report test results
         uses: dorny/test-reporter@v1.6.0
         with:

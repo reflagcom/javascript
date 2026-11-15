@@ -22,6 +22,21 @@ function setup() {
 afterEach(() => vi.useRealTimers());
 
 describe("v2 evaluated cache", () => {
+  test.each([
+    [{ code: "MISSING_CONTEXT_FIELD" }],
+    [
+      {
+        code: "MISSING_CONTEXT_FIELD",
+        message: "missing",
+        source: { type: "unknown", key: "s" },
+      },
+    ],
+  ])("rejects malformed v2 diagnostics: %j", (errors) => {
+    expect(
+      parseAPIFlagsResponse({ flagA: { ...selectedFlag(true), errors } }),
+    ).toBeUndefined();
+  });
+
   test("owns stored values and preserves snapshot version zero", async () => {
     const { cache } = setup();
     const optIn = {

@@ -122,7 +122,7 @@ import { ReflagBootstrappedProvider } from "@reflag/react-sdk";
 </ReflagBootstrappedProvider>;
 ```
 
-The envelope includes `protocolVersion: 2`, context, evaluated flag results and optional `flagStateVersion`. V1 bootstrap is rejected. Use a snapshot version for live updates; later refreshes use browser-visible context. Do not send secrets/server-only attributes to the browser. Disable live updates if later browser evaluation must not replace server-only results.
+The envelope includes `protocolVersion: 2`, context, evaluated flag results and optional `flagStateVersion`. V1 bootstrap is rejected. Use a snapshot version for live updates; later refreshes use browser-visible context. Do not send secrets/server-only attributes to the browser. Disable live updates if later browser evaluation must not replace server-only results. Requesting missing opt-in metadata still makes a browser-side request even when live updates are disabled.
 
 For a pre-existing Browser v2 client, use `<ReflagClientProvider client={client}>`. The provider does not own its lifecycle; initialize/stop externally, except that a suspending read can start on-demand initialization.
 
@@ -139,11 +139,15 @@ For a pre-existing Browser v2 client, use `<ReflagClientProvider client={client}
 ```tsx
 const { flags, isLoading } = useOptInFlags();
 const setOptIn = useSetOptIn();
-await setOptIn("huddles", { optedIn: true });
-await setOptIn("huddles", { optedIn: false, scope: "company" });
+try {
+  const response = await setOptIn("huddles", { optedIn: true });
+  if (!response?.ok) console.error("Could not update opt-in");
+} catch (error) {
+  console.error("Could not update opt-in", error);
+}
 ```
 
-Metadata arrives with the initial v2 evaluation for regular providers. Bootstrapped providers fetch missing metadata on demand from `/flags/evaluated` without replacing server-derived values. `isLoading` covers initialization and metadata retrieval; it settles on success or failure. Metadata presentation includes `isEnabled` and membership fields, separately from direct flag reads. User/company grants remain independent. Mutations confirm versioned evaluation and membership in a single refresh.
+Metadata arrives with the initial v2 evaluation for regular providers. Bootstrapped providers fetch missing metadata on demand from `/flags/evaluated` without replacing server-derived values. `isLoading` covers initialization and metadata retrieval; it settles on success or failure. Metadata presentation includes `isEnabled` and membership fields, separately from direct flag reads. User/company grants remain independent. Mutations confirm versioned evaluation and membership in a single refresh. Check the returned `Response.ok` and catch rejections; a confirmation failure can occur after membership changed remotely, and skipped calls return undefined. Failed metadata requests settle loading without exposing an error; use `useClient().refresh()` to retry.
 
 `useOptInFlags({ suspense: true | false })` retains its own per-hook loading options and may inherit provider `suspense`. These options are unrelated to the positional payload defaults used by `useFlag` / `useFlagSuspense`.
 

@@ -52,6 +52,65 @@ function checks() {
 }
 
 describe("direct values and root checks", () => {
+  test("captures initialization diagnostics at read time, even when delivery happens after initialization", async () => {
+    const client = create();
+    expect(client.getFlag("flagA")).toBe(false);
+    await client.initialize();
+    await client.stop();
+    expect(checks()[0]).toMatchObject({
+      key: "flagA",
+      evalErrors: [{ code: "CLIENT_NOT_INITIALIZED", field: "" }],
+    });
+  });
+
+  test("does not diagnose a read from flagsUpdated during initialization as uninitialized", async () => {
+    const client = create();
+    const onUpdated = vi.fn(() => {
+      expect(client.getState()).toBe("initializing");
+      expect(client.getFlag("flagA")).toBe(true);
+    });
+    client.on("flagsUpdated", onUpdated);
+    await client.initialize();
+    await client.stop();
+    expect(onUpdated).toHaveBeenCalledOnce();
+    expect(checks()[0]).toMatchObject({ evalResult: "true", evalErrors: [] });
+  });
+
+  test.each([false, true])(
+    "accepts an empty snapshot as initialized state, bootstrap: %s",
+    async (bootstrapped) => {
+      server.use(
+        http.get("https://front.reflag.com/flags/evaluated", () =>
+          HttpResponse.json({ ...flagResponse, flags: {} }),
+        ),
+      );
+      const client = create(
+        bootstrapped ? { bootstrappedState: bootstrap({}) } : {},
+      );
+      if (!bootstrapped) await client.initialize();
+      expect(client.getFlag("missing")).toBe(false);
+      await client.stop();
+      expect(checks()[0].evalErrors).toBeUndefined();
+    },
+  );
+
+  test("forwards v2 diagnostics without adding initialization errors to bootstrap reads", async () => {
+    const error = {
+      code: "MISSING_CONTEXT_FIELD",
+      field: "other.plan",
+      message: "Required targeting context is missing",
+      source: { type: "segment" as const, key: "enterprise" },
+    };
+    const client = create({
+      bootstrappedState: bootstrap({
+        flagA: { ...selectedFlag(true), errors: [error] },
+      }),
+    });
+    expect(client.getFlag("flagA")).toBe(true);
+    await client.stop();
+    expect(checks()[0].evalErrors).toEqual([error]);
+  });
+
   test("registers an ignored root read immediately, but diagnostics/bootstrap register none; delivery stays buffered", async () => {
     const client = create();
     const check = vi.fn();
@@ -380,6 +439,52 @@ describe("bootstrap and opt-in boundaries", () => {
     expect(metadataRequests).toBe(1);
   });
 
+  test("settles a failed metadata refresh and allows a manual retry", async () => {
+    let requests = 0;
+    server.use(
+      http.get("https://front.reflag.com/flags/evaluated", () => {
+        requests++;
+        return HttpResponse.json({ success: false }, { status: 500 });
+      }),
+    );
+    const client = create({
+      enableTracking: false,
+      bootstrappedState: bootstrap({ flagA: selectedFlag(true) }),
+    });
+    await client.initialize();
+    expect(client.getOptInFlags()).toEqual([]);
+    await vi.waitFor(() => expect(client.getIsLoadingOptInFlags()).toBe(false));
+    expect(client.getOptInFlags()).toEqual([]);
+    expect(requests).toBe(1);
+    server.use(
+      http.get("https://front.reflag.com/flags/evaluated", () => {
+        requests++;
+        return HttpResponse.json({
+          ...flagResponse,
+          flags: {
+            flagA: {
+              ...selectedFlag(true),
+              optInEnabled: true,
+              optIn: {
+                name: "Try",
+                description: null,
+                userOptedIn: false,
+                companyOptedIn: false,
+                isOptedIn: false,
+              },
+            },
+          },
+        });
+      }),
+    );
+    expect(await client.refresh()).toBeDefined();
+    expect(client.getIsLoadingOptInFlags()).toBe(false);
+    expect(client.getOptInFlags()).toEqual([
+      expect.objectContaining({ key: "flagA", userOptedIn: false }),
+    ]);
+    expect(requests).toBe(2);
+  });
+
   test("loads opt-in metadata with ordinary evaluation, including unavailable opt-in", async () => {
     let requests = 0;
     server.use(
@@ -485,6 +590,38 @@ describe("bootstrap and opt-in boundaries", () => {
     expect(client.getOptInFlags()[0].companyOptedIn).toBe(true);
     expect(client.getFlag("flagA")).toBe(true);
     expect(evaluationRequests).toBe(2);
+  });
+
+  test("returns readable opt-in HTTP errors without refreshing or changing accepted flags", async () => {
+    const errorBody = {
+      success: false,
+      error: { code: "OPT_IN_NOT_ALLOWED", message: "Opt-in is not enabled" },
+    };
+    const evaluation = vi.fn();
+    server.use(
+      http.post("https://front.reflag.com/flags/opt-in", () =>
+        HttpResponse.json(errorBody, { status: 403 }),
+      ),
+      http.get("https://front.reflag.com/flags/evaluated", () => {
+        evaluation();
+        return HttpResponse.json(flagResponse);
+      }),
+    );
+    const client = create({
+      enableTracking: false,
+      bootstrappedState: bootstrap({ flagA: selectedFlag(true) }),
+    });
+    await client.initialize();
+    const updated = vi.fn();
+    client.on("flagsUpdated", updated);
+    const response = await client.setOptIn("flagA", { optedIn: true });
+    expect(response?.ok).toBe(false);
+    expect(response?.status).toBe(403);
+    expect(response?.bodyUsed).toBe(false);
+    await expect(response!.json()).resolves.toEqual(errorBody);
+    expect(evaluation).not.toHaveBeenCalled();
+    expect(updated).not.toHaveBeenCalled();
+    expect(client.getFlag("flagA")).toBe(true);
   });
 
   test("fails opt-in confirmation if the refreshed server membership is missing", async () => {

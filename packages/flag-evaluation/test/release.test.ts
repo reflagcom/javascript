@@ -24,8 +24,13 @@ describe("v1/v2 release isolation", () => {
   });
 
   it("keeps the unchanged OpenFeature provider on published Node SDK v1", () => {
+    // Matching the v2 workspace's version would silently link this alias locally.
+    expect(require.resolve("@reflag/node-sdk-v1/package.json")).not.toBe(
+      resolve(__dirname, "../../node-sdk/package.json"),
+    );
+    expect(require("@reflag/node-sdk-v1/package.json").version).toBe("1.8.3");
     expect(openfeature.dependencies["@reflag/node-sdk-v1"]).toBe(
-      "npm:@reflag/node-sdk@1.8.0",
+      "npm:@reflag/node-sdk@1.8.3",
     );
     expect(openfeature.dependencies).not.toHaveProperty("@reflag/node-sdk");
   });

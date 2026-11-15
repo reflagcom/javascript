@@ -15,11 +15,11 @@ export const dynamic = "force-dynamic";
 type QueryValue = string | string[] | undefined;
 
 type PageProps = {
-  searchParams?: {
+  searchParams?: Promise<{
     appId?: QueryValue;
     envId?: QueryValue;
     userId?: QueryValue;
-  };
+  }>;
 };
 
 function getQueryValue(value: QueryValue) {
@@ -27,8 +27,9 @@ function getQueryValue(value: QueryValue) {
 }
 
 export default async function UserFlagsPage({ searchParams }: PageProps) {
+  const queryParams = await searchParams;
   const apps = (await listApps()).data ?? [];
-  const requestedAppId = getQueryValue(searchParams?.appId);
+  const requestedAppId = getQueryValue(queryParams?.appId);
   const selectedAppId =
     apps.find((app) => app.id === requestedAppId)?.id ?? apps[0]?.id ?? "";
 
@@ -36,11 +37,11 @@ export default async function UserFlagsPage({ searchParams }: PageProps) {
     ? ((await listEnvironments(selectedAppId)).data ?? [])
     : [];
 
-  const requestedEnvId = getQueryValue(searchParams?.envId);
+  const requestedEnvId = getQueryValue(queryParams?.envId);
   const selectedEnvId =
     envs.find((env) => env.id === requestedEnvId)?.id ?? envs[0]?.id ?? "";
 
-  const userId = getQueryValue(searchParams?.userId);
+  const userId = getQueryValue(queryParams?.userId);
 
   const flags =
     selectedAppId && selectedEnvId && userId

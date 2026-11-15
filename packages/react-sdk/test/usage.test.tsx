@@ -108,6 +108,10 @@ const server = setupServer(
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
   localStorage.clear();
+  // Prevent Preact toolbar renders from outliving the jsdom test environment.
+  vi.spyOn(ReflagClient.prototype, "showToolbarToggle").mockImplementation(
+    () => undefined,
+  );
 });
 afterEach(async () => {
   server.resetHandlers();

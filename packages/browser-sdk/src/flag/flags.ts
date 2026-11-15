@@ -201,6 +201,7 @@ export class FlagsClient {
   private initialized = false;
   private bootstrapped = false;
   private initializationComplete = false;
+  private flagStateAvailable = false;
 
   private rateLimiter: RateLimiter;
   private readonly logger: Logger;
@@ -343,6 +344,10 @@ export class FlagsClient {
     return copyJSON(this.fetchedFlags);
   }
 
+  hasFlagState(): boolean {
+    return this.flagStateAvailable;
+  }
+
   getOptInMetadata(): Record<string, RawFlagOptIn> {
     return copyJSON(this.optInMetadata);
   }
@@ -474,6 +479,8 @@ export class FlagsClient {
         !isValidFlagStateVersion(flagStateVersion))
     )
       throw new Error("Invalid protocol-v2 evaluated flags");
+    // State is available before update listeners can read flags during initialization.
+    this.flagStateAvailable = true;
     this.fetchedFlags = validated;
     this.fetchedFlagStateVersion = flagStateVersion;
     this.fetchedFlagsContextVersion = this.contextFetchVersion;

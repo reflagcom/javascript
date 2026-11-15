@@ -1,4 +1,10 @@
 {
   "tsconfig": "tsconfig.build.json",
-  "entryPoints": ["src/index.tsx"]
+  "entryPoints": ["src/index.tsx"],
+  "externalSymbolLinkMappings": {
+    "@reflag/browser-sdk": {
+      "OptInFlag": "@reflag/react-native-sdk/globals.md#optinflag",
+      "ReflagClient.setOptIn": "@reflag/react-native-sdk/globals.md#usesetoptin"
+    }
+  }
 }

@@ -1,4 +1,5 @@
 import { BULK_QUEUE_FLUSH_DELAY_MS, BULK_QUEUE_MAX_SIZE } from "./config";
+import type { CheckEvent } from "./flag/flags";
 import { Logger } from "./logger";
 import { logResponseError } from "./utils/responseError";
 
@@ -37,7 +38,7 @@ export type BulkEvent =
       sourceVersionId?: string;
       flagStateVersion?: number;
       evalResult?: string;
-      evalErrors?: import("./flag/flags").EvaluationError[];
+      evalErrors?: CheckEvent["evalErrors"];
       evalContext?: Record<string, any>;
       evalRuleResults?: boolean[];
       evalMissingFields?: string[];
