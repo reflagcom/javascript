@@ -175,10 +175,18 @@ describe("collection evaluation", () => {
   });
 
   it("matches multivariate variant keys, not value truthiness or object identity", () => {
-    for (const value of [undefined, null, false, 0, "", { model: "large" }]) {
+    for (const value of [
+      undefined,
+      null,
+      false,
+      0,
+      "",
+      [],
+      { model: "large" },
+    ]) {
       const b: CompiledFlag = {
         ...flag("b"),
-        variants: { quality: value, control: true },
+        variants: { quality: value, control: value },
         rules: [rule("select", yes, "quality")],
       };
       const evaluate = newEvaluator({
@@ -188,6 +196,10 @@ describe("collection evaluation", () => {
           b,
         ],
       });
+      const batch = evaluate.evaluateAll({});
+      expect(batch.flags.a.value).toBe(true);
+      expect(batch.flags.c.value).toBe(false);
+      expect(batch.flags.b).toMatchObject({ variantKey: "quality", value });
       expect(evaluate.evaluateFlag({}, "a").value).toBe(true);
       expect(evaluate.evaluateFlag({}, "c").value).toBe(false);
       expect(evaluate.evaluateFlag({}, "b").value).toBe(value);
@@ -742,8 +754,8 @@ describe("collection validation", () => {
   });
 });
 
-describe("recursive evaluation without result caching", () => {
-  it("evaluates repeated dependencies independently and never reuses results across contexts", () => {
+describe("evaluation-local result caching", () => {
+  it("reuses repeated dependencies only within a single call", () => {
     const evaluate = newEvaluator({
       flags: [
         flag("a", group("and", reference("b"), reference("b"))),
@@ -755,14 +767,14 @@ describe("recursive evaluation without result caching", () => {
       expect(evaluate.evaluateFlag(context, "a").value).toBe(true);
       expect(
         lookups.mock.calls.filter(([value]) => value === "acme"),
-      ).toHaveLength(2);
+      ).toHaveLength(1);
       expect(
         evaluate.evaluateFlag({ company: { id: "other" } }, "a").value,
       ).toBe(false);
       expect(evaluate.evaluateFlag(context, "a").value).toBe(true);
       expect(
         lookups.mock.calls.filter(([value]) => value === "acme"),
-      ).toHaveLength(4);
+      ).toHaveLength(2);
     } finally {
       lookups.mockRestore();
     }

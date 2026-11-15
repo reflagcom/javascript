@@ -242,6 +242,15 @@ type EvaluationState<T> = {
   flags: Map<string, PreparedFlag<T>>;
   segments: Map<string, PreparedFilter>;
   context: FlattenedContext;
+  flagResults: Map<string, FlagEvaluationResult<T>>;
+  segmentResults: Map<
+    string,
+    {
+      matched: boolean;
+      errors: Map<string, EvaluationError>;
+      diagnostics: Map<string, EvaluationError>;
+    }
+  >;
 };
 
 function prepareFilter(filter: RuleFilter): PreparedFilter {
@@ -448,7 +457,8 @@ function propagateErrors(
   errors?: Map<string, EvaluationError>,
 ): void {
   for (const error of sourceErrors) {
-    const diagnostic = error.source ? error : { ...error, source };
+    // Cached diagnostics can reach multiple roots; keep their public objects independent.
+    const diagnostic = { ...error, source: { ...(error.source ?? source) } };
     const key = JSON.stringify(diagnostic);
     diagnostics.set(key, diagnostic);
     errors?.set(key, diagnostic);
@@ -507,19 +517,28 @@ function evaluateFilter<T>(
       return matched;
     }
     case "segment": {
-      const segmentErrors = new Map<string, EvaluationError>();
-      const segmentDiagnostics = new Map<string, EvaluationError>();
-      const matched = evaluateFilter(
-        state.segments.get(filter.key)!,
-        state,
-        segmentErrors,
-        segmentDiagnostics,
-      );
+      let result = state.segmentResults.get(filter.key);
+      if (!result) {
+        const segmentErrors = new Map<string, EvaluationError>();
+        const segmentDiagnostics = new Map<string, EvaluationError>();
+        const matched = evaluateFilter(
+          state.segments.get(filter.key)!,
+          state,
+          segmentErrors,
+          segmentDiagnostics,
+        );
+        result = {
+          matched,
+          errors: segmentErrors,
+          diagnostics: segmentDiagnostics,
+        };
+        state.segmentResults.set(filter.key, result);
+      }
       const source = { type: "segment" as const, key: filter.key };
-      propagateErrors(segmentDiagnostics.values(), source, diagnostics);
-      // Segments are predicates, not sets of independent enable rules.
-      propagateErrors(segmentErrors.values(), source, diagnostics, errors);
-      return matched && segmentErrors.size === 0;
+      propagateErrors(result.diagnostics.values(), source, diagnostics);
+      // Re-propagate cached failures into every containing rule, including negation.
+      propagateErrors(result.errors.values(), source, diagnostics, errors);
+      return result.matched && result.errors.size === 0;
     }
     case "group":
       for (const child of filter.filters) {
@@ -593,8 +612,8 @@ function validateReferences<T>(
 }
 
 /**
- * Prepare a complete snapshot once on definition refresh. References are resolved
- * recursively for each call, without caching context-dependent results.
+ * Prepare a complete snapshot once on definition refresh. Flag and segment results
+ * are memoized within each evaluation, never across calls or contexts.
  * Throws for duplicate keys, missing references, unknown referenced variants or
  * cycles. Evaluating an unknown flag key also throws.
  */
@@ -619,7 +638,13 @@ export function newEvaluator<T>(
   }
   validateReferences(flags, segments);
   function createState(context: Record<string, unknown>): EvaluationState<T> {
-    return { flags, segments, context: flattenContext(context) };
+    return {
+      flags,
+      segments,
+      context: flattenContext(context),
+      flagResults: new Map(),
+      segmentResults: new Map(),
+    };
   }
 
   return {
@@ -647,6 +672,8 @@ function evaluatePreparedFlag<T>(
   flag: PreparedFlag<T>,
   state: EvaluationState<T>,
 ): FlagEvaluationResult<T> {
+  const cached = state.flagResults.get(flag.key);
+  if (cached) return cached;
   const flatContext = state.context;
   const errors = new Map<string, EvaluationError>();
   const filterErrors = new Map<string, EvaluationError>();
@@ -710,7 +737,7 @@ function evaluatePreparedFlag<T>(
       );
       break;
     }
-    return {
+    const result: FlagEvaluationResult<T> = {
       resolved: true,
       flagKey: flag.key,
       sourceVersionId: flag.sourceVersionId,
@@ -721,13 +748,15 @@ function evaluatePreparedFlag<T>(
       matchedRuleId: rule.id,
       allocationIndex: ruleResult.allocationIndex,
     };
+    state.flagResults.set(flag.key, result);
+    return result;
   }
   if (!errors.has("invalid"))
     invalidDefinition(
       errors,
       "No rule selected a variant; a catch-all default is required",
     );
-  return {
+  const result: FlagEvaluationResult<T> = {
     resolved: false,
     value: undefined,
     flagKey: flag.key,
@@ -735,4 +764,6 @@ function evaluatePreparedFlag<T>(
     ruleResults,
     errors: Array.from(errors.values()),
   };
+  state.flagResults.set(flag.key, result);
+  return result;
 }

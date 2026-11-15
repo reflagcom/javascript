@@ -3,6 +3,7 @@ import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
   CollectionEvaluationResult,
   CompiledFlag,
+  CompiledSegment,
   EvaluationResult,
   FlagEvaluationResult,
   newEvaluator,
@@ -188,14 +189,19 @@ describe("batch and single-flag API", () => {
   });
 
   it.each([false, true])(
-    "re-evaluates dependencies without memoization, reversed: %s",
+    "memoizes flag diamonds within each evaluation, reversed: %s",
     (reversed) => {
       const definitions = [
         flag("a", {
           type: "group",
           operator: "and",
-          filters: [reference, reference],
+          filters: [
+            { type: "flag", key: "left", variantKey: "on" },
+            { type: "flag", key: "right", variantKey: "on" },
+          ],
         }),
+        flag("left", reference),
+        flag("right", reference),
         flag("dependency", grant),
       ];
       const evaluator = newEvaluator({
@@ -203,23 +209,161 @@ describe("batch and single-flag API", () => {
       });
       const lookups = vi.spyOn(Set.prototype, "has");
       try {
-        expect(evaluator.evaluateAll(context).flags.a.value).toBe(true);
-        // Twice through a, once as a root output, regardless of definition order.
-        expect(
-          lookups.mock.calls.filter(([value]) => value === "acme"),
-        ).toHaveLength(3);
-        expect(
-          evaluator.evaluateAll({ company: { id: "other" } }).flags.a.value,
-        ).toBe(false);
-        expect(evaluator.evaluateAll(context).flags.a.value).toBe(true);
-        expect(
-          lookups.mock.calls.filter(([value]) => value === "acme"),
-        ).toHaveLength(6);
+        for (const id of ["acme", "other", "acme"]) {
+          const request = { company: { id } };
+          lookups.mockClear();
+          const batch = evaluator.evaluateAll(request);
+          expect(Object.values(batch.flags).map(({ value }) => value)).toEqual(
+            definitions.map(() => id === "acme"),
+          );
+          expect(
+            lookups.mock.calls.filter(([value]) => value === id),
+          ).toHaveLength(1);
+          lookups.mockClear();
+          expect(evaluator.evaluateFlag(request, "a")).toEqual({
+            ...batch.flags.a,
+            context: batch.context,
+          });
+          expect(
+            lookups.mock.calls.filter(([value]) => value === id),
+          ).toHaveLength(1);
+        }
       } finally {
         lookups.mockRestore();
       }
     },
   );
+
+  it("memoizes shared segment graphs across roots but not across calls", () => {
+    const segments: CompiledSegment[] = [{ key: "s0", filter: grant }];
+    for (let i = 1; i <= 16; i++) {
+      segments.push({
+        key: `s${i}`,
+        filter: {
+          type: "group",
+          operator: "and",
+          filters: [
+            { type: "segment", key: `s${i - 1}` },
+            { type: "segment", key: `s${i - 1}` },
+          ],
+        },
+      });
+    }
+    const evaluator = newEvaluator({
+      flags: [
+        flag("a", { type: "segment", key: "s16" }),
+        flag("b", { type: "segment", key: "s16" }),
+      ],
+      segments,
+    });
+    const lookups = vi.spyOn(Set.prototype, "has");
+    try {
+      for (const id of ["acme", "other", "acme"]) {
+        const request = { company: { id } };
+        lookups.mockClear();
+        const batch = evaluator.evaluateAll(request);
+        expect(batch.flags.a.value).toBe(id === "acme");
+        expect(batch.flags.b.value).toBe(id === "acme");
+        expect(
+          lookups.mock.calls.filter(([value]) => value === id),
+        ).toHaveLength(1);
+        lookups.mockClear();
+        expect(evaluator.evaluateFlag(request, "a")).toEqual({
+          ...batch.flags.a,
+          context: batch.context,
+        });
+        expect(
+          lookups.mock.calls.filter(([value]) => value === id),
+        ).toHaveLength(1);
+      }
+    } finally {
+      lookups.mockRestore();
+    }
+  });
+
+  it.each(["flag", "segment", "unresolved flag"] as const)(
+    "caches a failed %s while propagating errors to every referencing rule",
+    (kind) => {
+      const type = kind === "segment" ? "segment" : "flag";
+      const dependency: RuleFilter =
+        type === "segment"
+          ? { type, key: "dependency" }
+          : { type, key: "dependency", variantKey: "on" };
+      const failed: RuleFilter = {
+        type: "group",
+        operator: "and",
+        filters: [grant, missing],
+      };
+      const parent = flag("a", { type: "negation", filter: dependency });
+      parent.rules.unshift({ ...parent.rules[0], id: "repeated" });
+      const child = flag("dependency", failed);
+      if (kind === "unresolved flag") child.rules.pop();
+      const evaluator = newEvaluator({
+        flags: [
+          parent,
+          { ...parent, key: "b" },
+          ...(type === "flag" ? [child] : []),
+        ],
+        segments:
+          type === "segment" ? [{ key: "dependency", filter: failed }] : [],
+      });
+      const lookups = vi.spyOn(Set.prototype, "has");
+      try {
+        const batch = evaluator.evaluateAll(context);
+        expect(
+          lookups.mock.calls.filter(([value]) => value === "acme"),
+        ).toHaveLength(1);
+        for (const key of ["a", "b"]) {
+          expect(batch.flags[key].value).toBe(false);
+          expect(
+            batch.flags[key].ruleResults.map(({ matched }) => matched),
+          ).toEqual([false, false, true]);
+          expect(batch.flags[key].errors).toEqual([
+            expect.objectContaining({
+              code: "MISSING_CONTEXT_FIELD",
+              source: { type, key: "dependency" },
+            }),
+            ...(kind === "unresolved flag"
+              ? [
+                  expect.objectContaining({
+                    code: "INVALID_FLAG_DEFINITION",
+                    source: { type, key: "dependency" },
+                  }),
+                ]
+              : []),
+          ]);
+          const { context: _, ...single } = evaluator.evaluateFlag(
+            context,
+            key,
+          );
+          expect(single).toEqual(batch.flags[key]);
+        }
+      } finally {
+        lookups.mockRestore();
+      }
+    },
+  );
+
+  it("keeps cached nested diagnostics independent between batch outputs", () => {
+    const evaluator = newEvaluator({
+      flags: [
+        flag("a", reference),
+        flag("b", reference),
+        flag("dependency", { type: "segment", key: "outer" }),
+      ],
+      segments: [
+        { key: "outer", filter: { type: "segment", key: "inner" } },
+        { key: "inner", filter: missing },
+      ],
+    });
+    const first = evaluator.evaluateAll(context);
+    const expected = structuredClone(first);
+    first.flags.a.errors[0].source!.key = "changed";
+    first.flags.a.ruleResults.length = 0;
+    expect(first.flags.b).toEqual(expected.flags.b);
+    expect(first.flags.dependency).toEqual(expected.flags.dependency);
+    expect(evaluator.evaluateAll(context)).toEqual(expected);
+  });
 
   it("keeps diagnostics local to each flag and each call", () => {
     const evaluator = newEvaluator({
