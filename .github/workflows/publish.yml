@@ -40,26 +40,39 @@ jobs:
           commit: Version Packages
         env:
           GITHUB_TOKEN: ${{ secrets.CHANGESETS_BOT_TOKEN }}
-      - name: Build docs
+      - name: Select released SDK documentation
         if: steps.changesets.outputs.published == 'true'
+        id: docs
+        env:
+          PUBLISHED_PACKAGES: ${{ steps.changesets.outputs.publishedPackages }}
+        run: node scripts/docs-release-plan.mjs "$RUNNER_TEMP/sdk-docs-plan.json"
+      - name: Build docs
+        if: steps.docs.outputs.has_docs == 'true'
         run: yarn docs
       - name: Checkout docs with SSH
-        if: steps.changesets.outputs.published == 'true'
-        uses: actions/checkout@v3
+        if: steps.docs.outputs.has_docs == 'true'
+        uses: actions/checkout@v4
         with:
           repository: reflagcom/docs
           ssh-key: ${{ secrets.DOCS_DEPLOY_KEY }}
           path: reflag-docs
-      - name: Copy generated docs to docs repo
-        if: steps.changesets.outputs.published == 'true'
-        run: |
-          rm -rf reflag-docs/sdk
-          cp -R dist/docs reflag-docs/sdk
+      # Land the docs repository's SDK importer before enabling this workflow.
+      # That repository owns public paths/banners; SDK sources remain here.
+      - name: Sync only released packages and majors
+        if: steps.docs.outputs.has_docs == 'true'
+        run: node reflag-docs/.github/scripts/sdk-docs.mjs release --source . --destination reflag-docs --plan "$RUNNER_TEMP/sdk-docs-plan.json"
+      - name: Check generated documentation
+        if: steps.docs.outputs.has_docs == 'true'
+        working-directory: reflag-docs
+        run: node .github/scripts/check-sdk-docs.mjs
       - name: Commit and push changes
-        if: steps.changesets.outputs.published == 'true'
+        if: steps.docs.outputs.has_docs == 'true'
+        working-directory: reflag-docs
         run: |
-          cd reflag-docs
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@reflag.com"
-          git add sdk
-          git commit -m "Update documentation" && git push || echo "No docs changes to commit"
+          git add supported-languages legacy api sdk .generated/sdk-docs
+          if ! git diff --cached --quiet; then
+            git commit -m "Update released SDK documentation"
+            git push
+          fi

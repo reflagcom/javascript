@@ -24,6 +24,7 @@
     "release-packages": "yarn build && yarn release",
     "release": "changeset publish",
     "docs": "./docs.sh",
+    "test:docs-publishing": "node --test scripts/docs-release-plan.test.mjs",
     "lint:fix": "yarn oxlint --fix .",
     "fmt": "yarn oxfmt --check .",
     "fmt:fix": "yarn oxfmt --write .",
