@@ -2,8 +2,6 @@
 
 Server-side Boolean and multivariate flag values for [Reflag](https://reflag.com).
 
-> This branch implements the breaking v2 API. It requires the collection-capable evaluator, the v2 `/flags` endpoint, and compatible variant-key check ingestion. It has not been published or deployed.
-
 ## Installation and initialization
 
 ```sh
@@ -21,7 +19,7 @@ export const reflag = new ReflagClient({
 await reflag.initialize();
 ```
 
-## Direct values, immediate checks
+## Read flags
 
 ```ts
 const context = {
@@ -34,7 +32,7 @@ const model = reflag.getFlag(context, "model", "quick"); // string
 const limits = reflag.getFlag(context, "limits", { maxItems: 10 }); // { maxItems: number }
 ```
 
-**`getFlag()` returns the value itself**, not a flag object. There is no `.value`, `.isEnabled`, `.config`, or flag `.track()` wrapper. Without a default it is a Boolean read: unavailable or non-Boolean values return `false`, never a truthy object. With a positional default, missing values use that default. Valid `false`, `0`, empty strings, arrays, and objects are preserved rather than replaced by truthiness checks.
+`getFlag()` returns a Boolean, string, number, array, object, or null. Without a default it is a Boolean read: unavailable or non-Boolean values return `false`. With a positional default, missing values use that default. Valid `false`, `0`, empty strings, arrays, and objects are preserved rather than replaced by truthiness checks.
 
 Non-null defaults specify the expected JSON category: Boolean, number, string, array, or object. A category mismatch logs a warning without the payload and returns the default. This is not nested payload validation: object properties and array elements must still match your authored schema. Use an explicit `null` default for arbitrary JSON or nullable/off selections, and narrow the result before accessing object fields:
 
@@ -59,7 +57,7 @@ Each call immediately registers a check for the requested root, including when y
 }
 ```
 
-Boolean selections send `"true"` / `"false"` while returning Boolean values. Caller defaults, including category-mismatch defaults, do not claim an authored selection: their checks omit `evalResult` and `sourceVersionId`. Check deduplication includes normalized context, selection identity, root version, and snapshot version. Equal-valued variants are not interchangeable selections. Batch `getFlags()` remains a raw value record, without per-root caller defaults; unavailable batch values may be `undefined`.
+Boolean selections send `"true"` / `"false"` while returning Boolean values. Caller defaults, including category-mismatch defaults, do not claim an authored selection: their checks omit `evalResult` and `sourceVersionId`. Check deduplication includes normalized context, selection identity, root version, and snapshot version. Equal-valued variants are not interchangeable selections. `getFlags()` returns a record of flag values, without per-root caller defaults; unavailable batch values may be `undefined`.
 
 ```ts
 const values = reflag.getFlags(context); // value record; checks each returned root
@@ -114,7 +112,7 @@ await client.initialize();
 
 Live state is primary. When the initial live fetch fails, the SDK can load a saved complete collection. Later outages retain the in-memory graph rather than reloading older fallback state. Accepted live snapshots are saved in order; `flush()` also waits for pending saves.
 
-Available providers: `static`, `file`, `redis`, `s3`, and `gcs`, plus custom `FlagsFallbackProvider` implementations. A v2 snapshot contains:
+Available providers: `static`, `file`, `redis`, `s3`, and `gcs`, plus custom `FlagsFallbackProvider` implementations. A snapshot contains:
 
 ```ts
 {
@@ -126,7 +124,7 @@ Available providers: `static`, `file`, `redis`, `s3`, and `gcs`, plus custom `Fl
 }
 ```
 
-V1 flag-only snapshots are incompatible and are not automatically expanded or converted. Built-in files/S3/GCS objects use `flags-fallback-v2-<hash-prefix>.json`; Redis uses `<keyPrefix>:v2:<hash-prefix>`. This keeps v1 and v2 processes from overwriting each other's fallback state.
+Built-in files/S3/GCS objects use `flags-fallback-v2-<hash-prefix>.json`; Redis uses `<keyPrefix>:v2:<hash-prefix>`.
 
 A static fallback can contain any JSON values:
 
@@ -173,7 +171,7 @@ const model = reflag.getFlag(context, "model", "quick"); // string
 const models = reflag.getFlags(context); // models.model: "quick" | "quality" | undefined
 ```
 
-Augmentation rejects defaults with the wrong category, missing required properties, or incompatible nested types. Named-interface and readonly defaults are supported. Explicit `null` remains an arbitrary-JSON request, and bare/`undefined` reads still return Boolean. Return types continue to be inferred and widened from the default; generated types do not add nested runtime validation. The v2 CLI generates direct-value schemas from current production-environment variants. Regenerate old CLI wrapper declarations when migrating. Both destructuring `.isEnabled` and accessing it through an assigned singular value fail type checking, including without generated declarations. See the Express example for a typed direct-value integration.
+Augmentation rejects defaults with the wrong category, missing required properties, or incompatible nested types. Named-interface and readonly defaults are supported. Explicit `null` remains an arbitrary-JSON request, and bare/`undefined` reads still return Boolean. Return types continue to be inferred and widened from the default; generated types do not add nested runtime validation. The Reflag CLI generates schemas from current production-environment variants. See the Express example for a typed integration.
 
 ## Bootstrap state
 
@@ -186,7 +184,7 @@ const bootstrap = reflag.getFlagsForBootstrap(context);
 
 Bootstrap uses batch evaluation and preserves selection metadata and raw context. It does **not** register browser checks. Local overrides/value-only fallbacks carry their values without fabricated authored-selection metadata.
 
-**This is a v2 bootstrap contract, not the existing v1 Browser/React/Vue bootstrap shape.** Those consumers require a coordinated migration before accepting this state. Likewise, the current OpenFeature provider deliberately remains on published Node SDK v1 until its separate migration.
+Pass the entire envelope to the Browser, React or Vue SDK's bootstrap option, not just its `flags` property. Use your framework's safe serialization mechanism and never expose secret keys or server-only context in public bootstrap data.
 
 ## Remote evaluation
 
@@ -206,7 +204,7 @@ const values = await reflag.getFlagsRemote("user-1", "acme", {
 });
 ```
 
-These methods use `/flags/evaluated` and return direct values. Singular remote reads use the same defaults, category checks, and JSON validation as local reads. The root `getFlagRemote(key, defaultValue, userId?, companyId?, context?)` places the default second; use `undefined` for an implicit Boolean read when passing explicit IDs. This moves the old positional IDs one place to the right. `getFlagsRemote()` keeps its existing argument order and returns a raw value record.
+These methods use `/flags/evaluated` and return direct values. Singular remote reads use the same defaults, category checks, and JSON validation as local reads. The root `getFlagRemote(key, defaultValue, userId?, companyId?, context?)` places the default second; use `undefined` for an implicit Boolean read when passing explicit IDs. `getFlagsRemote(userId?, companyId?, context?)` returns a record of flag values.
 
 Each requested singular root registers a check, including a default after a failed/missing remote evaluation, unless tracking is disabled. Only accepted authored selections retain the server's selection/version metadata. Explicit IDs, including numeric zero, take precedence over IDs in additional context. Stored attribute updates are asynchronous; remote evaluation need not immediately observe a just-sent update.
 
