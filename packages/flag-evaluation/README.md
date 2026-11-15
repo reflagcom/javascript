@@ -86,10 +86,11 @@ variant keys, and cycles, including mixed flag/segment cycles and references in
 unreachable branches. Evaluating an unknown flag key also throws. Flag and segment
 keys occupy separate namespaces.
 
-References are evaluated recursively without dependency-result caching or
-memoization. Context is normalized once per call; repeated references are evaluated
-again. Only the existing definition-level membership Sets and percentage bounds
-are prepared ahead of time.
+Context is normalized once per call. Flag results and segment matches, errors, and
+diagnostics are memoized within that evaluation, including across roots in
+`evaluateAll`. Cached diagnostics are propagated into every referencing rule;
+results are never reused across calls or contexts. Definition-level membership
+Sets and percentage bounds are prepared ahead of time.
 
 ## Migration from v1
 
