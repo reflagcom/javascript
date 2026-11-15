@@ -1,10 +1,12 @@
-# Reflag React SDK v2
+# Reflag React SDK
 
-Direct-value feature flags for React, backed by [Browser SDK v2](../browser-sdk/README.md).
-
-> Breaking prerelease: requires compatible v2 server endpoints and **Node SDK v2** for bootstrap. The v2 CLI generates direct-value declarations; regenerate legacy wrapper-shaped output when migrating. Useful default-based inference does not require generated declarations. React Native remains on published React/Browser v1 in this repository.
+Feature flags and JSON configuration for React, backed by the [Browser SDK](../browser-sdk/README.md).
 
 ## Setup
+
+```sh
+npm install @reflag/react-sdk
+```
 
 ```tsx
 import { ReflagProvider } from "@reflag/react-sdk";
@@ -51,7 +53,7 @@ useFlag("nullable-settings", null); // FlagValue: arbitrary JSON
 
 Non-null defaults enforce only the top-level JSON category (Boolean/number/string/array/object). Mismatches return the default and warn without logging the payload. Explicit null accepts authored null and all other JSON; missing values return null. Accepted false, zero and empty strings are preserved. Nested fields/elements are not schema-validated. Values/defaults are independent mutable copies; readonly defaults are accepted.
 
-`useFlag` never suspends. Its second argument is **payload data**, not `{ suspense: ... }` options; ordinary JSON has no reserved keys. Use the dedicated hook below for suspension. Use `useIsLoading()` or the provider's `loadingComponent` when you need an explicit loading UI.
+`useFlag` returns immediately, using the default while flags load. Use `useIsLoading()` or the provider's `loadingComponent` for an explicit loading UI, or `useFlagSuspense()` to wait with React Suspense.
 
 ## `useFlagSuspense(key, defaultValue?)`
 
@@ -71,13 +73,13 @@ function Model() {
 
 This hook has the same Boolean/default-based return types. It waits for initialization before reading. Once initialization settles, missing flags return their default rather than suspending forever. Bootstrap values can render immediately. Suspended attempts do not register a root read before data is ready.
 
-The provider's existing `suspense` prop continues to configure **`useOptInFlags` only**. It does not change `useFlag`; `useFlagSuspense` is explicit.
+The provider's `suspense` prop configures **`useOptInFlags` only**. Use `useFlagSuspense` for flag reads with Suspense.
 
 ## Checks and usage tracking
 
 A completed getter/hook read registers its requested-root check immediately, even if the value is ignored. Actual delivery remains buffered and identity-aware rate-limited by the Browser SDK. Checks contain selected variant/source/snapshot identity, not payloads. Defaults, category mismatches and local overrides never invent authored selections. Diagnostic/bootstrap inspection registers no checks.
 
-Application usage and feedback remain separate hooks:
+Track application usage and collect feedback with these hooks:
 
 ```ts
 const track = useTrack();
@@ -102,11 +104,11 @@ declare module "@reflag/react-sdk" {
 }
 ```
 
-Registration constrains keys and checks non-null defaults against the registered value schema, including required and nested properties. Named-interface and readonly defaults are supported. Explicit `null` remains an arbitrary-JSON request; bare/`undefined` reads remain Boolean. The positional default still determines the widened return type, and generated declarations do not add nested runtime validation. The same rules apply to `useFlagSuspense`. The v2 CLI generates direct-value declarations from current production-environment variants; regenerate legacy wrapper declarations when migrating.
+Registration constrains keys and checks non-null defaults against the registered value schema, including required and nested properties. Named-interface and readonly defaults are supported. Explicit `null` remains an arbitrary-JSON request; bare/`undefined` reads remain Boolean. The positional default still determines the widened return type, and generated declarations do not add nested runtime validation. The same rules apply to `useFlagSuspense`. The Reflag CLI can generate these declarations from current production-environment variants.
 
 ## Bootstrap and SSR
 
-On the server, use Node SDK v2:
+On the server, use the Node.js SDK:
 
 ```ts
 const flags = serverClient.getFlagsForBootstrap(context);
@@ -122,9 +124,9 @@ import { ReflagBootstrappedProvider } from "@reflag/react-sdk";
 </ReflagBootstrappedProvider>;
 ```
 
-The envelope includes `protocolVersion: 2`, context, evaluated flag results and optional `flagStateVersion`. V1 bootstrap is rejected. Use a snapshot version for live updates; later refreshes use browser-visible context. Do not send secrets/server-only attributes to the browser. Disable live updates if later browser evaluation must not replace server-only results.
+The envelope includes `protocolVersion: 2`, context, evaluated flag results and optional `flagStateVersion`. Use a snapshot version for live updates; later refreshes use browser-visible context. Do not send secrets/server-only attributes to the browser. Disable live updates if later browser evaluation must not replace server-only results.
 
-For a pre-existing Browser v2 client, use `<ReflagClientProvider client={client}>`. The provider does not own its lifecycle; initialize/stop externally, except that a suspending read can start on-demand initialization.
+For an existing Browser SDK client, use `<ReflagClientProvider client={client}>`. The provider does not own its lifecycle; initialize/stop externally, except that a suspending read can start on-demand initialization.
 
 ## Context, loading and events
 
@@ -143,10 +145,6 @@ await setOptIn("huddles", { optedIn: true });
 await setOptIn("huddles", { optedIn: false, scope: "company" });
 ```
 
-Metadata arrives with the initial v2 evaluation for regular providers. Bootstrapped providers fetch missing metadata on demand from `/flags/evaluated` without replacing server-derived values. `isLoading` covers initialization and metadata retrieval; it settles on success or failure. Metadata presentation includes `isEnabled` and membership fields, separately from direct flag reads. User/company grants remain independent. Mutations confirm versioned evaluation and membership in a single refresh.
+Metadata arrives with the initial evaluation for regular providers. Bootstrapped providers fetch missing metadata on demand from `/flags/evaluated` without replacing server-derived values. `isLoading` covers initialization and metadata retrieval; it settles on success or failure. Metadata presentation includes `isEnabled` and membership fields, separately from direct flag reads. User/company grants remain independent. Mutations confirm versioned evaluation and membership in a single refresh.
 
 `useOptInFlags({ suspense: true | false })` retains its own per-hook loading options and may inherit provider `suspense`. These options are unrelated to the positional payload defaults used by `useFlag` / `useFlagSuspense`.
-
-## Migration from v1
-
-Use `const enabled = useFlag(key)` instead of destructuring `.isEnabled`. Replace wrapper config access with an authored multivariate flag and positional default. Move `.track()` and `.requestFeedback()` to separate hooks. Replace `useFlag(key, { suspense: true })` with `useFlagSuspense(key)`, and use `useIsLoading()` instead of a flag wrapper's loading property. Upgrade Browser/server bootstrap together. Nothing here publishes the prerelease or deploys its required server changes.
