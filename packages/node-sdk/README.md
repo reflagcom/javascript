@@ -43,21 +43,9 @@ const payload = reflag.getFlag(context, "nullable-settings", null); // FlagValue
 
 Defaults infer useful types without generated declarations, including widening primitive literals. Readonly defaults are accepted; results and defaults are returned as independent copies. Defaults are ordinary JSON payloads, with no reserved property names.
 
-Each call immediately registers a check for the requested root, including when you do not subsequently use its return value. Dependencies traversed internally do not register extra checks. Delivery is buffered and rate-limited. A check records the selected **variant key**, never the JSON payload:
+Each call records a check, even if you don't use the returned value. Reflag uses checks for launch monitoring; they are batched and rate-limited.
 
-```ts
-{
-  type: "feature-flag-event",
-  action: "check",
-  key: "model",
-  evalResult: "quality",
-  sourceVersionId: "version-id",
-  flagStateVersion: 42,
-  evalContext: { company: { id: "acme", plan: "enterprise" } },
-}
-```
-
-Boolean selections send `"true"` / `"false"` while returning Boolean values. Caller defaults, including category-mismatch defaults, do not claim an authored selection: their checks omit `evalResult` and `sourceVersionId`. Check deduplication includes normalized context, selection identity, root version, and snapshot version. Equal-valued variants are not interchangeable selections. `getFlags()` returns a record of flag values, without per-root caller defaults; unavailable batch values may be `undefined`.
+`getFlags()` returns a record of flag values; unavailable values may be `undefined`.
 
 ```ts
 const values = reflag.getFlags(context); // value record; checks each returned root
@@ -134,7 +122,7 @@ fallbackProviders.static({
 });
 ```
 
-Static values, `fallbackFlags`, and overrides do not identify authored variants. Their checks omit `evalResult` and `sourceVersionId`; they must not claim exposure to an authored selection. Restored real collection snapshots retain their real selection/version metadata. Providers are not loaded in offline mode.
+Providers are not loaded in offline mode.
 
 ## Overrides and tests
 
@@ -182,7 +170,7 @@ const bootstrap = reflag.getFlagsForBootstrap(context);
 //   flagStateVersion }
 ```
 
-Bootstrap uses batch evaluation and preserves selection metadata and raw context. It does **not** register browser checks. Local overrides/value-only fallbacks carry their values without fabricated authored-selection metadata.
+Bootstrap uses batch evaluation and does **not** register checks.
 
 Pass the entire envelope to the Browser, React or Vue SDK's bootstrap option, not just its `flags` property. Use your framework's safe serialization mechanism and never expose secret keys or server-only context in public bootstrap data.
 
@@ -206,7 +194,7 @@ const values = await reflag.getFlagsRemote("user-1", "acme", {
 
 These methods use `/flags/evaluated` and return direct values. Singular remote reads use the same defaults, category checks, and JSON validation as local reads. The root `getFlagRemote(key, defaultValue, userId?, companyId?, context?)` places the default second; use `undefined` for an implicit Boolean read when passing explicit IDs. `getFlagsRemote(userId?, companyId?, context?)` returns a record of flag values.
 
-Each requested singular root registers a check, including a default after a failed/missing remote evaluation, unless tracking is disabled. Only accepted authored selections retain the server's selection/version metadata. Explicit IDs, including numeric zero, take precedence over IDs in additional context. Stored attribute updates are asynchronous; remote evaluation need not immediately observe a just-sent update.
+Each requested singular root registers a check, including a default after a failed/missing remote evaluation, unless tracking is disabled. Explicit IDs, including numeric zero, take precedence over IDs in additional context. Stored attribute updates are asynchronous; remote evaluation need not immediately observe a just-sent update.
 
 ## Edge runtimes
 
@@ -218,7 +206,7 @@ Configuration precedence is constructor options, environment variables, then `re
 
 Constructor options also include a custom `logger` / `httpClient`, `flagsSyncMode`, `flagsPushUrl`, `fetchTimeoutMs`, `flagsFetchRetries`, `flagsFallbackProvider`, direct-value `flagOverrides`, and `batchOptions` (`maxSize`, `intervalMs`, `flushOnExit`). `emitEvaluationEvents` is deprecated and has no effect.
 
-Invalid options/context or non-JSON defaults can throw. Network or definition-refresh failures are logged and retain usable state. Singular reads use their caller default (implicit `false`) without fabricating an authored false selection; batch reads retain raw values/`undefined`. Call `await client.flush()` before shutting down, then `client.destroy()` to stop background work. `batchOptions.flushOnExit` only flushes on natural Node process exit (`beforeExit`); it does not install signal handlers or force application shutdown. For signal-driven shutdown or an explicit `process.exit()`, await `flush()` in the application's own shutdown hook before exiting.
+Invalid options/context or non-JSON defaults can throw. Network or definition-refresh failures are logged and retain usable state. Singular reads use their caller default (implicit `false`); batch reads retain raw values/`undefined`. Call `await client.flush()` before shutting down, then `client.destroy()` to stop background work. `batchOptions.flushOnExit` only flushes on natural Node process exit (`beforeExit`); it does not install signal handlers or force application shutdown. For signal-driven shutdown or an explicit `process.exit()`, await `flush()` in the application's own shutdown hook before exiting.
 
 ## License
 
