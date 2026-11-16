@@ -1,12 +1,16 @@
 # Reflag Vue SDK (beta)
 
-Reactive feature flags and JSON configuration for Vue 3, backed by the [Browser SDK](../browser-sdk/README.md).
+Feature flags, remote configuration, usage tracking and feedback for Vue 3 applications. Built on the [Browser SDK](../browser-sdk/README.md).
 
-## Setup
+## Get started
+
+Install the SDK:
 
 ```sh
 npm install @reflag/vue-sdk
 ```
+
+Wrap your application in `ReflagProvider` with your **publishable** key and the signed-in user's context:
 
 ```vue
 <script setup lang="ts">
@@ -27,60 +31,76 @@ import { ReflagProvider } from "@reflag/vue-sdk";
 </template>
 ```
 
-Provider options forward Browser settings, including cache/storage, fallback values, offline/tracking, feedback, toolbar, credentials and API origins. `logger` takes precedence over `debug`. Live updates default to true; disable with `:enable-live-flag-updates="false"`. For an ordinary client-only Nuxt provider, wrap it in `<ClientOnly>`.
+In Nuxt, wrap the provider in `<ClientOnly>`.
 
-## `useFlag(key, defaultValue?)`
+Then read a flag in any component:
 
 ```vue
 <script setup lang="ts">
-import { useFlag, useIsLoading, useTrack } from "@reflag/vue-sdk";
+import { useFlag, useTrack } from "@reflag/vue-sdk";
 
-const enabled = useFlag("huddles"); // ShallowRef<boolean>; implicit false
-const settings = useFlag("huddle-settings", { maxParticipants: 10 });
-const isLoading = useIsLoading();
+const enabled = useFlag("huddles");
 const track = useTrack();
-// In script: enabled.value, settings.value.maxParticipants
 </script>
 
 <template>
-  <span v-if="isLoading">Loading…</span>
-  <button v-else-if="enabled" @click="track('Started huddle')">
-    Start huddle (up to {{ settings.maxParticipants }} people)
-  </button>
+  <button v-if="enabled" @click="track('Started huddle')">Start huddle</button>
 </template>
 ```
 
-`useFlag()` returns a reactive ref containing the flag value. Vue unwraps refs in templates; use `.value` in script.
+## Read flags
+
+`useFlag()` returns a ref that updates when the flag changes. Vue unwraps refs in templates; use `.value` in script.
+
+Without a default, the ref holds a Boolean. It is `false` while flags are loading, and if the flag is missing or isn't a Boolean.
+
+To read a configuration value, pass a default. The type follows the default, and the ref holds the default while loading, or if the flag is missing or holds a different type of value:
 
 ```ts
-useFlag("release"); // ShallowRef<boolean>
-useFlag("model", "quick"); // ShallowRef<string>
-useFlag("limit", 10); // ShallowRef<number>
-useFlag("settings", { model: "quick" }); // ShallowRef<{ model: string }>
-useFlag("nullable-settings", null); // ShallowRef<FlagValue>
+const settings = useFlag("huddle-settings", { maxParticipants: 10 });
+// settings.value.maxParticipants: number
+
+useFlag("model", "quick"); // Ref of string
+useFlag("limit", 10); // Ref of number
+useFlag("nullable-settings", null); // any JSON value; narrow it yourself
 ```
 
-Defaults are positional JSON; literals widen without generated types. Non-null defaults require the same top-level category (Boolean/number/string/array/object), otherwise the default is returned with a payload-safe warning. Null explicitly accepts arbitrary JSON, including authored null; missing returns null. Valid false/zero/empty strings are preserved. Nested payload schemas are not validated by the SDK. Returned values/defaults are independent copies; readonly defaults are accepted.
+The SDK checks only the top-level type of a value. If your application depends on nested fields, validate them.
 
-The ref updates when evaluated flags change. Reading a flag records a check, even if you don't use the value. Reflag uses checks for launch monitoring.
+Reading a flag records a check, even if you don't use the value. Reflag uses checks for launch monitoring.
 
-## Loading, context and client access
+## Loading states
 
-- `useIsLoading()` returns a Boolean ref for provider loading; the `#loading` slot and `initialLoading` control initial presentation.
-- `useUpdateUser()`, `useUpdateCompany()` and `useUpdateOtherContext()` return async shallow-update functions.
-- `useClient()` exposes the Browser client, including `setContext(context)`, `refresh()` and `setFlagOverride(key, value)`. Undefined clears an override; null is a JSON override.
-- `getFlags()` returns direct values and registers returned-root checks. Use `getFlagResults()` for tooling without checks.
-- `useOnEvent(type, handler, client?)` subscribes on mount and unsubscribes on unmount. An external client may be supplied explicitly.
+`useIsLoading()` returns a Boolean ref that is `true` while the provider loads flags. You can also put loading content in the provider's `#loading` slot, as in the example above.
 
-A context change clears old values while fetching. Late responses for previous contexts or lower snapshot versions cannot replace accepted state. Browser fetching uses `/flags/evaluated` and never re-evaluates/caches dependencies locally.
+## Track usage and feedback
 
-## Bootstrap
+```ts
+const track = useTrack();
+await track("Started huddle", { button: "cta" });
 
-On the server, use the Node.js SDK and your framework's safe serialization mechanism:
+const requestFeedback = useRequestFeedback();
+requestFeedback({ flagKey: "huddles", title: "How did it go?" });
+
+const sendFeedback = useSendFeedback();
+await sendFeedback({ flagKey: "huddles", score: 5 });
+```
+
+Configure your flag's adoption rules to match the event names you send. See the [Browser feedback documentation](../browser-sdk/FEEDBACK.md) to configure feedback prompts and the feedback UI.
+
+## Update context
+
+`useUpdateUser()`, `useUpdateCompany()` and `useUpdateOtherContext()` return functions that merge new attributes into the current context. To replace the whole context, call `useClient().setContext(context)`. Flag values are refetched for the new context.
+
+## Bootstrap from the server
+
+To render flags immediately, without waiting for a network request, evaluate them on your server with the **Node.js SDK**:
 
 ```ts
 const flags = serverClient.getFlagsForBootstrap(context);
 ```
+
+Then pass the whole result to `ReflagBootstrappedProvider`, serialized with your framework's usual mechanism:
 
 ```vue
 <ReflagBootstrappedProvider :publishable-key="publishableKey" :flags="flags">
@@ -88,34 +108,43 @@ const flags = serverClient.getFlagsForBootstrap(context);
 </ReflagBootstrappedProvider>
 ```
 
-Pass the entire envelope (`protocolVersion: 2`, context, evaluated flags and optional snapshot version). A snapshot version is required for live updates. Never expose secret keys/server-only attributes in bootstrap data; later refreshes use browser-visible context, so disable live updates when they must not replace server-only evaluations.
+Leave secrets and server-only attributes out of the context you bootstrap, because the browser can read it. Later refreshes evaluate flags using the browser's context. If values that depend on server-only attributes must not change, set `:enable-live-flag-updates="false"`.
 
-`ReflagClientProvider` accepts an externally initialized Browser SDK client. Its lifecycle belongs to the application.
-
-## Opt-in, tracking and feedback
+## Let users opt in to flags
 
 ```ts
-const { flags, isLoading } = useOptInFlags(); // refs to metadata/list loading
+const { flags, isLoading } = useOptInFlags();
 const setOptIn = useSetOptIn();
+
 await setOptIn("huddles", { optedIn: true });
 await setOptIn("huddles", { optedIn: false, scope: "company" });
-
-const track = useTrack();
-await track("Started huddle", { button: "cta" });
-const requestFeedback = useRequestFeedback();
-requestFeedback({ flagKey: "huddles", title: "How did it go?" });
-const sendFeedback = useSendFeedback();
-await sendFeedback({ flagKey: "huddles", score: 5 });
 ```
 
-Opt-in metadata arrives with ordinary `/flags/evaluated` responses. Bootstrapped providers fetch missing metadata on demand from the same endpoint without replacing server-derived values or provenance; loading settles on success or failure. User/company grants remain independent; successful mutations confirm versioned evaluation and membership in a single refresh. The metadata list retains presentation/membership fields such as `isEnabled`; ordinary reads remain direct values.
+Each entry includes the flag's `key`, `name`, `description` and whether the user or company has opted in. User and company opt-ins are independent. Check `isLoading` before rendering an empty state.
 
-`enableTracking: false` disables checks and ordinary tracking. Offline mode skips HTTP/tracking. See [Browser feedback documentation](../browser-sdk/FEEDBACK.md) for prompting/UI options.
+## Toolbar
 
-## Optional key registration
+The toolbar shows on `localhost` by default and lets you toggle Boolean flags for yourself. Use the `toolbar` prop to show it elsewhere, for example to internal users in production:
+
+```vue
+<ReflagProvider
+  publishable-key="your-publishable-key"
+  :context="context"
+  :toolbar="user.isInternal"
+>
+  <App />
+</ReflagProvider>
+```
+
+To override a flag from code, call `useClient().setFlagOverride(key, value)`. Pass `undefined` to remove the override.
+
+## Type safety
+
+Optionally declare your flags to get autocompletion for keys and type checks for defaults:
 
 ```ts
 import "@reflag/vue-sdk";
+
 declare module "@reflag/vue-sdk" {
   interface Flags {
     huddles: boolean;
@@ -124,4 +153,14 @@ declare module "@reflag/vue-sdk" {
 }
 ```
 
-Registration constrains keys and checks non-null defaults against the registered value schema, including required and nested properties. Named-interface and readonly defaults are supported. Explicit `null` remains an arbitrary-JSON request; bare/`undefined` reads remain Boolean refs. Positional defaults still determine widened direct-value types, and generated declarations do not add nested runtime validation. The Reflag CLI can generate these schemas from current production-environment variants with `--format vue`.
+The [Reflag CLI](https://docs.reflag.com/api/cli) can generate these declarations for you with `--format vue`. Declarations are checked at compile time only.
+
+## Use an existing client
+
+`useClient()` returns the underlying Browser SDK client. If you already create a Browser SDK client yourself, pass it to `ReflagClientProvider`; your application is then responsible for initializing and stopping it. `useOnEvent(type, handler)` subscribes to client events and unsubscribes when the component unmounts.
+
+## Configuration
+
+The provider accepts the Browser SDK's configuration options, such as `fallbackFlags`, `enableTracking`, `offline`, `feedback` and `logger`, as props. Live updates are on by default in Vue; set `:enable-live-flag-updates="false"` to turn them off. Set `debug` to log to the console.
+
+For Content Security Policy requirements and the full list of options, see the [Browser SDK](../browser-sdk/README.md).
