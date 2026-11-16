@@ -38,15 +38,20 @@ The SDK downloads your flag definitions and evaluates flags locally, so reads do
 
 ## Read flags
 
-Without a default, `getFlag()` returns a Boolean. You get `false` if the flag is missing or isn't a Boolean.
+Pass a context and a flag key to check whether the flag is enabled:
 
-To read a configuration value, pass a default. The return type follows the default, and you get the default back if the flag is missing or holds a different type of value:
+```ts
+const enabled = reflag.getFlag(context, "new-editor"); // true or false
+```
+
+To read a configuration value, pass a default as the third argument. You get back a value of the same type as the default:
 
 ```ts
 const model = reflag.getFlag(context, "model", "quick"); // string
 const limits = reflag.getFlag(context, "limits", { maxItems: 10 }); // { maxItems: number }
-const payload = reflag.getFlag(context, "nullable-settings", null); // any JSON value; narrow it yourself
 ```
+
+If the flag doesn't exist, or its value has a different type, you get `false`, or your default if you passed one. Pass `null` as the default to accept any JSON value and narrow it yourself.
 
 The SDK checks only the top-level type of a value. If your application depends on nested fields, validate them.
 
