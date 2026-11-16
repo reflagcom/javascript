@@ -77,7 +77,7 @@ The provider's `suspense` prop configures **`useOptInFlags` only**. Use `useFlag
 
 ## Checks and usage tracking
 
-A completed getter/hook read registers its requested-root check immediately, even if the value is ignored. Actual delivery remains buffered and identity-aware rate-limited by the Browser SDK. Checks contain selected variant/source/snapshot identity, not payloads. Defaults, category mismatches and local overrides never invent authored selections. Diagnostic/bootstrap inspection registers no checks.
+Reading a flag records a check, even if you don't use the value. Reflag uses checks for launch monitoring.
 
 Track application usage and collect feedback with these hooks:
 

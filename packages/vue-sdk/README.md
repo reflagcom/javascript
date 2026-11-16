@@ -62,7 +62,7 @@ useFlag("nullable-settings", null); // ShallowRef<FlagValue>
 
 Defaults are positional JSON; literals widen without generated types. Non-null defaults require the same top-level category (Boolean/number/string/array/object), otherwise the default is returned with a payload-safe warning. Null explicitly accepts arbitrary JSON, including authored null; missing returns null. Valid false/zero/empty strings are preserved. Nested payload schemas are not validated by the SDK. Returned values/defaults are independent copies; readonly defaults are accepted.
 
-The ref updates when evaluated flags change. A composable read registers the requested root through the Browser SDK, even if its result is ignored; refresh-driven rereads are identity-aware rate-limited and delivered in batches. Diagnostics/bootstrap inspection register none. Checks carry genuine selected key/source/snapshot identity, never payloads or invented selections for defaults/overrides.
+The ref updates when evaluated flags change. Reading a flag records a check, even if you don't use the value. Reflag uses checks for launch monitoring.
 
 ## Loading, context and client access
 

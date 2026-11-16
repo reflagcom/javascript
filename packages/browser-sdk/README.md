@@ -51,9 +51,7 @@ reflag.getFlag("nullable-settings", null); // FlagValue (arbitrary JSON)
 
 ## Checks and delivery
 
-Reading a flag registers an exposure check, even if its return value is ignored. Checks are buffered, sent through `/bulk`, and rate-limited per identity.
-
-A selected check carries the authored selected key as `evalResult`, its `sourceVersionId` and the available snapshot `flagStateVersion`. Payload equality is not identity: equal-valued selections or segment-only snapshot changes remain distinguishable on subsequent reads. Defaults, category mismatches, local overrides and static fallback values do not fabricate authored selections. Diagnostics and bootstrap serialization generate no checks. The server evaluates dependencies; fetching their results does not itself register reads.
+Reading a flag records a check, even if you don't use its value. Reflag uses checks for launch monitoring; they are batched and rate-limited.
 
 `enableTracking: false` disables checks and user/company/usage tracking. `offline: true` skips HTTP and tracking. `await reflag.stop()` flushes buffered events and closes the client's background transports.
 
