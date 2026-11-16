@@ -52,18 +52,20 @@ const track = useTrack();
 
 `useFlag()` returns a ref that updates when the flag changes. Vue unwraps refs in templates; use `.value` in script.
 
-Without a default, the ref holds a Boolean. It is `false` while flags are loading, and if the flag is missing or isn't a Boolean.
-
-To read a configuration value, pass a default. The type follows the default, and the ref holds the default while loading, or if the flag is missing or holds a different type of value:
+Pass a flag key to check whether the flag is enabled:
 
 ```ts
-const settings = useFlag("huddle-settings", { maxParticipants: 10 });
-// settings.value.maxParticipants: number
-
-useFlag("model", "quick"); // Ref of string
-useFlag("limit", 10); // Ref of number
-useFlag("nullable-settings", null); // any JSON value; narrow it yourself
+const enabled = useFlag("huddles"); // ref of true or false
 ```
+
+To read a configuration value, pass a default as the second argument. The ref holds a value of the same type as the default:
+
+```ts
+const model = useFlag("model", "quick"); // ref of string
+const settings = useFlag("huddle-settings", { maxParticipants: 10 }); // ref of { maxParticipants: number }
+```
+
+While flags are loading, if the flag doesn't exist, or if its value has a different type, the ref holds `false`, or your default if you passed one. Pass `null` as the default to accept any JSON value and narrow it yourself.
 
 The SDK checks only the top-level type of a value. If your application depends on nested fields, validate them.
 

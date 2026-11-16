@@ -31,25 +31,20 @@ Publishable keys are safe to ship to the browser. Keep secret keys on your serve
 
 ## Read flags
 
-Without a default, `getFlag()` returns a Boolean. You get `false` if the flag is missing or isn't a Boolean:
+Pass a flag key to check whether the flag is enabled:
 
 ```ts
-const enabled = reflag.getFlag("huddles"); // boolean
+const enabled = reflag.getFlag("huddles"); // true or false
 ```
 
-To read a configuration value, pass a default. The return type follows the default, and you get the default back if the flag is missing or holds a different type of value:
+To read a configuration value, pass a default as the second argument. You get back a value of the same type as the default:
 
 ```ts
 const model = reflag.getFlag("model", "quick"); // string
-const limit = reflag.getFlag("limit", 10); // number
 const settings = reflag.getFlag("assistant-settings", { model: "quick" }); // { model: string }
 ```
 
-Pass `null` to accept any JSON value, then narrow it yourself:
-
-```ts
-const value = reflag.getFlag("nullable-settings", null);
-```
+If the flag doesn't exist, or its value has a different type, you get `false`, or your default if you passed one. Pass `null` as the default to accept any JSON value and narrow it yourself.
 
 The SDK checks only the top-level type of a value. If your application depends on nested fields, validate them.
 

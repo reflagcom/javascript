@@ -41,18 +41,20 @@ function Huddles() {
 
 ## Read flags
 
-Without a default, `useFlag()` returns a Boolean. You get `false` while flags are loading, and if the flag is missing or isn't a Boolean.
-
-To read a configuration value, pass a default. The return type follows the default, and you get the default back while loading, or if the flag is missing or holds a different type of value:
+Pass a flag key to check whether the flag is enabled:
 
 ```tsx
-const settings = useFlag("huddle-settings", { maxParticipants: 10 });
-// settings.maxParticipants: number
-
-useFlag("model", "quick"); // string
-useFlag("limit", 10); // number
-useFlag("nullable-settings", null); // any JSON value; narrow it yourself
+const enabled = useFlag("huddles"); // true or false
 ```
+
+To read a configuration value, pass a default as the second argument. You get back a value of the same type as the default:
+
+```tsx
+const model = useFlag("model", "quick"); // string
+const settings = useFlag("huddle-settings", { maxParticipants: 10 }); // { maxParticipants: number }
+```
+
+While flags are loading, if the flag doesn't exist, or if its value has a different type, you get `false`, or your default if you passed one. Pass `null` as the default to accept any JSON value and narrow it yourself.
 
 The SDK checks only the top-level type of a value. If your application depends on nested fields, validate them.
 
