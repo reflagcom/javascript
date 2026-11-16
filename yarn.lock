@@ -6041,7 +6041,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@reflag/browser-sdk@workspace:^, @reflag/browser-sdk@workspace:packages/browser-sdk":
+"@reflag/browser-sdk@workspace:*, @reflag/browser-sdk@workspace:^, @reflag/browser-sdk@workspace:packages/browser-sdk":
   version: 0.0.0-use.local
   resolution: "@reflag/browser-sdk@workspace:packages/browser-sdk"
   dependencies:
@@ -6232,31 +6232,22 @@ __metadata:
   resolution: "@reflag/react-native-sdk@workspace:packages/react-native-sdk"
   dependencies:
     "@react-native-async-storage/async-storage": "npm:^2.2.0"
-    "@reflag/react-sdk": "npm:1.7.4"
+    "@reflag/browser-sdk": "workspace:*"
+    "@reflag/node-sdk": "workspace:*"
+    "@reflag/react-sdk": "workspace:^"
     "@reflag/tsconfig": "npm:^0.0.2"
+    "@types/node": "npm:^22.12.0"
     "@types/react": "npm:^19.0.12"
+    "@types/react-test-renderer": "npm:^19.0.0"
     react-native-sse: "npm:^1.2.1"
+    react-test-renderer: "npm:19.1.0"
     typescript: "npm:^5.7.3"
+    vitest: "npm:~4.1.12"
   peerDependencies:
-    react: "*"
+    react: ">=17.0.0"
     react-native: "*"
   languageName: unknown
   linkType: soft
-
-"@reflag/react-sdk@npm:1.7.4":
-  version: 1.7.4
-  resolution: "@reflag/react-sdk@npm:1.7.4"
-  dependencies:
-    "@reflag/browser-sdk": "npm:1.7.4"
-  peerDependencies:
-    react: "*"
-    react-dom: "*"
-  peerDependenciesMeta:
-    react-dom:
-      optional: true
-  checksum: 10c0/5fa653826335fa4641ab436cbec98a39ddc0bdbd49f794b24152beaaafd27df6e7ce02657571e4af34fc179f1938153041594246d3df791e7849c42788b6ccb2
-  languageName: node
-  linkType: hard
 
 "@reflag/react-sdk@workspace:^, @reflag/react-sdk@workspace:packages/react-sdk":
   version: 0.0.0-use.local
@@ -7449,6 +7440,15 @@ __metadata:
   peerDependencies:
     "@types/react": ^19.2.0
   checksum: 10c0/b486ebe0f4e2fb35e2e108df1d8fc0927ca5d6002d5771e8a739de11239fe62d0e207c50886185253c99eb9dedfeeb956ea7429e5ba17f6693c7acb4c02f8cd1
+  languageName: node
+  linkType: hard
+
+"@types/react-test-renderer@npm:^19.0.0":
+  version: 19.3.1
+  resolution: "@types/react-test-renderer@npm:19.3.1"
+  dependencies:
+    "@types/react": "npm:*"
+  checksum: 10c0/330305cd5dbefa21233a04e432d06b6d3b8ba6bad83a3e9773eba8b1731d6c9b7bdc634999d590d042e5ca7f3543e04921b963d392fbda2bbd1ba2655851dfa0
   languageName: node
   linkType: hard
 
@@ -17315,6 +17315,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"react-is@npm:^19.1.0":
+  version: 19.3.1
+  resolution: "react-is@npm:19.3.1"
+  checksum: 10c0/428e02d986d56f1859c57756084489f6d2900fd686905003c405b32f1168738b78772bfa4bb6c706f5ac821199171522c28bf6434281f524f901459390a19606
+  languageName: node
+  linkType: hard
+
 "react-native-safe-area-context@npm:^5.6.0":
   version: 5.6.2
   resolution: "react-native-safe-area-context@npm:5.6.2"
@@ -17386,6 +17393,18 @@ __metadata:
   version: 0.14.2
   resolution: "react-refresh@npm:0.14.2"
   checksum: 10c0/875b72ef56b147a131e33f2abd6ec059d1989854b3ff438898e4f9310bfcc73acff709445b7ba843318a953cb9424bcc2c05af2b3d80011cee28f25aef3e2ebb
+  languageName: node
+  linkType: hard
+
+"react-test-renderer@npm:19.1.0":
+  version: 19.1.0
+  resolution: "react-test-renderer@npm:19.1.0"
+  dependencies:
+    react-is: "npm:^19.1.0"
+    scheduler: "npm:^0.26.0"
+  peerDependencies:
+    react: ^19.1.0
+  checksum: 10c0/34ed4a37ba8b0beb96c048de6ff28574f018a18dd1042c24f8f46142d48eb5b27f82ff7c2823d082932fd3983c5a3529ab8cc8f15191d4306df0082f9f84678f
   languageName: node
   linkType: hard
 
@@ -17500,10 +17519,12 @@ __metadata:
   dependencies:
     "@react-native-async-storage/async-storage": "npm:^2.2.0"
     "@reflag/react-native-sdk": "workspace:*"
+    "@types/react": "npm:^19.1.0"
     expo: "npm:~54.0.0"
     react: "npm:19.1.0"
     react-native: "npm:0.81.5"
     react-native-safe-area-context: "npm:^5.6.0"
+    typescript: "npm:^5.8.3"
   languageName: unknown
   linkType: soft
 

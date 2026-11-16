@@ -11,6 +11,7 @@ import { testLogger } from "./testLogger";
 let clients: ReflagClient[];
 let delivered: BulkEvent[];
 beforeEach(() => {
+  localStorage.clear();
   clients = [];
   delivered = [];
   server.use(

@@ -17,18 +17,19 @@ const openfeatureRequire = createRequire(
 );
 
 describe("framework v1/v2 release isolation", () => {
-  test("uses workspace Browser v2 for React and Vue", () => {
+  test("uses workspace v2 for React, Vue and React Native", () => {
     expect(browser.version).toBe("2.0.0-next.0");
     expect(react.dependencies["@reflag/browser-sdk"]).toBe("workspace:^");
     expect(vue.dependencies["@reflag/browser-sdk"]).toBe("workspace:^");
-  });
-
-  test("keeps unchanged React Native and OpenFeature Browser consumers on published v1", () => {
-    expect(native.dependencies["@reflag/react-sdk"]).toBe("1.7.4");
-    expect(openfeature.dependencies["@reflag/browser-sdk"]).toBe("1.7.4");
-    expect(nativeRequire.resolve("@reflag/react-sdk")).not.toBe(
+    expect(native.version).toBe("2.0.0-next.0");
+    expect(native.dependencies["@reflag/react-sdk"]).toBe("workspace:^");
+    expect(nativeRequire.resolve("@reflag/react-sdk")).toBe(
       resolve(__dirname, "../../react-sdk/dist/reflag-react-sdk.umd.js"),
     );
+  });
+
+  test("keeps the unchanged OpenFeature Browser provider on published v1", () => {
+    expect(openfeature.dependencies["@reflag/browser-sdk"]).toBe("1.7.4");
     expect(openfeatureRequire.resolve("@reflag/browser-sdk")).not.toBe(
       resolve(__dirname, "../dist/reflag-browser-sdk.umd.js"),
     );
