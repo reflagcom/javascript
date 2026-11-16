@@ -6041,7 +6041,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@reflag/browser-sdk@workspace:*, @reflag/browser-sdk@workspace:^, @reflag/browser-sdk@workspace:packages/browser-sdk":
+"@reflag/browser-sdk@workspace:^, @reflag/browser-sdk@workspace:packages/browser-sdk":
   version: 0.0.0-use.local
   resolution: "@reflag/browser-sdk@workspace:packages/browser-sdk"
   dependencies:
@@ -6232,7 +6232,6 @@ __metadata:
   resolution: "@reflag/react-native-sdk@workspace:packages/react-native-sdk"
   dependencies:
     "@react-native-async-storage/async-storage": "npm:^2.2.0"
-    "@reflag/browser-sdk": "workspace:*"
     "@reflag/node-sdk": "workspace:*"
     "@reflag/react-sdk": "workspace:^"
     "@reflag/tsconfig": "npm:^0.0.2"

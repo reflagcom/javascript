@@ -18,6 +18,7 @@ import {
   useSetOptIn,
   useTrack,
   type BootstrappedFlags,
+  type FlagValue,
   type ReflagProps,
   type StorageAdapter,
 } from "../src";
@@ -60,11 +61,11 @@ vi.mock("react-native-sse", () => ({
   },
 }));
 
-const selected = (value: unknown, variantKey = "selected") => ({
+const selected = (value: FlagValue) => ({
   value,
   resolved: true,
   sourceVersionId: "source-1",
-  variantKey,
+  variantKey: "selected",
   matchedRuleId: "default",
   ruleResults: [{ ruleId: "default", matched: true }],
   errors: [],
@@ -87,7 +88,7 @@ const bootstrap = (
   protocolVersion: 2,
   flagStateVersion,
   context: { user: { id: "native-user" } },
-  flags: evaluated(enabled).flags as BootstrappedFlags["flags"],
+  flags: evaluated(enabled).flags,
 });
 const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 const clients = new Set<ReturnType<typeof useClient>>();
@@ -364,7 +365,7 @@ describe("React Native v2", () => {
       return null;
     }
     await mount(
-      <ReflagBootstrappedProvider {...props} enableTracking flags={state!}>
+      <ReflagBootstrappedProvider {...props} enableTracking flags={state}>
         <CaptureClient />
         <Read />
       </ReflagBootstrappedProvider>,
@@ -376,7 +377,7 @@ describe("React Native v2", () => {
     client.getFlag("settings", null);
     // An already-read root is rate limited; a new subscriber still sees genuine identity after a new snapshot.
     await act(async () =>
-      client.applyBootstrappedState({ ...state!, flagStateVersion: 8 }),
+      client.applyBootstrappedState({ ...state, flagStateVersion: 8 }),
     );
     client.getFlag("settings", null);
     expect(check).toHaveBeenCalledWith(
@@ -558,7 +559,6 @@ describe("React Native v2", () => {
     let result: ReturnType<typeof useOptInFlags>;
     let setOptIn: ReturnType<typeof useSetOptIn>;
     let enabled: boolean;
-    let optedIn = false;
     let changed = false;
     fetchMock.mockImplementation(async (input, options) => {
       const url = new URL(String(input));
@@ -571,7 +571,6 @@ describe("React Native v2", () => {
         return Response.json({ success: true, flagStateVersion: 2 });
       }
       expect(url.pathname).toBe("/flags/evaluated");
-      optedIn = changed;
       return Response.json({
         ...evaluated(false, changed ? 2 : 1),
         flags: {
@@ -581,9 +580,9 @@ describe("React Native v2", () => {
             optIn: {
               name: "Preview",
               description: null,
-              userOptedIn: optedIn,
+              userOptedIn: changed,
               companyOptedIn: false,
-              isOptedIn: optedIn,
+              isOptedIn: changed,
             },
           },
         },

@@ -100,36 +100,24 @@ export type {
   UserContext,
 };
 
+function nativeOptions(props: ReflagInitOptionsBase) {
+  return {
+    sdkVersion: SDK_VERSION,
+    storage: props.storage ?? AsyncStorage,
+    eventSourceFactory: props.eventSourceFactory ?? defaultEventSourceFactory,
+    enableLiveFlagUpdates: props.enableLiveFlagUpdates ?? true,
+    toolbar: props.toolbar ?? false,
+    feedback: {
+      ...props.feedback,
+      enableAutoFeedback: props.feedback?.enableAutoFeedback ?? false,
+    },
+  };
+}
+
 export function ReflagProvider(props: ReflagProps) {
-  return (
-    <BaseProvider
-      {...props}
-      sdkVersion={SDK_VERSION}
-      storage={props.storage ?? AsyncStorage}
-      eventSourceFactory={props.eventSourceFactory ?? defaultEventSourceFactory}
-      enableLiveFlagUpdates={props.enableLiveFlagUpdates ?? true}
-      toolbar={props.toolbar ?? false}
-      feedback={{
-        ...props.feedback,
-        enableAutoFeedback: props.feedback?.enableAutoFeedback ?? false,
-      }}
-    />
-  );
+  return <BaseProvider {...props} {...nativeOptions(props)} />;
 }
 
 export function ReflagBootstrappedProvider(props: ReflagBootstrappedProps) {
-  return (
-    <BaseBootstrappedProvider
-      {...props}
-      sdkVersion={SDK_VERSION}
-      storage={props.storage ?? AsyncStorage}
-      eventSourceFactory={props.eventSourceFactory ?? defaultEventSourceFactory}
-      enableLiveFlagUpdates={props.enableLiveFlagUpdates ?? true}
-      toolbar={props.toolbar ?? false}
-      feedback={{
-        ...props.feedback,
-        enableAutoFeedback: props.feedback?.enableAutoFeedback ?? false,
-      }}
-    />
-  );
+  return <BaseBootstrappedProvider {...props} {...nativeOptions(props)} />;
 }
