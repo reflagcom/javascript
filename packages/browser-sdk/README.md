@@ -4,13 +4,15 @@ Feature flags, remote configuration, usage tracking and feedback for browser app
 
 ## Get started
 
+### 1. Create a client
+
 Install the SDK:
 
 ```sh
 npm install @reflag/browser-sdk
 ```
 
-Create a client with your **publishable** key and the signed-in user's context, then read a flag:
+Create a client with your **publishable** key and the signed-in user's context:
 
 ```ts
 import { ReflagClient } from "@reflag/browser-sdk";
@@ -21,13 +23,21 @@ const reflag = new ReflagClient({
   company: { id: "acme", plan: "enterprise" },
 });
 await reflag.initialize();
+```
 
+Publishable keys are safe to ship to the browser. Keep secret keys on your server.
+
+### 2. Create a flag
+
+Create a flag with the key `huddles` in the Reflag app.
+
+### 3. Read the flag
+
+```ts
 if (reflag.getFlag("huddles")) {
   await reflag.track("Started huddle");
 }
 ```
-
-Publishable keys are safe to ship to the browser. Keep secret keys on your server.
 
 ## Read flags
 
@@ -48,14 +58,19 @@ If the flag doesn't exist, or its value has a different type, you get `false`, o
 
 The SDK checks only the top-level type of a value. If your application depends on nested fields, validate them.
 
-`getFlags()` returns all flag values as a record. Reading a flag records a check, even if you don't use the value. Reflag uses checks for launch monitoring.
+`getFlags()` returns all flag values as a record.
+
+Each read records a check, which Reflag uses for launch monitoring.
 
 ## Track usage and feedback
 
 ```ts
 await reflag.track("Started huddle", { button: "cta" });
 reflag.requestFeedback({ flagKey: "huddles", title: "How did it go?" });
+await reflag.feedback({ flagKey: "huddles", score: 5 });
 ```
+
+`requestFeedback()` opens the feedback form. `feedback()` sends feedback you collected yourself.
 
 Configure your flag's adoption rules to match the event names you send. See [FEEDBACK.md](./FEEDBACK.md) to configure feedback prompts and the feedback UI.
 
@@ -92,7 +107,7 @@ await reflag.initialize();
 
 Pass the whole object returned by `getFlagsForBootstrap()`, serialized with your framework's usual mechanism. Leave secrets and server-only attributes out of the context you bootstrap, because the browser can read it.
 
-Later refreshes evaluate flags using the browser's context. If values that depend on server-only attributes must not change, disable live updates.
+Later refreshes evaluate flags using the browser's context. If values that depend on server-only attributes must not change, leave `enableLiveFlagUpdates` off (the default).
 
 ## Let users opt in to flags
 
@@ -147,7 +162,9 @@ const reflag = new ReflagClient({
 | `eventSourceFactory`       | Custom EventSource implementation for runtimes without one      |
 | `trackingQueue`            | Event batching: `flushDelayMs` and `maxSize`                    |
 
-Call `await reflag.stop()` to send buffered events and close the client.
+## Shut down
+
+Call `await reflag.stop()` to send buffered events and close the client, for example when the user signs out.
 
 ## Content Security Policy (CSP)
 

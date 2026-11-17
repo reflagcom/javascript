@@ -4,6 +4,8 @@ Feature flags, remote configuration, usage tracking and feedback for Vue 3 appli
 
 ## Get started
 
+### 1. Add the provider
+
 Install the SDK:
 
 ```sh
@@ -33,7 +35,13 @@ import { ReflagProvider } from "@reflag/vue-sdk";
 
 In Nuxt, wrap the provider in `<ClientOnly>`.
 
-Then read a flag in any component:
+### 2. Create a flag
+
+Create a flag with the key `huddles` in the Reflag app.
+
+### 3. Read the flag
+
+Use `useFlag()` in any component:
 
 ```vue
 <script setup lang="ts">
@@ -69,7 +77,7 @@ While flags are loading, if the flag doesn't exist, or if its value has a differ
 
 The SDK checks only the top-level type of a value. If your application depends on nested fields, validate them.
 
-Reading a flag records a check, even if you don't use the value. Reflag uses checks for launch monitoring.
+Each read records a check, which Reflag uses for launch monitoring.
 
 ## Loading states
 
@@ -124,7 +132,7 @@ await setOptIn("huddles", { optedIn: false, scope: "company" });
 
 Each entry includes the flag's `key`, `name`, `description` and whether the user or company has opted in. User and company opt-ins are independent. Check `isLoading` before rendering an empty state.
 
-## Toolbar
+## Overrides and toolbar
 
 The toolbar shows on `localhost` by default and lets you toggle Boolean flags for yourself. Use the `toolbar` prop to show it elsewhere, for example to internal users in production:
 
@@ -140,26 +148,13 @@ The toolbar shows on `localhost` by default and lets you toggle Boolean flags fo
 
 To override a flag from code, call `useClient().setFlagOverride(key, value)`. Pass `undefined` to remove the override.
 
-## Type safety
-
-Optionally declare your flags to get autocompletion for keys and type checks for defaults:
-
-```ts
-import "@reflag/vue-sdk";
-
-declare module "@reflag/vue-sdk" {
-  interface Flags {
-    huddles: boolean;
-    "huddle-settings": { maxParticipants: number };
-  }
-}
-```
-
-The [Reflag CLI](https://docs.reflag.com/api/cli) can generate these declarations for you with `--format vue`. Declarations are checked at compile time only.
-
 ## Use an existing client
 
-`useClient()` returns the underlying Browser SDK client. If you already create a Browser SDK client yourself, pass it to `ReflagClientProvider`; your application is then responsible for initializing and stopping it. `useOnEvent(type, handler)` subscribes to client events and unsubscribes when the component unmounts.
+`useClient()` returns the underlying Browser SDK client. If you already create a Browser SDK client yourself, pass it to `ReflagClientProvider`; your application is then responsible for initializing and stopping it.
+
+## Events
+
+`useOnEvent(type, handler)` subscribes to [client events](../browser-sdk/README.md) and unsubscribes when the component unmounts.
 
 ## Configuration
 
