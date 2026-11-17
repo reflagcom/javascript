@@ -12,7 +12,7 @@ import {
   RequestFeedbackOptions,
 } from "./feedback/feedback";
 import * as feedbackLib from "./feedback/ui";
-import { parseAPIFlagsResponse } from "./flag/flagCache";
+import { isValidBootstrapSnapshot } from "./flag/bootstrap";
 import {
   CheckEvent,
   FallbackFlagOverride,
@@ -477,10 +477,7 @@ export class ReflagClient {
       );
     if (
       opts.bootstrappedState &&
-      (opts.bootstrappedState.protocolVersion !== 2 ||
-        !parseAPIFlagsResponse(opts.bootstrappedState.flags, true) ||
-        (opts.bootstrappedState.flagStateVersion !== undefined &&
-          !isValidFlagStateVersion(opts.bootstrappedState.flagStateVersion)))
+      !isValidBootstrapSnapshot(opts.bootstrappedState)
     )
       throw new Error(
         "Expected a protocol-v2 bootstrap snapshot; v1 bootstrap is incompatible",
@@ -891,7 +888,8 @@ export class ReflagClient {
       newContext.company,
     );
     const userIdChanged =
-      !!newContext.user?.id && newContext.user.id !== previousContext.user?.id;
+      hasId(newContext.user?.id) &&
+      newContext.user?.id !== previousContext.user?.id;
 
     this.context = newContext;
 
@@ -931,12 +929,7 @@ export class ReflagClient {
     bootstrappedState: BootstrappedState,
     triggerEvent = true,
   ) {
-    if (
-      bootstrappedState.protocolVersion !== 2 ||
-      !parseAPIFlagsResponse(bootstrappedState.flags, true) ||
-      (bootstrappedState.flagStateVersion !== undefined &&
-        !isValidFlagStateVersion(bootstrappedState.flagStateVersion))
-    )
+    if (!isValidBootstrapSnapshot(bootstrappedState))
       throw new Error("Invalid protocol-v2 bootstrap snapshot");
     const previousContext = this.context;
     const newContext = normalizeContext(bootstrappedState.context);
@@ -948,7 +941,8 @@ export class ReflagClient {
       newContext.company,
     );
     const userIdChanged =
-      !!newContext.user?.id && newContext.user.id !== previousContext.user?.id;
+      hasId(newContext.user?.id) &&
+      newContext.user?.id !== previousContext.user?.id;
 
     const currentFlagStateVersion = this.flagsClient.getFlagStateVersion();
     const latestKnownFlagStateVersion = Math.max(
@@ -1619,9 +1613,9 @@ export class ReflagClient {
       return;
     }
 
-    if (this.autoFeedback && this.context.user?.id) {
+    if (this.autoFeedback && hasId(this.context.user?.id)) {
       this.autoFeedback.handleFeedbackPromptRequest(
-        String(this.context.user.id),
+        String(this.context.user?.id),
         payload,
       );
     }

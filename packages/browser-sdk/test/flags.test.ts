@@ -283,6 +283,71 @@ describe("v2 snapshots", () => {
     expect(client.getFlags().flagA.value).toBe(true);
   });
 
+  test.each(["refresh", "background"] as const)(
+    "storage failure does not discard a successful %s response",
+    async (mode) => {
+      const cache = new FlagCache({
+        storage: createNoopStorageAdapter(),
+        staleTimeMs: 0,
+        expireTimeMs: 1000,
+      });
+      const { client, get } = setup({
+        cache,
+        staleWhileRevalidate: mode === "background",
+      });
+      if (mode === "refresh") await client.initialize();
+      else {
+        vi.spyOn(cache, "get").mockResolvedValue({
+          flags: flagsResult,
+          flagStateVersion: 1,
+          stale: true,
+        });
+      }
+      const quota = new Error("quota");
+      const store = vi.spyOn(cache, "set").mockRejectedValue(quota);
+      const warningsBefore = testLogger.warn.mock.calls.length;
+      get.mockResolvedValue(response(2, false));
+      if (mode === "refresh") await client.refreshFlags();
+      else await client.initialize();
+      await vi.waitFor(() => {
+        expect(store).toHaveBeenCalledOnce();
+        expect(testLogger.warn.mock.calls.slice(warningsBefore)).toContainEqual(
+          ["[Flags] storing flags failed", quota],
+        );
+      });
+      expect(client.getFlagStateVersion()).toBe(2);
+      expect(client.getFlags().flagA.value).toBe(false);
+    },
+  );
+
+  test("does not replay a suppressed metadata-only update", async () => {
+    const { client } = setup();
+    await client.initialize();
+    client.setFlagOverride("flagA", false);
+    const updated = vi.fn();
+    client.onUpdated(updated);
+    const metadata = (userOptedIn: boolean) => ({
+      flagA: {
+        ...selectedFlag(true),
+        optInEnabled: true,
+        optIn: {
+          name: "Try",
+          description: null,
+          userOptedIn,
+          companyOptedIn: false,
+          isOptedIn: userOptedIn,
+        },
+      },
+    });
+    client.setFetchedFlags(metadata(true), false, 2);
+    client.updateFlags();
+    expect(updated).not.toHaveBeenCalled();
+    client.setFetchedFlags(metadata(false), true, 3);
+    expect(updated).toHaveBeenCalledOnce();
+    expect(client.getOptInMetadata().flagA.userOptedIn).toBe(false);
+    expect(client.getFlags().flagA.value).toBe(false);
+  });
+
   test("uses stale v2 cache on failure, preserving real selections", async () => {
     const cache = new FlagCache({
       storage: createNoopStorageAdapter(),

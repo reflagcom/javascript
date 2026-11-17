@@ -593,6 +593,63 @@ describe("bootstrap and opt-in boundaries", () => {
     expect(evaluationRequests).toBe(2);
   });
 
+  test.each([false, true])(
+    "notifies opt-in subscribers when an override keeps the value at %s",
+    async (override) => {
+      let optedIn = false;
+      server.use(
+        http.post("https://front.reflag.com/flags/opt-in", () => {
+          optedIn = true;
+          return HttpResponse.json({ success: true, flagStateVersion: 2 });
+        }),
+        http.get("https://front.reflag.com/flags/evaluated", () =>
+          HttpResponse.json({
+            ...flagResponse,
+            flagStateVersion: optedIn ? 2 : 1,
+            flags: {
+              flagA: {
+                ...selectedFlag(optedIn, String(optedIn)),
+                optInEnabled: true,
+                optIn: {
+                  name: "Try",
+                  description: null,
+                  userOptedIn: optedIn,
+                  companyOptedIn: false,
+                  isOptedIn: optedIn,
+                },
+              },
+            },
+          }),
+        ),
+      );
+      const client = create({ enableTracking: false });
+      await client.initialize();
+      client.setFlagOverride("flagA", override);
+      const updated = vi.fn(() => client.getOptInFlags());
+      client.on("flagsUpdated", updated);
+
+      expect((await client.setOptIn("flagA", { optedIn: true }))?.ok).toBe(
+        true,
+      );
+      expect(updated).toHaveBeenCalledOnce();
+      expect(updated).toHaveReturnedWith([
+        expect.objectContaining({
+          key: "flagA",
+          isEnabled: override,
+          userOptedIn: true,
+        }),
+      ]);
+      expect(client.getFlagResults().flagA).toEqual({
+        value: override,
+        resolved: false,
+        ruleResults: [],
+        errors: [],
+      });
+      await client.refresh();
+      expect(updated).toHaveBeenCalledOnce();
+    },
+  );
+
   test("returns readable opt-in HTTP errors without refreshing or changing accepted flags", async () => {
     const errorBody = {
       success: false,

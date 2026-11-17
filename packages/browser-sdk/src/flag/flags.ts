@@ -11,6 +11,7 @@ import { createAbortController } from "../utils/abortController";
 import { createEventTarget } from "../utils/eventTarget";
 import { logResponseError, parseResponseError } from "../utils/responseError";
 import { retryOnThrow } from "../utils/retry";
+import { isValidBootstrapSnapshot } from "./bootstrap";
 import { FlagCache, isObject, parseAPIFlagsResponse } from "./flagCache";
 import { isValidFlagStateVersion } from "./flagStateVersion";
 import { copyJSON, FlagValue, isFlagValue } from "./values";
@@ -215,6 +216,8 @@ export class FlagsClient {
   private fallbackFlags: FallbackFlags = {};
   private contextFetchVersion = 0;
   private optInMetadata: Record<string, RawFlagOptIn> = Object.create(null);
+  private lastUpdatedOptInMetadata: Record<string, RawFlagOptIn> =
+    Object.create(null);
   private optInMetadataContextVersion = -1;
   private optInMetadataFetchVersion = 0;
   private optInFlagsRequested = false;
@@ -269,12 +272,7 @@ export class FlagsClient {
     this.fallbackFlags = this.setupFallbackFlags(fallbackFlags);
 
     if (bootstrappedState) {
-      if (
-        bootstrappedState.protocolVersion !== 2 ||
-        !parseAPIFlagsResponse(bootstrappedState.flags, true) ||
-        (bootstrappedState.flagStateVersion !== undefined &&
-          !isValidFlagStateVersion(bootstrappedState.flagStateVersion))
-      ) {
+      if (!isValidBootstrapSnapshot(bootstrappedState)) {
         throw new Error(
           "Expected a protocol-v2 bootstrap snapshot; v1 bootstrap is incompatible",
         );
@@ -565,9 +563,14 @@ export class FlagsClient {
 
   updateFlags(triggerEvent = true) {
     const updatedFlags = this.mergeFlags(this.fetchedFlags, this.flagOverrides);
-    // Nothing has changed, skipping update
-    if (deepEqual(this.flags, updatedFlags)) return;
+    // Overrides hide fetched metadata, but opt-in subscribers still need updates.
+    if (
+      deepEqual(this.flags, updatedFlags) &&
+      deepEqual(this.lastUpdatedOptInMetadata, this.optInMetadata)
+    )
+      return;
     this.flags = updatedFlags;
+    this.lastUpdatedOptInMetadata = this.optInMetadata;
     if (triggerEvent) this.triggerFlagsUpdated();
   }
 
@@ -779,12 +782,19 @@ export class FlagsClient {
     ) {
       return;
     }
+    await this.persistSnapshot(cacheKey, result);
+    return this.getFetchedFlags();
+  }
+
+  private async persistSnapshot(
+    cacheKey: string,
+    snapshot: FetchedFlagsResult,
+  ) {
     try {
-      await this.cache.set(cacheKey, result);
+      await this.cache.set(cacheKey, snapshot);
     } catch (error) {
       this.logger.warn("storing flags failed", error);
     }
-    return this.getFetchedFlags();
   }
 
   private async setOverridesCache(overrides: FlagOverrides) {
@@ -833,11 +843,7 @@ export class FlagsClient {
             if (!result) return;
 
             this.applyFetchedFlagsResult(result, true, requestContextVersion);
-            try {
-              await this.cache.set(cacheKey, result);
-            } catch (error) {
-              this.logger.warn("storing flags failed", error);
-            }
+            await this.persistSnapshot(cacheKey, result);
           })
           .catch(() => {
             // we don't care about the result, we just want to re-fetch
@@ -851,11 +857,7 @@ export class FlagsClient {
     const fetchedFlags = await this.fetchFlags();
 
     if (fetchedFlags) {
-      try {
-        await this.cache.set(cacheKey, fetchedFlags);
-      } catch (error) {
-        this.logger.warn("storing flags failed", error);
-      }
+      await this.persistSnapshot(cacheKey, fetchedFlags);
       return {
         flags: fetchedFlags.flags,
         flagStateVersion: fetchedFlags.flagStateVersion,
@@ -914,6 +916,7 @@ export class FlagsClient {
     )
       return false;
     if (!this.setOptInMetadata(result.flags)) return false;
+    this.updateFlags(false);
     this.triggerFlagsUpdated();
     return true;
   }

@@ -574,6 +574,65 @@ describe("opt-in hooks", () => {
     });
   });
 
+  test("updates opt-in membership while an override keeps the value unchanged", async () => {
+    const optIn = {
+      name: "Try",
+      description: null,
+      userOptedIn: false,
+      companyOptedIn: false,
+      isOptedIn: false,
+    };
+    const initial = state();
+    initial.flags.release.optInEnabled = true;
+    initial.flags.release.optIn = optIn;
+    const client = create(initial);
+    client.setFlagOverride("release", false);
+    await client.initialize();
+    server.use(
+      http.post(/\/flags\/opt-in$/, () =>
+        HttpResponse.json({ success: true, flagStateVersion: 2 }),
+      ),
+      http.get(/\/flags\/evaluated$/, () =>
+        HttpResponse.json({
+          ...response,
+          flagStateVersion: 2,
+          flags: {
+            release: {
+              ...selected(true),
+              optInEnabled: true,
+              optIn: { ...optIn, userOptedIn: true, isOptedIn: true },
+            },
+          },
+        }),
+      ),
+    );
+    const { result } = renderHook(
+      () => ({
+        value: useFlag("release"),
+        optIn: useOptInFlags(),
+        setOptIn: useSetOptIn(),
+      }),
+      {
+        wrapper: ({ children }) => (
+          <ReflagClientProvider client={client}>
+            {children}
+          </ReflagClientProvider>
+        ),
+      },
+    );
+    expect(result.current.optIn.flags[0].userOptedIn).toBe(false);
+    await act(async () => {
+      expect(
+        (await result.current.setOptIn("release", { optedIn: true }))?.ok,
+      ).toBe(true);
+    });
+    await waitFor(() =>
+      expect(result.current.optIn.flags[0].userOptedIn).toBe(true),
+    );
+    expect(result.current.value).toBe(false);
+    expect(result.current.optIn.flags[0].isEnabled).toBe(false);
+  });
+
   test("preserves opt-in Suspense and releases it after metadata failure", async () => {
     const pending = gate();
     server.use(
