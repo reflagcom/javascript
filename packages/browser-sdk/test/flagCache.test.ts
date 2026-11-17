@@ -22,18 +22,86 @@ function setup() {
 afterEach(() => vi.useRealTimers());
 
 describe("v2 evaluated cache", () => {
-  test.each([
-    [{ code: "MISSING_CONTEXT_FIELD" }],
-    [
-      {
-        code: "MISSING_CONTEXT_FIELD",
-        message: "missing",
-        source: { type: "unknown", key: "s" },
+  const rule = { ruleId: "rule", matched: true };
+  const error = { code: "MISSING_CONTEXT_FIELD", message: "missing" };
+
+  test("accepts diagnostic optional fields and preserves their values", () => {
+    const flags = {
+      flagA: {
+        ...selectedFlag(true),
+        ruleResults: [
+          rule,
+          { ...rule, allocationIndex: 0, destination: { type: "nextRule" } },
+          {
+            ...rule,
+            allocationIndex: 1,
+            destination: { type: "variant", variantKey: "" },
+          },
+        ],
+        errors: [
+          error,
+          { ...error, source: { type: "flag", key: "parent" } },
+          {
+            ...error,
+            field: "user.id",
+            operator: "IS",
+            source: { type: "segment", key: "enterprise" },
+          },
+        ],
       },
-    ],
-  ])("rejects malformed v2 diagnostics: %j", (errors) => {
+    };
+    expect(parseAPIFlagsResponse(flags)).toEqual(flags);
+  });
+
+  test.each([
+    null,
+    true,
+    {},
+    { ...rule, ruleId: 1 },
+    { ...rule, matched: undefined },
+    { ...rule, matched: 1 },
+    ...[-1, 0.5, Infinity, NaN, "0", null].map((allocationIndex) => ({
+      ...rule,
+      allocationIndex,
+    })),
+    ...[
+      null,
+      [],
+      { type: "unknown" },
+      { type: "variant" },
+      { type: "variant", variantKey: 1 },
+    ].map((destination) => ({ ...rule, destination })),
+  ])("rejects malformed rule diagnostics atomically: %j", (invalidRule) => {
     expect(
-      parseAPIFlagsResponse({ flagA: { ...selectedFlag(true), errors } }),
+      parseAPIFlagsResponse({
+        good: selectedFlag(true),
+        bad: { ...selectedFlag(true), ruleResults: [invalidRule] },
+      }),
+    ).toBeUndefined();
+  });
+
+  test.each([
+    null,
+    true,
+    {},
+    { code: "MISSING_CONTEXT_FIELD" },
+    { ...error, code: 1 },
+    { ...error, message: null },
+    { ...error, field: null },
+    { ...error, operator: 1 },
+    ...[
+      null,
+      [],
+      { type: "unknown", key: "s" },
+      { type: "flag" },
+      { type: "segment", key: 1 },
+    ].map((source) => ({ ...error, source })),
+  ])("rejects malformed error diagnostics atomically: %j", (invalidError) => {
+    expect(
+      parseAPIFlagsResponse({
+        good: selectedFlag(true),
+        bad: { ...selectedFlag(true), errors: [invalidError] },
+      }),
     ).toBeUndefined();
   });
 
