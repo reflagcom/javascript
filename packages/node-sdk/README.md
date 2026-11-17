@@ -4,6 +4,8 @@ Feature flags, remote configuration and usage tracking for Node.js servers.
 
 ## Get started
 
+### 1. Create a client
+
 Install the SDK:
 
 ```sh
@@ -21,7 +23,22 @@ export const reflag = new ReflagClient({
 await reflag.initialize();
 ```
 
-Then read a flag for a user and company:
+Keep the secret key on your server.
+
+### 2. Create a flag
+
+Install the Reflag CLI and create a flag:
+
+```sh
+yarn add --dev @reflag/cli
+npx reflag new
+```
+
+The first time you run it, it signs you in to Reflag, saves its settings in `reflag.config.json` and generates types for your flags in `gen/flags.d.ts`. Choose `node` when asked for the output format, and make sure your `tsconfig.json` includes the generated file. You can also create flags in the Reflag app.
+
+### 3. Read the flag
+
+Read a flag for a user and company:
 
 ```ts
 const context = {
@@ -34,7 +51,7 @@ if (reflag.getFlag(context, "new-editor")) {
 }
 ```
 
-The SDK downloads your flag definitions and evaluates flags locally, so reads don't make network requests. Keep the secret key on your server.
+The SDK downloads your flag definitions and evaluates flags locally, so reads don't make network requests.
 
 ## Read flags
 
@@ -57,7 +74,7 @@ The SDK checks only the top-level type of a value. If your application depends o
 
 `getFlags(context)` returns all flag values as a record; a value can be `undefined` if the flag is unavailable.
 
-Reading a flag records a check, even if you don't use the value. Reflag uses checks for launch monitoring.
+Each read records a check, which Reflag uses for launch monitoring.
 
 ## Bind a client to a request
 
@@ -78,7 +95,7 @@ Binding also sends the user's and company's attributes to Reflag, so you can tar
 await bound.track("Document created", { attributes: { source: "editor" } });
 ```
 
-Configure your flag's adoption rules to match the event names you send. Events are sent in batches. Call `await reflag.flush()` to send any queued events, for example before your process exits.
+Configure your flag's adoption rules to match the event names you send. Events are sent in batches; see [Shutting down](#shutting-down) to send them before your process exits.
 
 ## Keep flags up to date
 
@@ -139,7 +156,7 @@ Overrides pushed with `pushFlagOverrides()` take precedence over base overrides 
 
 ## Type safety
 
-Optionally declare your flags to get autocompletion for keys, type checks for defaults and typed `getFlags()` results:
+Declaring your flags gives you autocompletion for keys, type checks for defaults and typed `getFlags()` results. If you created a flag with `npx reflag new`, the declarations are already generated; run `npx reflag flags types` again when your flags change. A declaration looks like this:
 
 ```ts
 declare module "@reflag/node-sdk" {
@@ -151,7 +168,7 @@ declare module "@reflag/node-sdk" {
 }
 ```
 
-The [Reflag CLI](https://docs.reflag.com/api/cli) can generate these declarations for you. Declarations are checked at compile time only.
+Declarations are checked at compile time only. See the [Reflag CLI](https://docs.reflag.com/api/cli) for more options.
 
 ## Bootstrap the browser
 
@@ -177,19 +194,50 @@ const values = await reflag.getFlagsRemote("user-1", "acme", {
 });
 ```
 
-On the root client, the default comes second: `getFlagRemote(key, defaultValue, userId?, companyId?, context?)`. Pass `undefined` as the default for a Boolean read.
+Unlike `getFlag()`, `getFlagRemote()` on the root client takes the default before the user and company IDs. To read a Boolean, pass `undefined` as the default.
 
 ## Edge runtimes
 
-Use `EdgeClient` in edge runtimes such as Cloudflare Workers, with Node.js compatibility enabled. It refreshes flags as they're read. Call `ctx.waitUntil(client.flush())` before returning from a Worker so queued events are sent.
+Use `EdgeClient` in edge runtimes such as Cloudflare Workers, with Node.js compatibility enabled. It refreshes flags as they're read, instead of in the background:
+
+```ts
+import { EdgeClient } from "@reflag/node-sdk";
+
+let reflag: EdgeClient | undefined;
+
+export default {
+  async fetch(request, env, ctx) {
+    reflag ??= new EdgeClient({ secretKey: env.REFLAG_SECRET_KEY });
+    await reflag.initialize();
+    const enabled = reflag.getFlag({ user: { id: "user-1" } }, "new-editor");
+    ctx.waitUntil(reflag.flush());
+    return new Response(enabled ? "New editor" : "Old editor");
+  },
+};
+```
+
+Call `ctx.waitUntil(reflag.flush())` before returning so queued events are sent.
 
 ## Configuration
 
 Options can be set in the constructor, through environment variables, or in `reflag.config.json`, in that order of precedence.
 
-Environment variables include `REFLAG_SECRET_KEY`, `REFLAG_API_BASE_URL`, `REFLAG_LOG_LEVEL`, `REFLAG_OFFLINE`, `REFLAG_CONFIG_FILE`, and `REFLAG_FLAGS_ENABLED` / `REFLAG_FLAGS_DISABLED` to override Boolean flags.
+| Option                  | Environment variable                            | Description                                                          |
+| ----------------------- | ----------------------------------------------- | -------------------------------------------------------------------- |
+| `secretKey`             | `REFLAG_SECRET_KEY`                             | Your environment's secret key                                        |
+| `apiBaseUrl`            | `REFLAG_API_BASE_URL`                           | Override the API URL                                                 |
+| `logLevel`, `logger`    | `REFLAG_LOG_LEVEL`                              | Log level (default `INFO`) or a custom logger                        |
+| `offline`               | `REFLAG_OFFLINE`                                | Make no network requests, for example in tests                       |
+| `configFile`            | `REFLAG_CONFIG_FILE`                            | Path to a config file other than `reflag.config.json`                |
+| `flagOverrides`         | `REFLAG_FLAGS_ENABLED`, `REFLAG_FLAGS_DISABLED` | Override flags; the variables take comma-separated Boolean flag keys |
+| `flagsSyncMode`         |                                                 | How flag definitions are kept up to date; default `push`             |
+| `flagsFallbackProvider` |                                                 | Where to save flag definitions for startup                           |
+| `fetchTimeoutMs`        |                                                 | Request timeout; default 10,000 ms                                   |
+| `flagsFetchRetries`     |                                                 | Retries for fetching flag definitions; default 3                     |
+| `batchOptions`          |                                                 | Event batching: `maxSize`, `intervalMs` and `flushOnExit`            |
+| `httpClient`            |                                                 | Custom HTTP client                                                   |
 
-Constructor options include `logger`, `httpClient`, `flagsSyncMode`, `fetchTimeoutMs`, `flagsFetchRetries`, `flagsFallbackProvider`, `flagOverrides`, `enableTracking`, `offline` and `batchOptions` (`maxSize`, `intervalMs`, `flushOnExit`).
+To stop sending checks and events for a context, include `enableTracking: false` in it.
 
 ## Shutting down
 
