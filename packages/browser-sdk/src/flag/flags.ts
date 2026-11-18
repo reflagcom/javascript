@@ -111,7 +111,8 @@ export type FetchedFlagsResult = {
 };
 
 export type FlagsFetchResult = FetchedFlagsResult & {
-  success: boolean;
+  success: true;
+  flagStateVersion: number;
 };
 
 export function validateFlagsResponse(
@@ -135,14 +136,10 @@ export function validateFlagsResponse(
     return;
   }
 
-  const flagStateVersion = isValidFlagStateVersion(response.flagStateVersion)
-    ? response.flagStateVersion
-    : undefined;
-
   return {
     success: response.success,
     flags,
-    flagStateVersion,
+    flagStateVersion: response.flagStateVersion,
   };
 }
 
@@ -728,7 +725,7 @@ export class FlagsClient {
         }
 
         const typeRes = validateFlagsResponse(await res.json());
-        if (!typeRes || !typeRes.success) {
+        if (!typeRes) {
           this.logger.error(
             "error fetching flags:",
             new Error("unable to validate response"),
@@ -738,8 +735,7 @@ export class FlagsClient {
 
         if (
           waitForVersion !== undefined &&
-          (typeRes.flagStateVersion === undefined ||
-            typeRes.flagStateVersion < waitForVersion)
+          typeRes.flagStateVersion < waitForVersion
         ) {
           this.logger.warn(
             "ignoring stale flag response for requested flag state version.",

@@ -105,15 +105,64 @@ describe("v2 evaluated cache", () => {
     ).toBeUndefined();
   });
 
+  const optIn = {
+    name: "Try",
+    description: null,
+    userOptedIn: true,
+    companyOptedIn: false,
+    isOptedIn: true,
+  };
+
+  test.each([
+    {},
+    { optInEnabled: false, optIn: null },
+    { optInEnabled: true, optIn: null },
+    { optInEnabled: true, optIn },
+    {
+      optInEnabled: true,
+      optIn: {
+        ...optIn,
+        description: "Preview",
+        userOptedIn: false,
+        isOptedIn: false,
+      },
+    },
+  ])("preserves accepted opt-in metadata states: %j", (metadata) => {
+    const flags = { release: { ...selectedFlag(true), ...metadata } };
+    expect(parseAPIFlagsResponse(flags)).toEqual(flags);
+    expect(parseAPIFlagsResponse(flags, true)).toEqual(flags);
+  });
+
+  test.each([
+    { optIn: null },
+    { optIn },
+    { optInEnabled: true },
+    { optInEnabled: false },
+    { optInEnabled: "true", optIn: null },
+    { optInEnabled: null, optIn: null },
+    { optInEnabled: false, optIn },
+    ...[
+      true,
+      [],
+      {},
+      { ...optIn, name: null },
+      { ...optIn, description: undefined },
+      { ...optIn, description: 1 },
+      { ...optIn, userOptedIn: 1 },
+      { ...optIn, companyOptedIn: undefined },
+      { ...optIn, isOptedIn: "true" },
+    ].map((invalidOptIn) => ({ optInEnabled: true, optIn: invalidOptIn })),
+  ])("rejects invalid opt-in metadata atomically: %j", (metadata) => {
+    const flags = {
+      good: selectedFlag(true),
+      bad: { ...selectedFlag(true), ...metadata },
+    };
+    expect(parseAPIFlagsResponse(flags)).toBeUndefined();
+    expect(parseAPIFlagsResponse(flags, true)).toBeUndefined();
+  });
+
   test("owns stored values and preserves snapshot version zero", async () => {
     const { cache } = setup();
-    const optIn = {
-      name: "Try",
-      description: null,
-      userOptedIn: true,
-      companyOptedIn: false,
-      isOptedIn: true,
-    };
     const flags = {
       settings: selectedFlag({ nested: [1] }, "quality"),
       release: { ...selectedFlag(true), optInEnabled: true, optIn },

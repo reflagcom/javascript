@@ -79,13 +79,34 @@ describe("v2 snapshots", () => {
     },
   );
 
+  test.each([0, 1])(
+    "accepts a successful response at version %s",
+    (version) => {
+      expect(
+        validateFlagsResponse({ ...flagResponse, flagStateVersion: version }),
+      ).toEqual({
+        success: true,
+        flags: flagsResult,
+        flagStateVersion: version,
+      });
+    },
+  );
+
   test.each([
+    ["unsuccessful response", { ...flagResponse, success: false }],
+    ["missing success", { ...flagResponse, success: undefined }],
+    ["non-boolean success", { ...flagResponse, success: "true" }],
     ["legacy protocol", { success: true, features: {} }],
     [
       "missing snapshot version",
       { ...flagResponse, flagStateVersion: undefined },
     ],
     ["negative snapshot version", { ...flagResponse, flagStateVersion: -1 }],
+    [
+      "non-numeric snapshot version",
+      { ...flagResponse, flagStateVersion: "1" },
+    ],
+    ["fractional snapshot version", { ...flagResponse, flagStateVersion: 0.5 }],
     [
       "missing selected identity",
       {

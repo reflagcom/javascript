@@ -40,6 +40,17 @@ function isEvaluationError(error: unknown): boolean {
   );
 }
 
+function isRawFlagOptIn(optIn: unknown): boolean {
+  return (
+    isObject(optIn) &&
+    typeof optIn.name === "string" &&
+    (optIn.description === null || typeof optIn.description === "string") &&
+    typeof optIn.userOptedIn === "boolean" &&
+    typeof optIn.companyOptedIn === "boolean" &&
+    typeof optIn.isOptedIn === "boolean"
+  );
+}
+
 /** Accept complete evaluated snapshots atomically, including Node v2 bootstrap. */
 export function parseAPIFlagsResponse(
   input: unknown,
@@ -73,16 +84,7 @@ export function parseAPIFlagsResponse(
       typeof flag.optInEnabled !== "boolean" ||
       flag.optIn === undefined ||
       (flag.optIn !== null &&
-        (flag.optInEnabled !== true ||
-          !isObject(flag.optIn) ||
-          typeof flag.optIn.name !== "string" ||
-          !(
-            flag.optIn.description === null ||
-            typeof flag.optIn.description === "string"
-          ) ||
-          typeof flag.optIn.userOptedIn !== "boolean" ||
-          typeof flag.optIn.companyOptedIn !== "boolean" ||
-          typeof flag.optIn.isOptedIn !== "boolean"))
+        (flag.optInEnabled !== true || !isRawFlagOptIn(flag.optIn)))
     )
       return;
 
