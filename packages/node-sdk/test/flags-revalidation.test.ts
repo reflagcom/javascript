@@ -7,22 +7,11 @@ import type {
   FlagsAPIResponse,
   FlagsFallbackSnapshot,
 } from "../src/types";
+import { definition, snapshot as collection } from "./fixtures";
 
 const etag = 'W/"flags-v1"';
 const notModified = { ok: false, status: 304, body: undefined };
-const definitions: FlagsAPIResponse = {
-  flagStateVersion: 1,
-  features: [
-    {
-      key: "flag",
-      description: null,
-      targeting: {
-        version: 1,
-        rules: [{ filter: { type: "constant", value: true } }],
-      },
-    },
-  ],
-};
+const definitions: FlagsAPIResponse = collection([definition("flag", true)]);
 
 function modified(version = 1, responseETag: string | undefined = etag) {
   return {
@@ -96,16 +85,7 @@ describe("flag-definition revalidation", () => {
         ...modified(2, '"flags-v2"'),
         body: {
           success: true,
-          flagStateVersion: 2,
-          features: [
-            {
-              ...definitions.features[0],
-              targeting: {
-                version: 2,
-                rules: [{ filter: { type: "constant", value: false } }],
-              },
-            },
-          ],
+          ...collection([definition("flag", false)], [], 2),
         },
       });
     const client = createClient({ flagsFallbackProvider: provider });
@@ -132,13 +112,13 @@ describe("flag-definition revalidation", () => {
       "If-None-Match": etag,
     });
     expect(requestHeaders(3)).toEqual(requestHeaders(2));
-    expect(client["_config"].headers).not.toHaveProperty("If-None-Match");
+    expect(client["config"].headers).not.toHaveProperty("If-None-Match");
 
     await refresh(client);
     expect(cache.get()).not.toBe(initialDefinitions);
     expect(cache.getFlagStateVersion()).toBe(2);
     expect(cache.getETag()).toBe('"flags-v2"');
-    expect(client.getFlag({}, "flag").isEnabled).toBe(false);
+    expect(client.getFlag({}, "flag")).toBe(false);
     expect(provider.save).toHaveBeenCalledTimes(2);
   });
 
@@ -154,7 +134,7 @@ describe("flag-definition revalidation", () => {
     const client = createClient({ flagsFallbackProvider: provider });
     await client.initialize();
 
-    expect(client.getFlag({}, "flag").isEnabled).toBe(true);
+    expect(client.getFlag({}, "flag")).toBe(true);
     expect(client["flagsCache"].getETag()).toBeUndefined();
     expect(provider.save).toHaveBeenCalledTimes(1);
     expect(logger.error).toHaveBeenCalledWith(
@@ -182,7 +162,7 @@ describe("flag-definition revalidation", () => {
     const client = createClient({ flagsFallbackProvider: provider });
     await client.initialize();
 
-    expect(client.getFlag({}, "flag").isEnabled).toBe(true);
+    expect(client.getFlag({}, "flag")).toBe(true);
     expect(client["flagsCache"].getETag()).toBeUndefined();
     completeSave();
     await vi.advanceTimersByTimeAsync(0);
@@ -214,14 +194,14 @@ describe("flag-definition revalidation", () => {
         .mockResolvedValueOnce(modified())
         .mockResolvedValueOnce({
           ...modified(2, '"v2"'),
-          body: { success: true, flagStateVersion: 2, features: [] },
+          body: { success: true, ...collection([], [], 2) },
         })
         .mockResolvedValue(notModified);
       const client = createClient({ flagsFallbackProvider: provider });
       await client.initialize();
       await refresh(client);
 
-      expect(client["flagsCache"].get()).toEqual([]);
+      expect(client["flagsCache"].get()?.flags).toEqual([]);
       expect(client["flagsCache"].getFlagStateVersion()).toBe(2);
       expect(client["flagsCache"].getETag()).toBeUndefined();
       expect(provider.save).toHaveBeenCalledTimes(1);
@@ -285,7 +265,7 @@ describe("flag-definition revalidation", () => {
     httpClient.get
       .mockResolvedValueOnce({
         ...modified(),
-        body: { success: true, flagStateVersion: 1, features: [] },
+        body: { success: true, ...collection() },
       })
       .mockResolvedValueOnce(notModified);
     const client = createClient();
@@ -293,7 +273,7 @@ describe("flag-definition revalidation", () => {
     const snapshot = client["flagsCache"].get();
     await refresh(client);
 
-    expect(snapshot).toEqual([]);
+    expect(snapshot?.flags).toEqual([]);
     expect(client["flagsCache"].get()).toBe(snapshot);
     expect(requestHeaders(2)["If-None-Match"]).toBe(etag);
   });
@@ -322,10 +302,10 @@ describe("flag-definition revalidation", () => {
     expect(client["flagsCache"].get()).toBe(snapshot);
     expect(fetch).toHaveBeenNthCalledWith(
       2,
-      "https://api.example.com/features",
+      "https://api.example.com/flags",
       expect.objectContaining({
         cache: "no-cache",
-        headers: { ...client["_config"].headers, "If-None-Match": etag },
+        headers: { ...client["config"].headers, "If-None-Match": etag },
       }),
     );
     await refresh(client);
@@ -338,7 +318,13 @@ describe("flag-definition revalidation", () => {
     httpClient.get.mockResolvedValueOnce(modified()).mockResolvedValueOnce({
       ok: true,
       status: 200,
-      body: { success: true, features: {}, remoteContextUsed: false },
+      body: {
+        success: true,
+        protocolVersion: 2,
+        flagStateVersion: 1,
+        flags: {},
+        remoteContextUsed: false,
+      },
     });
     const client = createClient();
     await client.initialize();
@@ -346,7 +332,7 @@ describe("flag-definition revalidation", () => {
 
     expect(httpClient.get).toHaveBeenNthCalledWith(
       2,
-      "https://api.example.com/features/evaluated",
+      "https://api.example.com/flags/evaluated?contextJson=%7B%7D",
       requestHeaders(1),
       API_TIMEOUT_MS,
     );
@@ -365,7 +351,7 @@ describe("flag-definition revalidation", () => {
 
     expect(httpClient.get).toHaveBeenCalledTimes(2);
     expect(requestHeaders(2)).not.toHaveProperty("If-None-Match");
-    expect(client.getFlag({}, "flag").isEnabled).toBe(true);
+    expect(client.getFlag({}, "flag")).toBe(true);
   });
 
   it("clears the old ETag when an accepted replacement omits it", async () => {
@@ -393,7 +379,7 @@ describe("flag-definition revalidation", () => {
       .mockResolvedValueOnce(current)
       .mockResolvedValueOnce({
         ...modified(1, '"v1"'),
-        body: { success: true, flagStateVersion: 1, features: [] },
+        body: { success: true, ...collection() },
       })
       .mockResolvedValueOnce(notModified);
     const client = createClient({ flagsFallbackProvider: provider });
@@ -407,9 +393,7 @@ describe("flag-definition revalidation", () => {
     expect(client["flagsCache"].getETag()).toBe('"v2"');
     expect(requestHeaders(3)["If-None-Match"]).toBe('"v2"');
     expect(provider.save).toHaveBeenCalledTimes(1);
-    expect(provider.save.mock.calls[0]?.[1].flags).toEqual(
-      current.body.features,
-    );
+    expect(provider.save.mock.calls[0]?.[1].flags).toEqual(current.body.flags);
   });
 
   it.each([
@@ -418,7 +402,7 @@ describe("flag-definition revalidation", () => {
       "malformed definitions",
       {
         ...modified(2, '"invalid"'),
-        body: { success: true, flagStateVersion: 2, features: null },
+        body: { success: true, ...collection([], [], 2), flags: null },
       },
     ],
     ["an older version", modified(0, '"older"')],
@@ -456,7 +440,7 @@ describe("flag-definition revalidation", () => {
     await refresh(client);
 
     expect(requestHeaders(3)["If-None-Match"]).toBe(etag);
-    expect(client.getFlag({}, "flag").isEnabled).toBe(true);
+    expect(client.getFlag({}, "flag")).toBe(true);
   });
 
   it("isolates validators between clients with different credentials", async () => {
@@ -493,7 +477,7 @@ describe("flag-definition revalidation", () => {
     expect(httpClient.get).toHaveBeenCalledTimes(2);
     expect(requestHeaders(1)).not.toHaveProperty("If-None-Match");
     expect(requestHeaders(2)).not.toHaveProperty("If-None-Match");
-    expect(client.getFlag({}, "flag").isEnabled).toBe(true);
+    expect(client.getFlag({}, "flag")).toBe(true);
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
@@ -525,9 +509,11 @@ describe("flag-definition revalidation", () => {
   it("fetches unconditionally after loading fallback definitions", async () => {
     const provider = {
       load: vi.fn().mockResolvedValue({
-        version: 1,
+        version: 2,
         savedAt: "2025-12-31T00:00:00Z",
-        flags: definitions.features,
+        flags: definitions.flags,
+        segments: definitions.segments,
+        flagStateVersion: 1,
       }),
       save: vi.fn().mockResolvedValue(undefined),
     };
@@ -564,7 +550,7 @@ describe("flag-definition revalidation", () => {
 
     expect(httpClient.get).toHaveBeenNthCalledWith(
       2,
-      "https://api.example.com/features?waitForVersion=2",
+      "https://api.example.com/flags?waitForVersion=2",
       requestHeaders(1),
       API_TIMEOUT_MS,
     );

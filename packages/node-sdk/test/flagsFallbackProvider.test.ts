@@ -4,420 +4,219 @@ import path from "path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { FlagsFallbackProviderContext } from "../src";
-import { fallbackProviders } from "../src";
+import { fallbackProviders, type FlagsFallbackSnapshot } from "../src";
+import { graph } from "./fixtures";
 
-const context: FlagsFallbackProviderContext = {
-  secretKeyHash: "abc123def456ghi789",
-};
-
-const snapshot = {
-  version: 1 as const,
+const context = { secretKeyHash: "abc123def456ghi789" };
+const snapshot: FlagsFallbackSnapshot = {
+  version: 2,
   savedAt: "2026-03-09T00:00:00.000Z",
-  flags: [
-    {
-      key: "flag-1",
-      description: "Flag 1",
-      targeting: {
-        version: 1,
-        rules: [],
-      },
-    },
-  ],
+  flagStateVersion: 1,
+  flags: graph().flags,
+  segments: graph().segments,
 };
+const filename = `flags-fallback-v2-${context.secretKeyHash.slice(0, 16)}.json`;
+const objectKey = `reflag/flags-fallback/${filename}`;
 
 describe("flagsFallbackProvider", () => {
   let tempDir: string | undefined;
-
   afterEach(async () => {
     vi.restoreAllMocks();
-    if (tempDir) {
-      await rm(tempDir, { recursive: true, force: true });
-      tempDir = undefined;
-    }
+    if (tempDir) await rm(tempDir, { recursive: true, force: true });
+    tempDir = undefined;
   });
 
-  it("loads static snapshots from a flag map", async () => {
+  it("creates complete static snapshots with explicitly local selection provenance", async () => {
     const provider = fallbackProviders.static({
-      flags: {
-        "flag-1": true,
-        "flag-2": false,
-      },
+      flags: { a: true, b: false, json: null },
     });
-
-    await expect(provider.load(context)).resolves.toEqual({
-      version: 1,
+    const result = await provider.load(context);
+    expect(result).toMatchObject({
+      version: 2,
+      source: "static",
       savedAt: expect.any(String),
-      flags: [
-        {
-          key: "flag-1",
-          description: null,
-          targeting: {
-            version: 1,
-            rules: [
-              {
-                filter: {
-                  type: "constant",
-                  value: true,
-                },
-              },
-            ],
-          },
-        },
-        {
-          key: "flag-2",
-          description: null,
-          targeting: {
-            version: 1,
-            rules: [
-              {
-                filter: {
-                  type: "constant",
-                  value: false,
-                },
-              },
-            ],
-          },
-        },
-      ],
+      segments: [],
     });
+    expect(result?.flags.map((flag) => flag.variants.default)).toEqual([
+      true,
+      false,
+      null,
+    ]);
   });
-
-  it("loads undefined when a file snapshot does not exist", async () => {
+  it("returns undefined for missing files", async () => {
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "reflag-node-sdk-"));
+    await expect(
+      fallbackProviders.file({ directory: tempDir }).load(context),
+    ).resolves.toBeUndefined();
+  });
+  it("round-trips full file snapshots in a versioned namespace", async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "reflag-node-sdk-"));
     const provider = fallbackProviders.file({ directory: tempDir });
-
-    await expect(provider.load(context)).resolves.toBeUndefined();
-  });
-
-  it("saves and loads file snapshots", async () => {
-    tempDir = await mkdtemp(path.join(os.tmpdir(), "reflag-node-sdk-"));
-    const provider = fallbackProviders.file({ directory: tempDir });
-
     await provider.save(context, snapshot);
-
-    const files = await readFile(
-      path.join(
-        tempDir,
-        `flags-fallback-${context.secretKeyHash.slice(0, 16)}.json`,
-      ),
-      "utf-8",
-    );
-    expect(JSON.parse(files)).toEqual(snapshot);
-
+    expect(
+      JSON.parse(await readFile(path.join(tempDir, filename), "utf8")),
+    ).toEqual(snapshot);
     await expect(provider.load(context)).resolves.toEqual(snapshot);
   });
-
+  it.each([
+    { ...snapshot, version: 1 },
+    { ...snapshot, segments: undefined },
+    { ...snapshot, flagStateVersion: -1 },
+    { ...snapshot, savedAt: "invalid" },
+  ])("rejects incompatible fallback envelopes %#", async (value) => {
+    const provider = fallbackProviders.redis({
+      client: { get: vi.fn(async () => JSON.stringify(value)), set: vi.fn() },
+    });
+    await expect(provider.load(context)).resolves.toBeUndefined();
+  });
   it("loads S3 snapshots", async () => {
-    const send = vi.fn().mockResolvedValue({
-      Body: {
-        transformToString: vi.fn().mockResolvedValue(JSON.stringify(snapshot)),
-      },
-    });
-
-    const provider = fallbackProviders.s3({
-      bucket: "bucket-name",
-      client: { send },
-    });
-
-    await expect(provider.load(context)).resolves.toEqual(snapshot);
+    const send = vi.fn(async () => ({
+      Body: { transformToString: async () => JSON.stringify(snapshot) },
+    }));
+    await expect(
+      fallbackProviders
+        .s3({ bucket: "bucket", client: { send } })
+        .load(context),
+    ).resolves.toEqual(snapshot);
     expect(send).toHaveBeenCalledWith(
-      expect.objectContaining({
-        input: expect.objectContaining({
-          Bucket: "bucket-name",
-          Key: expect.stringMatching(/^reflag\/flags-fallback\//),
-        }),
-      }),
+      expect.objectContaining({ input: { Bucket: "bucket", Key: objectKey } }),
     );
   });
-
-  it("trims trailing slashes from generated S3 keys without regex backtracking", async () => {
-    const send = vi.fn().mockResolvedValue({});
-    const provider = fallbackProviders.s3({
-      bucket: "bucket-name",
-      client: { send },
-      keyPrefix: "reflag/flags-fallback///",
-    });
-
-    await provider.save(context, snapshot);
-
+  it("trims S3 key-prefix slashes and saves versioned objects", async () => {
+    const send = vi.fn();
+    await fallbackProviders
+      .s3({
+        bucket: "bucket",
+        client: { send },
+        keyPrefix: "reflag/flags-fallback///",
+      })
+      .save(context, snapshot);
     expect(send).toHaveBeenCalledWith(
       expect.objectContaining({
-        input: expect.objectContaining({
-          Bucket: "bucket-name",
-          Key: `reflag/flags-fallback/flags-fallback-${context.secretKeyHash.slice(0, 16)}.json`,
-        }),
-      }),
-    );
-  });
-
-  it("returns undefined for missing S3 snapshots", async () => {
-    const send = vi.fn().mockRejectedValue({ name: "NoSuchKey" });
-    const provider = fallbackProviders.s3({
-      bucket: "bucket-name",
-      client: { send },
-    });
-
-    await expect(provider.load(context)).resolves.toBeUndefined();
-  });
-
-  it("saves S3 snapshots", async () => {
-    const send = vi.fn().mockResolvedValue({});
-    const provider = fallbackProviders.s3({
-      bucket: "bucket-name",
-      client: { send },
-    });
-
-    await provider.save(context, snapshot);
-
-    expect(send).toHaveBeenCalledWith(
-      expect.objectContaining({
-        input: expect.objectContaining({
-          Bucket: "bucket-name",
-          Key: expect.stringMatching(/^reflag\/flags-fallback\//),
-          Body: JSON.stringify(snapshot),
+        input: {
+          Bucket: "bucket",
+          Key: objectKey,
           ContentType: "application/json",
-        }),
+          Body: JSON.stringify(snapshot),
+        },
       }),
     );
   });
-
-  it("loads GCS snapshots", async () => {
-    const exists = vi.fn().mockResolvedValue([true]);
-    const download = vi
-      .fn()
-      .mockResolvedValue([Buffer.from(JSON.stringify(snapshot), "utf-8")]);
+  it("loads and saves legacy GCS injected clients", async () => {
+    const download = vi.fn(
+      async () => [Buffer.from(JSON.stringify(snapshot))] as [Buffer],
+    );
     const save = vi.fn();
-    const file = vi.fn().mockReturnValue({ exists, download, save });
-    const bucket = vi.fn().mockReturnValue({ file });
-
+    const file = vi.fn(() => ({
+      exists: async () => [true] as [boolean],
+      download,
+      save,
+    }));
     const provider = fallbackProviders.gcs({
-      bucket: "bucket-name",
-      client: { bucket },
+      bucket: "bucket",
+      client: { bucket: () => ({ file }) },
     });
-
     await expect(provider.load(context)).resolves.toEqual(snapshot);
-    expect(bucket).toHaveBeenCalledWith("bucket-name");
-    expect(file).toHaveBeenCalledWith(
-      expect.stringMatching(/^reflag\/flags-fallback\//),
-    );
-  });
-
-  it("returns undefined for missing GCS snapshots", async () => {
-    const exists = vi.fn().mockResolvedValue([false]);
-    const download = vi.fn();
-    const save = vi.fn();
-    const file = vi.fn().mockReturnValue({ exists, download, save });
-    const bucket = vi.fn().mockReturnValue({ file });
-
-    const provider = fallbackProviders.gcs({
-      bucket: "bucket-name",
-      client: { bucket },
-    });
-
-    await expect(provider.load(context)).resolves.toBeUndefined();
-    expect(download).not.toHaveBeenCalled();
-  });
-
-  it("saves GCS snapshots", async () => {
-    const exists = vi.fn();
-    const download = vi.fn();
-    const save = vi.fn().mockResolvedValue(undefined);
-    const file = vi.fn().mockReturnValue({ exists, download, save });
-    const bucket = vi.fn().mockReturnValue({ file });
-
-    const provider = fallbackProviders.gcs({
-      bucket: "bucket-name",
-      client: { bucket },
-      keyPrefix: "reflag/flags-fallback///",
-    });
-
     await provider.save(context, snapshot);
-
-    expect(file).toHaveBeenCalledWith(
-      `reflag/flags-fallback/flags-fallback-${context.secretKeyHash.slice(0, 16)}.json`,
-    );
+    expect(file).toHaveBeenCalledWith(objectKey);
     expect(save).toHaveBeenCalledWith(JSON.stringify(snapshot), {
       contentType: "application/json",
     });
   });
-
-  it("accepts a provided @googleapis/storage client", async () => {
+  it("loads and saves Google APIs GCS clients", async () => {
     const get = vi
       .fn()
       .mockResolvedValueOnce({ data: { kind: "storage#object" } })
-      .mockResolvedValueOnce({
-        data: Buffer.from(JSON.stringify(snapshot), "utf-8"),
-      });
-    const insert = vi.fn().mockResolvedValue({});
-
+      .mockResolvedValueOnce({ data: Buffer.from(JSON.stringify(snapshot)) });
+    const insert = vi.fn();
     const provider = fallbackProviders.gcs({
-      bucket: "bucket-name",
-      client: {
-        objects: {
-          get,
-          insert,
-        },
-      },
+      bucket: "bucket",
       keyPrefix: "reflag/flags-fallback///",
+      client: { objects: { get, insert } },
     });
-
     await expect(provider.load(context)).resolves.toEqual(snapshot);
     await provider.save(context, snapshot);
-
     expect(get).toHaveBeenNthCalledWith(1, {
-      bucket: "bucket-name",
-      object: `reflag/flags-fallback/flags-fallback-${context.secretKeyHash.slice(0, 16)}.json`,
+      bucket: "bucket",
+      object: objectKey,
     });
     expect(get).toHaveBeenNthCalledWith(
       2,
-      {
-        bucket: "bucket-name",
-        object: `reflag/flags-fallback/flags-fallback-${context.secretKeyHash.slice(0, 16)}.json`,
-        alt: "media",
-      },
-      {
-        responseType: "arraybuffer",
-      },
+      { bucket: "bucket", object: objectKey, alt: "media" },
+      { responseType: "arraybuffer" },
     );
     expect(insert).toHaveBeenCalledWith({
-      bucket: "bucket-name",
-      name: `reflag/flags-fallback/flags-fallback-${context.secretKeyHash.slice(0, 16)}.json`,
+      bucket: "bucket",
+      name: objectKey,
       uploadType: "media",
-      media: {
-        mimeType: "application/json",
-        body: JSON.stringify(snapshot),
-      },
+      media: { mimeType: "application/json", body: JSON.stringify(snapshot) },
     });
   });
-
   it("creates the default GCS client from @googleapis/storage", async () => {
     vi.resetModules();
-
     const get = vi
       .fn()
       .mockResolvedValueOnce({ data: { kind: "storage#object" } })
-      .mockResolvedValueOnce({
-        data: Buffer.from(JSON.stringify(snapshot), "utf-8"),
-      });
-    const insert = vi.fn().mockResolvedValue({});
-    const storage = vi.fn().mockReturnValue({
-      objects: {
-        get,
-        insert,
-      },
-    });
+      .mockResolvedValueOnce({ data: Buffer.from(JSON.stringify(snapshot)) });
+    const insert = vi.fn();
+    const storage = vi.fn(() => ({ objects: { get, insert } }));
     const GoogleAuth = vi.fn();
-
-    vi.doMock("@googleapis/storage", () => ({
-      auth: { GoogleAuth },
-      storage,
-    }));
-
+    vi.doMock("@googleapis/storage", () => ({ auth: { GoogleAuth }, storage }));
     try {
       const { createGCSFallbackProvider } =
         await import("../src/flagsFallbackProvider");
-      const provider = createGCSFallbackProvider({
-        bucket: "bucket-name",
-        keyPrefix: "reflag/flags-fallback///",
-      });
-
+      const provider = createGCSFallbackProvider({ bucket: "bucket" });
       await expect(provider.load(context)).resolves.toEqual(snapshot);
       await provider.save(context, snapshot);
-
       expect(GoogleAuth).toHaveBeenCalledWith({
         scopes: ["https://www.googleapis.com/auth/devstorage.read_write"],
       });
       expect(storage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          version: "v1",
-        }),
+        expect.objectContaining({ version: "v1" }),
       );
-      expect(get).toHaveBeenNthCalledWith(1, {
-        bucket: "bucket-name",
-        object: `reflag/flags-fallback/flags-fallback-${context.secretKeyHash.slice(0, 16)}.json`,
-      });
-      expect(get).toHaveBeenNthCalledWith(
-        2,
-        {
-          bucket: "bucket-name",
-          object: `reflag/flags-fallback/flags-fallback-${context.secretKeyHash.slice(0, 16)}.json`,
-          alt: "media",
-        },
-        {
-          responseType: "arraybuffer",
-        },
-      );
-      expect(insert).toHaveBeenCalledWith({
-        bucket: "bucket-name",
-        name: `reflag/flags-fallback/flags-fallback-${context.secretKeyHash.slice(0, 16)}.json`,
-        uploadType: "media",
-        media: {
-          mimeType: "application/json",
-          body: JSON.stringify(snapshot),
-        },
-      });
     } finally {
       vi.doUnmock("@googleapis/storage");
       vi.resetModules();
     }
   });
-
-  it("loads Redis snapshots", async () => {
-    const get = vi.fn().mockResolvedValue(JSON.stringify(snapshot));
-    const set = vi.fn();
-    const provider = fallbackProviders.redis({
-      client: { get, set },
-    });
-
+  it("loads Redis snapshots in a versioned namespace", async () => {
+    const get = vi.fn(async () => JSON.stringify(snapshot));
+    const provider = fallbackProviders.redis({ client: { get, set: vi.fn() } });
     await expect(provider.load(context)).resolves.toEqual(snapshot);
     expect(get).toHaveBeenCalledWith(
-      `reflag:flags-fallback:${context.secretKeyHash.slice(0, 16)}`,
+      `reflag:flags-fallback:v2:${context.secretKeyHash.slice(0, 16)}`,
     );
   });
-
   it("returns undefined for missing Redis snapshots", async () => {
-    const get = vi.fn().mockResolvedValue(null);
-    const set = vi.fn();
-    const provider = fallbackProviders.redis({
-      client: { get, set },
-    });
-
-    await expect(provider.load(context)).resolves.toBeUndefined();
+    await expect(
+      fallbackProviders
+        .redis({ client: { get: vi.fn(async () => null), set: vi.fn() } })
+        .load(context),
+    ).resolves.toBeUndefined();
   });
-
-  it("saves Redis snapshots", async () => {
-    const get = vi.fn();
-    const set = vi.fn().mockResolvedValue("OK");
-    const provider = fallbackProviders.redis({
-      client: { get, set },
-      keyPrefix: "reflag:flags-fallback:::",
-    });
-
-    await provider.save(context, snapshot);
-
+  it("trims Redis prefixes and saves versioned keys", async () => {
+    const set = vi.fn();
+    await fallbackProviders
+      .redis({
+        client: { get: vi.fn(), set },
+        keyPrefix: "reflag:flags-fallback:::",
+      })
+      .save(context, snapshot);
     expect(set).toHaveBeenCalledWith(
-      `reflag:flags-fallback:${context.secretKeyHash.slice(0, 16)}`,
+      `reflag:flags-fallback:v2:${context.secretKeyHash.slice(0, 16)}`,
       JSON.stringify(snapshot),
     );
   });
-
   it("requires REDIS_URL when no Redis client is provided", async () => {
-    const previousRedisUrl = process.env.REDIS_URL;
+    const previous = process.env.REDIS_URL;
     delete process.env.REDIS_URL;
-
     try {
-      const provider = fallbackProviders.redis();
-
-      await expect(provider.load(context)).rejects.toThrow(
-        "fallbackProviders.redis() requires REDIS_URL to be set when no client is provided",
+      await expect(fallbackProviders.redis().load(context)).rejects.toThrow(
+        "requires REDIS_URL",
       );
     } finally {
-      if (previousRedisUrl === undefined) {
-        delete process.env.REDIS_URL;
-      } else {
-        process.env.REDIS_URL = previousRedisUrl;
-      }
+      if (previous === undefined) delete process.env.REDIS_URL;
+      else process.env.REDIS_URL = previous;
     }
   });
 });

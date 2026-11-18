@@ -1,4 +1,4 @@
-import { ReflagClient as ReflagNodeClient } from "@reflag/node-sdk";
+import { ReflagClient as ReflagNodeClient } from "@reflag/node-sdk-v1";
 
 const secretKey = process.env.REFLAG_SECRET_KEY;
 export const publishableKey = process.env.REFLAG_PUBLISHABLE_KEY || "";

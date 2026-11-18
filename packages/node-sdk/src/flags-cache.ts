@@ -1,11 +1,12 @@
-import type { CachedFlagDefinition, Logger } from "./types";
+import type { CachedFlagCollection, Logger } from "./types";
 
 const DEFAULT_MIN_REFRESH_INTERVAL_MS = 1000;
 
 /** ETags belong to their snapshot, even when persistence publishes them later. */
 export type FlagsCacheSnapshot = {
-  readonly definitions: CachedFlagDefinition[];
+  readonly definitions: CachedFlagCollection;
   readonly flagStateVersion?: number;
+  fallback?: boolean;
   etag?: string;
 };
 
@@ -21,6 +22,7 @@ type ScheduledRefresh = {
 
 type FlagsCacheOptions = {
   logger?: Logger;
+  onApply?: (snapshot: FlagsCacheSnapshot) => void;
   minRefreshIntervalMs?: number;
   scheduleTrailingRefresh?: (
     delayMs: number,
@@ -57,7 +59,7 @@ export class FlagsCache {
     private readonly fetchFlags: (
       waitForVersion?: number,
     ) => Promise<FlagsCacheRefreshResult | undefined>,
-    options: FlagsCacheOptions = {},
+    private readonly options: FlagsCacheOptions = {},
   ) {
     this.logger = options.logger;
     this.minRefreshIntervalMs =
@@ -258,6 +260,7 @@ export class FlagsCache {
 
     this.snapshot = result;
     this.lastRefreshAt = Date.now();
+    this.options.onApply?.(result);
     this.logger?.info("refreshed flag definitions");
   }
 

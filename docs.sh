@@ -24,7 +24,7 @@ do
   echo "Processing $file..."
 
   # Fix anchor links in globals.md files
-  if [[ "$file" == *"globals.md" ]]; then
+  if [ "${file##*/}" = "globals.md" ]; then
     sed -r "$SEDCOMMAND" "$file" > "$file.fixed"
     rm "$file"
     mv "$file.fixed" "$file"

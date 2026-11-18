@@ -1,0 +1,4 @@
+{
+  "extends": "./tsconfig.type-tests.json",
+  "include": ["src", "type-tests/augmented-defaults.ts"]
+}
