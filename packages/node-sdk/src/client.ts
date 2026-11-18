@@ -271,7 +271,6 @@ export class ReflagClient {
           waitForVersion === undefined ? this.flagsCache.getETag() : undefined;
         const response = await this.getResponse<FlagsAPIResponse>(
           `flags${waitForVersion === undefined ? "" : `?waitForVersion=${encodeURIComponent(waitForVersion)}`}`,
-          this.config.flagsFetchRetries,
           { etag },
         );
         if (response?.status === 304) return { notModified: true };
@@ -867,9 +866,9 @@ export class ReflagClient {
   }
   private async getResponse<Response>(
     path: string,
-    retries = this.config.flagsFetchRetries,
     revalidation?: { etag?: string },
   ) {
+    const retries = this.config.flagsFetchRetries;
     const url = new URL(path, this.config.apiBaseUrl).toString();
     const etag = revalidation?.etag;
     const headers = etag

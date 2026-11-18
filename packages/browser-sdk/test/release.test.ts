@@ -5,6 +5,7 @@ import { describe, expect, test } from "vitest";
 
 import openfeature from "../../openfeature-browser-provider/package.json";
 import native from "../../react-native-sdk/package.json";
+import bootstrap from "../../react-sdk/dev/nextjs-bootstrap-demo/package.json";
 import react from "../../react-sdk/package.json";
 import vue from "../../vue-sdk/package.json";
 import browser from "../package.json";
@@ -14,6 +15,9 @@ const nativeRequire = createRequire(
 );
 const openfeatureRequire = createRequire(
   resolve(__dirname, "../../openfeature-browser-provider/package.json"),
+);
+const bootstrapRequire = createRequire(
+  resolve(__dirname, "../../react-sdk/dev/nextjs-bootstrap-demo/package.json"),
 );
 
 describe("framework v1/v2 release isolation", () => {
@@ -25,6 +29,14 @@ describe("framework v1/v2 release isolation", () => {
     expect(native.dependencies["@reflag/react-sdk"]).toBe("workspace:^");
     expect(nativeRequire.resolve("@reflag/react-sdk")).toBe(
       resolve(__dirname, "../../react-sdk/dist/reflag-react-sdk.umd.js"),
+    );
+  });
+
+  test("uses matching workspace Node v2 for the React bootstrap demo", () => {
+    expect(bootstrap.dependencies["@reflag/node-sdk"]).toBe("workspace:^");
+    expect(bootstrap.dependencies).not.toHaveProperty("@reflag/node-sdk-v1");
+    expect(bootstrapRequire.resolve("@reflag/node-sdk")).toBe(
+      resolve(__dirname, "../../node-sdk/dist/src/index.js"),
     );
   });
 

@@ -63,7 +63,7 @@ export type TypedFlags = keyof Flags extends never
 /**
  * An opt-in-enabled flag for the generated React SDK flag definitions.
  *
- * Includes all fields from {@link BrowserOptInFlag}: `name`, `description`,
+ * Includes all fields from {@link @reflag/browser-sdk!OptInFlag}: `name`, `description`,
  * `isEnabled`, `userOptedIn`, `companyOptedIn`, and `isOptedIn`.
  * Only `key` is narrowed to the generated {@link FlagKey} type.
  */
@@ -731,7 +731,7 @@ export function useOptInFlags(
  * Check the returned Response's `ok` property and catch promise rejections.
  * HTTP failures return a non-OK Response; offline mode, invalid arguments, or
  * missing scoped context return undefined. Confirmation failures can reject
- * after the membership changed remotely. See {@link ReflagClient.setOptIn}.
+ * after the membership changed remotely. See {@link @reflag/browser-sdk!ReflagClient.setOptIn}.
  */
 export function useSetOptIn() {
   const client = useClient();
