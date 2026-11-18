@@ -49,7 +49,7 @@ function mountToolbar() {
   const on = vi.spyOn(client, "on").mockReturnValue(unsubscribe);
   showToolbarToggle({ reflagClient: client });
   expect(document.getElementById(toolbarContainerId)).not.toBeNull();
-  return { on, unsubscribe };
+  return { client, on, unsubscribe };
 }
 
 afterEach(() => {
@@ -59,6 +59,25 @@ afterEach(() => {
   options.debounceRendering = originalDebounce;
   vi.restoreAllMocks();
 });
+
+test.each([false, true])(
+  "reads a %s toolbar override once and displays it as active",
+  async (override) => {
+    const { client } = mountToolbar();
+    client.setFlagOverride("release", override);
+    const getOverride = vi.spyOn(client, "getFlagOverride");
+
+    drainCallbacks();
+
+    expect(getOverride).toHaveBeenCalledExactlyOnceWith("release");
+    expect(
+      document
+        .getElementById(toolbarContainerId)!
+        .shadowRoot!.querySelector(".toolbar-toggle .override-indicator.show"),
+    ).not.toBeNull();
+    await client.stop();
+  },
+);
 
 test("unmounts before a delayed toolbar effect can run after jsdom teardown", () => {
   const { on } = mountToolbar();

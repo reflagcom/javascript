@@ -35,6 +35,50 @@ function setup(
 afterEach(() => vi.useRealTimers());
 
 describe("v2 snapshots", () => {
+  test("owns singular results as well as batch and fetched snapshots", () => {
+    const flag = selectedFlag({ nested: [1] });
+    const { client } = setup({
+      bootstrappedState: {
+        protocolVersion: 2,
+        flags: { settings: flag },
+      },
+    });
+    const singular = client.getFlag("settings")!;
+    (singular.value as { nested: number[] }).nested.push(2);
+    singular.ruleResults[0].matched = false;
+    singular.errors.push({ code: "TEST", message: "mutated" });
+    expect(client.getFlag("settings")).toEqual(flag);
+
+    const batch = client.getFlags();
+    batch.settings.value = false;
+    batch.settings.ruleResults[0].matched = false;
+    const fetched = client.getFetchedFlags();
+    fetched.settings.value = false;
+    fetched.settings.ruleResults[0].matched = false;
+    expect(client.getFlags()).toEqual({ settings: flag });
+    expect(client.getFetchedFlags()).toEqual({ settings: flag });
+    expect(client.getFlag("settings")).toEqual(flag);
+  });
+
+  test.each(["missing", "constructor", "toString", "__proto__"])(
+    "returns undefined for the absent key %s",
+    (key) => {
+      const { client } = setup();
+      expect(client.getFlag(key)).toBeUndefined();
+    },
+  );
+
+  test.each(["constructor", "toString", "__proto__"])(
+    "reads an authored flag with the key %s",
+    (key) => {
+      const flag = selectedFlag(false);
+      const { client } = setup({
+        bootstrappedState: { protocolVersion: 2, flags: { [key]: flag } },
+      });
+      expect(client.getFlag(key)).toEqual(flag);
+    },
+  );
+
   test.each([
     ["legacy protocol", { success: true, features: {} }],
     [

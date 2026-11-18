@@ -1390,10 +1390,7 @@ export class ReflagClient {
     defaultValue: Default,
   ): FlagValueFromDefault<Default>;
   getFlag(key: string, defaultValue: FlagDefaultValue = false): FlagValue {
-    const flags = this.flagsClient.getFlags();
-    const result = Object.prototype.hasOwnProperty.call(flags, key)
-      ? flags[key]
-      : undefined;
+    const result = this.flagsClient.getFlag(key);
     const selected = resolveFlagValue(result?.value, defaultValue);
     if (selected.typeMismatch)
       this.logger.warn(

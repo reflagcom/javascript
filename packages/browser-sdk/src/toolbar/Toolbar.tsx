@@ -51,17 +51,14 @@ export default function Toolbar({
     setFlags(
       Object.entries(rawFlags)
         .filter(([, flag]) => typeof flag.value === "boolean")
-        .map(
-          ([key, flag]) =>
-            ({
-              flagKey: key,
-              isEnabledOverride:
-                typeof reflagClient.getFlagOverride(key) === "boolean"
-                  ? (reflagClient.getFlagOverride(key) as boolean)
-                  : null,
-              isEnabled: flag.value === true,
-            }) satisfies FlagItem,
-        ),
+        .map(([key, flag]) => {
+          const override = reflagClient.getFlagOverride(key);
+          return {
+            flagKey: key,
+            isEnabledOverride: typeof override === "boolean" ? override : null,
+            isEnabled: flag.value === true,
+          } satisfies FlagItem;
+        }),
     );
   }, [reflagClient]);
 

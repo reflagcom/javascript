@@ -184,6 +184,28 @@ describe("direct values and root checks", () => {
     expect(checks()[4]).not.toHaveProperty("sourceVersionId");
   });
 
+  test.each(["release", "missing"])(
+    "reading %s does not copy unrelated flag payloads",
+    (key) => {
+      const client = create({
+        enableTracking: false,
+        bootstrappedState: bootstrap({
+          release: selectedFlag(true),
+          unrelated: selectedFlag({ payload: "unrelated-payload" }),
+        }),
+      });
+      const stringify = vi.spyOn(JSON, "stringify");
+      try {
+        expect(client.getFlag(key)).toBe(key === "release");
+        expect(
+          stringify.mock.results.map((result) => result.value).join("\n"),
+        ).not.toContain("unrelated-payload");
+      } finally {
+        stringify.mockRestore();
+      }
+    },
+  );
+
   test("clones selected values, defaults, diagnostics and input snapshots", () => {
     const state = bootstrap({
       settings: selectedFlag({ nested: [1] }, "quality"),

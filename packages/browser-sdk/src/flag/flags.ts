@@ -334,6 +334,12 @@ export class FlagsClient {
     this.abortController.abort();
   }
 
+  getFlag(key: string): RawFlag | undefined {
+    return Object.prototype.hasOwnProperty.call(this.flags, key)
+      ? copyJSON(this.flags[key])
+      : undefined;
+  }
+
   getFlags(): RawFlags {
     return copyJSON(this.flags);
   }
