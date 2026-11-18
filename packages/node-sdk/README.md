@@ -172,13 +172,15 @@ Declarations are checked at compile time only. See the [Reflag CLI](https://docs
 
 ## Bootstrap the browser
 
-To render flags in the browser without waiting for a network request, evaluate them on the server and pass the result to the Browser, React or Vue SDK's bootstrap option:
+**Requires a Browser, React or Vue SDK that supports the v2 bootstrap protocol.** V1 consumers expect a different flag shape and cannot use this result.
+
+With a compatible v2 consumer, evaluate flags on the server to render them in the browser without waiting for a network request:
 
 ```ts
 const bootstrap = reflag.getFlagsForBootstrap(context);
 ```
 
-Pass the whole object, serialized with your framework's usual mechanism. Leave secrets and server-only attributes out of the context you bootstrap, because the browser can read it.
+Pass the whole object to the compatible consumer's bootstrap option, serialized with your framework's usual mechanism. Do not pass it to a v1 SDK. Leave secrets and server-only attributes out of the context you bootstrap, because the browser can read it.
 
 ## Remote evaluation
 
@@ -237,7 +239,14 @@ Options can be set in the constructor, through environment variables, or in `ref
 | `batchOptions`          |                                                 | Event batching: `maxSize`, `intervalMs` and `flushOnExit`            |
 | `httpClient`            |                                                 | Custom HTTP client                                                   |
 
-To stop sending checks and events for a context, include `enableTracking: false` in it.
+To disable checks, automatic user/company updates and bound-client usage tracking for a context, pass `enableTracking: false` to reads or `bindClient()`, not to the constructor:
+
+```ts
+reflag.getFlag({ ...context, enableTracking: false }, "new-editor");
+const untracked = reflag.bindClient({ ...context, enableTracking: false });
+```
+
+Explicit calls to the root client's `track()`, `updateUser()` and `updateCompany()` remain separate operations and still send events.
 
 ## Shutting down
 
