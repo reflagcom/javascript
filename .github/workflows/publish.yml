@@ -30,6 +30,9 @@ jobs:
           scope: "@reflag"
       - name: Install dependencies
         run: yarn install --immutable
+      - name: Determine release channel
+        id: release-channel
+        run: node scripts/release-channel.mjs >> "$GITHUB_OUTPUT"
       - name: Create release PR or publish packages
         id: changesets
         uses: changesets/action@v1
@@ -41,22 +44,22 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.CHANGESETS_BOT_TOKEN }}
       - name: Build docs
-        if: steps.changesets.outputs.published == 'true'
+        if: steps.changesets.outputs.published == 'true' && steps.release-channel.outputs.prerelease == 'false'
         run: yarn docs
       - name: Checkout docs with SSH
-        if: steps.changesets.outputs.published == 'true'
-        uses: actions/checkout@v3
+        if: steps.changesets.outputs.published == 'true' && steps.release-channel.outputs.prerelease == 'false'
+        uses: actions/checkout@v4
         with:
           repository: reflagcom/docs
           ssh-key: ${{ secrets.DOCS_DEPLOY_KEY }}
           path: reflag-docs
       - name: Copy generated docs to docs repo
-        if: steps.changesets.outputs.published == 'true'
+        if: steps.changesets.outputs.published == 'true' && steps.release-channel.outputs.prerelease == 'false'
         run: |
           rm -rf reflag-docs/sdk
           cp -R dist/docs reflag-docs/sdk
       - name: Commit and push changes
-        if: steps.changesets.outputs.published == 'true'
+        if: steps.changesets.outputs.published == 'true' && steps.release-channel.outputs.prerelease == 'false'
         run: |
           cd reflag-docs
           git config user.name "github-actions[bot]"
