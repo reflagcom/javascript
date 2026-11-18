@@ -1,0 +1,152 @@
+name: Node SDK next prerelease
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact 40-character commit SHA with passing Package CI
+        required: true
+        type: string
+      version:
+        description: Expected Node manifest version (2.0.0-next.N)
+        required: true
+        default: 2.0.0-next.0
+        type: string
+      publish:
+        description: Publish the verified tarball to npm under next (false only prepares an artifact)
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: node-sdk-next-prerelease
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      checks: read
+      actions: read
+    outputs:
+      sha256: ${{ steps.prepare.outputs.sha256 }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: release-tools
+          persist-credentials: false
+      - name: Validate dispatch and candidate identity
+        env:
+          WORKFLOW_REF: ${{ github.ref }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          test "$WORKFLOW_REF" = refs/heads/main
+          node release-tools/scripts/node-sdk-prerelease.mjs validate --version "$VERSION" --sha "$SOURCE_SHA"
+      - name: Require successful CI on the exact candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/commits/$SOURCE_SHA/check-runs?per_page=100" > "$RUNNER_TEMP/candidate-checks.json"
+          node release-tools/scripts/node-sdk-prerelease.mjs ci --version "$VERSION" --sha "$SOURCE_SHA" --checks "$RUNNER_TEMP/candidate-checks.json"
+      - name: Require publication approval protection
+        if: ${{ inputs.publish }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/environments/npm-node-prerelease" > "$RUNNER_TEMP/prerelease-environment.json"
+          node release-tools/scripts/node-sdk-prerelease.mjs environment --environment "$RUNNER_TEMP/prerelease-environment.json"
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_sha }}
+          path: candidate
+          persist-credentials: false
+      - name: Enable corepack
+        run: corepack enable
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: release-tools/.nvmrc
+          # Never save candidate-controlled dependencies into main's cache scope.
+          package-manager-cache: false
+      - name: Build, test and verify the actual packed package
+        id: prepare
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          VERSION: ${{ inputs.version }}
+          HUSKY: "0"
+        run: |
+          node release-tools/scripts/node-sdk-prerelease.mjs prepare \
+            --source "$GITHUB_WORKSPACE/candidate" --output "$RUNNER_TEMP/node-sdk-next" \
+            --version "$VERSION" --sha "$SOURCE_SHA"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: node-sdk-next
+          path: ${{ runner.temp }}/node-sdk-next/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    if: ${{ inputs.publish && github.ref == 'refs/heads/main' }}
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: npm-node-prerelease
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      # Only trusted workflow tools are checked out here. Candidate code and its
+      # dependency/lifecycle scripts never execute in this OIDC-enabled job.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+          registry-url: https://registry.npmjs.org
+          scope: "@reflag"
+      - uses: actions/download-artifact@v4
+        with:
+          name: node-sdk-next
+          path: ${{ runner.temp }}/node-sdk-next
+      - name: Verify immutable artifact and current registry state
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          VERSION: ${{ inputs.version }}
+          SHA256: ${{ needs.prepare.outputs.sha256 }}
+        run: |
+          node -e 'const [major,minor,patch] = require("node:child_process").execFileSync("npm", ["--version"], {encoding:"utf8"}).trim().split(".").map(Number); if (!(major > 11 || (major === 11 && (minor > 5 || (minor === 5 && patch >= 1))))) throw new Error("npm >=11.5.1 is required for trusted publishing");'
+          node scripts/node-sdk-prerelease.mjs verify \
+            --output "$RUNNER_TEMP/node-sdk-next" --version "$VERSION" --sha "$SOURCE_SHA" --sha256 "$SHA256"
+      - name: Publish only the verified Node tarball under next
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          npm publish "$RUNNER_TEMP/node-sdk-next/reflag-node-sdk-$VERSION.tgz" \
+            --tag next --access public --provenance --ignore-scripts --registry https://registry.npmjs.org
+      - name: Confirm next, artifact integrity and unchanged latest
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          VERSION: ${{ inputs.version }}
+          SHA256: ${{ needs.prepare.outputs.sha256 }}
+        run: |
+          # Registry/CDN reads may briefly lag a successful immutable publish.
+          for attempt in 1 2 3 4 5; do
+            if node scripts/node-sdk-prerelease.mjs verify --published \
+              --output "$RUNNER_TEMP/node-sdk-next" --version "$VERSION" --sha "$SOURCE_SHA" --sha256 "$SHA256"; then
+              printf '\n### Published\n\n`@reflag/node-sdk@%s` under `next`; `latest` remains unchanged.\n' "$VERSION" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            if [ "$attempt" = 5 ]; then exit 1; fi
+            sleep 2
+          done
