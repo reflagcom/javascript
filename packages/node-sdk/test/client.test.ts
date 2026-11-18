@@ -41,7 +41,7 @@ function harness(response: unknown = graph(), options: ClientOptions = {}) {
       async (
         _url: string,
         _headers: Record<string, string>,
-        _body: unknown[],
+        _body: { type: string; [key: string]: unknown }[],
       ) => ({ status: 200, ok: true, body: { success: true } }),
     ),
   };
@@ -57,17 +57,7 @@ function harness(response: unknown = graph(), options: ClientOptions = {}) {
     ...options,
   });
   clients.push(client);
-  const events = () =>
-    httpClient.post.mock.calls.flatMap(
-      (call) =>
-        (
-          call as unknown as [
-            string,
-            unknown,
-            { type: string; [key: string]: unknown }[],
-          ]
-        )[2],
-    );
+  const events = () => httpClient.post.mock.calls.flatMap(([, , body]) => body);
   return {
     client,
     state,
@@ -778,6 +768,30 @@ describe("bootstrap, bound clients, and overrides", () => {
     expect(h.httpClient.get).not.toHaveBeenCalled();
     expect(h.events()).toEqual([]);
   });
+});
+
+describe("configured flag-fetch retries", () => {
+  it.each(["collection", "remote"] as const)(
+    "uses the configured retry count for %s requests",
+    async (endpoint) => {
+      const h = harness(graph(), { flagsFetchRetries: 2 });
+      const error = new Error("network failure");
+      h.httpClient.get.mockRejectedValue(error);
+      const pending =
+        endpoint === "collection"
+          ? h.client.initialize()
+          : h.client.getFlagRemote("missing");
+      await vi.advanceTimersByTimeAsync(10000);
+      await pending;
+
+      expect(h.httpClient.get).toHaveBeenCalledTimes(3);
+      expect(h.logger.warn).toHaveBeenCalledTimes(2);
+      expect(h.logger.debug).toHaveBeenCalledWith(
+        expect.stringContaining("failed with error after 2 retries"),
+        error,
+      );
+    },
+  );
 });
 
 describe("atomic refresh and complete fallback snapshots", () => {
