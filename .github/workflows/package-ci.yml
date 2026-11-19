@@ -47,6 +47,10 @@ jobs:
           done
       - name: Report test results
         uses: dorny/test-reporter@v1.6.0
+        # Reporting only. Failing tests already fail the "Test the project"
+        # step; a reporter API error (seen on merge queue commits) shouldn't
+        # fail the required "Build & Test" job.
+        continue-on-error: true
         with:
           name: Build & Test Report
           path: ./packages/*/junit.xml
