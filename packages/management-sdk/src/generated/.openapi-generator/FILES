@@ -8,6 +8,7 @@ models/AppHeaderCollection.ts
 models/CreateFlag200Response.ts
 models/CreateFlag200ResponseFlag.ts
 models/CreateFlagRequest.ts
+models/DeleteCompanyRequest.ts
 models/EntityFlag.ts
 models/EntityFlagUpdate.ts
 models/EntityFlagsResponse.ts
@@ -26,11 +27,18 @@ models/FlagValue.ts
 models/FlagValueTargeting.ts
 models/OrgHeader.ts
 models/ReflagUserHeader.ts
+models/Schema0.ts
+models/Schema1.ts
 models/SegmentHeader.ts
 models/SegmentType.ts
 models/SortOrder.ts
 models/StageHeader.ts
 models/UpdateEntityFlagsBody.ts
+models/UpdateEntityFlagsResponse.ts
 models/UpdateFlagRequest.ts
+models/UpsertCompany200Response.ts
+models/UpsertCompanyRequest.ts
+models/UpsertUser200Response.ts
+models/UpsertUserRequest.ts
 models/index.ts
 runtime.ts

@@ -10,6 +10,47 @@ export function isObject(item: unknown): item is Record<string, any> {
   return item !== null && typeof item === "object" && !Array.isArray(item);
 }
 
+function isRuleEvaluationResult(result: unknown): boolean {
+  return (
+    isObject(result) &&
+    typeof result.ruleId === "string" &&
+    typeof result.matched === "boolean" &&
+    (result.allocationIndex === undefined ||
+      (Number.isInteger(result.allocationIndex) &&
+        result.allocationIndex >= 0)) &&
+    (result.destination === undefined ||
+      (isObject(result.destination) &&
+        (result.destination.type === "nextRule" ||
+          (result.destination.type === "variant" &&
+            typeof result.destination.variantKey === "string"))))
+  );
+}
+
+function isEvaluationError(error: unknown): boolean {
+  return (
+    isObject(error) &&
+    typeof error.code === "string" &&
+    typeof error.message === "string" &&
+    (error.field === undefined || typeof error.field === "string") &&
+    (error.operator === undefined || typeof error.operator === "string") &&
+    (error.source === undefined ||
+      (isObject(error.source) &&
+        (error.source.type === "flag" || error.source.type === "segment") &&
+        typeof error.source.key === "string"))
+  );
+}
+
+function isRawFlagOptIn(optIn: unknown): boolean {
+  return (
+    isObject(optIn) &&
+    typeof optIn.name === "string" &&
+    (optIn.description === null || typeof optIn.description === "string") &&
+    typeof optIn.userOptedIn === "boolean" &&
+    typeof optIn.companyOptedIn === "boolean" &&
+    typeof optIn.isOptedIn === "boolean"
+  );
+}
+
 /** Accept complete evaluated snapshots atomically, including Node v2 bootstrap. */
 export function parseAPIFlagsResponse(
   input: unknown,
@@ -25,34 +66,9 @@ export function parseAPIFlagsResponse(
         (bootstrap && flag.resolved === false && flag.value === undefined)
       ) ||
       !Array.isArray(flag.ruleResults) ||
-      !flag.ruleResults.every(
-        (r: unknown) =>
-          isObject(r) &&
-          typeof r.ruleId === "string" &&
-          typeof r.matched === "boolean" &&
-          (r.allocationIndex === undefined ||
-            (Number.isInteger(r.allocationIndex) && r.allocationIndex >= 0)) &&
-          (r.destination === undefined ||
-            (isObject(r.destination) &&
-              (r.destination.type === "nextRule" ||
-                (r.destination.type === "variant" &&
-                  typeof r.destination.variantKey === "string")))),
-      ) ||
+      !flag.ruleResults.every(isRuleEvaluationResult) ||
       !Array.isArray(flag.errors) ||
-      !flag.errors.every(
-        (error: unknown) =>
-          isObject(error) &&
-          typeof error.code === "string" &&
-          typeof error.message === "string" &&
-          (error.field === undefined || typeof error.field === "string") &&
-          (error.operator === undefined ||
-            typeof error.operator === "string") &&
-          (error.source === undefined ||
-            (isObject(error.source) &&
-              (error.source.type === "flag" ||
-                error.source.type === "segment") &&
-              typeof error.source.key === "string")),
-      ) ||
+      !flag.errors.every(isEvaluationError) ||
       (flag.matchedRuleId !== undefined &&
         typeof flag.matchedRuleId !== "string") ||
       (flag.allocationIndex !== undefined &&
@@ -68,16 +84,7 @@ export function parseAPIFlagsResponse(
       typeof flag.optInEnabled !== "boolean" ||
       flag.optIn === undefined ||
       (flag.optIn !== null &&
-        (flag.optInEnabled !== true ||
-          !isObject(flag.optIn) ||
-          typeof flag.optIn.name !== "string" ||
-          !(
-            flag.optIn.description === null ||
-            typeof flag.optIn.description === "string"
-          ) ||
-          typeof flag.optIn.userOptedIn !== "boolean" ||
-          typeof flag.optIn.companyOptedIn !== "boolean" ||
-          typeof flag.optIn.isOptedIn !== "boolean"))
+        (flag.optInEnabled !== true || !isRawFlagOptIn(flag.optIn)))
     )
       return;
 

@@ -22,15 +22,147 @@ function setup() {
 afterEach(() => vi.useRealTimers());
 
 describe("v2 evaluated cache", () => {
+  const rule = { ruleId: "rule", matched: true };
+  const error = { code: "MISSING_CONTEXT_FIELD", message: "missing" };
+
+  test("accepts diagnostic optional fields and preserves their values", () => {
+    const flags = {
+      flagA: {
+        ...selectedFlag(true),
+        ruleResults: [
+          rule,
+          { ...rule, allocationIndex: 0, destination: { type: "nextRule" } },
+          {
+            ...rule,
+            allocationIndex: 1,
+            destination: { type: "variant", variantKey: "" },
+          },
+        ],
+        errors: [
+          error,
+          { ...error, source: { type: "flag", key: "parent" } },
+          {
+            ...error,
+            field: "user.id",
+            operator: "IS",
+            source: { type: "segment", key: "enterprise" },
+          },
+        ],
+      },
+    };
+    expect(parseAPIFlagsResponse(flags)).toEqual(flags);
+  });
+
+  test.each([
+    null,
+    true,
+    {},
+    { ...rule, ruleId: 1 },
+    { ...rule, matched: undefined },
+    { ...rule, matched: 1 },
+    ...[-1, 0.5, Infinity, NaN, "0", null].map((allocationIndex) => ({
+      ...rule,
+      allocationIndex,
+    })),
+    ...[
+      null,
+      [],
+      { type: "unknown" },
+      { type: "variant" },
+      { type: "variant", variantKey: 1 },
+    ].map((destination) => ({ ...rule, destination })),
+  ])("rejects malformed rule diagnostics atomically: %j", (invalidRule) => {
+    expect(
+      parseAPIFlagsResponse({
+        good: selectedFlag(true),
+        bad: { ...selectedFlag(true), ruleResults: [invalidRule] },
+      }),
+    ).toBeUndefined();
+  });
+
+  test.each([
+    null,
+    true,
+    {},
+    { code: "MISSING_CONTEXT_FIELD" },
+    { ...error, code: 1 },
+    { ...error, message: null },
+    { ...error, field: null },
+    { ...error, operator: 1 },
+    ...[
+      null,
+      [],
+      { type: "unknown", key: "s" },
+      { type: "flag" },
+      { type: "segment", key: 1 },
+    ].map((source) => ({ ...error, source })),
+  ])("rejects malformed error diagnostics atomically: %j", (invalidError) => {
+    expect(
+      parseAPIFlagsResponse({
+        good: selectedFlag(true),
+        bad: { ...selectedFlag(true), errors: [invalidError] },
+      }),
+    ).toBeUndefined();
+  });
+
+  const optIn = {
+    name: "Try",
+    description: null,
+    userOptedIn: true,
+    companyOptedIn: false,
+    isOptedIn: true,
+  };
+
+  test.each([
+    {},
+    { optInEnabled: false, optIn: null },
+    { optInEnabled: true, optIn: null },
+    { optInEnabled: true, optIn },
+    {
+      optInEnabled: true,
+      optIn: {
+        ...optIn,
+        description: "Preview",
+        userOptedIn: false,
+        isOptedIn: false,
+      },
+    },
+  ])("preserves accepted opt-in metadata states: %j", (metadata) => {
+    const flags = { release: { ...selectedFlag(true), ...metadata } };
+    expect(parseAPIFlagsResponse(flags)).toEqual(flags);
+    expect(parseAPIFlagsResponse(flags, true)).toEqual(flags);
+  });
+
+  test.each([
+    { optIn: null },
+    { optIn },
+    { optInEnabled: true },
+    { optInEnabled: false },
+    { optInEnabled: "true", optIn: null },
+    { optInEnabled: null, optIn: null },
+    { optInEnabled: false, optIn },
+    ...[
+      true,
+      [],
+      {},
+      { ...optIn, name: null },
+      { ...optIn, description: undefined },
+      { ...optIn, description: 1 },
+      { ...optIn, userOptedIn: 1 },
+      { ...optIn, companyOptedIn: undefined },
+      { ...optIn, isOptedIn: "true" },
+    ].map((invalidOptIn) => ({ optInEnabled: true, optIn: invalidOptIn })),
+  ])("rejects invalid opt-in metadata atomically: %j", (metadata) => {
+    const flags = {
+      good: selectedFlag(true),
+      bad: { ...selectedFlag(true), ...metadata },
+    };
+    expect(parseAPIFlagsResponse(flags)).toBeUndefined();
+    expect(parseAPIFlagsResponse(flags, true)).toBeUndefined();
+  });
+
   test("owns stored values and preserves snapshot version zero", async () => {
     const { cache } = setup();
-    const optIn = {
-      name: "Try",
-      description: null,
-      userOptedIn: true,
-      companyOptedIn: false,
-      isOptedIn: true,
-    };
     const flags = {
       settings: selectedFlag({ nested: [1] }, "quality"),
       release: { ...selectedFlag(true), optInEnabled: true, optIn },

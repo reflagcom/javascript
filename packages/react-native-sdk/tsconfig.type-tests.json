@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "noEmit": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "paths": { "@reflag/react-native-sdk": ["./src/index.tsx"] }
+  },
+  "include": ["src", "type-tests/defaults.tsx"]
+}

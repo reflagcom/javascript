@@ -2,6 +2,7 @@ import { transferableAbortController } from "node:util";
 
 import { afterAll, afterEach, beforeAll } from "vitest";
 
+import { cleanupUi } from "./test/cleanupUi";
 import { server } from "./test/mocks/server.js";
 
 // Node fetch requires its own AbortSignal, not jsdom's cross-realm signal.
@@ -17,6 +18,7 @@ beforeAll(() => {
 });
 
 afterEach(() => {
+  cleanupUi();
   server.resetHandlers();
 });
 

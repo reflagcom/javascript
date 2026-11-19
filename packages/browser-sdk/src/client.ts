@@ -12,7 +12,7 @@ import {
   RequestFeedbackOptions,
 } from "./feedback/feedback";
 import * as feedbackLib from "./feedback/ui";
-import { parseAPIFlagsResponse } from "./flag/flagCache";
+import { isValidBootstrapSnapshot } from "./flag/bootstrap";
 import {
   CheckEvent,
   FallbackFlagOverride,
@@ -404,8 +404,15 @@ const defaultConfig: Config = {
   bootstrapped: false,
 };
 
+const CLIENT_NOT_INITIALIZED_EVALUATION_ERROR = {
+  code: "CLIENT_NOT_INITIALIZED",
+  field: "",
+  message:
+    "ReflagClient was not initialized before this flag was evaluated. Call initialize() before evaluating flags.",
+} as const;
+
 /**
- * Represents a flag.
+ * Options for changing the current user or company's opt-in membership.
  */
 export type SetOptInOptions = {
   /**
@@ -470,10 +477,7 @@ export class ReflagClient {
       );
     if (
       opts.bootstrappedState &&
-      (opts.bootstrappedState.protocolVersion !== 2 ||
-        !parseAPIFlagsResponse(opts.bootstrappedState.flags, true) ||
-        (opts.bootstrappedState.flagStateVersion !== undefined &&
-          !isValidFlagStateVersion(opts.bootstrappedState.flagStateVersion)))
+      !isValidBootstrapSnapshot(opts.bootstrappedState)
     )
       throw new Error(
         "Expected a protocol-v2 bootstrap snapshot; v1 bootstrap is incompatible",
@@ -884,7 +888,8 @@ export class ReflagClient {
       newContext.company,
     );
     const userIdChanged =
-      !!newContext.user?.id && newContext.user.id !== previousContext.user?.id;
+      hasId(newContext.user?.id) &&
+      newContext.user?.id !== previousContext.user?.id;
 
     this.context = newContext;
 
@@ -924,12 +929,7 @@ export class ReflagClient {
     bootstrappedState: BootstrappedState,
     triggerEvent = true,
   ) {
-    if (
-      bootstrappedState.protocolVersion !== 2 ||
-      !parseAPIFlagsResponse(bootstrappedState.flags, true) ||
-      (bootstrappedState.flagStateVersion !== undefined &&
-        !isValidFlagStateVersion(bootstrappedState.flagStateVersion))
-    )
+    if (!isValidBootstrapSnapshot(bootstrappedState))
       throw new Error("Invalid protocol-v2 bootstrap snapshot");
     const previousContext = this.context;
     const newContext = normalizeContext(bootstrappedState.context);
@@ -941,7 +941,8 @@ export class ReflagClient {
       newContext.company,
     );
     const userIdChanged =
-      !!newContext.user?.id && newContext.user.id !== previousContext.user?.id;
+      hasId(newContext.user?.id) &&
+      newContext.user?.id !== previousContext.user?.id;
 
     const currentFlagStateVersion = this.flagsClient.getFlagStateVersion();
     const latestKnownFlagStateVersion = Math.max(
@@ -1250,6 +1251,12 @@ export class ReflagClient {
 
   /**
    * Set whether the current user or company has opted into a flag.
+   *
+   * A successful Response is returned after the refreshed flag state confirms
+   * the membership change. HTTP failures return a readable non-OK Response
+   * without refreshing flags. Offline mode, invalid arguments, or missing scoped
+   * context return undefined. Network and confirmation failures reject; a
+   * confirmation failure may occur after membership changed remotely.
    */
   async setOptIn(
     flagKey: string,
@@ -1329,7 +1336,7 @@ export class ReflagClient {
     if (!res.ok) {
       await logResponseError({
         logger: this.logger,
-        res,
+        res: res.clone(),
         message: "set opt-in request failed",
         extra: { flagKey, optedIn: options.optedIn, scope },
       });
@@ -1383,10 +1390,7 @@ export class ReflagClient {
     defaultValue: Default,
   ): FlagValueFromDefault<Default>;
   getFlag(key: string, defaultValue: FlagDefaultValue = false): FlagValue {
-    const flags = this.flagsClient.getFlags();
-    const result = Object.prototype.hasOwnProperty.call(flags, key)
-      ? flags[key]
-      : undefined;
+    const result = this.flagsClient.getFlag(key);
     const selected = resolveFlagValue(result?.value, defaultValue);
     if (selected.typeMismatch)
       this.logger.warn(
@@ -1423,7 +1427,9 @@ export class ReflagClient {
           ? [error.field]
           : [],
       ),
-      evalErrors: result?.errors,
+      evalErrors: this.flagsClient.hasFlagState()
+        ? result?.errors
+        : [...(result?.errors ?? []), CLIENT_NOT_INITIALIZED_EVALUATION_ERROR],
     };
     void this.sendCheckEvent(event).catch((error) =>
       this.logger.warn("failed to register flag check", error),
@@ -1604,9 +1610,9 @@ export class ReflagClient {
       return;
     }
 
-    if (this.autoFeedback && this.context.user?.id) {
+    if (this.autoFeedback && hasId(this.context.user?.id)) {
       this.autoFeedback.handleFeedbackPromptRequest(
-        String(this.context.user.id),
+        String(this.context.user?.id),
         payload,
       );
     }

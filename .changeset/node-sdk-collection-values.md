@@ -3,16 +3,17 @@
 "@reflag/openfeature-node-provider": patch
 ---
 
-Adopt evaluator v2 and the complete `GET /flags` collection protocol in the Node SDK.
+Adopt protocol-v2, adding support for multivariate and JSON flags.
 
-- `getFlag(context, key)` and bound `getFlag(key)` are direct Boolean reads with an implicit `false` default. Positional defaults infer the value type, widening literals, without generated declarations. Non-null defaults require the same top-level JSON category; missing/mismatched values use the default without authored-selection metadata. An explicit `null` default accepts arbitrary JSON, including authored null. Nested payload schemas are not validated. There is no flag wrapper, `.isEnabled`, `.config`, or flag `.track()` method. Batch `getFlags()` keeps raw JSON/`undefined` values. Ordinary client `track()` APIs remain separate.
-- Singular remote reads share the default contract. Root `getFlagRemote(key, defaultValue, userId?, companyId?, context?)` puts the default second, moving old positional IDs one place right; pass `undefined` for a Boolean read with IDs. Bound `getFlagRemote(key, defaultValue?)` needs no explicit IDs.
-- Reads immediately register checks for requested roots. Checks carry the selected variant key as `evalResult`, `sourceVersionId`, and the snapshot `flagStateVersion`. Boolean values send the keys `"true"` / `"false"`. Equal-valued variants and dependency-only version changes retain their distinct identities. Delivery remains buffered and rate-limited.
-- Prepare complete flags/segments snapshots before atomically accepting them. Evaluate references recursively without dependency-result caching.
-- Persist full graphs and snapshot versions in version-2 fallback snapshots. V1 snapshots are not converted. Built-in storage uses separate versioned keys/files so V1 and V2 clients cannot overwrite one another's snapshots. Local overrides and value-only fallbacks do not fabricate authored variant selections.
-- Bootstrap state contains v2 selection results and context/version metadata, without registering browser checks. Existing v1 browser bootstrap consumers require a separate migration; this is not a backwards-compatible bootstrap shape.
-- Preserve sync modes, ordinary tracking, bound contexts, and post-evaluation override layering. Update the Express example to consume direct values.
+- `getFlag(context, key)` and bound `getFlag(key)` return direct values instead of flag wrappers. Reads without a default return Booleans, using `false` when unavailable. Replace `.isEnabled` and `.config` access with direct values.
+- Pass a positional default to read strings, numbers, arrays, or objects. TypeScript infers the return type from the default without generated declarations. Missing values or values of a different top-level type use the default. Pass `null` to accept any JSON value, including null. Nested payload schemas are not validated at runtime.
+- With optional `Flags` registration, TypeScript checks non-null defaults against each flag's value type for local, remote, and bound reads. Named-interface and readonly defaults are supported.
+- Flag reads automatically record checks. Replace flag-level `.track()` calls with the client's separate `track()` API.
+- `getFlags()` and `getFlagsRemote()` return records of direct values; unavailable flags may be `undefined`.
+- `getFlagRemote(key, defaultValue, userId?, companyId?, context?)` now takes the default second, shifting existing user/company arguments one position to the right. Pass `undefined` for a Boolean read with explicit IDs. Bound clients use `getFlagRemote(key, defaultValue?)`.
+- `getFlagDefinitions()` returns `{ flags, segments }` instead of an array.
+- Saved fallback snapshots use a new format; v1 snapshots are not migrated automatically. Regenerate saved snapshots when upgrading. Built-in storage keeps v1 and v2 snapshots separate.
+- `getFlagsForBootstrap()` produces protocol-v2 state. Upgrade Browser/framework consumers to compatible v2 SDKs before using this state; v1 bootstrap consumers are incompatible.
+- Existing synchronization modes, bound contexts, and local overrides remain supported. Overrides and static fallbacks accept direct JSON values.
 
-The existing OpenFeature provider and v1 React bootstrap demo remain explicitly pinned to published Node SDK v1 through an npm alias. This prevents automatic workspace dependency upgrades from silently breaking their wrapper/bootstrap contracts; migrating those consumers to multivariate values is separate work.
-
-This release requires the collection-capable evaluator and compatible `/flags` and variant-key check ingestion. It does not migrate legacy remote config into multivariate flag values.
+The OpenFeature Node provider continues to use Node SDK v1. Legacy remote configuration is not automatically converted into multivariate flag values.

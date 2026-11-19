@@ -21,6 +21,28 @@ function response(version = 1, value = true): Response {
     },
   });
 }
+function optInResponse(version: number, optedIn: boolean | null): Response {
+  return Response.json({
+    ...flagResponse,
+    flagStateVersion: version,
+    flags: {
+      flagA: {
+        ...selectedFlag(false, "false", `source-${version}`),
+        optInEnabled: true,
+        optIn:
+          optedIn === null
+            ? null
+            : {
+                name: "Try",
+                description: null,
+                userOptedIn: optedIn,
+                companyOptedIn: false,
+                isOptedIn: optedIn,
+              },
+      },
+    },
+  });
+}
 function setup(
   options: NonNullable<ConstructorParameters<typeof FlagsClient>[3]> = {},
 ) {
@@ -35,13 +57,78 @@ function setup(
 afterEach(() => vi.useRealTimers());
 
 describe("v2 snapshots", () => {
+  test("owns singular results as well as batch and fetched snapshots", () => {
+    const flag = selectedFlag({ nested: [1] });
+    const { client } = setup({
+      bootstrappedState: {
+        protocolVersion: 2,
+        flags: { settings: flag },
+      },
+    });
+    const singular = client.getFlag("settings")!;
+    (singular.value as { nested: number[] }).nested.push(2);
+    singular.ruleResults[0].matched = false;
+    singular.errors.push({ code: "TEST", message: "mutated" });
+    expect(client.getFlag("settings")).toEqual(flag);
+
+    const batch = client.getFlags();
+    batch.settings.value = false;
+    batch.settings.ruleResults[0].matched = false;
+    const fetched = client.getFetchedFlags();
+    fetched.settings.value = false;
+    fetched.settings.ruleResults[0].matched = false;
+    expect(client.getFlags()).toEqual({ settings: flag });
+    expect(client.getFetchedFlags()).toEqual({ settings: flag });
+    expect(client.getFlag("settings")).toEqual(flag);
+  });
+
+  test.each(["missing", "constructor", "toString", "__proto__"])(
+    "returns undefined for the absent key %s",
+    (key) => {
+      const { client } = setup();
+      expect(client.getFlag(key)).toBeUndefined();
+    },
+  );
+
+  test.each(["constructor", "toString", "__proto__"])(
+    "reads an authored flag with the key %s",
+    (key) => {
+      const flag = selectedFlag(false);
+      const { client } = setup({
+        bootstrappedState: { protocolVersion: 2, flags: { [key]: flag } },
+      });
+      expect(client.getFlag(key)).toEqual(flag);
+    },
+  );
+
+  test.each([0, 1])(
+    "accepts a successful response at version %s",
+    (version) => {
+      expect(
+        validateFlagsResponse({ ...flagResponse, flagStateVersion: version }),
+      ).toEqual({
+        success: true,
+        flags: flagsResult,
+        flagStateVersion: version,
+      });
+    },
+  );
+
   test.each([
+    ["unsuccessful response", { ...flagResponse, success: false }],
+    ["missing success", { ...flagResponse, success: undefined }],
+    ["non-boolean success", { ...flagResponse, success: "true" }],
     ["legacy protocol", { success: true, features: {} }],
     [
       "missing snapshot version",
       { ...flagResponse, flagStateVersion: undefined },
     ],
     ["negative snapshot version", { ...flagResponse, flagStateVersion: -1 }],
+    [
+      "non-numeric snapshot version",
+      { ...flagResponse, flagStateVersion: "1" },
+    ],
+    ["fractional snapshot version", { ...flagResponse, flagStateVersion: 0.5 }],
     [
       "missing selected identity",
       {
@@ -145,6 +232,103 @@ describe("v2 snapshots", () => {
     expect(await first).toBeUndefined();
     expect(client.getFlags().flagA.value).toBe(false);
     expect(client.getFlagStateVersion()).toBe(3);
+  });
+
+  test.each([true, null])(
+    "a late full refresh cannot roll back newer opt-in metadata (%s)",
+    async (optedIn) => {
+      const { client, get } = setup({
+        bootstrappedState: {
+          protocolVersion: 2,
+          flagStateVersion: 1,
+          flags: { flagA: selectedFlag(true) },
+        },
+      });
+      await client.initialize();
+      const older = deferred<Response>();
+      get
+        .mockReturnValueOnce(older.promise)
+        .mockResolvedValueOnce(optInResponse(3, optedIn));
+      const refresh = client.refreshFlags();
+      client.requestOptInFlags();
+      await client.refreshOptInMetadataIfNeeded();
+      const metadata = client.getOptInMetadata();
+      expect(metadata.flagA?.userOptedIn).toBe(
+        optedIn === null ? undefined : optedIn,
+      );
+      expect(client.getFlagStateVersion()).toBe(1);
+      expect(client.getFlags().flagA.value).toBe(true);
+      expect(client.getFlags().flagA.sourceVersionId).toBe("version-1");
+      older.resolve(optInResponse(2, false));
+      await refresh;
+      expect(client.getFlagStateVersion()).toBe(2);
+      expect(client.getFlags().flagA.value).toBe(false);
+      expect(client.getFlags().flagA.sourceVersionId).toBe("source-2");
+      expect(client.getOptInMetadata()).toEqual(metadata);
+      // Bootstrap reapplication invalidates requests, not same-context freshness.
+      client.setContextWithoutFetch({ user: { id: "alice" } }, true);
+      client.setFetchedFlags({ flagA: selectedFlag(true) });
+      client.markBootstrappedStateApplied();
+      expect(client.getOptInMetadata()).toEqual(metadata);
+      expect(client.getIsLoadingOptInFlags()).toBe(false);
+      get.mockResolvedValueOnce(optInResponse(4, false));
+      await client.refreshFlags();
+      expect(client.getOptInMetadata().flagA.userOptedIn).toBe(false);
+      expect(client.getFlagStateVersion()).toBe(4);
+    },
+  );
+
+  test.each(["fetch", "bootstrap"])(
+    "resets opt-in metadata freshness when the context changes through %s",
+    async (update) => {
+      const { client, get } = setup({
+        bootstrappedState: {
+          protocolVersion: 2,
+          flagStateVersion: 1,
+          flags: { flagA: selectedFlag(true) },
+        },
+      });
+      await client.initialize();
+      get.mockResolvedValueOnce(optInResponse(30, true));
+      client.requestOptInFlags();
+      await client.refreshOptInMetadataIfNeeded();
+      expect(client.getOptInMetadata().flagA.userOptedIn).toBe(true);
+      if (update === "fetch") {
+        get.mockResolvedValueOnce(optInResponse(1, false));
+        await client.setContext({ user: { id: "bob" } });
+      } else {
+        client.setContextWithoutFetch({ user: { id: "bob" } });
+        const result = validateFlagsResponse(
+          await optInResponse(1, false).json(),
+        )!;
+        client.setFetchedFlags(result.flags, true, result.flagStateVersion);
+      }
+      expect(client.getOptInMetadata().flagA.userOptedIn).toBe(false);
+      expect(client.getFlagStateVersion()).toBe(1);
+    },
+  );
+
+  test("a newer bootstrap missing metadata invalidates membership and fetches it again", async () => {
+    const { client, get } = setup({
+      bootstrappedState: {
+        protocolVersion: 2,
+        flagStateVersion: 1,
+        flags: { flagA: selectedFlag(true) },
+      },
+    });
+    await client.initialize();
+    get.mockResolvedValueOnce(optInResponse(3, true));
+    client.requestOptInFlags();
+    await client.refreshOptInMetadataIfNeeded();
+    client.setFetchedFlags({ flagA: selectedFlag(true) }, true, 4);
+    expect(client.getOptInMetadata()).toEqual({});
+    get.mockResolvedValueOnce(optInResponse(4, false));
+    client.resetOptInMetadataRefresh();
+    client.markBootstrappedStateApplied();
+    await client.refreshOptInMetadataIfNeeded();
+    expect(client.getOptInMetadata().flagA.userOptedIn).toBe(false);
+    expect(client.getFlags().flagA.value).toBe(true);
+    expect(client.getFlagStateVersion()).toBe(4);
   });
 
   test("a context change in an update listener cannot redirect a refresh cache write", async () => {
@@ -281,6 +465,71 @@ describe("v2 snapshots", () => {
     });
     await client.initialize();
     expect(client.getFlags().flagA.value).toBe(true);
+  });
+
+  test.each(["refresh", "background"] as const)(
+    "storage failure does not discard a successful %s response",
+    async (mode) => {
+      const cache = new FlagCache({
+        storage: createNoopStorageAdapter(),
+        staleTimeMs: 0,
+        expireTimeMs: 1000,
+      });
+      const { client, get } = setup({
+        cache,
+        staleWhileRevalidate: mode === "background",
+      });
+      if (mode === "refresh") await client.initialize();
+      else {
+        vi.spyOn(cache, "get").mockResolvedValue({
+          flags: flagsResult,
+          flagStateVersion: 1,
+          stale: true,
+        });
+      }
+      const quota = new Error("quota");
+      const store = vi.spyOn(cache, "set").mockRejectedValue(quota);
+      const warningsBefore = testLogger.warn.mock.calls.length;
+      get.mockResolvedValue(response(2, false));
+      if (mode === "refresh") await client.refreshFlags();
+      else await client.initialize();
+      await vi.waitFor(() => {
+        expect(store).toHaveBeenCalledOnce();
+        expect(testLogger.warn.mock.calls.slice(warningsBefore)).toContainEqual(
+          ["[Flags] storing flags failed", quota],
+        );
+      });
+      expect(client.getFlagStateVersion()).toBe(2);
+      expect(client.getFlags().flagA.value).toBe(false);
+    },
+  );
+
+  test("does not replay a suppressed metadata-only update", async () => {
+    const { client } = setup();
+    await client.initialize();
+    client.setFlagOverride("flagA", false);
+    const updated = vi.fn();
+    client.onUpdated(updated);
+    const metadata = (userOptedIn: boolean) => ({
+      flagA: {
+        ...selectedFlag(true),
+        optInEnabled: true,
+        optIn: {
+          name: "Try",
+          description: null,
+          userOptedIn,
+          companyOptedIn: false,
+          isOptedIn: userOptedIn,
+        },
+      },
+    });
+    client.setFetchedFlags(metadata(true), false, 2);
+    client.updateFlags();
+    expect(updated).not.toHaveBeenCalled();
+    client.setFetchedFlags(metadata(false), true, 3);
+    expect(updated).toHaveBeenCalledOnce();
+    expect(client.getOptInMetadata().flagA.userOptedIn).toBe(false);
+    expect(client.getFlags().flagA.value).toBe(false);
   });
 
   test("uses stale v2 cache on failure, preserving real selections", async () => {

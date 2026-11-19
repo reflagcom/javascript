@@ -110,18 +110,21 @@ function isResult(
     value.allocations.every(
       (a: unknown) =>
         isObject(a) &&
-        Number.isInteger(a.percentage) &&
+        Number.isFinite(a.percentage) &&
         a.percentage >= 0 &&
         a.percentage <= 100 &&
+        Math.abs(a.percentage * 1000 - Math.round(a.percentage * 1000)) <=
+          1e-8 &&
         isObject(a.destination) &&
         (a.destination.type === "nextRule" ||
           (a.destination.type === "variant" &&
             isResult(a.destination, variants))),
     ) &&
     value.allocations.reduce(
-      (sum: number, a: { percentage: number }) => sum + a.percentage,
+      (sum: number, a: { percentage: number }) =>
+        sum + Math.round(a.percentage * 1000),
       0,
-    ) === 100
+    ) === 100000
   );
 }
 

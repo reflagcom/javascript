@@ -11,6 +11,7 @@ import { createAbortController } from "../utils/abortController";
 import { createEventTarget } from "../utils/eventTarget";
 import { logResponseError, parseResponseError } from "../utils/responseError";
 import { retryOnThrow } from "../utils/retry";
+import { isValidBootstrapSnapshot } from "./bootstrap";
 import { FlagCache, isObject, parseAPIFlagsResponse } from "./flagCache";
 import { isValidFlagStateVersion } from "./flagStateVersion";
 import { copyJSON, FlagValue, isFlagValue } from "./values";
@@ -110,7 +111,8 @@ export type FetchedFlagsResult = {
 };
 
 export type FlagsFetchResult = FetchedFlagsResult & {
-  success: boolean;
+  success: true;
+  flagStateVersion: number;
 };
 
 export function validateFlagsResponse(
@@ -134,14 +136,10 @@ export function validateFlagsResponse(
     return;
   }
 
-  const flagStateVersion = isValidFlagStateVersion(response.flagStateVersion)
-    ? response.flagStateVersion
-    : undefined;
-
   return {
     success: response.success,
     flags,
-    flagStateVersion,
+    flagStateVersion: response.flagStateVersion,
   };
 }
 
@@ -201,6 +199,7 @@ export class FlagsClient {
   private initialized = false;
   private bootstrapped = false;
   private initializationComplete = false;
+  private flagStateAvailable = false;
 
   private rateLimiter: RateLimiter;
   private readonly logger: Logger;
@@ -214,7 +213,10 @@ export class FlagsClient {
   private fallbackFlags: FallbackFlags = {};
   private contextFetchVersion = 0;
   private optInMetadata: Record<string, RawFlagOptIn> = Object.create(null);
+  private lastUpdatedOptInMetadata: Record<string, RawFlagOptIn> =
+    Object.create(null);
   private optInMetadataContextVersion = -1;
+  private optInMetadataFlagStateVersion: number | undefined;
   private optInMetadataFetchVersion = 0;
   private optInFlagsRequested = false;
   private optInFlagsLoading = false;
@@ -268,12 +270,7 @@ export class FlagsClient {
     this.fallbackFlags = this.setupFallbackFlags(fallbackFlags);
 
     if (bootstrappedState) {
-      if (
-        bootstrappedState.protocolVersion !== 2 ||
-        !parseAPIFlagsResponse(bootstrappedState.flags, true) ||
-        (bootstrappedState.flagStateVersion !== undefined &&
-          !isValidFlagStateVersion(bootstrappedState.flagStateVersion))
-      ) {
+      if (!isValidBootstrapSnapshot(bootstrappedState)) {
         throw new Error(
           "Expected a protocol-v2 bootstrap snapshot; v1 bootstrap is incompatible",
         );
@@ -335,12 +332,22 @@ export class FlagsClient {
     this.abortController.abort();
   }
 
+  getFlag(key: string): RawFlag | undefined {
+    return Object.prototype.hasOwnProperty.call(this.flags, key)
+      ? copyJSON(this.flags[key])
+      : undefined;
+  }
+
   getFlags(): RawFlags {
     return copyJSON(this.flags);
   }
 
   getFetchedFlags(): RawFlags {
     return copyJSON(this.fetchedFlags);
+  }
+
+  hasFlagState(): boolean {
+    return this.flagStateAvailable;
   }
 
   getOptInMetadata(): Record<string, RawFlagOptIn> {
@@ -451,10 +458,16 @@ export class FlagsClient {
     context: ReflagContext,
     invalidatePendingFetches = false,
   ) {
-    if (!deepEqual(this.context, context) || invalidatePendingFetches) {
+    const contextChanged = !deepEqual(this.context, context);
+    if (contextChanged || invalidatePendingFetches) {
+      const metadataWasCurrent = this.hasOptInMetadataForCurrentContext();
       this.contextFetchVersion += 1;
-      this.optInMetadata = Object.create(null);
-      this.optInMetadataContextVersion = -1;
+      if (contextChanged) {
+        this.clearOptInMetadata();
+      } else if (metadataWasCurrent) {
+        // Invalidating requests must not roll back same-context membership.
+        this.optInMetadataContextVersion = this.contextFetchVersion;
+      }
       if (this.optInFlagsRequested) {
         this.startOptInFlagsLoading();
       }
@@ -474,12 +487,14 @@ export class FlagsClient {
         !isValidFlagStateVersion(flagStateVersion))
     )
       throw new Error("Invalid protocol-v2 evaluated flags");
+    // State is available before update listeners can read flags during initialization.
+    this.flagStateAvailable = true;
     this.fetchedFlags = validated;
     this.fetchedFlagStateVersion = flagStateVersion;
     this.fetchedFlagsContextVersion = this.contextFetchVersion;
     // A newly accepted snapshot supersedes any metadata-only request in flight.
     this.optInMetadataFetchVersion++;
-    this.setOptInMetadata(validated);
+    this.setOptInMetadata(validated, flagStateVersion);
     this.warnMissingFlagContextFields(fetchedFlags);
     this.updateFlags(triggerEvent);
   }
@@ -509,20 +524,19 @@ export class FlagsClient {
   }
 
   private applyFetchedFlagsResult(
-    result: FetchedFlagsResult | undefined,
+    result: FetchedFlagsResult,
     triggerEvent = true,
     requestContextVersion = this.contextFetchVersion,
   ) {
     if (
       !this.shouldApplyFetchedFlagsResult(
-        result?.flagStateVersion,
+        result.flagStateVersion,
         requestContextVersion,
       )
     ) {
       return false;
     }
 
-    if (!result) return false;
     this.setFetchedFlags(result.flags, triggerEvent, result.flagStateVersion);
     return true;
   }
@@ -532,7 +546,7 @@ export class FlagsClient {
     const requestVersion = ++this.contextFetchVersion;
     this.fetchedFlags = Object.create(null);
     this.fetchedFlagStateVersion = undefined;
-    this.optInMetadata = Object.create(null);
+    this.clearOptInMetadata();
     this.updateFlags();
     this.resetOptInMetadataRefresh();
     const loadingGeneration = this.optInFlagsRequested
@@ -558,9 +572,14 @@ export class FlagsClient {
 
   updateFlags(triggerEvent = true) {
     const updatedFlags = this.mergeFlags(this.fetchedFlags, this.flagOverrides);
-    // Nothing has changed, skipping update
-    if (deepEqual(this.flags, updatedFlags)) return;
+    // Overrides hide fetched metadata, but opt-in subscribers still need updates.
+    if (
+      deepEqual(this.flags, updatedFlags) &&
+      deepEqual(this.lastUpdatedOptInMetadata, this.optInMetadata)
+    )
+      return;
     this.flags = updatedFlags;
+    this.lastUpdatedOptInMetadata = this.optInMetadata;
     if (triggerEvent) this.triggerFlagsUpdated();
   }
 
@@ -712,7 +731,7 @@ export class FlagsClient {
         }
 
         const typeRes = validateFlagsResponse(await res.json());
-        if (!typeRes || !typeRes.success) {
+        if (!typeRes) {
           this.logger.error(
             "error fetching flags:",
             new Error("unable to validate response"),
@@ -722,8 +741,7 @@ export class FlagsClient {
 
         if (
           waitForVersion !== undefined &&
-          (typeRes.flagStateVersion === undefined ||
-            typeRes.flagStateVersion < waitForVersion)
+          typeRes.flagStateVersion < waitForVersion
         ) {
           this.logger.warn(
             "ignoring stale flag response for requested flag state version.",
@@ -772,12 +790,19 @@ export class FlagsClient {
     ) {
       return;
     }
+    await this.persistSnapshot(cacheKey, result);
+    return this.getFetchedFlags();
+  }
+
+  private async persistSnapshot(
+    cacheKey: string,
+    snapshot: FetchedFlagsResult,
+  ) {
     try {
-      await this.cache.set(cacheKey, result);
+      await this.cache.set(cacheKey, snapshot);
     } catch (error) {
       this.logger.warn("storing flags failed", error);
     }
-    return this.getFetchedFlags();
   }
 
   private async setOverridesCache(overrides: FlagOverrides) {
@@ -809,7 +834,7 @@ export class FlagsClient {
 
   private async maybeFetchFlags(
     requestContextVersion = this.contextFetchVersion,
-  ): Promise<FetchedFlagsResult | undefined> {
+  ): Promise<FetchedFlagsResult> {
     if (this.config.offline) return this.fallbackResult();
 
     const cacheKey = this.fetchParams().toString();
@@ -826,11 +851,7 @@ export class FlagsClient {
             if (!result) return;
 
             this.applyFetchedFlagsResult(result, true, requestContextVersion);
-            try {
-              await this.cache.set(cacheKey, result);
-            } catch (error) {
-              this.logger.warn("storing flags failed", error);
-            }
+            await this.persistSnapshot(cacheKey, result);
           })
           .catch(() => {
             // we don't care about the result, we just want to re-fetch
@@ -844,11 +865,7 @@ export class FlagsClient {
     const fetchedFlags = await this.fetchFlags();
 
     if (fetchedFlags) {
-      try {
-        await this.cache.set(cacheKey, fetchedFlags);
-      } catch (error) {
-        this.logger.warn("storing flags failed", error);
-      }
+      await this.persistSnapshot(cacheKey, fetchedFlags);
       return {
         flags: fetchedFlags.flags,
         flagStateVersion: fetchedFlags.flagStateVersion,
@@ -906,14 +923,32 @@ export class FlagsClient {
           result.flagStateVersion < this.fetchedFlagStateVersion))
     )
       return false;
-    if (!this.setOptInMetadata(result.flags)) return false;
+    if (!this.setOptInMetadata(result.flags, result.flagStateVersion))
+      return false;
+    this.updateFlags(false);
     this.triggerFlagsUpdated();
     return true;
   }
 
-  private setOptInMetadata(flags: RawFlags): boolean {
+  private clearOptInMetadata() {
     this.optInMetadata = Object.create(null);
     this.optInMetadataContextVersion = -1;
+    this.optInMetadataFlagStateVersion = undefined;
+  }
+
+  private setOptInMetadata(
+    flags: RawFlags,
+    flagStateVersion: number | undefined,
+  ): boolean {
+    // Metadata-only requests can advance membership beyond the value snapshot.
+    if (
+      this.optInMetadataContextVersion === this.contextFetchVersion &&
+      this.optInMetadataFlagStateVersion !== undefined &&
+      (flagStateVersion === undefined ||
+        flagStateVersion < this.optInMetadataFlagStateVersion)
+    )
+      return false;
+    this.clearOptInMetadata();
     if (Object.values(flags).some((flag) => flag.optInEnabled === undefined))
       return false;
     for (const [key, flag] of Object.entries(flags)) {
@@ -922,6 +957,7 @@ export class FlagsClient {
       }
     }
     this.optInMetadataContextVersion = this.contextFetchVersion;
+    this.optInMetadataFlagStateVersion = flagStateVersion;
     return true;
   }
 

@@ -3,7 +3,7 @@ import { transferableAbortController } from "node:util";
 import { act, render, renderHook, waitFor } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
-import React, { Suspense, useLayoutEffect } from "react";
+import React, { Suspense, useEffect, useLayoutEffect, useState } from "react";
 import { renderToString } from "react-dom/server";
 import {
   afterAll,
@@ -16,7 +16,11 @@ import {
   vi,
 } from "vitest";
 
-import { ReflagClient } from "@reflag/browser-sdk";
+import {
+  ReflagClient,
+  type FlagValue,
+  type RawFlag,
+} from "@reflag/browser-sdk";
 
 import type { BootstrappedFlags, ReflagProps } from "../src";
 import {
@@ -40,7 +44,7 @@ import {
 
 globalThis.AbortController = transferableAbortController()
   .constructor as typeof AbortController;
-const selected = (value: unknown, variantKey = "true") => ({
+const selected = (value: FlagValue, variantKey = "true"): RawFlag => ({
   value,
   resolved: true,
   sourceVersionId: "version-1",
@@ -62,7 +66,7 @@ const response = {
 const state = (): BootstrappedFlags => ({
   protocolVersion: 2,
   context: { user: { id: "alice" } },
-  flags: { release: selected(true) as BootstrappedFlags["flags"][string] },
+  flags: { release: selected(true) },
   flagStateVersion: 1,
 });
 function gate() {
@@ -108,6 +112,10 @@ const server = setupServer(
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
   localStorage.clear();
+  // Prevent Preact toolbar renders from outliving the jsdom test environment.
+  vi.spyOn(ReflagClient.prototype, "showToolbarToggle").mockImplementation(
+    () => undefined,
+  );
 });
 afterEach(async () => {
   server.resetHandlers();
@@ -149,6 +157,167 @@ describe("direct-value hooks", () => {
     );
   });
 
+  describe.each<[string, typeof useFlag]>([
+    ["useFlag", useFlag],
+    ["useFlagSuspense", useFlagSuspense],
+  ])("%s result identity", (_name, useReadFlag) => {
+    test.each<[string, FlagValue, FlagValue]>([
+      ["object", { items: ["first"] }, { items: ["second"] }],
+      ["array", [{ name: "first" }], [{ name: "second" }]],
+    ])(
+      "keeps %s values stable until their contents change",
+      (_type, firstValue, nextValue) => {
+        const initial = state();
+        initial.flags.settings = selected(firstValue, "settings");
+        const client = create(initial);
+        const effect = vi.fn();
+        const { result, rerender } = renderHook(
+          () => {
+            const value = useReadFlag("settings", null);
+            const [, redraw] = useState(0);
+            useEffect(() => {
+              effect(value);
+              // Bound the broken behavior so this regression fails rather than hangs.
+              if (effect.mock.calls.length < 5)
+                redraw((revision) => revision + 1);
+            }, [value]);
+            return value;
+          },
+          {
+            wrapper: ({ children }) => (
+              <ReflagClientProvider client={client} initialLoading={false}>
+                {children}
+              </ReflagClientProvider>
+            ),
+          },
+        );
+        const first = result.current;
+        expect(first).toEqual(firstValue);
+        expect(effect).toHaveBeenCalledOnce();
+        rerender();
+        expect(result.current).toBe(first);
+        act(() =>
+          client.updateFlags(
+            {
+              ...initial.flags,
+              release: selected(false, "false"),
+            },
+            true,
+            2,
+          ),
+        );
+        expect(result.current).toBe(first);
+        expect(effect).toHaveBeenCalledOnce();
+        act(() =>
+          client.updateFlags(
+            {
+              ...initial.flags,
+              settings: selected(nextValue, "settings"),
+            },
+            true,
+            3,
+          ),
+        );
+        const next = result.current;
+        expect(next).toEqual(nextValue);
+        expect(next).not.toBe(first);
+        expect(effect).toHaveBeenCalledTimes(2);
+        rerender();
+        expect(result.current).toBe(next);
+      },
+    );
+
+    test("stabilizes inline defaults and responds to default, key and client changes", () => {
+      let client = create();
+      const { result, rerender } = renderHook(
+        ({ key, fallback }) => useReadFlag(key, { items: [fallback] }),
+        {
+          initialProps: { key: "missing", fallback: "first" },
+          wrapper: ({ children }) => (
+            <ReflagClientProvider client={client} initialLoading={false}>
+              {children}
+            </ReflagClientProvider>
+          ),
+        },
+      );
+      const first = result.current;
+      rerender({ key: "missing", fallback: "first" });
+      expect(result.current).toBe(first);
+      rerender({ key: "missing", fallback: "second" });
+      const second = result.current;
+      expect(second).toEqual({ items: ["second"] });
+      expect(second).not.toBe(first);
+      rerender({ key: "other", fallback: "second" });
+      const other = result.current;
+      expect(other).toEqual(second);
+      expect(other).not.toBe(second);
+      client = create();
+      rerender({ key: "other", fallback: "second" });
+      expect(result.current).toEqual(other);
+      expect(result.current).not.toBe(other);
+    });
+
+    test("preserves read checks and owns each hook's returned value", () => {
+      const value = { items: ["first"] };
+      const initial = state();
+      initial.flags.settings = selected(value, "first");
+      const client = new ReflagClient({
+        publishableKey: `identity-checks-${index++}`,
+        bootstrappedState: initial,
+        toolbar: false,
+        feedback: { enableAutoFeedback: false },
+      });
+      clients.add(client);
+      const check = vi.fn();
+      client.on("check", check);
+      const read = vi.spyOn(client, "getFlag");
+      const { result, rerender } = renderHook(
+        () => [useReadFlag("settings", null), useReadFlag("settings", null)],
+        {
+          wrapper: ({ children }) => (
+            <ReflagClientProvider client={client} initialLoading={false}>
+              {children}
+            </ReflagClientProvider>
+          ),
+        },
+      );
+      const first = result.current[0];
+      expect(result.current[1]).not.toBe(first);
+      const reads = read.mock.calls.length;
+      rerender();
+      expect(result.current[0]).toBe(first);
+      expect(read.mock.calls.length).toBeGreaterThan(reads);
+      expect(check).toHaveBeenCalledOnce();
+      act(() =>
+        client.updateFlags(
+          {
+            ...initial.flags,
+            settings: {
+              ...selected(value, "second"),
+              sourceVersionId: "version-2",
+            },
+          },
+          true,
+          2,
+        ),
+      );
+      expect(result.current[0]).toBe(first);
+      expect(check).toHaveBeenCalledTimes(2);
+      expect(check.mock.calls[1][0]).toMatchObject({
+        key: "settings",
+        evalResult: "second",
+        sourceVersionId: "version-2",
+        flagStateVersion: 2,
+      });
+      (first as { items: string[] }).items.push("mutated");
+      expect(result.current[1]).toEqual(value);
+      expect(client.getFlag("settings", null)).toEqual(value);
+      rerender();
+      expect(result.current[0]).toEqual(value);
+      expect(result.current[0]).not.toBe(first);
+    });
+  });
+
   test("tracks ignored hook reads immediately and rerenders on new evaluated state", async () => {
     const client = new ReflagClient({
       publishableKey: "checks",
@@ -177,10 +346,7 @@ describe("direct-value hooks", () => {
     act(() =>
       client.updateFlags(
         {
-          release: selected(
-            false,
-            "false",
-          ) as BootstrappedFlags["flags"][string],
+          release: selected(false, "false"),
         },
         true,
         2,
@@ -216,10 +382,7 @@ describe("direct-value hooks", () => {
       useLayoutEffect(() => {
         client.updateFlags(
           {
-            release: selected(
-              false,
-              "false",
-            ) as BootstrappedFlags["flags"][string],
+            release: selected(false, "false"),
           },
           true,
           2,
@@ -331,10 +494,7 @@ describe("direct-value hooks", () => {
         ...initial,
         flagStateVersion: 2,
         flags: {
-          release: selected(
-            false,
-            "false",
-          ) as BootstrappedFlags["flags"][string],
+          release: selected(false, "false"),
         },
       }),
     );
@@ -568,6 +728,65 @@ describe("opt-in hooks", () => {
       isEnabled: true,
       userOptedIn: true,
     });
+  });
+
+  test("updates opt-in membership while an override keeps the value unchanged", async () => {
+    const optIn = {
+      name: "Try",
+      description: null,
+      userOptedIn: false,
+      companyOptedIn: false,
+      isOptedIn: false,
+    };
+    const initial = state();
+    initial.flags.release.optInEnabled = true;
+    initial.flags.release.optIn = optIn;
+    const client = create(initial);
+    client.setFlagOverride("release", false);
+    await client.initialize();
+    server.use(
+      http.post(/\/flags\/opt-in$/, () =>
+        HttpResponse.json({ success: true, flagStateVersion: 2 }),
+      ),
+      http.get(/\/flags\/evaluated$/, () =>
+        HttpResponse.json({
+          ...response,
+          flagStateVersion: 2,
+          flags: {
+            release: {
+              ...selected(true),
+              optInEnabled: true,
+              optIn: { ...optIn, userOptedIn: true, isOptedIn: true },
+            },
+          },
+        }),
+      ),
+    );
+    const { result } = renderHook(
+      () => ({
+        value: useFlag("release"),
+        optIn: useOptInFlags(),
+        setOptIn: useSetOptIn(),
+      }),
+      {
+        wrapper: ({ children }) => (
+          <ReflagClientProvider client={client}>
+            {children}
+          </ReflagClientProvider>
+        ),
+      },
+    );
+    expect(result.current.optIn.flags[0].userOptedIn).toBe(false);
+    await act(async () => {
+      expect(
+        (await result.current.setOptIn("release", { optedIn: true }))?.ok,
+      ).toBe(true);
+    });
+    await waitFor(() =>
+      expect(result.current.optIn.flags[0].userOptedIn).toBe(true),
+    );
+    expect(result.current.value).toBe(false);
+    expect(result.current.optIn.flags[0].isEnabled).toBe(false);
   });
 
   test("preserves opt-in Suspense and releases it after metadata failure", async () => {

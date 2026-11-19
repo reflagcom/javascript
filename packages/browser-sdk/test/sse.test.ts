@@ -13,14 +13,29 @@ function createSSEChannel(
   return new AblySSEChannel(channels, sseHost, callback, testLogger);
 }
 
+function mockEventSource(methods: {
+  addEventListener: (event: string, callback: (event: Event) => void) => void;
+  close?: () => void;
+}) {
+  vi.mocked(window.EventSource).mockImplementation(
+    class {
+      constructor() {
+        Object.assign(this, methods);
+      }
+    } as unknown as typeof EventSource,
+  );
+}
+
 Object.defineProperty(window, "EventSource", {
-  value: vi.fn().mockImplementation(() => {
-    // ignore
-  }),
+  value: vi.fn(class {}),
   writable: true,
 });
 
 describe("connection handling", () => {
+  beforeEach(() => {
+    mockEventSource({ addEventListener: vi.fn(), close: vi.fn() });
+  });
+
   afterEach(() => {
     vi.clearAllMocks();
   });
@@ -29,9 +44,7 @@ describe("connection handling", () => {
     const sse = createSSEChannel();
     const addEventListener = vi.fn();
 
-    vi.mocked(window.EventSource).mockReturnValue({
-      addEventListener,
-    } as any);
+    mockEventSource({ addEventListener });
 
     await sse.connect();
 
@@ -43,9 +56,7 @@ describe("connection handling", () => {
     const sse = createSSEChannel(vi.fn(), ["channel-a", "channel-b"]);
     const addEventListener = vi.fn();
 
-    vi.mocked(window.EventSource).mockReturnValue({
-      addEventListener,
-    } as any);
+    mockEventSource({ addEventListener });
 
     await sse.connect();
 
@@ -66,9 +77,7 @@ describe("connection handling", () => {
     );
     const addEventListener = vi.fn();
 
-    vi.mocked(window.EventSource).mockReturnValue({
-      addEventListener,
-    } as any);
+    mockEventSource({ addEventListener });
 
     await sse.connect();
 
@@ -143,9 +152,7 @@ describe("connection handling", () => {
       }
     };
 
-    vi.mocked(window.EventSource).mockReturnValue({
-      addEventListener,
-    } as any);
+    mockEventSource({ addEventListener });
 
     await sse.connect();
 
@@ -175,9 +182,7 @@ describe("connection handling", () => {
       }
     };
 
-    vi.mocked(window.EventSource).mockReturnValue({
-      addEventListener,
-    } as any);
+    mockEventSource({ addEventListener });
 
     await sse.connect();
 
@@ -194,10 +199,7 @@ describe("connection handling", () => {
     const addEventListener = vi.fn();
     const close = vi.fn();
 
-    vi.mocked(window.EventSource).mockReturnValue({
-      addEventListener,
-      close,
-    } as any);
+    mockEventSource({ addEventListener, close });
 
     const sse = createSSEChannel();
 
@@ -216,12 +218,12 @@ describe("connection handling", () => {
     const close = vi.fn();
     let errorCallback: ((e: Event) => void) | undefined;
 
-    vi.mocked(window.EventSource).mockReturnValue({
+    mockEventSource({
       addEventListener: (event: string, cb: (e: Event) => void) => {
         if (event === "error") errorCallback = cb;
       },
       close,
-    } as any);
+    });
 
     const sse = createSSEChannel();
     await sse.connect();

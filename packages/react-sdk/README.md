@@ -142,6 +142,8 @@ import { ReflagBootstrappedProvider } from "@reflag/react-sdk";
 </ReflagBootstrappedProvider>;
 ```
 
+Use Node SDK v2 and preserve the whole object, including `protocolVersion: 2`. V1 bootstrap data is not supported. Live updates require `flagStateVersion` in the bootstrap data.
+
 Leave secrets and server-only attributes out of the context you bootstrap, because the browser can read it. Later refreshes evaluate flags using the browser's context. If values that depend on server-only attributes must not change, set `enableLiveFlagUpdates={false}`.
 
 ## Let users opt in to flags
@@ -150,11 +152,19 @@ Leave secrets and server-only attributes out of the context you bootstrap, becau
 const { flags, isLoading } = useOptInFlags();
 const setOptIn = useSetOptIn();
 
-await setOptIn("huddles", { optedIn: true });
-await setOptIn("huddles", { optedIn: false, scope: "company" });
+try {
+  const response = await setOptIn("huddles", { optedIn: true });
+  if (!response?.ok) console.error("Could not update opt-in");
+} catch (error) {
+  console.error("Could not update opt-in", error);
+}
 ```
 
-Each entry includes the flag's `key`, `name`, `description` and whether the user or company has opted in. User and company opt-ins are independent. Check `isLoading` before rendering an empty state. The provider's `suspense` prop, or `useOptInFlags({ suspense: true })`, makes this hook suspend instead. See [Beta feature opt-in](https://docs.reflag.com/guides/self-opt-in) for a complete example.
+Each entry includes the flag's `key`, `name`, `description` and whether the user or company has opted in. User and company opt-ins are independent; pass `scope: "company"` to change the company's opt-in. Check `isLoading` before rendering an empty state. The provider's `suspense` prop, or `useOptInFlags({ suspense: true })`, makes this hook suspend instead. See [Beta feature opt-in](https://docs.reflag.com/guides/self-opt-in) for a complete example.
+
+Opt-in metadata arrives with flag values. Bootstrapped providers fetch missing metadata on demand without replacing server-evaluated values, even with live updates disabled. `isLoading` covers initialization and metadata retrieval and settles on success or failure. Failed metadata requests do not expose an error; use `useClient().refresh()` to retry.
+
+Check the mutation's returned `Response.ok` and catch rejections. HTTP failures return a readable non-OK response without refreshing; skipped calls return `undefined`. Successful mutations wait for updated values and membership confirmation, but confirmation can fail after membership has changed remotely.
 
 ## Overrides and toolbar
 

@@ -72,6 +72,10 @@ await bound.track("Document created", { attributes: { source: "editor" } });
 await reflag.flush();
 ```
 
+Binding queues user/company attributes and their association even if the client is subsequently used only for tracking or remote reads. Synchronization is asynchronous and respects offline/tracking guards; failures are logged.
+
+Local reads made before initialization include a `CLIENT_NOT_INITIALIZED` diagnostic in their check's optional `evalErrors`. Targeting diagnostics retain their code, field/operator when applicable, message, and dependency origin. Remote evaluation does not require the local definition cache to be initialized, and bootstrap/diagnostic access does not itself register checks.
+
 `enableTracking: false` disables checks, context synchronization, and bound-client usage tracking. Explicit calls to the root client's `track()`, `updateUser()`, and `updateCompany()` remain separate operations.
 
 ## Evaluation and synchronization
@@ -93,6 +97,8 @@ const definitions = reflag.getFlagDefinitions(); // { flags, segments }, not an 
 ```
 
 Refreshes are throttled. In-request mode can queue a refresh during the throttle window until a later access; a refresh call is not an unconditional synchronization barrier.
+
+Ordinary warm `/flags` refreshes send `If-None-Match` when the accepted snapshot has an ETag. A bodyless `304` retains the complete prepared graph and version while resetting freshness, without recompiling or saving it again. Cold/fallback initialization and version-targeted requests remain unconditional. Custom HTTP clients can return the exact optional `HttpClientResponse.etag` to enable this behavior; clients without one continue to use full GETs. Validators are enabled only after the snapshot's fallback save succeeds. Failed or pending saves leave refreshes unconditional, and rejected snapshots cannot replace a validator or overwrite fallback storage.
 
 ## Fallback providers
 
@@ -214,7 +220,7 @@ Configuration precedence is constructor options, environment variables, then `re
 
 Constructor options also include a custom `logger` / `httpClient`, `flagsSyncMode`, `flagsPushUrl`, `fetchTimeoutMs`, `flagsFetchRetries`, `flagsFallbackProvider`, direct-value `flagOverrides`, and `batchOptions` (`maxSize`, `intervalMs`, `flushOnExit`). `emitEvaluationEvents` is deprecated and has no effect.
 
-Invalid options/context or non-JSON defaults can throw. Network or definition-refresh failures are logged and retain usable state. Singular reads use their caller default (implicit `false`) without fabricating an authored false selection; batch reads retain raw values/`undefined`. Call `await client.flush()` before shutting down, then `client.destroy()` to stop background work.
+Invalid options/context or non-JSON defaults can throw. Network or definition-refresh failures are logged and retain usable state. Singular reads use their caller default (implicit `false`) without fabricating an authored false selection; batch reads retain raw values/`undefined`. Call `await client.flush()` before shutting down, then `client.destroy()` to stop background work. `batchOptions.flushOnExit` only flushes on natural Node process exit (`beforeExit`); it does not install signal handlers or force application shutdown. For signal-driven shutdown or an explicit `process.exit()`, await `flush()` in the application's own shutdown hook before exiting.
 
 ## License
 

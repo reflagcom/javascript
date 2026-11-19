@@ -1,5 +1,6 @@
 "use client";
 
+import { deepEqual } from "fast-equals";
 import React, {
   createContext,
   ReactNode,
@@ -62,6 +63,10 @@ export type TypedFlags = keyof Flags extends never
 
 /**
  * An opt-in-enabled flag for the generated React SDK flag definitions.
+ *
+ * Includes all fields from {@link @reflag/browser-sdk!OptInFlag}: `name`, `description`,
+ * `isEnabled`, `userOptedIn`, `companyOptedIn`, and `isOptedIn`.
+ * Only `key` is narrowed to the generated {@link FlagKey} type.
  */
 export type OptInFlag = Omit<BrowserOptInFlag, "key"> & {
   key: FlagKey;
@@ -657,6 +662,14 @@ function useFlagValue(
   const context = useSafeContext();
   const { client } = context;
   const [, update] = useState(0);
+  const resolvedValue = useRef<
+    | {
+        client: ReflagClient;
+        key: FlagKey;
+        value: FlagValue;
+      }
+    | undefined
+  >(undefined);
   useOnEvent("flagsUpdated", () => update((revision) => revision + 1), client);
   useIsomorphicLayoutEffect(() => {
     update((revision) => revision + 1);
@@ -668,7 +681,20 @@ function useFlagValue(
   ) {
     throw context.getLoadingPromise();
   }
-  return client.getFlag(key, defaultValue);
+  // Always perform the read for check tracking, even when its value is unchanged.
+  const currentValue = client.getFlag(key, defaultValue);
+  const previous = resolvedValue.current;
+  const value =
+    previous?.client === client &&
+    previous.key === key &&
+    deepEqual(previous.value, currentValue)
+      ? previous.value
+      : currentValue;
+  // Only committed renders replace the cache; abandoned renders must not affect it.
+  useIsomorphicLayoutEffect(() => {
+    resolvedValue.current = { client, key, value };
+  }, [client, key, value]);
+  return value;
 }
 
 /**
@@ -676,9 +702,12 @@ function useFlagValue(
  *
  * The loading state is only used with `ReflagBootstrappedProvider` while
  * opt-in metadata is fetched on demand. Regular providers load opt-in metadata
- * with the initial flags.
+ * with the initial flags; use {@link useIsLoading} for their loading state.
  * When suspense is enabled for the provider or this hook, it suspends instead
- * of returning a loading result.
+ * of returning a loading result. A Suspense boundary alone does not enable it.
+ *
+ * If fetching opt-in metadata fails, loading ends without exposing an error.
+ * Call `refresh()` on the client returned by {@link useClient} to retry.
  */
 export function useOptInFlags(
   options: UseOptInFlagsOptions = {},
@@ -720,6 +749,11 @@ export function useOptInFlags(
 
 /**
  * Returns a function to set whether the current user or company has opted into a flag.
+ *
+ * Check the returned Response's `ok` property and catch promise rejections.
+ * HTTP failures return a non-OK Response; offline mode, invalid arguments, or
+ * missing scoped context return undefined. Confirmation failures can reject
+ * after the membership changed remotely. See {@link @reflag/browser-sdk!ReflagClient.setOptIn}.
  */
 export function useSetOptIn() {
   const client = useClient();

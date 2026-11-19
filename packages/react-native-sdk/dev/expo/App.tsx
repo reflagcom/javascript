@@ -14,6 +14,7 @@ import {
   useClient,
   useFlag,
   useIsLoading,
+  useTrack,
 } from "@reflag/react-native-sdk";
 
 const publishableKey = process.env.EXPO_PUBLIC_REFLAG_PUBLISHABLE_KEY ?? "";
@@ -22,17 +23,17 @@ const isConfigured = publishableKey.length > 0;
 function FlagCard() {
   const client = useClient();
   const isLoading = useIsLoading();
-  const { isEnabled, track } = useFlag("expo-demo");
+  const isEnabled = useFlag("expo-demo");
+  const track = useTrack();
 
   const [logs, setLogs] = useState<string[]>([]);
   useEffect(() => {
     return client.on("flagsUpdated", () => {
       const flags = client.getFlags();
       console.log("flagsUpdated", flags);
-      const enabledFlags = Object.values(flags).filter(
-        (flag) => flag.isEnabled,
-      );
-      const enabledFlagsKeys = enabledFlags.map((flag) => flag.key);
+      const enabledFlagsKeys = Object.entries(flags)
+        .filter(([, value]) => value === true)
+        .map(([key]) => key);
       if (enabledFlagsKeys.length > 0) {
         setLogs((prevLogs) => [
           ...prevLogs,
@@ -52,7 +53,10 @@ function FlagCard() {
           Status: {isLoading ? "loading" : isEnabled ? "enabled" : "disabled"}
         </Text>
         <View style={styles.buttonRow}>
-          <Button title="Track usage" onPress={() => void track()} />
+          <Button
+            title="Track usage"
+            onPress={() => void track("Used Expo demo")}
+          />
           <Button title="Refresh" onPress={() => void client.refresh()} />
         </View>
       </View>
@@ -74,7 +78,7 @@ export default function App() {
         <ReflagProvider
           publishableKey={publishableKey || "demo"}
           offline={!isConfigured}
-          fallbackFlags={["expo-demo"]}
+          fallbackFlags={{ "expo-demo": true }}
           context={{
             user: { id: "expo-user", name: "Expo User" },
             other: { platform: "react-native" },

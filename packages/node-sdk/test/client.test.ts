@@ -41,7 +41,7 @@ function harness(response: unknown = graph(), options: ClientOptions = {}) {
       async (
         _url: string,
         _headers: Record<string, string>,
-        _body: unknown[],
+        _body: { type: string; [key: string]: unknown }[],
       ) => ({ status: 200, ok: true, body: { success: true } }),
     ),
   };
@@ -57,17 +57,7 @@ function harness(response: unknown = graph(), options: ClientOptions = {}) {
     ...options,
   });
   clients.push(client);
-  const events = () =>
-    httpClient.post.mock.calls.flatMap(
-      (call) =>
-        (
-          call as unknown as [
-            string,
-            unknown,
-            { type: string; [key: string]: unknown }[],
-          ]
-        )[2],
-    );
+  const events = () => httpClient.post.mock.calls.flatMap(([, , body]) => body);
   return {
     client,
     state,
@@ -423,6 +413,41 @@ describe("default-value reads", () => {
 });
 
 describe("check identity and context", () => {
+  it.each(["singular", "batch"])(
+    "records pre-initialization diagnostics at the time of a local %s read",
+    async (read) => {
+      const h = harness(graph(), { fallbackFlags: { flag: true } });
+      if (read === "singular") h.client.getFlag({}, "flag");
+      else h.client.getFlags({});
+      await h.client.initialize();
+      await h.client.flush();
+      expect(h.checks()).toEqual([
+        expect.objectContaining({
+          key: "flag",
+          evalErrors: [
+            expect.objectContaining({
+              code: "CLIENT_NOT_INITIALIZED",
+              field: "",
+            }),
+          ],
+        }),
+      ]);
+      expect(h.checks()[0]).not.toHaveProperty("evalResult");
+      expect(h.checks()[0]).not.toHaveProperty("sourceVersionId");
+    },
+  );
+  it("does not diagnose a remote read as an uninitialized local evaluation", async () => {
+    const h = harness({
+      protocolVersion: 2,
+      flagStateVersion: 1,
+      remoteContextUsed: true,
+      flags: {},
+    });
+    expect(await h.client.getFlagRemote("flag")).toBe(false);
+    await h.client.flush();
+    expect(h.checks()).toHaveLength(1);
+    expect(h.checks()[0]).not.toHaveProperty("evalErrors");
+  });
   it("deduplicates equivalent normalized contexts within the check window", async () => {
     const h = harness();
     await h.client.initialize();
@@ -543,6 +568,104 @@ describe("check identity and context", () => {
 });
 
 describe("bootstrap, bound clients, and overrides", () => {
+  it.each(["track", "remote"])(
+    "synchronizes bound attributes and association for %s-only clients",
+    async (operation) => {
+      const h = harness({
+        protocolVersion: 2,
+        flagStateVersion: 1,
+        remoteContextUsed: true,
+        flags: {},
+      });
+      const bound = h.client.bindClient({
+        user: { id: 0, name: "User" },
+        company: { id: "acme", plan: "enterprise" },
+        meta: { active: false },
+      });
+      if (operation === "track") await bound.track("clicked");
+      else await bound.getFlagsRemote();
+      await bound.flush();
+      expect(h.events()).toContainEqual({
+        type: "user",
+        userId: 0,
+        attributes: { name: "User" },
+        context: { active: false },
+      });
+      expect(h.events()).toContainEqual({
+        type: "company",
+        companyId: "acme",
+        userId: 0,
+        attributes: { plan: "enterprise" },
+        context: { active: false },
+      });
+      expect(h.checks()).toEqual([]);
+      expect(h.httpClient.get).toHaveBeenCalledTimes(
+        operation === "remote" ? 1 : 0,
+      );
+    },
+  );
+  it("synchronizes newly merged bindings without a local flag read", async () => {
+    const h = harness();
+    h.client.bindClient({ enableTracking: false }).bindClient({
+      user: { id: "u", name: "User" },
+      company,
+      enableTracking: true,
+    });
+    await h.client.flush();
+    expect(h.events()).toContainEqual(
+      expect.objectContaining({
+        type: "company",
+        companyId: "acme",
+        userId: "u",
+      }),
+    );
+    expect(h.checks()).toEqual([]);
+  });
+  it.each(["offline", "tracking-disabled"])(
+    "does not synchronize a binding when %s",
+    async (guard) => {
+      const h = harness(graph(), { offline: guard === "offline" });
+      h.client.bindClient({
+        user: { id: "u" },
+        company,
+        enableTracking: guard !== "tracking-disabled",
+      });
+      await h.client.flush();
+      expect(h.events()).toEqual([]);
+      expect(h.httpClient.get).not.toHaveBeenCalled();
+    },
+  );
+  it("logs asynchronous bound context synchronization failures", async () => {
+    const h = harness();
+    const error = new Error("user update failed");
+    vi.spyOn(h.client, "updateUser").mockRejectedValue(error);
+    expect(() => h.client.bindClient({ user: { id: "u" } })).not.toThrow();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.logger.error).toHaveBeenCalledWith(
+      "failed to synchronize context",
+      error,
+    );
+  });
+  it.each([
+    [undefined, "acme"],
+    [0, 0],
+    ["override", "override"],
+  ] as const)(
+    "resolves optional bound tracking company %j to %j",
+    async (companyId, expected) => {
+      const h = harness();
+      const bound = h.client.bindClient({ user: { id: 0 }, company });
+      await bound.track("clicked", { companyId });
+      await bound.flush();
+      expect(h.events().filter((event) => event.type === "event")).toEqual([
+        expect.objectContaining({
+          userId: 0,
+          companyId: expected,
+          event: "clicked",
+        }),
+      ]);
+    },
+  );
   it("bootstraps selections and version without registering checks", async () => {
     const h = harness();
     await h.client.initialize();
@@ -645,6 +768,30 @@ describe("bootstrap, bound clients, and overrides", () => {
     expect(h.httpClient.get).not.toHaveBeenCalled();
     expect(h.events()).toEqual([]);
   });
+});
+
+describe("configured flag-fetch retries", () => {
+  it.each(["collection", "remote"] as const)(
+    "uses the configured retry count for %s requests",
+    async (endpoint) => {
+      const h = harness(graph(), { flagsFetchRetries: 2 });
+      const error = new Error("network failure");
+      h.httpClient.get.mockRejectedValue(error);
+      const pending =
+        endpoint === "collection"
+          ? h.client.initialize()
+          : h.client.getFlagRemote("missing");
+      await vi.advanceTimersByTimeAsync(10000);
+      await pending;
+
+      expect(h.httpClient.get).toHaveBeenCalledTimes(3);
+      expect(h.logger.warn).toHaveBeenCalledTimes(2);
+      expect(h.logger.debug).toHaveBeenCalledWith(
+        expect.stringContaining("failed with error after 2 retries"),
+        error,
+      );
+    },
+  );
 });
 
 describe("atomic refresh and complete fallback snapshots", () => {

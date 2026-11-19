@@ -180,6 +180,7 @@ describe("invalid conditions", () => {
     "BEFORE",
     "DATE_AFTER",
     "DATE_BEFORE",
+    "UNKNOWN" as ContextFilterOperator,
   ] as const)(
     "%s reports invalid operands, even under negation/OR, without logging values",
     (operator) => {

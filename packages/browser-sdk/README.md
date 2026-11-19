@@ -105,7 +105,7 @@ const reflag = new ReflagClient({ publishableKey, bootstrappedState });
 await reflag.initialize();
 ```
 
-Pass the whole object returned by `getFlagsForBootstrap()`, serialized with your framework's usual mechanism. Leave secrets and server-only attributes out of the context you bootstrap, because the browser can read it.
+Use Node SDK v2 and pass the whole object returned by `getFlagsForBootstrap()`, including `protocolVersion: 2`, serialized with your framework's usual mechanism. V1 bootstrap data and the old `bootstrappedFlags` option are not supported. Live updates require `flagStateVersion` in the bootstrap data. Leave secrets and server-only attributes out of the context you bootstrap, because the browser can read it.
 
 Later refreshes evaluate flags using the browser's context. If values that depend on server-only attributes must not change, leave `enableLiveFlagUpdates` off (the default).
 
@@ -113,11 +113,19 @@ Later refreshes evaluate flags using the browser's context. If values that depen
 
 ```ts
 const optInFlags = reflag.getOptInFlags();
-await reflag.setOptIn("huddles", { optedIn: true });
-await reflag.setOptIn("huddles", { optedIn: false, scope: "company" });
+try {
+  const response = await reflag.setOptIn("huddles", { optedIn: true });
+  if (!response?.ok) console.error("Could not update opt-in");
+} catch (error) {
+  console.error("Could not update opt-in", error);
+}
 ```
 
-Each entry includes the flag's `key`, `name`, `description` and whether the user or company has opted in. User and company opt-ins are independent. Use `getIsLoadingOptInFlags()` and the `optInFlagsLoadingUpdated` event to show a loading state.
+Each entry includes the flag's `key`, `name`, `description` and whether the user or company has opted in. User and company opt-ins are independent; pass `scope: "company"` to change the company's opt-in. Use `getIsLoadingOptInFlags()` and the `optInFlagsLoadingUpdated` event to show a loading state.
+
+Opt-in metadata arrives with flag values and is cached with them. Bootstrapped clients fetch missing metadata on demand without replacing server-evaluated values. This request can happen even with live updates disabled. Loading settles on success or failure; failed metadata requests do not expose an error, so call `reflag.refresh()` to retry.
+
+Check the mutation's returned `Response.ok` and catch rejections. HTTP failures return a readable non-OK response without refreshing; skipped calls return `undefined`. Successful mutations wait for updated values and membership confirmation, but confirmation can fail after membership has changed remotely.
 
 ## Overrides and toolbar
 

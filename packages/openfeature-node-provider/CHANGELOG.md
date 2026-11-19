@@ -1,5 +1,27 @@
 # @reflag/openfeature-node-provider
 
+## 1.2.8
+
+### Patch Changes
+
+- Updated dependencies [d7078e0]
+  - @reflag/node-sdk@1.8.3
+
+## 1.2.7
+
+### Patch Changes
+
+- Updated dependencies [9d213c0]
+  - @reflag/node-sdk@1.8.2
+
+## 1.2.6
+
+### Patch Changes
+
+- Updated dependencies [c69ee92]
+- Updated dependencies [df37a58]
+  - @reflag/node-sdk@1.8.1
+
 ## 1.2.5
 
 ### Patch Changes

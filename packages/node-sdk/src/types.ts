@@ -126,8 +126,12 @@ export type FlagEvent = {
   flagStateVersion?: number;
   evalContext?: Record<string, unknown>;
   evalRuleResults?: boolean[];
+  /** @deprecated Use evalErrors and check for MISSING_CONTEXT_FIELD. */
   evalMissingFields?: string[];
-  evalErrors?: EvaluationError[];
+  evalErrors?: Array<
+    | EvaluationError
+    | { code: "CLIENT_NOT_INITIALIZED"; field: string; message: string }
+  >;
 };
 
 /** V1 snapshots cannot be evaluated by the collection evaluator. */
@@ -152,6 +156,8 @@ export type HttpClientResponse<Response> = {
   status: number;
   ok: boolean;
   body: Response | undefined;
+  /** Exact response ETag for conditional definition refreshes, when available. */
+  etag?: string;
 };
 export interface HttpClient {
   post<Body, Response>(
@@ -176,6 +182,10 @@ export type BatchBufferOptions<T> = {
   logger?: Logger;
   maxSize?: number;
   intervalMs?: number;
+  /**
+   * Flush on natural process exit (beforeExit), without installing signal handlers.
+   * For signals or process.exit(), await client.flush() in the application hook.
+   */
   flushOnExit?: boolean;
 };
 export type CacheStrategy = "periodically-update" | "in-request";
