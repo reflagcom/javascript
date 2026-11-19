@@ -463,9 +463,7 @@ export class FlagsClient {
       const metadataWasCurrent = this.hasOptInMetadataForCurrentContext();
       this.contextFetchVersion += 1;
       if (contextChanged) {
-        this.optInMetadata = Object.create(null);
-        this.optInMetadataContextVersion = -1;
-        this.optInMetadataFlagStateVersion = undefined;
+        this.clearOptInMetadata();
       } else if (metadataWasCurrent) {
         // Invalidating requests must not roll back same-context membership.
         this.optInMetadataContextVersion = this.contextFetchVersion;
@@ -548,9 +546,7 @@ export class FlagsClient {
     const requestVersion = ++this.contextFetchVersion;
     this.fetchedFlags = Object.create(null);
     this.fetchedFlagStateVersion = undefined;
-    this.optInMetadata = Object.create(null);
-    this.optInMetadataContextVersion = -1;
-    this.optInMetadataFlagStateVersion = undefined;
+    this.clearOptInMetadata();
     this.updateFlags();
     this.resetOptInMetadataRefresh();
     const loadingGeneration = this.optInFlagsRequested
@@ -934,6 +930,12 @@ export class FlagsClient {
     return true;
   }
 
+  private clearOptInMetadata() {
+    this.optInMetadata = Object.create(null);
+    this.optInMetadataContextVersion = -1;
+    this.optInMetadataFlagStateVersion = undefined;
+  }
+
   private setOptInMetadata(
     flags: RawFlags,
     flagStateVersion: number | undefined,
@@ -946,9 +948,7 @@ export class FlagsClient {
         flagStateVersion < this.optInMetadataFlagStateVersion)
     )
       return false;
-    this.optInMetadata = Object.create(null);
-    this.optInMetadataContextVersion = -1;
-    this.optInMetadataFlagStateVersion = undefined;
+    this.clearOptInMetadata();
     if (Object.values(flags).some((flag) => flag.optInEnabled === undefined))
       return false;
     for (const [key, flag] of Object.entries(flags)) {
