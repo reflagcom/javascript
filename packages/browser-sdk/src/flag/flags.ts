@@ -526,20 +526,19 @@ export class FlagsClient {
   }
 
   private applyFetchedFlagsResult(
-    result: FetchedFlagsResult | undefined,
+    result: FetchedFlagsResult,
     triggerEvent = true,
     requestContextVersion = this.contextFetchVersion,
   ) {
     if (
       !this.shouldApplyFetchedFlagsResult(
-        result?.flagStateVersion,
+        result.flagStateVersion,
         requestContextVersion,
       )
     ) {
       return false;
     }
 
-    if (!result) return false;
     this.setFetchedFlags(result.flags, triggerEvent, result.flagStateVersion);
     return true;
   }
@@ -839,7 +838,7 @@ export class FlagsClient {
 
   private async maybeFetchFlags(
     requestContextVersion = this.contextFetchVersion,
-  ): Promise<FetchedFlagsResult | undefined> {
+  ): Promise<FetchedFlagsResult> {
     if (this.config.offline) return this.fallbackResult();
 
     const cacheKey = this.fetchParams().toString();

@@ -16,7 +16,11 @@ import {
   vi,
 } from "vitest";
 
-import { ReflagClient, type FlagValue } from "@reflag/browser-sdk";
+import {
+  ReflagClient,
+  type FlagValue,
+  type RawFlag,
+} from "@reflag/browser-sdk";
 
 import type { BootstrappedFlags, ReflagProps } from "../src";
 import {
@@ -40,7 +44,7 @@ import {
 
 globalThis.AbortController = transferableAbortController()
   .constructor as typeof AbortController;
-const selected = (value: unknown, variantKey = "true") => ({
+const selected = (value: FlagValue, variantKey = "true"): RawFlag => ({
   value,
   resolved: true,
   sourceVersionId: "version-1",
@@ -62,7 +66,7 @@ const response = {
 const state = (): BootstrappedFlags => ({
   protocolVersion: 2,
   context: { user: { id: "alice" } },
-  flags: { release: selected(true) as BootstrappedFlags["flags"][string] },
+  flags: { release: selected(true) },
   flagStateVersion: 1,
 });
 function gate() {
@@ -164,10 +168,7 @@ describe("direct-value hooks", () => {
       "keeps %s values stable until their contents change",
       (_type, firstValue, nextValue) => {
         const initial = state();
-        initial.flags.settings = {
-          ...selected(firstValue, "settings"),
-          value: firstValue,
-        };
+        initial.flags.settings = selected(firstValue, "settings");
         const client = create(initial);
         const effect = vi.fn();
         const { result, rerender } = renderHook(
@@ -199,7 +200,7 @@ describe("direct-value hooks", () => {
           client.updateFlags(
             {
               ...initial.flags,
-              release: { ...selected(false, "false"), value: false },
+              release: selected(false, "false"),
             },
             true,
             2,
@@ -211,10 +212,7 @@ describe("direct-value hooks", () => {
           client.updateFlags(
             {
               ...initial.flags,
-              settings: {
-                ...selected(nextValue, "settings"),
-                value: nextValue,
-              },
+              settings: selected(nextValue, "settings"),
             },
             true,
             3,
@@ -262,7 +260,7 @@ describe("direct-value hooks", () => {
     test("preserves read checks and owns each hook's returned value", () => {
       const value = { items: ["first"] };
       const initial = state();
-      initial.flags.settings = { ...selected(value, "first"), value };
+      initial.flags.settings = selected(value, "first");
       const client = new ReflagClient({
         publishableKey: `identity-checks-${index++}`,
         bootstrappedState: initial,
@@ -296,7 +294,6 @@ describe("direct-value hooks", () => {
             ...initial.flags,
             settings: {
               ...selected(value, "second"),
-              value,
               sourceVersionId: "version-2",
             },
           },
@@ -349,10 +346,7 @@ describe("direct-value hooks", () => {
     act(() =>
       client.updateFlags(
         {
-          release: selected(
-            false,
-            "false",
-          ) as BootstrappedFlags["flags"][string],
+          release: selected(false, "false"),
         },
         true,
         2,
@@ -388,10 +382,7 @@ describe("direct-value hooks", () => {
       useLayoutEffect(() => {
         client.updateFlags(
           {
-            release: selected(
-              false,
-              "false",
-            ) as BootstrappedFlags["flags"][string],
+            release: selected(false, "false"),
           },
           true,
           2,
@@ -503,10 +494,7 @@ describe("direct-value hooks", () => {
         ...initial,
         flagStateVersion: 2,
         flags: {
-          release: selected(
-            false,
-            "false",
-          ) as BootstrappedFlags["flags"][string],
+          release: selected(false, "false"),
         },
       }),
     );
