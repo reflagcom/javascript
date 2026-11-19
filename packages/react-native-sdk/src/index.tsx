@@ -2,48 +2,13 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import ReactNativeEventSource from "react-native-sse";
 
 import type {
-  BootstrappedFlags,
-  CheckEvent,
-  CompanyContext,
-  FlagDefaultValue,
-  FlagKey,
-  Flags,
-  FlagValue,
-  FlagValueFromDefault,
-  OptInFlag,
-  RawFlags,
   ReflagBootstrappedProps,
-  ReflagClientProviderProps,
   ReflagInitOptionsBase,
   ReflagProps,
-  ReflagPropsBase,
-  RequestFeedbackOptions,
-  SetOptInOptions,
-  StorageAdapter,
-  TrackEvent,
-  TypedFlags,
-  UseOptInFlagsOptions,
-  UseOptInFlagsResult,
-  UserContext,
 } from "@reflag/react-sdk";
 import {
   ReflagBootstrappedProvider as BaseBootstrappedProvider,
-  ReflagClientProvider,
   ReflagProvider as BaseProvider,
-  useClient,
-  useFeature,
-  useFlag,
-  useFlagSuspense,
-  useIsLoading,
-  useOnEvent,
-  useOptInFlags,
-  useRequestFeedback,
-  useSendFeedback,
-  useSetOptIn,
-  useTrack,
-  useUpdateCompany,
-  useUpdateOtherContext,
-  useUpdateUser,
 } from "@reflag/react-sdk";
 
 import { version } from "../package.json";
@@ -73,7 +38,7 @@ export {
   useUpdateCompany,
   useUpdateOtherContext,
   useUpdateUser,
-};
+} from "@reflag/react-sdk";
 export type {
   BootstrappedFlags,
   CheckEvent,
@@ -98,7 +63,7 @@ export type {
   UseOptInFlagsOptions,
   UseOptInFlagsResult,
   UserContext,
-};
+} from "@reflag/react-sdk";
 
 function nativeOptions(props: ReflagInitOptionsBase) {
   return {

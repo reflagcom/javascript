@@ -463,19 +463,6 @@ describe("direct-value hooks", () => {
     }
     const key = `bootstrap-${index++}`;
     const initial = state();
-    expect(
-      renderToString(
-        <ReflagBootstrappedProvider
-          publishableKey={key}
-          flags={initial}
-          enableTracking={false}
-          enableLiveFlagUpdates={false}
-          toolbar={false}
-        >
-          <Flag />
-        </ReflagBootstrappedProvider>,
-      ),
-    ).toContain("true");
     const tree = (flags: BootstrappedFlags) => (
       <ReflagBootstrappedProvider
         publishableKey={key}
@@ -487,6 +474,7 @@ describe("direct-value hooks", () => {
         <Flag />
       </ReflagBootstrappedProvider>
     );
+    expect(renderToString(tree(initial))).toContain("true");
     const view = render(tree(initial));
     expect(view.container.textContent).toBe("true");
     view.rerender(
