@@ -18,14 +18,8 @@ import {
 beforeAll(() => {
   vi.spyOn(ReflagClient.prototype, "initialize").mockResolvedValue(undefined);
   vi.spyOn(ReflagClient.prototype, "stop").mockResolvedValue(undefined);
-  vi.spyOn(ReflagClient.prototype, "getFlag").mockReturnValue({
-    isEnabled: true,
-    config: { key: "default", payload: { message: "Hello" } },
-    track: vi.fn().mockResolvedValue(undefined),
-    requestFeedback: vi.fn(),
-    setIsEnabledOverride: vi.fn(),
-    isEnabledOverride: null,
-  });
+  vi.spyOn(ReflagClient.prototype, "getFlag").mockReturnValue(true);
+  vi.spyOn(ReflagClient.prototype, "getState").mockReturnValue("initialized");
   vi.spyOn(ReflagClient.prototype, "getFlags").mockReturnValue({});
   vi.spyOn(ReflagClient.prototype, "getOptInFlags").mockReturnValue([]);
   vi.spyOn(ReflagClient.prototype, "getIsLoadingOptInFlags").mockReturnValue(
@@ -42,6 +36,7 @@ beforeAll(() => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(ReflagClient.prototype.getFlag).mockReturnValue(true);
   vi.mocked(ReflagClient.prototype.getOptInFlags).mockReturnValue([]);
   vi.mocked(ReflagClient.prototype.getIsLoadingOptInFlags).mockReturnValue(
     false,
@@ -60,6 +55,64 @@ function getProvider() {
 }
 
 describe("ReflagProvider", () => {
+  test("useFlag returns a direct reactive value, forwards positional defaults and unsubscribes", async () => {
+    let update: (() => void) | undefined;
+    const unsubscribe = vi.fn();
+    vi.mocked(ReflagClient.prototype.on).mockImplementation(
+      (event, handler) => {
+        if (event === "flagsUpdated") update = handler as () => void;
+        return unsubscribe;
+      },
+    );
+    vi.mocked(ReflagClient.prototype.getFlag)
+      .mockReturnValueOnce(false)
+      .mockReturnValue(false);
+    const Child = defineComponent({
+      setup() {
+        return { enabled: useFlag("release") };
+      },
+      template: "<span>{{ enabled }}</span>",
+    });
+    const wrapper = mount(ReflagProvider, {
+      props: { publishableKey: "reactive-direct-value" },
+      slots: { default: () => h(Child) },
+    });
+    await nextTick();
+    expect(wrapper.text()).toBe("false");
+    expect(ReflagClient.prototype.getFlag).toHaveBeenCalledWith(
+      "release",
+      false,
+    );
+    vi.mocked(ReflagClient.prototype.getFlag).mockReturnValue(true);
+    update?.();
+    await nextTick();
+    expect(wrapper.text()).toBe("true");
+    wrapper.unmount();
+    expect(unsubscribe).toHaveBeenCalled();
+  });
+
+  test("useFlag forwards JSON defaults without wrappers or truthiness fallback", async () => {
+    vi.mocked(ReflagClient.prototype.getFlag).mockReturnValue(null);
+    const fallback = { model: "default" };
+    const Child = defineComponent({
+      setup() {
+        return { settings: useFlag("settings", fallback) };
+      },
+      template: "<span>{{ settings === null ? 'off' : settings.model }}</span>",
+    });
+    const wrapper = mount(ReflagProvider, {
+      props: { publishableKey: "reactive-json-default" },
+      slots: { default: () => h(Child) },
+    });
+    await nextTick();
+    expect(ReflagClient.prototype.getFlag).toHaveBeenCalledWith(
+      "settings",
+      fallback,
+    );
+    expect(wrapper.text()).toBe("off");
+    wrapper.unmount();
+  });
+
   test("provides the client", async () => {
     const Child = defineComponent({
       setup() {
@@ -156,7 +209,7 @@ describe("ReflagProvider", () => {
 
     await nextTick();
     expect(wrapper.findComponent(Child).vm.flags).toEqual(optInFlags);
-    expect(wrapper.findComponent(Child).vm.isLoading).toBe(false);
+    expect(wrapper.findComponent(Child).vm.isLoading).toBe(true);
     expect(ReflagClient.prototype.on).toHaveBeenCalledWith(
       "flagsUpdated",
       expect.any(Function),
@@ -195,12 +248,16 @@ describe("ReflagProvider", () => {
       props: {
         publishableKey: "key-loading-opt-in-flags",
         flags: {
+          protocolVersion: 2,
           context: { user: { id: "user-1" } },
           flags: {
             optInFlag: {
-              key: "optInFlag",
-              isEnabled: false,
-              targetingVersion: 1,
+              value: false,
+              resolved: true,
+              variantKey: "false",
+              sourceVersionId: "version-1",
+              ruleResults: [],
+              errors: [],
             },
           },
         },
@@ -348,15 +405,19 @@ describe("ReflagProvider", () => {
 
 describe("ReflagBootstrappedProvider", () => {
   const bootstrappedFlags = {
+    protocolVersion: 2 as const,
     context: {
       user: { id: "test-user" },
       company: { id: "test-company" },
     },
     flags: {
       "test-flag": {
-        key: "test-flag",
-        isEnabled: true,
-        config: { key: "default", payload: { message: "Hello" } },
+        value: true,
+        resolved: true,
+        variantKey: "true",
+        sourceVersionId: "version-1",
+        ruleResults: [],
+        errors: [],
       },
     },
     flagStateVersion: 1,
@@ -382,7 +443,7 @@ describe("ReflagBootstrappedProvider", () => {
 
     await nextTick();
     expect(wrapper.findComponent(Child).vm.client).toBeDefined();
-    expect(wrapper.findComponent(Child).vm.flag.isEnabled.value).toBe(true);
+    expect(wrapper.findComponent(Child).vm.flag).toBe(true);
   });
 
   test("enables live flag updates by default for bootstrapped providers", async () => {

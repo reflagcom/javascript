@@ -15,9 +15,10 @@ import {
   useClient,
   useFlag,
   useIsLoading,
+  useTrack,
 } from "@reflag/react-native-sdk";
 
-const publishableKey = "pub_prod_Y25RPZYAkvrcWPnPMZIseK";
+const publishableKey = ""; // Set your Reflag publishable key to enable live requests.
 const isConfigured = publishableKey.length > 0;
 
 const loggingEventSourceFactory = (url: string) => {
@@ -142,7 +143,8 @@ function RuntimeChecksCard() {
 function FlagCard() {
   const client = useClient();
   const isLoading = useIsLoading();
-  const { isEnabled, track } = useFlag("bare-rn-demo");
+  const isEnabled = useFlag("bare-rn-demo");
+  const track = useTrack();
 
   useEffect(() => {
     return client.on("flagsUpdated", (flags) => {
@@ -157,7 +159,10 @@ function FlagCard() {
         Status: {isLoading ? "loading" : isEnabled ? "enabled" : "disabled"}
       </Text>
       <View style={styles.buttonRow}>
-        <Button title="Track usage" onPress={() => void track()} />
+        <Button
+          title="Track usage"
+          onPress={() => void track("Used bare RN demo")}
+        />
         <Button title="Refresh" onPress={() => void client.refresh()} />
       </View>
     </View>
@@ -172,7 +177,7 @@ export default function App() {
         <ReflagProvider
           publishableKey={publishableKey || "demo"}
           offline={!isConfigured}
-          fallbackFlags={["bare-rn-demo"]}
+          fallbackFlags={{ "bare-rn-demo": true }}
           context={{
             company: { id: "232" },
             user: { id: "bare-rn-user", name: "Bare RN User" },

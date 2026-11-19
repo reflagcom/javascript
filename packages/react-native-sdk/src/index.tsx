@@ -1,65 +1,33 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import React from "react";
 import ReactNativeEventSource from "react-native-sse";
 
 import type {
-  BootstrappedFlags,
-  CheckEvent,
-  CompanyContext,
-  EmptyFlagRemoteConfig,
-  Flag,
-  FlagKey,
-  FlagRemoteConfig,
-  Flags,
-  FlagType,
-  OptInFlag,
-  RawFlags,
   ReflagBootstrappedProps,
-  ReflagClientProviderProps,
   ReflagInitOptionsBase,
   ReflagProps,
-  ReflagPropsBase,
-  RequestFeedbackOptions,
-  SetOptInOptions,
-  StorageAdapter,
-  TrackEvent,
-  TypedFlags,
-  UseFlagOptions,
-  UserContext,
 } from "@reflag/react-sdk";
 import {
   ReflagBootstrappedProvider as BaseBootstrappedProvider,
-  ReflagClientProvider,
   ReflagProvider as BaseProvider,
-  useClient,
-  useFeature,
-  useFlag,
-  useIsLoading,
-  useOnEvent,
-  useOptInFlags,
-  useRequestFeedback,
-  useSendFeedback,
-  useSetOptIn,
-  useTrack,
-  useUpdateCompany,
-  useUpdateOtherContext,
-  useUpdateUser,
 } from "@reflag/react-sdk";
 
 import { version } from "../package.json";
 
 const SDK_VERSION = `react-native-sdk/${version}`;
 
-const defaultEventSourceFactory = (url: string) =>
-  new ReactNativeEventSource(url, {
+const defaultEventSourceFactory: NonNullable<
+  ReflagInitOptionsBase["eventSourceFactory"]
+> = (url) =>
+  new ReactNativeEventSource<string>(url, {
     pollingInterval: 0,
-  }) as any;
+  });
 
 export {
   ReflagClientProvider,
   useClient,
   useFeature,
   useFlag,
+  useFlagSuspense,
   useIsLoading,
   useOnEvent,
   useOptInFlags,
@@ -70,17 +38,16 @@ export {
   useUpdateCompany,
   useUpdateOtherContext,
   useUpdateUser,
-};
+} from "@reflag/react-sdk";
 export type {
   BootstrappedFlags,
   CheckEvent,
   CompanyContext,
-  EmptyFlagRemoteConfig,
-  Flag,
+  FlagDefaultValue,
   FlagKey,
-  FlagRemoteConfig,
   Flags,
-  FlagType,
+  FlagValue,
+  FlagValueFromDefault,
   OptInFlag,
   RawFlags,
   ReflagBootstrappedProps,
@@ -93,38 +60,29 @@ export type {
   StorageAdapter,
   TrackEvent,
   TypedFlags,
-  UseFlagOptions,
+  UseOptInFlagsOptions,
+  UseOptInFlagsResult,
   UserContext,
-};
+} from "@reflag/react-sdk";
+
+function nativeOptions(props: ReflagInitOptionsBase) {
+  return {
+    sdkVersion: SDK_VERSION,
+    storage: props.storage ?? AsyncStorage,
+    eventSourceFactory: props.eventSourceFactory ?? defaultEventSourceFactory,
+    enableLiveFlagUpdates: props.enableLiveFlagUpdates ?? true,
+    toolbar: props.toolbar ?? false,
+    feedback: {
+      ...props.feedback,
+      enableAutoFeedback: props.feedback?.enableAutoFeedback ?? false,
+    },
+  };
+}
 
 export function ReflagProvider(props: ReflagProps) {
-  return (
-    <BaseProvider
-      {...props}
-      sdkVersion={SDK_VERSION}
-      storage={props.storage ?? AsyncStorage}
-      eventSourceFactory={props.eventSourceFactory ?? defaultEventSourceFactory}
-      enableLiveFlagUpdates={props.enableLiveFlagUpdates ?? true}
-      feedback={{
-        ...props.feedback,
-        enableAutoFeedback: props.feedback?.enableAutoFeedback ?? false,
-      }}
-    />
-  );
+  return <BaseProvider {...props} {...nativeOptions(props)} />;
 }
 
 export function ReflagBootstrappedProvider(props: ReflagBootstrappedProps) {
-  return (
-    <BaseBootstrappedProvider
-      {...props}
-      sdkVersion={SDK_VERSION}
-      storage={props.storage ?? AsyncStorage}
-      eventSourceFactory={props.eventSourceFactory ?? defaultEventSourceFactory}
-      enableLiveFlagUpdates={props.enableLiveFlagUpdates ?? true}
-      feedback={{
-        ...props.feedback,
-        enableAutoFeedback: props.feedback?.enableAutoFeedback ?? false,
-      }}
-    />
-  );
+  return <BaseBootstrappedProvider {...props} {...nativeOptions(props)} />;
 }

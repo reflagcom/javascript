@@ -98,9 +98,9 @@ public types. `newEvaluator` accepts a complete compiled collection, not value
 rules or a single flag. It returns an object with `evaluateAll(context)` and
 `evaluateFlag(context, flagKey)` methods, rather than a callable evaluator.
 Publishers and consumers must adopt the collection/reference protocol together.
-Node SDK v2 uses the collection evaluator. The OpenFeature Node provider and the
-v1 React bootstrap demo remain pinned to published Node SDK 1.8.3 and its v1
-evaluator.
+Node SDK v2 uses the collection evaluator, including in the matching v2 React
+bootstrap demo. The OpenFeature Node provider remains pinned to published Node
+SDK 1.8.3 and its v1 evaluator.
 
 V1's `evaluateFlagRules`, scalar `evaluate`, `flattenJSON`, `unflattenJSON`, and
 value-rule types are removed. There is no v2 one-shot evaluation wrapper.
