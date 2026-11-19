@@ -40,7 +40,8 @@
     "fmt:fix": "oxfmt --write ."
   },
   "dependencies": {
-    "@reflag/browser-sdk": "workspace:^"
+    "@reflag/browser-sdk": "workspace:^",
+    "fast-equals": "^5.2.2"
   },
   "devDependencies": {
     "@reflag/tsconfig": "^0.0.2",

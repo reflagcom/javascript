@@ -21,6 +21,28 @@ function response(version = 1, value = true): Response {
     },
   });
 }
+function optInResponse(version: number, optedIn: boolean | null): Response {
+  return Response.json({
+    ...flagResponse,
+    flagStateVersion: version,
+    flags: {
+      flagA: {
+        ...selectedFlag(false, "false", `source-${version}`),
+        optInEnabled: true,
+        optIn:
+          optedIn === null
+            ? null
+            : {
+                name: "Try",
+                description: null,
+                userOptedIn: optedIn,
+                companyOptedIn: false,
+                isOptedIn: optedIn,
+              },
+      },
+    },
+  });
+}
 function setup(
   options: NonNullable<ConstructorParameters<typeof FlagsClient>[3]> = {},
 ) {
@@ -210,6 +232,103 @@ describe("v2 snapshots", () => {
     expect(await first).toBeUndefined();
     expect(client.getFlags().flagA.value).toBe(false);
     expect(client.getFlagStateVersion()).toBe(3);
+  });
+
+  test.each([true, null])(
+    "a late full refresh cannot roll back newer opt-in metadata (%s)",
+    async (optedIn) => {
+      const { client, get } = setup({
+        bootstrappedState: {
+          protocolVersion: 2,
+          flagStateVersion: 1,
+          flags: { flagA: selectedFlag(true) },
+        },
+      });
+      await client.initialize();
+      const older = deferred<Response>();
+      get
+        .mockReturnValueOnce(older.promise)
+        .mockResolvedValueOnce(optInResponse(3, optedIn));
+      const refresh = client.refreshFlags();
+      client.requestOptInFlags();
+      await client.refreshOptInMetadataIfNeeded();
+      const metadata = client.getOptInMetadata();
+      expect(metadata.flagA?.userOptedIn).toBe(
+        optedIn === null ? undefined : optedIn,
+      );
+      expect(client.getFlagStateVersion()).toBe(1);
+      expect(client.getFlags().flagA.value).toBe(true);
+      expect(client.getFlags().flagA.sourceVersionId).toBe("version-1");
+      older.resolve(optInResponse(2, false));
+      await refresh;
+      expect(client.getFlagStateVersion()).toBe(2);
+      expect(client.getFlags().flagA.value).toBe(false);
+      expect(client.getFlags().flagA.sourceVersionId).toBe("source-2");
+      expect(client.getOptInMetadata()).toEqual(metadata);
+      // Bootstrap reapplication invalidates requests, not same-context freshness.
+      client.setContextWithoutFetch({ user: { id: "alice" } }, true);
+      client.setFetchedFlags({ flagA: selectedFlag(true) });
+      client.markBootstrappedStateApplied();
+      expect(client.getOptInMetadata()).toEqual(metadata);
+      expect(client.getIsLoadingOptInFlags()).toBe(false);
+      get.mockResolvedValueOnce(optInResponse(4, false));
+      await client.refreshFlags();
+      expect(client.getOptInMetadata().flagA.userOptedIn).toBe(false);
+      expect(client.getFlagStateVersion()).toBe(4);
+    },
+  );
+
+  test.each(["fetch", "bootstrap"])(
+    "resets opt-in metadata freshness when the context changes through %s",
+    async (update) => {
+      const { client, get } = setup({
+        bootstrappedState: {
+          protocolVersion: 2,
+          flagStateVersion: 1,
+          flags: { flagA: selectedFlag(true) },
+        },
+      });
+      await client.initialize();
+      get.mockResolvedValueOnce(optInResponse(30, true));
+      client.requestOptInFlags();
+      await client.refreshOptInMetadataIfNeeded();
+      expect(client.getOptInMetadata().flagA.userOptedIn).toBe(true);
+      if (update === "fetch") {
+        get.mockResolvedValueOnce(optInResponse(1, false));
+        await client.setContext({ user: { id: "bob" } });
+      } else {
+        client.setContextWithoutFetch({ user: { id: "bob" } });
+        const result = validateFlagsResponse(
+          await optInResponse(1, false).json(),
+        )!;
+        client.setFetchedFlags(result.flags, true, result.flagStateVersion);
+      }
+      expect(client.getOptInMetadata().flagA.userOptedIn).toBe(false);
+      expect(client.getFlagStateVersion()).toBe(1);
+    },
+  );
+
+  test("a newer bootstrap missing metadata invalidates membership and fetches it again", async () => {
+    const { client, get } = setup({
+      bootstrappedState: {
+        protocolVersion: 2,
+        flagStateVersion: 1,
+        flags: { flagA: selectedFlag(true) },
+      },
+    });
+    await client.initialize();
+    get.mockResolvedValueOnce(optInResponse(3, true));
+    client.requestOptInFlags();
+    await client.refreshOptInMetadataIfNeeded();
+    client.setFetchedFlags({ flagA: selectedFlag(true) }, true, 4);
+    expect(client.getOptInMetadata()).toEqual({});
+    get.mockResolvedValueOnce(optInResponse(4, false));
+    client.resetOptInMetadataRefresh();
+    client.markBootstrappedStateApplied();
+    await client.refreshOptInMetadataIfNeeded();
+    expect(client.getOptInMetadata().flagA.userOptedIn).toBe(false);
+    expect(client.getFlags().flagA.value).toBe(true);
+    expect(client.getFlagStateVersion()).toBe(4);
   });
 
   test("a context change in an update listener cannot redirect a refresh cache write", async () => {

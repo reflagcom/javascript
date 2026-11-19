@@ -1,5 +1,6 @@
 "use client";
 
+import { deepEqual } from "fast-equals";
 import React, {
   createContext,
   ReactNode,
@@ -661,6 +662,14 @@ function useFlagValue(
   const context = useSafeContext();
   const { client } = context;
   const [, update] = useState(0);
+  const resolvedValue = useRef<
+    | {
+        client: ReflagClient;
+        key: FlagKey;
+        value: FlagValue;
+      }
+    | undefined
+  >(undefined);
   useOnEvent("flagsUpdated", () => update((revision) => revision + 1), client);
   useIsomorphicLayoutEffect(() => {
     update((revision) => revision + 1);
@@ -672,7 +681,20 @@ function useFlagValue(
   ) {
     throw context.getLoadingPromise();
   }
-  return client.getFlag(key, defaultValue);
+  // Always perform the read for check tracking, even when its value is unchanged.
+  const currentValue = client.getFlag(key, defaultValue);
+  const previous = resolvedValue.current;
+  const value =
+    previous?.client === client &&
+    previous.key === key &&
+    deepEqual(previous.value, currentValue)
+      ? previous.value
+      : currentValue;
+  // Only committed renders replace the cache; abandoned renders must not affect it.
+  useIsomorphicLayoutEffect(() => {
+    resolvedValue.current = { client, key, value };
+  }, [client, key, value]);
+  return value;
 }
 
 /**

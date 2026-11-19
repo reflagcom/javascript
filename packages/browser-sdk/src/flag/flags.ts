@@ -216,6 +216,7 @@ export class FlagsClient {
   private lastUpdatedOptInMetadata: Record<string, RawFlagOptIn> =
     Object.create(null);
   private optInMetadataContextVersion = -1;
+  private optInMetadataFlagStateVersion: number | undefined;
   private optInMetadataFetchVersion = 0;
   private optInFlagsRequested = false;
   private optInFlagsLoading = false;
@@ -457,10 +458,18 @@ export class FlagsClient {
     context: ReflagContext,
     invalidatePendingFetches = false,
   ) {
-    if (!deepEqual(this.context, context) || invalidatePendingFetches) {
+    const contextChanged = !deepEqual(this.context, context);
+    if (contextChanged || invalidatePendingFetches) {
+      const metadataWasCurrent = this.hasOptInMetadataForCurrentContext();
       this.contextFetchVersion += 1;
-      this.optInMetadata = Object.create(null);
-      this.optInMetadataContextVersion = -1;
+      if (contextChanged) {
+        this.optInMetadata = Object.create(null);
+        this.optInMetadataContextVersion = -1;
+        this.optInMetadataFlagStateVersion = undefined;
+      } else if (metadataWasCurrent) {
+        // Invalidating requests must not roll back same-context membership.
+        this.optInMetadataContextVersion = this.contextFetchVersion;
+      }
       if (this.optInFlagsRequested) {
         this.startOptInFlagsLoading();
       }
@@ -487,7 +496,7 @@ export class FlagsClient {
     this.fetchedFlagsContextVersion = this.contextFetchVersion;
     // A newly accepted snapshot supersedes any metadata-only request in flight.
     this.optInMetadataFetchVersion++;
-    this.setOptInMetadata(validated);
+    this.setOptInMetadata(validated, flagStateVersion);
     this.warnMissingFlagContextFields(fetchedFlags);
     this.updateFlags(triggerEvent);
   }
@@ -541,6 +550,8 @@ export class FlagsClient {
     this.fetchedFlags = Object.create(null);
     this.fetchedFlagStateVersion = undefined;
     this.optInMetadata = Object.create(null);
+    this.optInMetadataContextVersion = -1;
+    this.optInMetadataFlagStateVersion = undefined;
     this.updateFlags();
     this.resetOptInMetadataRefresh();
     const loadingGeneration = this.optInFlagsRequested
@@ -917,15 +928,28 @@ export class FlagsClient {
           result.flagStateVersion < this.fetchedFlagStateVersion))
     )
       return false;
-    if (!this.setOptInMetadata(result.flags)) return false;
+    if (!this.setOptInMetadata(result.flags, result.flagStateVersion))
+      return false;
     this.updateFlags(false);
     this.triggerFlagsUpdated();
     return true;
   }
 
-  private setOptInMetadata(flags: RawFlags): boolean {
+  private setOptInMetadata(
+    flags: RawFlags,
+    flagStateVersion: number | undefined,
+  ): boolean {
+    // Metadata-only requests can advance membership beyond the value snapshot.
+    if (
+      this.optInMetadataContextVersion === this.contextFetchVersion &&
+      this.optInMetadataFlagStateVersion !== undefined &&
+      (flagStateVersion === undefined ||
+        flagStateVersion < this.optInMetadataFlagStateVersion)
+    )
+      return false;
     this.optInMetadata = Object.create(null);
     this.optInMetadataContextVersion = -1;
+    this.optInMetadataFlagStateVersion = undefined;
     if (Object.values(flags).some((flag) => flag.optInEnabled === undefined))
       return false;
     for (const [key, flag] of Object.entries(flags)) {
@@ -934,6 +958,7 @@ export class FlagsClient {
       }
     }
     this.optInMetadataContextVersion = this.contextFetchVersion;
+    this.optInMetadataFlagStateVersion = flagStateVersion;
     return true;
   }
 

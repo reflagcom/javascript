@@ -462,6 +462,60 @@ describe("bootstrap and opt-in boundaries", () => {
     expect(metadataRequests).toBe(1);
   });
 
+  test("same-context bootstrap reapplication preserves newer opt-in membership", async () => {
+    const metadata = {
+      name: "Try it",
+      description: null,
+      userOptedIn: true,
+      companyOptedIn: false,
+      isOptedIn: true,
+    };
+    const request = vi.fn(() =>
+      HttpResponse.json({
+        ...flagResponse,
+        flagStateVersion: 3,
+        flags: {
+          flagA: {
+            ...selectedFlag(false),
+            optInEnabled: true,
+            optIn: metadata,
+          },
+        },
+      }),
+    );
+    server.use(http.get("https://front.reflag.com/flags/evaluated", request));
+    const client = create({
+      enableTracking: false,
+      bootstrappedState: bootstrap({ flagA: selectedFlag(true) }),
+    });
+    await client.initialize();
+    client.getOptInFlags();
+    await vi.waitFor(() => expect(client.getIsLoadingOptInFlags()).toBe(false));
+    expect(client.getFlag("flagA")).toBe(true);
+    expect(client.getOptInFlags()).toEqual([
+      expect.objectContaining({ userOptedIn: true }),
+    ]);
+    client.applyBootstrappedState(
+      bootstrap(
+        {
+          flagA: {
+            ...selectedFlag(false, "false", "older-bootstrap"),
+            optInEnabled: true,
+            optIn: { ...metadata, userOptedIn: false, isOptedIn: false },
+          },
+        },
+        2,
+      ),
+    );
+    expect(client.getFlag("flagA")).toBe(false);
+    expect(client.getFlagsForBootstrap().flagStateVersion).toBe(2);
+    expect(client.getOptInFlags()).toEqual([
+      expect.objectContaining({ userOptedIn: true, isEnabled: false }),
+    ]);
+    expect(client.getIsLoadingOptInFlags()).toBe(false);
+    expect(request).toHaveBeenCalledOnce();
+  });
+
   test("settles a failed metadata refresh and allows a manual retry", async () => {
     let requests = 0;
     server.use(
