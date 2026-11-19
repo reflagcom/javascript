@@ -48,6 +48,8 @@
   },
   "resolutions": {
     "@changesets/assemble-release-plan@npm:^6.0.9": "patch:@changesets/assemble-release-plan@npm%3A6.0.9#~/.yarn/patches/@changesets-assemble-release-plan-npm-6.0.9-e01af97ef4.patch",
+    "get-uri@npm:8.0.1": "npm:8.0.2",
+    "minimatch@npm:10.2.5": "npm:10.2.6",
     "minimatch@npm:9.0.1": "npm:9.0.9",
     "postcss@npm:8.4.31": "npm:8.5.32",
     "postcss@npm:~8.4.32": "npm:8.5.32",
