@@ -97,6 +97,13 @@ export function canonicalContextJSONStringify(
     : undefined;
 }
 
+/** Copy context without turning undefined-only objects into explicit empty objects. */
+export function copyContext(context: ReflagContext): ReflagContext {
+  return JSON.parse(
+    canonicalJSONStringify(pruneUndefinedObjectValues(context, new WeakSet())),
+  ) as ReflagContext;
+}
+
 /**
  * Context is a set of key-value pairs.
  * This is used to determine if feature targeting matches and to track events.

@@ -2,7 +2,7 @@ import { deepEqual } from "fast-equals";
 
 import { BulkEvent, BulkQueue } from "./bulkQueue";
 import { API_BASE_URL, APP_BASE_URL, IS_SERVER, SDK_VERSION } from "./config";
-import { ReflagContext, ReflagDeprecatedContext } from "./context";
+import { copyContext, ReflagContext, ReflagDeprecatedContext } from "./context";
 import {
   AutoFeedback,
   Feedback,
@@ -22,7 +22,6 @@ import {
 } from "./flag/flags";
 import { isValidFlagStateVersion } from "./flag/flagStateVersion";
 import {
-  copyJSON,
   FlagDefaultValue,
   FlagValue,
   FlagValueFromDefault,
@@ -51,7 +50,7 @@ function normalizeContext({
   otherContext,
   ...context
 }: ReflagDeprecatedContext): ReflagContext {
-  return copyJSON({
+  return copyContext({
     user: hasId(context.user?.id) ? context.user : undefined,
     company: hasId(context.company?.id) ? context.company : undefined,
     other: { ...otherContext, ...context.other },
@@ -770,7 +769,7 @@ export class ReflagClient {
    * Get the current context.
    */
   getContext() {
-    return copyJSON(this.context);
+    return copyContext(this.context);
   }
 
   /**

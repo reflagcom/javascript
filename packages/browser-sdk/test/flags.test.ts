@@ -191,6 +191,61 @@ describe("v2 snapshots", () => {
     });
   });
 
+  test.each(["constructor", "setContext", "setContextWithoutFetch"])(
+    "owns context without changing canonical request or cache identity via %s",
+    async (method) => {
+      const cache = new FlagCache({
+        storage: createNoopStorageAdapter(),
+        staleTimeMs: 0,
+        expireTimeMs: 60_000,
+      });
+      const cacheGet = vi.spyOn(cache, "get");
+      const http = new HttpClient("pk", {
+        baseUrl: "https://front.reflag.com",
+      });
+      const get = vi
+        .spyOn(http, "get")
+        .mockImplementation(async () => response());
+      const context = {
+        other: {
+          profile: { plan: undefined },
+          nested: { profile: { plan: undefined } },
+          explicitEmpty: {},
+          values: [{ plan: undefined }, "second"],
+        },
+      };
+      const client = new FlagsClient(
+        http,
+        method === "constructor" ? context : {},
+        testLogger,
+        { cache },
+      );
+      try {
+        if (method === "setContext") {
+          await client.setContext(context);
+        } else if (method === "setContextWithoutFetch") {
+          client.setContextWithoutFetch(context);
+        }
+        context.other.values.push("mutated");
+        await client.initialize();
+        await client.refreshFlags();
+
+        const expected =
+          '{"other":{"explicitEmpty":{},"values":[{},"second"]}}';
+        expect(get).toHaveBeenCalled();
+        for (const [options] of get.mock.calls) {
+          expect(options.params?.get("contextJson")).toBe(expected);
+        }
+        expect(cacheGet).toHaveBeenCalled();
+        for (const [key] of cacheGet.mock.calls) {
+          expect(new URLSearchParams(key).get("contextJson")).toBe(expected);
+        }
+      } finally {
+        client.stop();
+      }
+    },
+  );
+
   test("accepts empty snapshots but retains the known-good state after an invalid refresh", async () => {
     const { client, get } = setup();
     await client.initialize();

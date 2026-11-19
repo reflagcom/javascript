@@ -348,6 +348,69 @@ describe("direct values and root checks", () => {
   });
 });
 
+describe("context ownership", () => {
+  test.each(["constructor", "setContext", "bootstrap"])(
+    "preserves undefined-only pruning in evaluation and subscription context via %s",
+    async (method) => {
+      const requests: (string | null)[] = [];
+      server.use(
+        http.get("https://front.reflag.com/flags/evaluated", ({ request }) => {
+          requests.push(new URL(request.url).searchParams.get("contextJson"));
+          return HttpResponse.json(flagResponse);
+        }),
+      );
+      const profile: { plan: string | undefined } = { plan: undefined };
+      const context = {
+        user: { id: "alice", profile, roles: ["original"] },
+        company: { id: "acme", profile },
+        other: {
+          profile,
+          nested: { profile },
+          explicitEmpty: {},
+          values: [{ plan: undefined }, "second"],
+        },
+      };
+      const eventSourceFactory = vi.fn((_url: string) => ({
+        close: vi.fn(),
+        addEventListener: vi.fn(),
+      }));
+      const client = create({
+        enableTracking: false,
+        enableLiveFlagUpdates: true,
+        eventSourceFactory,
+        ...(method === "constructor" ? context : {}),
+      });
+      if (method === "setContext") {
+        await client.setContext(context);
+      } else if (method === "bootstrap") {
+        client.applyBootstrappedState({
+          ...bootstrap({ flagA: selectedFlag(true) }),
+          context,
+        });
+      }
+      profile.plan = "mutated";
+      context.user.roles.push("mutated");
+      await client.initialize();
+      await client.refresh();
+
+      const expected =
+        '{"company":{"id":"acme"},"other":{"explicitEmpty":{},"values":[{},"second"]},"user":{"id":"alice","roles":["original"]}}';
+      expect(requests.length).toBeGreaterThan(0);
+      for (const contextJson of requests) {
+        expect(contextJson).toBe(expected);
+      }
+      expect(eventSourceFactory).toHaveBeenCalledOnce();
+      expect(
+        new URL(eventSourceFactory.mock.calls[0][0]).searchParams.get(
+          "contextJson",
+        ),
+      ).toBe(expected);
+      (client.getContext().user!.roles as string[]).push("mutated");
+      expect(client.getContext().user?.roles).toEqual(["original"]);
+    },
+  );
+});
+
 describe("bootstrap and opt-in boundaries", () => {
   test("rejects legacy bootstrap and invalid replacements before changing context or accepted flags", () => {
     expect(() =>

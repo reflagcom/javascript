@@ -2,7 +2,11 @@ import { deepEqual } from "fast-equals";
 
 import type { BulkEvent } from "../bulkQueue";
 import { FLAG_EVENTS_PER_MIN, FLAGS_EXPIRE_MS } from "../config";
-import { canonicalContextJSONStringify, ReflagContext } from "../context";
+import {
+  canonicalContextJSONStringify,
+  copyContext,
+  ReflagContext,
+} from "../context";
 import { HttpClient } from "../httpClient";
 import { Logger, loggerWithPrefix } from "../logger";
 import RateLimiter from "../rateLimiter";
@@ -252,6 +256,7 @@ export class FlagsClient {
       ...config
     }: FlagsClientOptions = {},
   ) {
+    this.context = copyContext(context);
     this.config = {
       ...this.config,
       ...Object.fromEntries(
@@ -458,7 +463,8 @@ export class FlagsClient {
     context: ReflagContext,
     invalidatePendingFetches = false,
   ) {
-    const contextChanged = !deepEqual(this.context, context);
+    const newContext = copyContext(context);
+    const contextChanged = !deepEqual(this.context, newContext);
     if (contextChanged || invalidatePendingFetches) {
       const metadataWasCurrent = this.hasOptInMetadataForCurrentContext();
       this.contextFetchVersion += 1;
@@ -472,7 +478,7 @@ export class FlagsClient {
         this.startOptInFlagsLoading();
       }
     }
-    this.context = copyJSON(context);
+    this.context = newContext;
   }
 
   setFetchedFlags(
@@ -542,7 +548,7 @@ export class FlagsClient {
   }
 
   async setContext(context: ReflagContext) {
-    this.context = copyJSON(context);
+    this.context = copyContext(context);
     const requestVersion = ++this.contextFetchVersion;
     this.fetchedFlags = Object.create(null);
     this.fetchedFlagStateVersion = undefined;
@@ -634,7 +640,7 @@ export class FlagsClient {
       return;
     }
 
-    const context = copyJSON(this.context);
+    const context = copyContext(this.context);
     const rateLimitKey = JSON.stringify([
       this.fetchParams().toString(),
       checkEvent.key,

@@ -89,6 +89,13 @@ function create(bootstrappedState = state()) {
   clients.add(client);
   return client;
 }
+function clientProvider(client: ReflagClient) {
+  return ({ children }: { children: React.ReactNode }) => (
+    <ReflagClientProvider client={client} initialLoading={false}>
+      {children}
+    </ReflagClientProvider>
+  );
+}
 function provider(props: Partial<ReflagProps> = {}) {
   const publishableKey = `provider-${index++}`;
   return ({ children }: { children: React.ReactNode }) => (
@@ -183,13 +190,7 @@ describe("direct-value hooks", () => {
             }, [value]);
             return value;
           },
-          {
-            wrapper: ({ children }) => (
-              <ReflagClientProvider client={client} initialLoading={false}>
-                {children}
-              </ReflagClientProvider>
-            ),
-          },
+          { wrapper: clientProvider(client) },
         );
         const first = result.current;
         expect(first).toEqual(firstValue);
@@ -273,13 +274,7 @@ describe("direct-value hooks", () => {
       const read = vi.spyOn(client, "getFlag");
       const { result, rerender } = renderHook(
         () => [useReadFlag("settings", null), useReadFlag("settings", null)],
-        {
-          wrapper: ({ children }) => (
-            <ReflagClientProvider client={client} initialLoading={false}>
-              {children}
-            </ReflagClientProvider>
-          ),
-        },
+        { wrapper: clientProvider(client) },
       );
       const first = result.current[0];
       expect(result.current[1]).not.toBe(first);
@@ -329,11 +324,7 @@ describe("direct-value hooks", () => {
     const check = vi.fn();
     client.on("check", check);
     const { result } = renderHook(() => useFlag("release"), {
-      wrapper: ({ children }) => (
-        <ReflagClientProvider client={client} initialLoading={false}>
-          {children}
-        </ReflagClientProvider>
-      ),
+      wrapper: clientProvider(client),
     });
     expect(result.current).toBe(true);
     expect(check).toHaveBeenCalledTimes(1);
@@ -362,11 +353,7 @@ describe("direct-value hooks", () => {
       ({ key, fallback }) => useFlag(key, fallback),
       {
         initialProps: { key: "release", fallback: true },
-        wrapper: ({ children }) => (
-          <ReflagClientProvider client={client} initialLoading={false}>
-            {children}
-          </ReflagClientProvider>
-        ),
+        wrapper: clientProvider(client),
       },
     );
     expect(result.current).toBe(true);
@@ -627,13 +614,7 @@ describe("provider and independent hooks", () => {
         other: useUpdateOtherContext(),
         optIn: useSetOptIn(),
       }),
-      {
-        wrapper: ({ children }) => (
-          <ReflagClientProvider client={client} initialLoading={false}>
-            {children}
-          </ReflagClientProvider>
-        ),
-      },
+      { wrapper: clientProvider(client) },
     );
     await result.current.track("Started", { button: "cta" });
     result.current.requestFeedback({ flagKey: "release", title: "Feedback" });
