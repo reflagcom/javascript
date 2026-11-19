@@ -45,6 +45,8 @@
     "typescript": "^5.7.3"
   },
   "resolutions": {
+    "get-uri@npm:8.0.1": "npm:8.0.2",
+    "minimatch@npm:10.2.5": "npm:10.2.6",
     "minimatch@npm:9.0.1": "npm:9.0.9",
     "postcss@npm:8.4.31": "npm:8.5.32",
     "postcss@npm:~8.4.32": "npm:8.5.32",
