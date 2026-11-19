@@ -23,13 +23,14 @@ const client = useReflagClient({
   logger,
 });
 
-const isLoading = ref(
-  client.getState() !== "initialized" ? initialLoading : false,
-);
+let hasInitialized = client.getState() === "initialized";
+const isLoading = ref(hasInitialized ? false : initialLoading);
 useOnEvent(
   "stateUpdated",
   (state) => {
-    isLoading.value = state === "initializing";
+    if (state === "initialized") hasInitialized = true;
+    isLoading.value =
+      state === "initializing" && (hasInitialized || initialLoading);
   },
   client,
 );

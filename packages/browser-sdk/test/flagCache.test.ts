@@ -1,122 +1,255 @@
-import {
-  afterAll,
-  beforeEach,
-  describe,
-  expect,
-  test,
-  vi,
-  vitest,
-} from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
-import {
-  CacheResult,
-  FlagCache,
-  parseAPIFlagsResponse,
-} from "../src/flag/flagCache";
+import { FlagCache, parseAPIFlagsResponse } from "../src/flag/flagCache";
+import type { StorageAdapter } from "../src/storage";
+import { flagsResult, selectedFlag } from "./mocks/handlers";
 
-beforeEach(() => {
-  vi.useFakeTimers();
-  vi.resetAllMocks();
-});
-
-afterAll(() => {
-  vi.useRealTimers();
-});
-
-export const TEST_STALE_MS = 1000;
-export const TEST_EXPIRE_MS = 2000;
-
-export function newCache(): {
-  cache: FlagCache;
-  cacheItem: (string | null)[];
-} {
-  const cacheItem: (string | null)[] = [null];
-  return {
-    cache: new FlagCache({
-      storage: {
-        getItem: async () => cacheItem[0],
-        setItem: async (_key, value) => {
-          cacheItem[0] = value;
-        },
-      },
-      staleTimeMs: TEST_STALE_MS,
-      expireTimeMs: TEST_EXPIRE_MS,
+function setup() {
+  const data: Record<string, string> = {};
+  const storage: StorageAdapter = {
+    getItem: vi.fn(async (key) => data[key] ?? null),
+    setItem: vi.fn(async (key, value) => {
+      data[key] = value;
     }),
-    cacheItem,
   };
+  const cache = new FlagCache({
+    storage,
+    staleTimeMs: 1000,
+    expireTimeMs: 2000,
+  });
+  return { cache, storage, data };
 }
+afterEach(() => vi.useRealTimers());
 
-describe("parseAPIFlagsResponse", () => {
-  test("rejects malformed flag entries without throwing", () => {
-    expect(parseAPIFlagsResponse({ flagA: null })).toBeUndefined();
+describe("v2 evaluated cache", () => {
+  const rule = { ruleId: "rule", matched: true };
+  const error = { code: "MISSING_CONTEXT_FIELD", message: "missing" };
+
+  test("accepts diagnostic optional fields and preserves their values", () => {
+    const flags = {
+      flagA: {
+        ...selectedFlag(true),
+        ruleResults: [
+          rule,
+          { ...rule, allocationIndex: 0, destination: { type: "nextRule" } },
+          {
+            ...rule,
+            allocationIndex: 1,
+            destination: { type: "variant", variantKey: "" },
+          },
+        ],
+        errors: [
+          error,
+          { ...error, source: { type: "flag", key: "parent" } },
+          {
+            ...error,
+            field: "user.id",
+            operator: "IS",
+            source: { type: "segment", key: "enterprise" },
+          },
+        ],
+      },
+    };
+    expect(parseAPIFlagsResponse(flags)).toEqual(flags);
   });
 
-  test("rejects malformed evaluation errors", () => {
+  test.each([
+    null,
+    true,
+    {},
+    { ...rule, ruleId: 1 },
+    { ...rule, matched: undefined },
+    { ...rule, matched: 1 },
+    ...[-1, 0.5, Infinity, NaN, "0", null].map((allocationIndex) => ({
+      ...rule,
+      allocationIndex,
+    })),
+    ...[
+      null,
+      [],
+      { type: "unknown" },
+      { type: "variant" },
+      { type: "variant", variantKey: 1 },
+    ].map((destination) => ({ ...rule, destination })),
+  ])("rejects malformed rule diagnostics atomically: %j", (invalidRule) => {
     expect(
       parseAPIFlagsResponse({
-        flagA: {
-          isEnabled: true,
-          key: "flagA",
-          targetingVersion: 1,
-          evaluationErrors: [{ code: "MISSING_CONTEXT_FIELD" }],
-        },
+        good: selectedFlag(true),
+        bad: { ...selectedFlag(true), ruleResults: [invalidRule] },
       }),
     ).toBeUndefined();
   });
-});
 
-describe("cache", () => {
-  const flags = {
-    flagA: { isEnabled: true, key: "flagA", targetingVersion: 1 },
+  test.each([
+    null,
+    true,
+    {},
+    { code: "MISSING_CONTEXT_FIELD" },
+    { ...error, code: 1 },
+    { ...error, message: null },
+    { ...error, field: null },
+    { ...error, operator: 1 },
+    ...[
+      null,
+      [],
+      { type: "unknown", key: "s" },
+      { type: "flag" },
+      { type: "segment", key: 1 },
+    ].map((source) => ({ ...error, source })),
+  ])("rejects malformed error diagnostics atomically: %j", (invalidError) => {
+    expect(
+      parseAPIFlagsResponse({
+        good: selectedFlag(true),
+        bad: { ...selectedFlag(true), errors: [invalidError] },
+      }),
+    ).toBeUndefined();
+  });
+
+  const optIn = {
+    name: "Try",
+    description: null,
+    userOptedIn: true,
+    companyOptedIn: false,
+    isOptedIn: true,
   };
 
-  test("caches items", async () => {
-    const { cache } = newCache();
+  test.each([
+    {},
+    { optInEnabled: false, optIn: null },
+    { optInEnabled: true, optIn: null },
+    { optInEnabled: true, optIn },
+    {
+      optInEnabled: true,
+      optIn: {
+        ...optIn,
+        description: "Preview",
+        userOptedIn: false,
+        isOptedIn: false,
+      },
+    },
+  ])("preserves accepted opt-in metadata states: %j", (metadata) => {
+    const flags = { release: { ...selectedFlag(true), ...metadata } };
+    expect(parseAPIFlagsResponse(flags)).toEqual(flags);
+    expect(parseAPIFlagsResponse(flags, true)).toEqual(flags);
+  });
 
-    await cache.set("key", { flags });
-    await expect(cache.get("key")).resolves.toEqual({
+  test.each([
+    { optIn: null },
+    { optIn },
+    { optInEnabled: true },
+    { optInEnabled: false },
+    { optInEnabled: "true", optIn: null },
+    { optInEnabled: null, optIn: null },
+    { optInEnabled: false, optIn },
+    ...[
+      true,
+      [],
+      {},
+      { ...optIn, name: null },
+      { ...optIn, description: undefined },
+      { ...optIn, description: 1 },
+      { ...optIn, userOptedIn: 1 },
+      { ...optIn, companyOptedIn: undefined },
+      { ...optIn, isOptedIn: "true" },
+    ].map((invalidOptIn) => ({ optInEnabled: true, optIn: invalidOptIn })),
+  ])("rejects invalid opt-in metadata atomically: %j", (metadata) => {
+    const flags = {
+      good: selectedFlag(true),
+      bad: { ...selectedFlag(true), ...metadata },
+    };
+    expect(parseAPIFlagsResponse(flags)).toBeUndefined();
+    expect(parseAPIFlagsResponse(flags, true)).toBeUndefined();
+  });
+
+  test("owns stored values and preserves snapshot version zero", async () => {
+    const { cache } = setup();
+    const flags = {
+      settings: selectedFlag({ nested: [1] }, "quality"),
+      release: { ...selectedFlag(true), optInEnabled: true, optIn },
+    };
+    await cache.set("pk-and-context", { flags, flagStateVersion: 0 });
+    (flags.settings.value as { nested: number[] }).nested.push(2);
+    const first = await cache.get("pk-and-context");
+    expect(first).toMatchObject({
+      flags: { settings: { value: { nested: [1] } } },
+      flagStateVersion: 0,
       stale: false,
-      flags,
-    } satisfies CacheResult);
-  });
-
-  test("caches flag state version when present", async () => {
-    const { cache } = newCache();
-
-    await cache.set("key", { flags, flagStateVersion: 7 });
-    await expect(cache.get("key")).resolves.toEqual({
-      stale: false,
-      flags,
-      flagStateVersion: 7,
-    } satisfies CacheResult);
-  });
-
-  test("sets stale", async () => {
-    const { cache } = newCache();
-
-    await cache.set("key", { flags });
-
-    vitest.advanceTimersByTime(TEST_STALE_MS + 1);
-
-    const cacheItem = await cache.get("key");
-    expect(cacheItem?.stale).toBe(true);
-  });
-
-  test("expires on set", async () => {
-    const { cache, cacheItem } = newCache();
-
-    await cache.set("first key", {
-      flags,
     });
-    expect(cacheItem[0]).not.toBeNull();
-    vitest.advanceTimersByTime(TEST_EXPIRE_MS + 1);
-
-    await cache.set("other key", {
-      flags,
+    expect(first!.flags.release.optIn).toEqual(optIn);
+    first!.flags.release.optIn!.name = "Changed";
+    expect((await cache.get("pk-and-context"))!.flags.release.optIn!.name).toBe(
+      "Try",
+    );
+    first!.flags.settings.value = false;
+    expect((await cache.get("pk-and-context"))!.flags.settings.value).toEqual({
+      nested: [1],
     });
+  });
 
-    const item = await cache.get("key");
-    expect(item).toBeUndefined();
-    expect(cacheItem[0]).not.toContain("first key"); // should have been removed
+  test("never loads v1 storage or malformed v2 entries", async () => {
+    const { cache, data, storage } = setup();
+    data.__reflag_fetched_flags = JSON.stringify({
+      key: {
+        flags: { flag: { isEnabled: true } },
+        expireAt: Date.now() + 10000,
+      },
+    });
+    expect(await cache.get("key")).toBeUndefined();
+    expect(storage.getItem).toHaveBeenCalledWith("__reflag_fetched_flags_v2");
+    data.__reflag_fetched_flags_v2 = JSON.stringify({
+      key: {
+        protocolVersion: 2,
+        flags: { good: selectedFlag(true), bad: {} },
+        expireAt: Date.now() + 10000,
+        staleAt: Date.now() + 10000,
+      },
+    });
+    expect(await cache.get("key")).toBeUndefined();
+  });
+
+  test("becomes stale and then expires, pruning expired entries on writes", async () => {
+    vi.useFakeTimers();
+    const { cache, data } = setup();
+    await cache.set("first", { flags: flagsResult });
+    vi.advanceTimersByTime(1001);
+    expect((await cache.get("first"))?.stale).toBe(true);
+    vi.advanceTimersByTime(1000);
+    expect(await cache.get("first")).toBeUndefined();
+    await cache.set("second", { flags: flagsResult });
+    expect(Object.keys(JSON.parse(data.__reflag_fetched_flags_v2))).toEqual([
+      "second",
+    ]);
+  });
+
+  test("serializes cache writes and refuses version regression for the same context", async () => {
+    const { cache } = setup();
+    await Promise.all([
+      cache.set("a", { flags: flagsResult, flagStateVersion: 3 }),
+      cache.set("b", { flags: flagsResult, flagStateVersion: 1 }),
+      cache.set("a", { flags: {}, flagStateVersion: 2 }),
+    ]);
+    expect((await cache.get("a"))?.flagStateVersion).toBe(3);
+    expect((await cache.get("b"))?.flagStateVersion).toBe(1);
+  });
+
+  test("accepts Node's unselected bootstrap entries but rejects partial or unresolved authored identity", () => {
+    expect(
+      parseAPIFlagsResponse(
+        { fallback: { resolved: false, ruleResults: [], errors: [] } },
+        true,
+      ),
+    ).toEqual({ fallback: { resolved: false, ruleResults: [], errors: [] } });
+    expect(
+      parseAPIFlagsResponse(
+        { broken: { ...selectedFlag(true), variantKey: undefined } },
+        true,
+      ),
+    ).toBeUndefined();
+    expect(
+      parseAPIFlagsResponse(
+        { broken: { ...selectedFlag(true), resolved: false } },
+        true,
+      ),
+    ).toBeUndefined();
   });
 });

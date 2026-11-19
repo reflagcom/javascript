@@ -23,26 +23,30 @@ function pick<T>(options: T[]): T {
   return options[Math.floor(Math.random() * options.length)];
 }
 
+async function mockAPI(page: Page) {
+  await page.route(`${API_HOST}/bulk`, (route) =>
+    route.fulfill({ status: 200 }),
+  );
+  await page.route(`${API_HOST}/flags/evaluated*`, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        success: true,
+        protocolVersion: 2,
+        flagStateVersion: 1,
+        flags: {},
+      }),
+    }),
+  );
+}
+
 async function getOpenedWidgetContainer(
   page: Page,
   initOptions: Omit<InitOptions, "publishableKey"> = {},
 ) {
   await page.goto("http://localhost:8001/test/e2e/empty.html");
-
-  // Mock API calls
-  await page.route(`${API_HOST}/bulk`, async (route) => {
-    await route.fulfill({ status: 200 });
-  });
-
-  await page.route(`${API_HOST}/features/evaluated*`, async (route) => {
-    await route.fulfill({
-      status: 200,
-      body: JSON.stringify({
-        success: true,
-        features: {},
-      }),
-    });
-  });
+  await mockAPI(page);
 
   // Golden path requests
   await page.evaluate(`
@@ -65,21 +69,7 @@ async function getGiveFeedbackPageContainer(
   initOptions: Omit<InitOptions, "publishableKey"> = {},
 ) {
   await page.goto("http://localhost:8001/test/e2e/give-feedback-button.html");
-
-  // Mock API calls
-  await page.route(`${API_HOST}/bulk`, async (route) => {
-    await route.fulfill({ status: 200 });
-  });
-
-  await page.route(`${API_HOST}/features/evaluated*`, async (route) => {
-    await route.fulfill({
-      status: 200,
-      body: JSON.stringify({
-        success: true,
-        features: {},
-      }),
-    });
-  });
+  await mockAPI(page);
 
   // Golden path requests
   await page.evaluate(`
