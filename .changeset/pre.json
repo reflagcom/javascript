@@ -21,5 +21,10 @@
     "@reflag/tsconfig": "0.0.2",
     "@reflag/vue-sdk": "2.0.0-next.0"
   },
-  "changesets": []
+  "changesets": [
+    "browser-framework-collection-values",
+    "node-sdk-collection-values",
+    "react-native-collection-values",
+    "tidy-dependency-scanning"
+  ]
 }
