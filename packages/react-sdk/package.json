@@ -40,7 +40,7 @@
     "fmt:fix": "oxfmt --write ."
   },
   "dependencies": {
-    "@reflag/browser-sdk": "workspace:^",
+    "@reflag/browser-sdk": "^2.0.0-next.1",
     "fast-equals": "^5.2.2"
   },
   "devDependencies": {
