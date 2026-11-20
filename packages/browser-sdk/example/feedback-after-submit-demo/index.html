@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>onAfterSubmit timing demo</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      body {
+        max-width: 780px;
+        margin: 2rem auto;
+        padding: 0 1rem;
+        line-height: 1.5;
+        color: #1a1a1a;
+      }
+      h1 {
+        font-size: 1.4rem;
+      }
+      section {
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        padding: 1rem 1.25rem;
+        margin-bottom: 1.25rem;
+      }
+      section h2 {
+        margin-top: 0;
+        font-size: 1.05rem;
+      }
+      button {
+        cursor: pointer;
+        padding: 0.5rem 0.9rem;
+        border-radius: 6px;
+        border: 1px solid #999;
+        background: #f5f5f5;
+        font-size: 0.95rem;
+      }
+      button:hover {
+        background: #ebebeb;
+      }
+      button.primary {
+        background: #2d6cdf;
+        border-color: #2d6cdf;
+        color: white;
+      }
+      button.danger {
+        background: #d1352b;
+        border-color: #d1352b;
+        color: white;
+      }
+      #risk-banner {
+        display: none;
+        padding: 0.6rem 0.9rem;
+        border-radius: 6px;
+        font-weight: 600;
+        margin-bottom: 1rem;
+      }
+      #risk-banner.pending {
+        display: block;
+        background: #fde2e1;
+        color: #7a1812;
+      }
+      #risk-banner.resolved {
+        display: block;
+        background: #def7e5;
+        color: #0f5b27;
+      }
+      #log {
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+        font-size: 0.85rem;
+        background: #0e0e0e;
+        color: #d8d8d8;
+        border-radius: 6px;
+        padding: 0.75rem;
+        height: 220px;
+        overflow-y: auto;
+        white-space: pre-wrap;
+      }
+      #log .ok {
+        color: #67e28a;
+      }
+      #log .pending {
+        color: #f2c15c;
+      }
+      #log .err {
+        color: #ff7a72;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.85rem;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 0.35rem 0.5rem;
+        border-bottom: 1px solid #eee;
+      }
+      .mono {
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+      }
+      .controls {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        flex-wrap: wrap;
+        margin-bottom: 0.75rem;
+      }
+      label {
+        font-size: 0.9rem;
+      }
+      input[type="number"] {
+        width: 5rem;
+        padding: 0.3rem;
+      }
+      .verdict-lost {
+        color: #b3261e;
+        font-weight: 600;
+      }
+      .verdict-partial {
+        color: #a66a00;
+        font-weight: 600;
+      }
+      .verdict-ok {
+        color: #0f5b27;
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Does <code>onAfterSubmit</code> survive the user closing the tab?</h1>
+    <p>
+      <code>onAfterSubmit</code> only fires once the feedback POST to Reflag
+      resolves, which means there is a real gap between the user clicking Send/a
+      score and the callback actually running. This page makes that gap visible,
+      and then proves what happens if the tab goes away before it closes.
+    </p>
+
+    <section>
+      <h2>1. Artificial network latency</h2>
+      <p>
+        Widens the gap between submit and <code>onAfterSubmit</code> so it's
+        easy to watch. The mock API server delays its response by this many
+        milliseconds.
+      </p>
+      <div class="controls">
+        <label
+          >Delay (ms):
+          <input id="delay-input" type="number" min="0" max="20000" step="100"
+        /></label>
+        <button id="apply-delay">Apply</button>
+        <span id="delay-status"></span>
+      </div>
+    </section>
+
+    <section>
+      <h2>2. Live widget</h2>
+      <p>
+        Open the real feedback widget (built from this branch's
+        <code>src/</code>, not a mock) and submit a score/comment. Watch the
+        banner and log below.
+      </p>
+      <button id="open-widget" class="primary">Open feedback widget</button>
+      <div id="risk-banner"></div>
+      <div id="log"></div>
+    </section>
+
+    <section>
+      <h2>3. Prove it: navigate away mid-submit</h2>
+      <p>
+        This calls the exact same <code>feedback()</code> request the widget's
+        Send button triggers, then navigates away a moment later — simulating
+        the user closing the tab (or clicking a link) right after submitting,
+        before the response comes back. "Server actually received it?" is ground
+        truth from the mock API's own log, independent of anything the browser
+        tab believes happened.
+      </p>
+      <p>
+        <small
+          >On localhost, the request body is tiny and the round-trip to the mock
+          server is near-instant, so it often finishes sending before the
+          navigation can interrupt it — the row below may well show the server
+          received it either way. On a real network, with real latency, that's
+          not guaranteed: without `keepalive`, closing the tab can lose the
+          request outright. What <em>is</em> guaranteed, every time, is the
+          other column: the client never sees <code>onAfterSubmit</code> fire,
+          because the page that would have run it is gone.</small
+        >
+      </p>
+      <div class="controls">
+        <label
+          ><input id="use-keepalive" type="checkbox" /> send with
+          <code>keepalive: true</code> instead (bypasses the SDK, to show what a
+          fix could look like)</label
+        >
+      </div>
+      <div class="controls">
+        <button id="run-danger" class="danger">
+          Submit feedback, then navigate away immediately
+        </button>
+        <button id="reset">Reset demo</button>
+      </div>
+      <table id="attempts">
+        <thead>
+          <tr>
+            <th>Attempt</th>
+            <th>Mode</th>
+            <th>Sent</th>
+            <th>Client saw onAfterSubmit?</th>
+            <th>Server actually received it?</th>
+            <th>Verdict</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <p>
+        <small
+          >Every row here is a deliberately interrupted attempt — that's the
+          point of this button. "Client saw onAfterSubmit?" reproduces the
+          widget's own await-then-notify sequence; "no" means the page was gone
+          before that sequence could finish.</small
+        >
+      </p>
+    </section>
+
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
