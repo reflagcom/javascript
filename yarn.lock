@@ -6179,7 +6179,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@reflag/node-sdk@npm:2.0.0-next.1, @reflag/node-sdk@workspace:*, @reflag/node-sdk@workspace:^, @reflag/node-sdk@workspace:packages/node-sdk":
+"@reflag/node-sdk@npm:2.0.0-next.2, @reflag/node-sdk@workspace:*, @reflag/node-sdk@workspace:^, @reflag/node-sdk@workspace:packages/node-sdk":
   version: 0.0.0-use.local
   resolution: "@reflag/node-sdk@workspace:packages/node-sdk"
   dependencies:
@@ -6246,8 +6246,8 @@ __metadata:
   resolution: "@reflag/react-native-sdk@workspace:packages/react-native-sdk"
   dependencies:
     "@react-native-async-storage/async-storage": "npm:^2.2.0"
-    "@reflag/node-sdk": "npm:2.0.0-next.1"
-    "@reflag/react-sdk": "npm:^2.0.0-next.1"
+    "@reflag/node-sdk": "npm:2.0.0-next.2"
+    "@reflag/react-sdk": "npm:^2.0.0-next.2"
     "@reflag/tsconfig": "npm:^0.0.2"
     "@types/node": "npm:^22.12.0"
     "@types/react": "npm:^19.0.12"
@@ -6262,7 +6262,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@reflag/react-sdk@npm:^2.0.0-next.1, @reflag/react-sdk@workspace:^, @reflag/react-sdk@workspace:packages/react-sdk":
+"@reflag/react-sdk@npm:^2.0.0-next.2, @reflag/react-sdk@workspace:^, @reflag/react-sdk@workspace:packages/react-sdk":
   version: 0.0.0-use.local
   resolution: "@reflag/react-sdk@workspace:packages/react-sdk"
   dependencies:

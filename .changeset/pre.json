@@ -23,6 +23,7 @@
   },
   "changesets": [
     "browser-framework-collection-values",
+    "fix-published-workspace-dependencies",
     "node-sdk-collection-values",
     "react-native-collection-values",
     "tidy-dependency-scanning"

@@ -1,5 +1,11 @@
 # @reflag/react-sdk
 
+## 2.0.0-next.2
+
+### Patch Changes
+
+- 9654308: Replace workspace-only dependency ranges with registry-compatible versions so the published SDKs can be installed outside the monorepo. Keep local workspace linking and the existing v1 OpenFeature dependencies unchanged.
+
 ## 2.0.0-next.1
 
 ### Major Changes
