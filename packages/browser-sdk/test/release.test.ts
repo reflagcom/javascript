@@ -23,10 +23,12 @@ const bootstrapRequire = createRequire(
 describe("framework v1/v2 release isolation", () => {
   test("uses workspace v2 for React, Vue and React Native", () => {
     expect(browser.version).toMatch(/^2\.\d+\.\d+(?:-next\.\d+)?$/);
-    expect(react.dependencies["@reflag/browser-sdk"]).toBe("workspace:^");
-    expect(vue.dependencies["@reflag/browser-sdk"]).toBe("workspace:^");
+    expect(react.dependencies["@reflag/browser-sdk"]).toBe(
+      `^${browser.version}`,
+    );
+    expect(vue.dependencies["@reflag/browser-sdk"]).toBe(`^${browser.version}`);
     expect(native.version).toMatch(/^2\.\d+\.\d+(?:-next\.\d+)?$/);
-    expect(native.dependencies["@reflag/react-sdk"]).toBe("workspace:^");
+    expect(native.dependencies["@reflag/react-sdk"]).toBe(`^${react.version}`);
     expect(nativeRequire.resolve("@reflag/react-sdk")).toBe(
       resolve(__dirname, "../../react-sdk/dist/reflag-react-sdk.umd.js"),
     );

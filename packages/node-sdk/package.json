@@ -35,7 +35,7 @@
     "@aws-sdk/client-s3": "^3.888.0",
     "@googleapis/storage": "21.2.0",
     "@redis/client": "^5.11.0",
-    "@reflag/flag-evaluation": "workspace:*"
+    "@reflag/flag-evaluation": "2.0.0"
   },
   "devDependencies": {
     "@babel/core": "~7.29.6",
