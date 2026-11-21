@@ -22,6 +22,7 @@
     "@reflag/vue-sdk": "2.0.0-next.0"
   },
   "changesets": [
+    "bootstrap-public-flags-only",
     "browser-framework-collection-values",
     "fix-published-workspace-dependencies",
     "node-sdk-collection-values",

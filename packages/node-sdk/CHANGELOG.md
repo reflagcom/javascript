@@ -1,5 +1,11 @@
 # @reflag/node-sdk
 
+## 2.0.0-next.3
+
+### Patch Changes
+
+- 49355be: Keep secret flags out of browser data returned by `getFlagsForBootstrap()`, including bound clients. Server-side reads still work, including public flags that depend on secret flags. Remove dependency names from error details sent to the browser.
+
 ## 2.0.0-next.2
 
 ### Patch Changes

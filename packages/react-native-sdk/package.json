@@ -41,7 +41,7 @@
     "react-native-sse": "^1.2.1"
   },
   "devDependencies": {
-    "@reflag/node-sdk": "2.0.0-next.2",
+    "@reflag/node-sdk": "2.0.0-next.3",
     "@reflag/tsconfig": "^0.0.2",
     "@types/node": "^22.12.0",
     "@types/react": "^19.0.12",
