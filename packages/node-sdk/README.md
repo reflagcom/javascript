@@ -381,6 +381,10 @@ export const customFallbackProvider: FlagsFallbackProvider = {
 
 The `getFlagsForBootstrap()` method is useful whenever you need to pass flag data to another runtime or serialize it without wrapper functions. Server-side rendering (SSR) is a common example, but it is also useful for other bootstrapping and hydration flows.
 
+Bootstrap exports only flags explicitly marked public (`secret: false`) in the accepted definitions. Secret flags remain available to server reads, but their keys, values and remote configuration are excluded from bootstrap. Overrides for known public flags remain supported; overrides for unknown/secret keys and value-only fallbacks are excluded.
+
+Deploy the API visibility marker before upgrading this SDK, and refresh saved fallback snapshots. Older responses/snapshots without visibility still support server evaluation, but cannot authorize bootstrap exports. The bootstrap context is still included: supply only browser-safe attributes, never credentials or server-only context.
+
 ```typescript
 const client = new ReflagClient();
 await client.initialize();

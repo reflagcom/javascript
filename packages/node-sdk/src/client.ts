@@ -174,9 +174,11 @@ type BulkEvent =
 function compileFlagDefinitions(
   flags: FlagAPIResponse[],
 ): CachedFlagDefinition[] {
-  return flags.map((flagDef) => {
+  return structuredClone(flags).map((flagDef) => {
     return {
       ...flagDef,
+      // Only an explicit public marker may authorize browser bootstrap export.
+      secret: flagDef.secret !== false,
       enabledEvaluator: newEvaluator(
         flagDef.targeting.rules.map((rule) => ({
           filter: rule.filter,
@@ -204,7 +206,7 @@ function createFlagsFallbackSnapshot(
   return {
     version: 1,
     savedAt: new Date().toISOString(),
-    flags,
+    flags: structuredClone(flags),
   };
 }
 
@@ -652,6 +654,8 @@ export class ReflagClient {
     snapshot: FlagsCacheSnapshot,
     etag?: string,
   ) {
+    // Own the response before asynchronous persistence can observe caller mutation.
+    const fallbackSnapshot = createFlagsFallbackSnapshot(flags);
     // Serialize background writes so an older save cannot overwrite a newer one.
     this.flagsFallbackSavePromise = this.flagsFallbackSavePromise.then(
       async () => {
@@ -660,7 +664,7 @@ export class ReflagClient {
           if (provider) {
             await provider.save(
               this._config.flagsFallbackProviderContext,
-              createFlagsFallbackSnapshot(flags),
+              fallbackSnapshot,
             );
           }
           // Enable revalidation only after saving. A late save updates only its
@@ -1025,6 +1029,7 @@ export class ReflagClient {
     const flags = this.flagsCache.get() || [];
     return flags.map((f) => ({
       key: f.key,
+      secret: f.secret,
       description: f.description,
       flag: f.targeting,
       config: f.config,
@@ -1097,7 +1102,10 @@ export class ReflagClient {
    *
    * @remarks
    * Call `initialize` before calling this method to ensure the flag definitions are cached, no flags will be returned otherwise.
-   * This method returns RawFlag objects without wrapping them in getters, making them suitable for serialization.
+   * Only flags explicitly marked public in the accepted definitions are exported.
+   * Secret flags, unknown overrides and value-only fallbacks remain server-side.
+   * Older responses/snapshots without visibility cannot authorize client exports.
+   * The context is included; supply only browser-safe context attributes.
    **/
   public getFlagsForBootstrap({
     enableTracking = true,
@@ -1105,10 +1113,21 @@ export class ReflagClient {
   }: ContextWithTracking): BootstrappedFlags {
     const contextWithTracking = { enableTracking, ...context };
     const flagStateVersion = this.flagsCache.getFlagStateVersion();
+    const publicKeys = new Set(
+      this.flagsCache
+        .get()
+        ?.filter((flag) => flag.secret === false)
+        .map((flag) => flag.key),
+    );
+    const flags = this._getFlags(contextWithTracking);
 
     return {
       context: contextWithTracking,
-      flags: this._getFlags(contextWithTracking),
+      flags: structuredClone(
+        Object.fromEntries(
+          Object.entries(flags).filter(([key]) => publicKeys.has(key)),
+        ),
+      ),
       ...(flagStateVersion !== undefined ? { flagStateVersion } : {}),
     };
   }
