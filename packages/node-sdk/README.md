@@ -379,22 +379,13 @@ export const customFallbackProvider: FlagsFallbackProvider = {
 
 ## Bootstrapping client-side applications
 
-Use `getFlagsForBootstrap()` to pass server-evaluated flags to a browser, for example when rendering a page on the server.
-
-Only public flags and their remote config are included. Secret flags remain available on the server.
-
-Overrides for public flags are included. Overrides for secret or unknown flags, `fallbackFlags`, and values from `fallbackProviders.static()` are not.
-
-> [!WARNING]
-> When starting from an old saved snapshot without `secret` fields, server-side reads still work, but bootstrap `flags` is empty. The SDK fetches fresh definitions and updates the saved snapshot automatically when it can reach Reflag.
-
-The browser can read the context you pass in. Leave out secrets and server-only attributes.
+The `getFlagsForBootstrap()` method is useful whenever you need to pass flag data to another runtime or serialize it without wrapper functions. Server-side rendering (SSR) is a common example, but it is also useful for other bootstrapping and hydration flows.
 
 ```typescript
 const client = new ReflagClient();
 await client.initialize();
 
-// Evaluate flags with browser-safe context.
+// Get bootstrapped state with full context
 const bootstrappedState = client.getFlagsForBootstrap({
   user: {
     id: "user123",
