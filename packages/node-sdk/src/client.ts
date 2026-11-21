@@ -1088,8 +1088,7 @@ export class ReflagClient {
   }
 
   /**
-   * Gets the evaluated flags for the current context without wrapping them in getters.
-   * This method returns raw flag data suitable for bootstrapping client-side applications.
+   * Get public flag data to send to a browser.
    *
    * @param options - The options for the context.
    * @param options.enableTracking - Whether to enable tracking for the context.
@@ -1102,10 +1101,9 @@ export class ReflagClient {
    *
    * @remarks
    * Call `initialize` before calling this method to ensure the flag definitions are cached, no flags will be returned otherwise.
-   * Only flags explicitly marked public in the accepted definitions are exported.
-   * Secret flags, unknown overrides and value-only fallbacks remain server-side.
-   * Older responses/snapshots without visibility cannot authorize client exports.
-   * The context is included; supply only browser-safe context attributes.
+   * Only flags marked `secret: false` are included. Secret flags, unknown overrides
+   * and fallback values without definitions are left out. Older definitions without
+   * the `secret` field are also left out. Include only browser-safe context attributes.
    **/
   public getFlagsForBootstrap({
     enableTracking = true,

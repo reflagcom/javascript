@@ -2,6 +2,8 @@
 "@reflag/node-sdk": patch
 ---
 
-Restrict direct and bound `getFlagsForBootstrap()` to flags explicitly marked public in the accepted definitions. Secret flag keys, values and legacy remote configuration remain available for server reads, but are no longer exported to clients. Own visibility across cached definitions and saved fallback snapshots.
+Keep secret flags and their remote config out of browser data returned by `getFlagsForBootstrap()`, including bound clients. They remain available on the server. The v1 data format does not change.
 
-Deploy the API visibility marker first and refresh persisted fallback snapshots. Older responses/snapshots without visibility, value-only fallbacks, and overrides for unknown or secret keys cannot authorize client exports. Overrides for known public flags remain supported. Bootstrap still includes the supplied context; pass only browser-safe attributes. The v1 bootstrap protocol is unchanged.
+Deploy the API change that adds `secret` to flag definitions before upgrading, then refresh saved fallback snapshots. Only flags marked `secret: false` are included. Older definitions without this field, fallback values without definitions, and overrides for unknown or secret flags are left out. Overrides for known public flags still work.
+
+The browser can read the context you pass in. Leave out secrets and server-only attributes.
