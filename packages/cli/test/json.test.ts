@@ -399,6 +399,15 @@ describe("JSON utilities", () => {
       expect(JSONToType([{}], "JsonValue")).toBe("Record<string, JsonValue>");
     });
 
+    it("uses the same merge rules even when variants contain different kinds", () => {
+      expect(JSONToType([null, [], [1], "", "ready"])).toBe(
+        "null | string | (number)[]",
+      );
+      expect(JSONToType([null, { a: 1 }, { b: 2 }])).toBe(
+        "null | {\n  a?: number,\n  b?: number\n}",
+      );
+    });
+
     it("preserves already-optional properties across nested array merges", () => {
       expect(JSONToType([[{ a: 1 }, { b: 2 }], [{ a: 3, b: 4 }]])).toBe(
         "({\n  a?: number,\n  b?: number\n})[]",
@@ -416,7 +425,7 @@ describe("JSON utilities", () => {
     });
 
     it("should handle arrays with simple mixed element types", () => {
-      const expected = "(number | string | boolean)[]";
+      const expected = "(string | boolean | number)[]";
       expect(JSONToType([["a", true], [1]])).toBe(expected);
     });
 
@@ -432,7 +441,7 @@ describe("JSON utilities", () => {
     });
 
     it("should merge arrays with nested arrays of mixed element types", () => {
-      const expected = "((boolean | number | string | {\n  id: number\n})[])[]";
+      const expected = "((number | string | boolean | {\n  id: number\n})[])[]";
       expect(JSONToType([[[1, "test"], [true]], [[{ id: 1 }]]])).toBe(expected);
     });
 

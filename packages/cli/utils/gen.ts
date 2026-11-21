@@ -3,10 +3,12 @@ import { dirname, isAbsolute, join } from "node:path";
 
 import { camelCase, kebabCase, pascalCase, snakeCase } from "change-case";
 
-import type { FlagWithValues } from "../services/flags.js";
-import { JSONToType, quoteKey } from "./json.js";
+import type { TypeFormat } from "./constants.js";
+import { JSONToType, quoteKey, type JSONValue } from "./json.js";
 
-export type GenFormat = "react" | "node" | "vue";
+export type FlagForTypes =
+  | { key: string; flagType: "boolean" }
+  | { key: string; flagType: "multivariate"; values: JSONValue[] };
 
 // Keep in sync with Reflag main repo
 export const KeyFormats = [
@@ -85,18 +87,20 @@ export function genFlagKey(input: string, format: KeyFormat): string {
   return KeyFormatPatterns[format].transform(input);
 }
 
-export function genTypes(flags: FlagWithValues[], format: GenFormat = "react") {
-  const jsonValue = `import("@reflag/${format}-sdk").FlagValue`;
+export function genTypes(flags: FlagForTypes[], format: TypeFormat = "react") {
+  const moduleName = `@reflag/${format}-sdk`;
+  const jsonValue = `import("${moduleName}").FlagValue`;
   const keys = new Set<string>();
   const definitions = flags
-    .map(({ key, flagType, values }) => {
+    .map((flag) => {
+      const { key } = flag;
       if (keys.has(key))
         throw new Error(`Duplicate flag key: ${JSON.stringify(key)}`);
       keys.add(key);
       const definition =
-        flagType === "boolean"
+        flag.flagType === "boolean"
           ? "boolean"
-          : (JSONToType(values ?? [], jsonValue) ?? jsonValue);
+          : (JSONToType(flag.values, jsonValue) ?? jsonValue);
       return indentLines(`${quoteKey(key)}: ${definition};`, 4);
     })
     .join("\n");
@@ -106,9 +110,9 @@ export function genTypes(flags: FlagWithValues[], format: GenFormat = "react") {
 // Requires Reflag SDK v2. Values are inferred from current authored variants, not runtime-validated schemas.
 // eslint-disable
 // prettier-ignore
-import "@reflag/${format}-sdk";
+import "${moduleName}";
 
-declare module "@reflag/${format}-sdk" {
+declare module "${moduleName}" {
   export interface Flags {
 ${definitions}
   }

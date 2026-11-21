@@ -73,8 +73,12 @@ describe("v2 flag services", () => {
       .mockResolvedValueOnce(version(values));
     const result = await listFlagValues("app", "production");
     expect(result).toEqual([
-      enabled,
-      { ...settings, values: Object.values(values) },
+      { key: "enabled", flagType: "boolean" },
+      {
+        key: "settings",
+        flagType: "multivariate",
+        values: Object.values(values),
+      },
     ]);
     expect(request).toHaveBeenNthCalledWith(
       2,
@@ -91,7 +95,7 @@ describe("v2 flag services", () => {
       versions: [],
     });
     expect(await listFlagValues("app", "production")).toEqual([
-      { ...settings, values: [] },
+      { key: "settings", flagType: "multivariate", values: [] },
     ]);
   });
 

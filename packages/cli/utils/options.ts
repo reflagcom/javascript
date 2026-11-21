@@ -1,6 +1,6 @@
 import { Argument, Option } from "commander";
 
-import { CONFIG_FILE_NAME } from "./constants.js";
+import { CONFIG_FILE_NAME, TYPE_FORMATS } from "./constants.js";
 
 // Define supported editors directly here or import from a central place if needed elsewhere
 const SUPPORTED_EDITORS = ["cursor", "vscode"] as const; // Add more later: "claude", "cline", "windsurf"
@@ -40,7 +40,7 @@ export const typesOutOption = new Option(
 export const typesFormatOption = new Option(
   "-f, --format [format]",
   "Single output format for generated flag types",
-).choices(["react", "node", "vue"]);
+).choices(TYPE_FORMATS);
 
 export const flagNameArgument = new Argument(
   "[name]",

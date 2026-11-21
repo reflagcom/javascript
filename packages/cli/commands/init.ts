@@ -6,8 +6,8 @@ import { Command } from "commander";
 import ora, { Ora } from "ora";
 
 import { App, listApps } from "../services/bootstrap.js";
-import { configStore, typeFormats } from "../stores/config.js";
-import { DEFAULT_TYPES_OUTPUT } from "../utils/constants.js";
+import { configStore } from "../stores/config.js";
+import { DEFAULT_TYPES_OUTPUT, TYPE_FORMATS } from "../utils/constants.js";
 import { handleError } from "../utils/errors.js";
 import { overwriteOption } from "../utils/options.js";
 
@@ -67,7 +67,7 @@ export const initAction = async (args: InitArgs = {}) => {
     // Get types output format
     const typesFormat = await select({
       message: "What is the output format?",
-      choices: typeFormats.map((format) => ({
+      choices: TYPE_FORMATS.map((format) => ({
         name: format,
         value: format,
       })),

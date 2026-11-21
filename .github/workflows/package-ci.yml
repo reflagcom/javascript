@@ -37,6 +37,8 @@ jobs:
       - id: build
         name: Build the project
         run: yarn build
+      - name: Check generated CLI declarations
+        run: node packages/cli/test/generated-types.mjs
       - name: Build docs
         run: yarn docs
       - id: test

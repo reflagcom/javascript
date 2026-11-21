@@ -15,11 +15,9 @@ const require = createRequire(join(root, "package.json"));
 const ts = require("typescript");
 const { genTypes } = await import(join(root, "packages/cli/dist/utils/gen.js"));
 const fixtures = [
-  { id: "enabled", key: "enabled", name: "Enabled", flagType: "boolean" },
+  { key: "enabled", flagType: "boolean" },
   {
-    id: "settings",
     key: "settings",
-    name: "Settings",
     flagType: "multivariate",
     values: [
       {
@@ -36,48 +34,16 @@ const fixtures = [
       },
     ],
   },
+  { key: "days", flagType: "multivariate", values: [0, 3] },
+  { key: "label", flagType: "multivariate", values: ["", "Express"] },
+  { key: "methods", flagType: "multivariate", values: [[], ["standard"]] },
   {
-    id: "days",
-    key: "days",
-    name: "Days",
-    flagType: "multivariate",
-    values: [0, 3],
-  },
-  {
-    id: "label",
-    key: "label",
-    name: "Label",
-    flagType: "multivariate",
-    values: ["", "Express"],
-  },
-  {
-    id: "methods",
-    key: "methods",
-    name: "Methods",
-    flagType: "multivariate",
-    values: [[], ["standard"]],
-  },
-  {
-    id: "nullable",
     key: "nullable",
-    name: "Nullable",
     flagType: "multivariate",
     values: [null, { tokens: 128 }],
   },
-  {
-    id: "draft",
-    key: "draft",
-    name: "Draft",
-    flagType: "multivariate",
-    values: [],
-  },
-  {
-    id: "empty",
-    key: "empty",
-    name: "Empty",
-    flagType: "multivariate",
-    values: [{}],
-  },
+  { key: "draft", flagType: "multivariate", values: [] },
+  { key: "empty", flagType: "multivariate", values: [{}] },
 ];
 const paths = {};
 for (const sdk of ["node", "react", "vue", "browser"]) {

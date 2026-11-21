@@ -1,17 +1,13 @@
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
-import type { FlagWithValues } from "../services/flags.js";
-import { genTypes } from "../utils/gen.js";
+import { genTypes, type FlagForTypes } from "../utils/gen.js";
+import type { JSONValue } from "../utils/json.js";
 
-function flag(key: string, values?: FlagWithValues["values"]): FlagWithValues {
-  return {
-    id: key,
-    key,
-    name: "Same display name",
-    flagType: values === undefined ? "boolean" : "multivariate",
-    values,
-  };
+function flag(key: string, values?: JSONValue[]): FlagForTypes {
+  return values === undefined
+    ? { key, flagType: "boolean" }
+    : { key, flagType: "multivariate", values };
 }
 function properties(source: string) {
   const diagnostics =
@@ -101,14 +97,6 @@ describe("SDK v2 generation", () => {
     expect(types.get(key)).toContain("config: {");
     expect(types.get(key)).toContain("payload: string");
     expect(types.get(key)).toContain(`${JSON.stringify(key)}: number`);
-  });
-
-  it("supports duplicate display names without generated alias collisions", () => {
-    const types = properties(
-      genTypes([flag("first", [{ a: 1 }]), flag("second", [{ b: "two" }])]),
-    );
-    expect(types.get("first")).toContain("a: number");
-    expect(types.get("second")).toContain("b: string");
   });
 
   it("rejects duplicate flag keys", () => {

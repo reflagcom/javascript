@@ -6,7 +6,7 @@ you can streamline your flagging workflow directly from your terminal.
 
 ## SDK v2 generation
 
-This branch targets **Node, React, and Vue SDK v2** and requires the compatible management flag API. SDK v1 applications must keep the CLI 1.x generator; do not mix its config-wrapper declarations with v2 direct values.
+CLI v2 generates types for the **Node, React, and Vue v2 SDKs**. If you use SDK v1, stay on CLI 1.x for legacy type generation.
 
 `reflag flags types` reads Boolean flag headers and current multivariate variants in the app's production environment. Generated `Flags` entries are direct value types, not `.config.payload` wrappers. Regenerate old declarations when migrating. Formats are `node`, `react`, and `vue`; you can configure multiple outputs.
 
