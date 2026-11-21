@@ -383,7 +383,7 @@ Use `getFlagsForBootstrap()` to pass server-evaluated flags to a browser, for ex
 
 Only public flags (`secret: false`) are included. Secret flags and their remote config stay on the server. Overrides for known public flags still work. Overrides for unknown or secret flags and fallback values without definitions are left out.
 
-Deploy the API change that adds `secret` to flag definitions before upgrading this SDK, then refresh saved fallback snapshots. Older definitions without this field still work on the server, but are not included in browser data.
+After upgrading, fetch current flag definitions from Reflag to refresh saved fallback snapshots. Older definitions without this field still work on the server, but are not included in browser data.
 
 The browser can read the context you pass in. Leave out secrets and server-only attributes.
 
