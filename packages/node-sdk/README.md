@@ -381,9 +381,12 @@ export const customFallbackProvider: FlagsFallbackProvider = {
 
 Use `getFlagsForBootstrap()` to pass server-evaluated flags to a browser, for example when rendering a page on the server.
 
-Only public flags (`secret: false`) are included. Secret flags and their remote config stay on the server. Overrides for known public flags still work. Overrides for unknown or secret flags and fallback values without definitions are left out.
+Only public flags and their remote config are included. Secret flags remain available on the server.
 
-After upgrading, fetch current flag definitions from Reflag to refresh saved fallback snapshots. Older definitions without this field still work on the server, but are not included in browser data.
+Overrides for public flags are included. Overrides for secret or unknown flags, `fallbackFlags`, and values from `fallbackProviders.static()` are not.
+
+> [!WARNING]
+> When starting from an old saved snapshot without `secret` fields, server-side reads still work, but bootstrap `flags` is empty. The SDK fetches fresh definitions and updates the saved snapshot automatically when it can reach Reflag.
 
 The browser can read the context you pass in. Leave out secrets and server-only attributes.
 
@@ -391,7 +394,7 @@ The browser can read the context you pass in. Leave out secrets and server-only 
 const client = new ReflagClient();
 await client.initialize();
 
-// Get bootstrapped state with full context
+// Evaluate flags with browser-safe context.
 const bootstrappedState = client.getFlagsForBootstrap({
   user: {
     id: "user123",
