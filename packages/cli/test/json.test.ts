@@ -26,7 +26,7 @@ describe("JSON utilities", () => {
 
       expect(toTypeAST([])).toEqual({
         kind: "array",
-        elementType: { kind: "primitive", type: "any" },
+        elementType: { kind: "primitive", type: "never" },
       });
     });
 
@@ -132,7 +132,7 @@ describe("JSON utilities", () => {
 
   describe("mergeTypeASTs", () => {
     it("should handle empty array", () => {
-      expect(mergeTypeASTs([])).toEqual({ kind: "primitive", type: "any" });
+      expect(mergeTypeASTs([])).toEqual({ kind: "primitive", type: "never" });
     });
 
     it("should return the same AST for single item arrays", () => {
@@ -298,7 +298,9 @@ describe("JSON utilities", () => {
     });
 
     it("should stringify empty objects", () => {
-      expect(stringifyTypeAST({ kind: "object", properties: [] })).toBe("{}");
+      expect(stringifyTypeAST({ kind: "object", properties: [] })).toBe(
+        "Record<string, unknown>",
+      );
     });
 
     it("should quote object keys with special characters", () => {
@@ -390,6 +392,19 @@ describe("JSON utilities", () => {
   });
 
   describe("JSONToType", () => {
+    it("does not let empty arrays erase known element types", () => {
+      expect(JSONToType([[], ["standard"]])).toBe("(string)[]");
+      expect(JSONToType([[[]], [[1]]])).toBe("((number)[])[]");
+      expect(JSONToType([[]], "JsonValue")).toBe("(JsonValue)[]");
+      expect(JSONToType([{}], "JsonValue")).toBe("Record<string, JsonValue>");
+    });
+
+    it("preserves already-optional properties across nested array merges", () => {
+      expect(JSONToType([[{ a: 1 }, { b: 2 }], [{ a: 3, b: 4 }]])).toBe(
+        "({\n  a?: number,\n  b?: number\n})[]",
+      );
+    });
+
     it("should handle empty arrays", () => {
       expect(JSONToType([])).toBeNull();
     });
@@ -462,6 +477,9 @@ describe("JSON utilities", () => {
       expect(quoteKey("my.key")).toBe('"my.key"');
       expect(quoteKey("123key")).toBe('"123key"');
       expect(quoteKey("key")).toBe("key");
+      expect(quoteKey("")).toBe('""');
+      expect(quoteKey('a"b\\c\n')).toBe(JSON.stringify('a"b\\c\n'));
+      expect(quoteKey("$key")).toBe("$key");
     });
   });
 });

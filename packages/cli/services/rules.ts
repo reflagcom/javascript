@@ -1,8 +1,8 @@
 export function getCursorRules() {
   return `
 ---
-description: Guidelines for implementing flagging using Reflag feature management service
-globs: "**/*.ts, **/*.tsx, **/*.js, **/*.jsx"
+description: Guidelines for Reflag SDK v2 direct-value flags
+globs: "**/*.ts, **/*.tsx, **/*.js, **/*.jsx, **/*.vue"
 ---
 
 ${rules}
@@ -14,289 +14,78 @@ export function getCopilotInstructions() {
 }
 
 const rules = /* markdown */ `
-# Reflag Flag Management Service for LLMs
+# Reflag SDK v2
 
-Reflag is a comprehensive feature management service offering flags, user feedback collection, adoption tracking, and remote configuration for your applications across various JavaScript frameworks, particularly React, Next.js, Node.js, vanilla browser, CLI, and OpenFeature environments. Follow these best practices for flagging.
+These instructions apply to Node, Browser, React, and Vue SDK v2. Native and OpenFeature integrations may still use SDK v1; do not mix their declarations or bootstrap formats with v2.
 
-## Follow Official Documentation
+## Direct-value reads
 
-- Refer to [Reflag's official documentation](mdc:https:/docs.reflag.com) for implementation details.
-- Adhere to Reflag's recommended patterns for each framework.
+- Singular reads return the selected JSON value, not a flag wrapper. Do not use flag .isEnabled, .config.payload, .value, .track(), or feedback methods. Vue's .value is the normal ref API, not a flag wrapper.
+- A read without a default requests Boolean with implicit false, even when generated types register a JSON flag. Generated types do not change runtime read categories.
+- For other values, pass a JSON default immediately after the key. It selects the top-level category and supplies missing/mismatched-value fallback behavior.
+- Non-null defaults must match the registered value schema, if types are generated. Without registration, return types are inferred from the default. Literal values widen, and readonly defaults produce mutable results.
+- Explicit null requests arbitrary JSON and returns FlagValue; narrow or validate it before using object properties. It is not a request for a null-only value.
+- Preserve authored false, zero, empty strings, empty arrays, and null. Do not substitute defaults with truthiness checks.
+- Defaults must be ordinary JSON: no functions, Dates, undefined, or cycles. Objects and arrays returned by the SDK are independent mutable copies.
+- Runtime category checks are not nested schema validation. Generated declarations are a snapshot inferred from authored variants; regenerate when flags change and validate externally when stronger runtime guarantees are needed.
 
-## Reflag SDK Usage
+## Generated declarations
 
-- Configure \`ReflagProvider\` or \`ReflagClient\` properly at application entry points.
-- Leverage Reflag CLI for generating type-safe feature definitions.
-- Write clean, type-safe code when applying Reflag flags.
-- Follow established patterns in the project.
+Use reflag flags types after configuring the project. This CLI targets SDK v2 and loads the current production-environment variants through the management flag API. It does not generate legacy remote-config wrappers.
 
-## Flag Implementation
-
-- Create reusable hooks and utilities for consistent feature management.
-- Write clear comments for usage and checks of a flag.
-- Properly handle feature loading states to prevent UI flashing.
-- Implement proper error fallbacks when flag services are unavailable.
-
-## Flag Targeting
-
-- Use release stages to manage feature rollout (for example, development, staging, production).
-- Use targeting modes effectively:
-  - \`none\`: Flag is disabled for all targets.
-  - \`some\`: Flag is enabled only for specified targets.
-  - \`everyone\`: Flag is enabled for all targets.
-- Target features to specific users, companies, or segments.
-
-## Analytics and Feedback
-
-- Track feature usage with Reflag analytics.
-- Collect user feedback on features.
-- Monitor feature adoption and health.
-
-## Common Concepts
-
-### Targeting Rules
-
-Targeting rules are entities used in Reflag to describe the target audience of a given feature. The target audience refers to the users who can interact with the feature within your application. Additionally, each targeting rule contains a value that is used for the target audience.
-
-### Flag Stages
-
-Release stages in Reflag allow setting up app-wide feature access targeting rules. Each release stage defines targeting rules for each available environment. Later, during the development of new features, you can apply all those rules automatically by selecting an available release stage.
-
-Release stages are useful tools when a standard release workflow is used in your organization.
-
-Predefined stages:
-
-- In development
-- Internal
-- Beta
-- General Availability
-
-### Segments
-
-A segment entity in Reflag is a dynamic collection of companies. Segments' dynamic nature results from the fact that they use filters to evaluate which companies are included in them.
-
-#### Segment filters can be constructed using any combination of the following rules:
-
-- company attributes
-- user feature access
-- feature metrics
-- other segments
-
-### Integrations
-
-Connect Reflag with your existing tools:
-
-- Linear
-- Datadog
-- Segment
-- PostHog
-- Amplitude
-- Mixpanel
-- AWS S3
-- Slack
-
-## React SDK Implementation
-
-### Installation
-
-\`\`\`bash
-npm i @reflag/react-sdk
-\`\`\`
-
-### Key Features
-
-- Flag toggling with fine-grained targeting
-- User feedback collection
-- Flag usage tracking
-- Remote configuration
-- Type-safe feature management
-
-### Basic Setup
-
-1. Add the \`ReflagProvider\` to wrap your application:
-
-\`\`\`jsx
-import { ReflagProvider } from "@reflag/react-sdk";
-
-<ReflagProvider
-  publishableKey="{YOUR_PUBLISHABLE_KEY}"
-  company={{ id: "acme_inc", plan: "pro" }}
-  user={{ id: "john_doe" }}
->
-  <YourApp />
-</ReflagProvider>;
-\`\`\`
-
-1. Create a feature and generate type-safe definitions:
-
-\`\`\`bash
-npm i --save-dev @reflag/cli
-npx reflag new "Flag name"
-\`\`\`
+Example generated shape:
 
 \`\`\`typescript
-// DO NOT EDIT THIS FILE. IT IS GENERATED BY THE BUCKET CLI AND WILL BE OVERWRITTEN.
-// eslint-disable
-// prettier-ignore
 import "@reflag/react-sdk";
-
 declare module "@reflag/react-sdk" {
-  export interface Flags {
-    "flag-key": {
-      config: {
-        payload: {
-          tokens: number;
-        };
-      };
-    };
+  interface Flags {
+    huddles: boolean;
+    "huddle-settings": { tokens: number; model: string };
   }
 }
 \`\`\`
 
-1. Use features in your components:
+## React
 
-\`\`\`jsx
+Configure ReflagProvider with the publishable key and appropriate user/company context. Never expose a secret key in browser code.
+
+\`\`\`tsx
 import { useFlag } from "@reflag/react-sdk";
 
-function StartHuddleButton() {
-  const {
-    isLoading, // true while features are being loaded
-    isEnabled, // boolean indicating if the feature is enabled
-    config: {
-      // feature configuration
-      key, // string identifier for the config variant
-      payload, // type-safe configuration object
-    },
-    track, // function to track feature usage
-    requestFeedback, // function to request feedback for this feature
-  } = useFlag("huddle");
-
-  if (isLoading) {
-    return <Loading />;
-  }
-
-  if (!isEnabled) {
-    return null;
-  }
-
-  return (
-    <>
-      <button onClick={track}>Start huddle!</button>
-      <button
-        onClick={(e) =>
-          requestFeedback({
-            title: payload?.question ?? "How do you like the Huddles feature?",
-            position: {
-              type: "POPOVER",
-              anchor: e.currentTarget as HTMLElement,
-            },
-          })
-        }
-      >
-        Give feedback!
-      </button>
-    </>
-  );
+function HuddleButton() {
+  const enabled = useFlag("huddles");
+  const settings = useFlag("huddle-settings", { tokens: 128, model: "quick" });
+  if (!enabled) return null;
+  return <button>{settings.model}: {settings.tokens} tokens</button>;
 }
 \`\`\`
 
-### Core React Hooks
+useFlag is non-suspending. Use useFlagSuspense explicitly inside a React Suspense boundary when initialization must complete before reading. Use separate useTrack and feedback hooks rather than methods on flag results.
 
-- \`useFlag()\` - Access feature status, config, and tracking
-- \`useTrack()\` - Send custom events to Reflag
-- \`useRequestFeedback()\` - Open feedback dialog for a feature
-- \`useSendFeedback()\` - Programmatically send feedback
-- \`useUpdateUser()\` / \`useUpdateCompany()\` - Update user/company data
-- \`useUpdateOtherContext()\` - Update session-only context data
-- \`useClient()\` - Access the underlying Reflag client
+## Node
 
-## Node.js SDK Implementation
+Initialize the client, then supply context directly or bind a context-specific client. Defaults are the third argument to an unbound getFlag and the second argument to bound or remote getters.
 
-### Installation
-
-\`\`\`bash
-npm i @reflag/node-sdk
-\`\`\`
-
-### Key Features
-
-- Server-side flag evaluation
-- User and company context management
-- Flexible integration options
-- Event tracking
-
-### Basic Setup
-
-\`\`\`javascript
+\`\`\`typescript
 import { ReflagClient } from "@reflag/node-sdk";
 
-const client = new ReflagClient({
-  secretKey: process.env.REFLAG_SECRET_KEY,
-});
-
-// Check if a feature is enabled
-const isEnabled = await client.isEnabled("flag-key", {
-  user: { id: "user_123", role: "admin" },
-  company: { id: "company_456", plan: "enterprise" },
-});
+const client = new ReflagClient({ secretKey: process.env.REFLAG_SECRET_KEY! });
+await client.initialize();
+const context = { user: { id: "user_123" }, company: { id: "company_456" } };
+const enabled = client.getFlag(context, "huddles");
+const bound = client.bindClient(context);
+const settings = bound.getFlag("huddle-settings", { tokens: 128, model: "quick" });
 \`\`\`
 
-### Context Management
+Use getFlagRemote for explicit remote evaluation. getFlags returns a record of values that may be undefined; reading a complete record is not a replacement for choosing a singular read's category/default.
 
-\`\`\`javascript
-// Set user and company context
-await client.setContext({
-  user: {
-    id: "user_123",
-    email: "user@example.com",
-    role: "admin",
-  },
-  company: {
-    id: "company_456",
-    name: "Acme Inc",
-    plan: "enterprise",
-  },
-});
+## Vue and Browser
 
-// Check feature after setting context
-const isEnabled = await client.isEnabled("flag-key");
-\`\`\`
+Vue useFlag has the same default rules and returns a ref; access settings.value.model for an object-valued ref. Browser client.getFlag(key, defaultValue) returns a direct value, not a ref or wrapper.
 
-### Flag Configuration
+## Further resources
 
-\`\`\`javascript
-// Get feature configuration
-const config = await client.getConfig("flag-key", {
-  user: { id: "user_123" },
-  company: { id: "company_456" },
-});
-
-// Use the configuration
-console.log(config.payload.maxDuration);
-\`\`\`
-
-### Event Tracking
-
-\`\`\`javascript
-// Track feature usage
-await client.track("flag-key", {
-  user: { id: "user_123" },
-  company: { id: "company_456" },
-  metadata: { action: "completed" },
-});
-
-// Track custom events
-await client.trackEvent("custom-event", {
-  user: { id: "user_123" },
-  company: { id: "company_456" },
-  metadata: { value: 42 },
-});
-\`\`\`
-
-## Further Resources
-
-- [Official Documentation](mdc:https:/docs.reflag.com)
-- [Docs llms.txt](mdc:https:/docs.reflag.com/llms.txt)
-- [GitHub Repository](mdc:https:/github.com/reflagcom/javascript)
-- [Example React App](mdc:https:/github.com/reflagcom/javascript/tree/main/packages/react-sdk/dev)
+- [Documentation](https://docs.reflag.com)
+- [Repository](https://github.com/reflagcom/javascript)
+- Prefer the installed package README and declarations for the exact SDK version in use.
 `.trim();
