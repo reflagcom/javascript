@@ -40,7 +40,7 @@ export const typesOutOption = new Option(
 export const typesFormatOption = new Option(
   "-f, --format [format]",
   "Single output format for generated flag types",
-).choices(["react", "node"]);
+).choices(["react", "node", "vue"]);
 
 export const flagNameArgument = new Argument(
   "[name]",

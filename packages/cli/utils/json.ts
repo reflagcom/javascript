@@ -25,7 +25,7 @@ export function toTypeAST(value: JSONPrimitive, path: string[] = []): TypeAST {
     if (value.length === 0) {
       return {
         kind: "array",
-        elementType: { kind: "primitive", type: "any" },
+        elementType: { kind: "primitive", type: "never" },
       };
     }
 
@@ -55,8 +55,12 @@ export function toTypeAST(value: JSONPrimitive, path: string[] = []): TypeAST {
 }
 
 // Merge multiple TypeASTs into one
-export function mergeTypeASTs(types: TypeAST[]): TypeAST {
-  if (types.length === 0) return { kind: "primitive", type: "any" };
+export function mergeTypeASTs(input: TypeAST[]): TypeAST {
+  // Empty arrays provide no element evidence; they must not erase known element types.
+  const types = input.filter(
+    (type) => !(type.kind === "primitive" && type.type === "never"),
+  );
+  if (types.length === 0) return { kind: "primitive", type: "never" };
   if (types.length === 1) return types[0];
 
   // Group ASTs by kind
@@ -150,9 +154,12 @@ export function mergeTypeASTs(types: TypeAST[]): TypeAST {
       return {
         key,
         type: mergeTypeASTs(props.map((p) => p.type)),
-        optional: byKind.object.some(
-          (obj) => !obj.properties.some((p) => p.key === key),
-        ),
+        optional: byKind.object.some((obj) => {
+          const property = obj.properties.find(
+            (candidate) => candidate.key === key,
+          );
+          return !property || property.optional;
+        }),
       };
     });
 
@@ -160,50 +167,64 @@ export function mergeTypeASTs(types: TypeAST[]): TypeAST {
   }
 
   // Fallback
-  return { kind: "primitive", type: "any" };
+  return { kind: "primitive", type: "unknown" };
 }
 
 // Stringify TypeAST to TypeScript type declaration
-export function stringifyTypeAST(ast: TypeAST, nestLevel = 0): string {
+export function stringifyTypeAST(
+  ast: TypeAST,
+  nestLevel = 0,
+  unknownType = "unknown",
+): string {
   const indent = " ".repeat(nestLevel * 2);
   const nextIndent = " ".repeat((nestLevel + 1) * 2);
 
   switch (ast.kind) {
     case "primitive":
-      return ast.type;
+      return ast.type === "never" || ast.type === "unknown"
+        ? unknownType
+        : ast.type;
 
     case "array":
-      return `(${stringifyTypeAST(ast.elementType, nestLevel)})[]`;
+      return `(${stringifyTypeAST(ast.elementType, nestLevel, unknownType)})[]`;
 
     case "object":
-      if (ast.properties.length === 0) return "{}";
+      if (ast.properties.length === 0) return `Record<string, ${unknownType}>`;
 
       return `{\n${ast.properties
         .map(({ key, optional, type }) => {
           return `${nextIndent}${quoteKey(key)}${optional ? "?" : ""}: ${stringifyTypeAST(
             type,
             nestLevel + 1,
+            unknownType,
           )}`;
         })
         .join(",\n")}\n${indent}}`;
 
     case "union":
-      if (ast.types.length === 0) return "any";
+      if (ast.types.length === 0) return unknownType;
       if (ast.types.length === 1)
-        return stringifyTypeAST(ast.types[0], nestLevel);
+        return stringifyTypeAST(ast.types[0], nestLevel, unknownType);
       return ast.types
-        .map((type) => stringifyTypeAST(type, nestLevel))
+        .map((type) => stringifyTypeAST(type, nestLevel, unknownType))
         .join(" | ");
   }
 }
 
 export function quoteKey(key: string): string {
-  return /[^a-zA-Z0-9_]/.test(key) || /^[0-9]/.test(key) ? `"${key}"` : key;
+  return /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(key) ? key : JSON.stringify(key);
 }
 
 // Convert JSON array to TypeScript type
-export function JSONToType(json: JSONPrimitive[]): string | null {
+export function JSONToType(
+  json: JSONPrimitive[],
+  unknownType = "unknown",
+): string | null {
   if (!json.length) return null;
 
-  return stringifyTypeAST(mergeTypeASTs(json.map((item) => toTypeAST(item))));
+  return stringifyTypeAST(
+    mergeTypeASTs(json.map((item) => toTypeAST(item))),
+    0,
+    unknownType,
+  );
 }

@@ -4,6 +4,14 @@ Command-line interface for interacting with Reflag services. The CLI allows you 
 flags, authentication, and generate TypeScript types for your Reflag flags. With this tool,
 you can streamline your flagging workflow directly from your terminal.
 
+## SDK v2 generation
+
+This branch targets **Node, React, and Vue SDK v2** and requires the compatible management flag API. SDK v1 applications must keep the CLI 1.x generator; do not mix its config-wrapper declarations with v2 direct values.
+
+`reflag flags types` reads Boolean flag headers and current multivariate variants in the app's production environment. Generated `Flags` entries are direct value types, not `.config.payload` wrappers. Regenerate old declarations when migrating. Formats are `node`, `react`, and `vue`; you can configure multiple outputs.
+
+Registered non-null defaults are checked against the generated value type, including required and nested fields. Singular return types still widen from the supplied default. Bare/`undefined` reads remain Boolean; explicit `null` requests arbitrary JSON. Generated schemas reflect current authored variants and do not add nested runtime validation; regenerate when values change. Unconfigured multivariate flags and empty shapes retain JSON-capable types rather than silently becoming Boolean or `any`.
+
 ## Installation
 
 Install the CLI as a development dependency in your project:
@@ -77,13 +85,13 @@ Here are all the configuration options available in the `reflag.config.json` fil
 }
 ```
 
-| Option        | Description                                                                                                                                                          | Default                                            |
-| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| `$schema`     | Autocompletion for the config. `latest` can be replaced with a specific version.                                                                                     | "https://unpkg.com/@reflag/cli@latest/schema.json" |
-| `baseUrl`     | Base URL for Reflag services.                                                                                                                                        | "https://app.reflag.com"                           |
-| `apiUrl`      | API URL for Reflag services (overrides baseUrl for API calls).                                                                                                       | "https://app.reflag.com/api"                       |
-| `appId`       | Your Reflag application ID.                                                                                                                                          | Required                                           |
-| `typesOutput` | Path(s) where TypeScript types will be generated. Can be a string or an array of objects with `path` and `format` properties. Available formats: `react` and `node`. | "gen/flags.ts" with format "react"                 |
+| Option        | Description                                                                                                                                                                  | Default                                            |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| `$schema`     | Autocompletion for the config. `latest` can be replaced with a specific version.                                                                                             | "https://unpkg.com/@reflag/cli@latest/schema.json" |
+| `baseUrl`     | Base URL for Reflag services.                                                                                                                                                | "https://app.reflag.com"                           |
+| `apiUrl`      | API URL for Reflag services (overrides baseUrl for API calls).                                                                                                               | "https://app.reflag.com/api"                       |
+| `appId`       | Your Reflag application ID.                                                                                                                                                  | Required                                           |
+| `typesOutput` | Path(s) where TypeScript types will be generated. Can be a string or an array of objects with `path` and `format` properties. Available formats: `react`, `node`, and `vue`. | "gen/flags.ts" with format "react"                 |
 
 You can override these settings using command-line options for individual commands.
 
@@ -117,7 +125,7 @@ Options:
 - `--app-id`: App ID to use.
 - `--key-format`: Format for flag keys (custom, snake, camel, etc.).
 - `--out`: Path to generate TypeScript types.
-- `--format`: Format of the generated types (react or node).
+- `--format`: Format of the generated types (react, node, or vue).
 
 If you prefer more control over each step, you can use the individual commands (`init`, `flags create`, `flags types`) instead.
 
@@ -179,7 +187,7 @@ Options:
 
 - `--app-id`: App ID to use.
 - `--out`: Path to generate TypeScript types.
-- `--format`: Format of the generated types (react or node).
+- `--format`: Format of the generated types (react, node, or vue).
 
 ### `reflag apps`
 
@@ -283,6 +291,9 @@ Example CI workflow:
 ```bash
 # Build the CLI
 yarn build
+
+# Test generated declarations against the built Node, React, and Vue SDKs
+yarn test:generated-types
 
 # Run the CLI locally
 yarn reflag [command]

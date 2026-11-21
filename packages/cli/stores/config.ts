@@ -22,7 +22,7 @@ import { ConfigValidationError, handleError } from "../utils/errors.js";
 import { stripTrailingSlash } from "../utils/urls.js";
 import { current as currentVersion } from "../utils/version.js";
 
-export const typeFormats = ["react", "node"] as const;
+export const typeFormats = ["react", "node", "vue"] as const;
 export type TypeFormat = (typeof typeFormats)[number];
 
 export type TypesOutput = {
