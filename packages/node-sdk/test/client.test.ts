@@ -150,6 +150,7 @@ const flagDefinitions: FlagsAPIResponse = {
   features: [
     {
       key: "flag1",
+      secret: false,
       description: "Flag 1",
       targeting: {
         version: 1,
@@ -182,6 +183,7 @@ const flagDefinitions: FlagsAPIResponse = {
     },
     {
       key: "flag2",
+      secret: false,
       description: "Flag 2",
       targeting: {
         version: 2,
@@ -3082,7 +3084,7 @@ describe("ReflagClient", () => {
       expect(flags.flags.flag2).not.toHaveProperty("track");
     });
 
-    it("should return fallback flags when client is not initialized", async () => {
+    it("should exclude value-only fallback flags when client is not initialized", async () => {
       const flags = client.getFlagsForBootstrap({
         company,
         user,
@@ -3090,7 +3092,7 @@ describe("ReflagClient", () => {
         enableTracking: true,
       });
 
-      // Should return the fallback flags defined in validOptions
+      // Value-only fallbacks do not establish public visibility.
       expect(flags).toStrictEqual({
         context: {
           company,
@@ -3098,12 +3100,7 @@ describe("ReflagClient", () => {
           other: otherContext,
           enableTracking: true,
         },
-        flags: {
-          key: {
-            isEnabled: true,
-            key: "key",
-          },
-        },
+        flags: {},
       });
     });
 
@@ -3204,7 +3201,7 @@ describe("ReflagClient", () => {
       });
     });
 
-    it("should use fallback flags when provided and no definitions available", async () => {
+    it("should exclude configured fallbacks when no definitions establish visibility", async () => {
       const fallbackTestFlags = {
         fallbackFlag: {
           key: "fallbackFlag",
@@ -3233,7 +3230,7 @@ describe("ReflagClient", () => {
           other: otherContext,
           enableTracking: true,
         },
-        flags: fallbackTestFlags,
+        flags: {},
       });
     });
   });
