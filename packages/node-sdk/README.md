@@ -184,9 +184,12 @@ const bootstrap = reflag.getFlagsForBootstrap(context);
 //   flagStateVersion }
 ```
 
-`getFlagsForBootstrap()` includes only public flags (`secret: false`). Secret flags stay on the server, where they can still be read or used by public flags. Error details sent to the browser omit dependency names. Creating bootstrap data does **not** record flag checks.
+`getFlagsForBootstrap()` includes only public flags. Secret flags can still be read on the server and used by public flags, but are not sent to the browser. Error details omit dependency names. Creating bootstrap data does **not** record flag checks.
 
-After upgrading, fetch current flag definitions from Reflag to refresh saved fallback snapshots. Older definitions without this field still work on the server, but are not included in browser data. Fallback values without definitions and overrides for unknown or secret flags are also left out. Overrides for known public flags still work.
+Overrides for public flags are included. Overrides for secret or unknown flags, `fallbackFlags`, and values from `fallbackProviders.static()` are not.
+
+> [!WARNING]
+> When starting from an old saved snapshot without `secret` fields, server-side reads still work, but bootstrap `flags` is empty. The SDK fetches fresh definitions and updates the saved snapshot automatically when it can reach Reflag.
 
 The browser can read the context you pass in. Leave out secrets and server-only attributes.
 
