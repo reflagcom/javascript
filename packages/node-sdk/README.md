@@ -184,7 +184,11 @@ const bootstrap = reflag.getFlagsForBootstrap(context);
 //   flagStateVersion }
 ```
 
-Bootstrap uses batch evaluation and preserves selection metadata and raw context. It does **not** register browser checks. Local overrides/value-only fallbacks carry their values without fabricated authored-selection metadata.
+Bootstrap exports only flags explicitly marked public (`secret: false`) in the accepted definitions. Secret flags remain available to server reads and dependency evaluation, but their results and diagnostic source identifiers are not exported. Public selections retain their selection metadata. Bootstrap does **not** register browser checks.
+
+Deploy the API visibility marker before upgrading this SDK, and refresh persisted fallback snapshots. Older responses/snapshots without visibility still support server evaluation, but cannot authorize bootstrap exports. Value-only fallbacks and overrides for unknown or secret keys are excluded; overrides for known public flags remain exportable without fabricated authored-selection metadata.
+
+The context is still included in bootstrap data. Pass only browser-safe context attributes; do not embed credentials or server-only attributes.
 
 **This is a v2 bootstrap contract, not the existing v1 Browser/React/Vue bootstrap shape.** Those consumers require a coordinated migration before accepting this state. Likewise, the current OpenFeature provider deliberately remains on published Node SDK v1 until its separate migration.
 

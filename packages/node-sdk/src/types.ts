@@ -76,8 +76,12 @@ export type FlagOverrides = Partial<
 >;
 export type FlagOverridesFn = (context: Context) => FlagOverrides;
 
-export type FlagDefinition = CompiledFlag<FlagValue>;
-export type FlagCollection = CompiledCollection<FlagValue> & {
+export type FlagDefinition = CompiledFlag<FlagValue> & {
+  /** Only explicit false authorizes export to a browser bootstrap payload. */
+  secret?: boolean;
+};
+export type FlagCollection = {
+  flags: FlagDefinition[];
   segments: NonNullable<CompiledCollection["segments"]>;
 };
 export type FlagsAPIResponse = FlagCollection & {

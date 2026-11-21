@@ -507,19 +507,43 @@ export class ReflagClient {
       ]),
     ) as TypedFlags;
   }
-  /** Serialization is not a read by the browser; it must not emit check events. */
+  /**
+   * Export only explicitly public flags, without registering checks.
+   * Secret dependencies still participate in server evaluation, but their results
+   * and diagnostic source identifiers are not exported. Definitions without
+   * visibility (including value-only fallbacks/unknown overrides) are excluded.
+   * Context is included unchanged; pass only browser-safe context attributes.
+   */
   public getFlagsForBootstrap(options: ContextWithTracking): BootstrappedFlags {
-    const { flags, flagStateVersion } = this.evaluate(
+    const { flags, flagStateVersion, collection } = this.evaluate(
       options,
       undefined,
       false,
+    );
+    const publicKeys = new Set(
+      collection?.flags
+        .filter((flag) => flag.secret === false)
+        .map((flag) => flag.key),
+    );
+    const publicFlags = Object.fromEntries(
+      Object.entries(flags)
+        .filter(([key]) => publicKeys.has(key))
+        .map(([key, result]) => [
+          key,
+          {
+            ...result,
+            // Match publishable-key HTTP evaluation: dependency origins can name
+            // private flags or segments, even when the requested root is public.
+            errors: result.errors.map(({ source: _source, ...error }) => error),
+          },
+        ]),
     );
     return {
       protocolVersion: 2,
       context: JSON.parse(
         canonicalJSONStringify(contextOnly(options)),
       ) as Context,
-      flags: structuredClone(flags),
+      flags: structuredClone(publicFlags),
       ...(flagStateVersion === undefined ? {} : { flagStateVersion }),
     };
   }
@@ -580,6 +604,7 @@ export class ReflagClient {
     return {
       flags,
       flagStateVersion,
+      collection,
       evaluatedBeforeInitialization: !this.initialized,
     };
   }
