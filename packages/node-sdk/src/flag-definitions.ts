@@ -187,11 +187,14 @@ export function prepareFlagCollection(
       ({
         key,
         sourceVersionId,
+        secret,
         variants,
         rules,
       }: FlagCollection["flags"][number]) => ({
         key,
         sourceVersionId,
+        // Older responses/snapshots and malformed visibility cannot authorize export.
+        secret: secret !== false,
         variants,
         rules,
       }),

@@ -322,6 +322,7 @@ describe("React Native v2", () => {
               flags: Object.entries(values).map(([key, value]) => ({
                 key,
                 sourceVersionId: `source:${key}`,
+                secret: false,
                 variants: { chosen: value },
                 rules: [
                   {

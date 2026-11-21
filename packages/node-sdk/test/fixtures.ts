@@ -13,6 +13,7 @@ export function definition(
   return {
     key,
     sourceVersionId: `version:${key}`,
+    secret: false,
     variants: { [variantKey]: value },
     rules: [
       {
