@@ -184,14 +184,7 @@ const bootstrap = reflag.getFlagsForBootstrap(context);
 //   flagStateVersion }
 ```
 
-`getFlagsForBootstrap()` includes only public flags. Secret flags can still be read on the server and used by public flags, but are not sent to the browser. Error details omit dependency names. Creating bootstrap data does **not** record flag checks.
-
-Overrides for public flags are included. Overrides for secret or unknown flags, `fallbackFlags`, and values from `fallbackProviders.static()` are not.
-
-> [!WARNING]
-> When starting from an old saved snapshot without `secret` fields, server-side reads still work, but bootstrap `flags` is empty. The SDK fetches fresh definitions and updates the saved snapshot automatically when it can reach Reflag.
-
-The browser can read the context you pass in. Leave out secrets and server-only attributes.
+Bootstrap uses batch evaluation and preserves selection metadata and raw context. It does **not** register browser checks. Local overrides/value-only fallbacks carry their values without fabricated authored-selection metadata.
 
 **This is a v2 bootstrap contract, not the existing v1 Browser/React/Vue bootstrap shape.** Those consumers require a coordinated migration before accepting this state. Likewise, the current OpenFeature provider deliberately remains on published Node SDK v1 until its separate migration.
 
