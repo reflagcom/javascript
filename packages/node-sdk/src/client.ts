@@ -508,11 +508,10 @@ export class ReflagClient {
     ) as TypedFlags;
   }
   /**
-   * Export only explicitly public flags, without registering checks.
-   * Secret dependencies still participate in server evaluation, but their results
-   * and diagnostic source identifiers are not exported. Definitions without
-   * visibility (including value-only fallbacks/unknown overrides) are excluded.
-   * Context is included unchanged; pass only browser-safe context attributes.
+   * Get public flag data for a browser without recording flag checks.
+   * Secret flags can still be read on the server and used by public flags.
+   * Flags without `secret: false` are left out. Dependency names are removed
+   * from error details. Include only browser-safe attributes in the context.
    */
   public getFlagsForBootstrap(options: ContextWithTracking): BootstrappedFlags {
     const { flags, flagStateVersion, collection } = this.evaluate(

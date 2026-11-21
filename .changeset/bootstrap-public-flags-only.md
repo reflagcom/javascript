@@ -2,6 +2,8 @@
 "@reflag/node-sdk": patch
 ---
 
-Restrict `getFlagsForBootstrap()` (including bound clients) to flags explicitly marked public in the accepted definitions. Keep secret flags available for server evaluation and public-flag dependencies, but exclude their results and diagnostic source identifiers from bootstrap.
+Keep secret flags out of browser data returned by `getFlagsForBootstrap()`, including bound clients. Server-side reads still work, including public flags that depend on secret flags. Remove dependency names from error details sent to the browser.
 
-Deploy the API visibility marker before upgrading the SDK and refresh saved fallback snapshots. Definitions without explicit public visibility, including older responses/snapshots, value-only fallbacks, and overrides for unknown keys, no longer authorize client exports. Overrides for known public flags remain supported. Bootstrap still includes the supplied context; pass only browser-safe attributes.
+Deploy the API change that adds `secret` to flag definitions before upgrading, then refresh saved fallback snapshots. Only flags marked `secret: false` are included. Older definitions without this field, fallback values without definitions, and overrides for unknown or secret flags are left out. Overrides for known public flags still work.
+
+The browser can read the context you pass in. Leave out secrets and server-only attributes.
