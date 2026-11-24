@@ -27,6 +27,7 @@
     "fix-published-workspace-dependencies",
     "node-sdk-collection-values",
     "react-native-collection-values",
+    "registered-defaults-cli-v2",
     "tidy-dependency-scanning"
   ]
 }

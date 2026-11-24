@@ -1,6 +1,6 @@
 {
   "name": "@reflag/cli",
-  "version": "1.0.5-next.0",
+  "version": "2.0.0-next.1",
   "description": "CLI for Reflag service",
   "homepage": "https://docs.reflag.com/",
   "license": "MIT",
