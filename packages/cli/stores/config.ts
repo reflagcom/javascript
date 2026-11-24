@@ -17,13 +17,11 @@ import {
   DEFAULT_TYPES_OUTPUT,
   MODULE_ROOT,
   SCHEMA_URL,
+  type TypeFormat,
 } from "../utils/constants.js";
 import { ConfigValidationError, handleError } from "../utils/errors.js";
 import { stripTrailingSlash } from "../utils/urls.js";
 import { current as currentVersion } from "../utils/version.js";
-
-export const typeFormats = ["react", "node"] as const;
-export type TypeFormat = (typeof typeFormats)[number];
 
 export type TypesOutput = {
   path: string;

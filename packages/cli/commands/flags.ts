@@ -6,7 +6,7 @@ import { Command } from "commander";
 import ora, { Ora } from "ora";
 
 import { App, getApp, getOrg } from "../services/bootstrap.js";
-import { createFlag, Flag, listFlags } from "../services/flags.js";
+import { createFlag, listFlags, listFlagValues } from "../services/flags.js";
 import { configStore } from "../stores/config.js";
 import {
   handleError,
@@ -14,6 +14,7 @@ import {
   MissingEnvIdError,
 } from "../utils/errors.js";
 import {
+  type FlagForTypes,
   genFlagKey,
   genTypes,
   indentLines,
@@ -27,7 +28,7 @@ import {
   typesFormatOption,
   typesOutOption,
 } from "../utils/options.js";
-import { baseUrlSuffix, featureUrl } from "../utils/urls.js";
+import { baseUrlSuffix, flagUrl } from "../utils/urls.js";
 
 type CreateFlagOptions = {
   key?: string;
@@ -84,7 +85,7 @@ export const createFlagAction = async (
     );
     if (production) {
       console.log(
-        indentLines(chalk.magenta(featureUrl(baseUrl, production, flag))),
+        indentLines(chalk.magenta(flagUrl(baseUrl, production, flag))),
       );
     }
   } catch (error) {
@@ -134,11 +135,10 @@ export const listFlagsAction = async () => {
 };
 
 export const generateTypesAction = async () => {
-  const { baseUrl, appId } = configStore.getConfig();
-  const typesOutput = configStore.getConfig("typesOutput");
+  const { baseUrl, appId, typesOutput } = configStore.getConfig();
 
   let spinner: Ora | undefined;
-  let flags: Flag[] = [];
+  let flags: FlagForTypes[];
 
   if (!appId) {
     handleError(new MissingAppIdError(), "Flags Types");
@@ -161,10 +161,7 @@ export const generateTypesAction = async () => {
       `Loading flags of app ${chalk.cyan(app.name)}${baseUrlSuffix(baseUrl)}...`,
     ).start();
 
-    flags = await listFlags(appId, {
-      envId: production.id,
-      includeRemoteConfigs: true,
-    }).then((res) => res.data);
+    flags = await listFlagValues(appId, production.id);
 
     spinner.succeed(
       `Loaded flags of app ${chalk.cyan(app.name)}${baseUrlSuffix(baseUrl)}.`,

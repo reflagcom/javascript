@@ -1,10 +1,10 @@
-export type JSONPrimitive =
+export type JSONValue =
   | number
   | string
   | boolean
   | null
-  | JSONPrimitive[]
-  | { [key: string]: JSONPrimitive };
+  | JSONValue[]
+  | { [key: string]: JSONValue };
 
 export type PrimitiveAST = { kind: "primitive"; type: string };
 export type ArrayAST = { kind: "array"; elementType: TypeAST };
@@ -17,193 +17,132 @@ export type UnionAST = { kind: "union"; types: TypeAST[] };
 // Type AST to represent TypeScript types
 export type TypeAST = PrimitiveAST | ArrayAST | ObjectAST | UnionAST;
 
-// Convert JSON value to TypeAST
-export function toTypeAST(value: JSONPrimitive, path: string[] = []): TypeAST {
+export function toTypeAST(value: JSONValue): TypeAST {
   if (value === null) return { kind: "primitive", type: "null" };
-
   if (Array.isArray(value)) {
-    if (value.length === 0) {
-      return {
-        kind: "array",
-        elementType: { kind: "primitive", type: "any" },
-      };
-    }
-
-    // Process all elements in the array instead of just the first one
-    const elementTypes = value.map((item, index) =>
-      toTypeAST(item, [...path, index.toString()]),
-    );
-
-    return {
-      kind: "array",
-      elementType: mergeTypeASTs(elementTypes),
-    };
+    return { kind: "array", elementType: mergeTypeASTs(value.map(toTypeAST)) };
   }
-
   if (typeof value === "object") {
     return {
       kind: "object",
-      properties: Object.entries(value).map(([key, val]) => ({
+      properties: Object.entries(value).map(([key, propertyValue]) => ({
         key,
-        type: toTypeAST(val, [...path, key]),
+        type: toTypeAST(propertyValue),
         optional: false,
       })),
     };
   }
-
   return { kind: "primitive", type: typeof value };
 }
 
-// Merge multiple TypeASTs into one
-export function mergeTypeASTs(types: TypeAST[]): TypeAST {
-  if (types.length === 0) return { kind: "primitive", type: "any" };
-  if (types.length === 1) return types[0];
+export function mergeTypeASTs(input: TypeAST[]): TypeAST {
+  const primitives = new Set<string>();
+  const elements: TypeAST[] = [];
+  const objects: ObjectAST[] = [];
 
-  // Group ASTs by kind
-  const byKind = {
-    union: types.filter((t) => t.kind === "union"),
-    primitive: types.filter((t) => t.kind === "primitive"),
-    array: types.filter((t) => t.kind === "array"),
-    object: types.filter((t) => t.kind === "object"),
-  };
-
-  // Create a union for mixed kinds
-  const hasMixedKinds =
-    byKind.union.length > 0 || // If we have any unions, treat it as mixed kinds
-    (byKind.primitive.length > 0 &&
-      (byKind.array.length > 0 || byKind.object.length > 0)) ||
-    (byKind.array.length > 0 && byKind.object.length > 0);
-
-  if (hasMixedKinds) {
-    // If there are existing unions, flatten them into the current union
-    if (byKind.union.length > 0) {
-      // Flatten existing unions and collect types by category
-      const flattenedTypes: TypeAST[] = [];
-      const objectsToMerge: ObjectAST[] = [...byKind.object];
-      const arraysToMerge: ArrayAST[] = [...byKind.array];
-
-      // Add primitives directly
-      flattenedTypes.push(...byKind.primitive);
-
-      // Process union types
-      for (const unionType of byKind.union) {
-        for (const type of unionType.types) {
-          if (type.kind === "object") {
-            objectsToMerge.push(type);
-          } else if (type.kind === "array") {
-            arraysToMerge.push(type);
-          } else {
-            flattenedTypes.push(type);
-          }
-        }
-      }
-
-      // Merge objects and arrays if they exist
-      if (objectsToMerge.length > 0) {
-        flattenedTypes.push(mergeTypeASTs(objectsToMerge));
-      }
-
-      if (arraysToMerge.length > 0) {
-        flattenedTypes.push(mergeTypeASTs(arraysToMerge));
-      }
-
-      return { kind: "union", types: flattenedTypes };
+  function collect(ast: TypeAST) {
+    switch (ast.kind) {
+      case "primitive":
+        // Empty arrays do not contribute evidence about their element type.
+        if (ast.type !== "never") primitives.add(ast.type);
+        break;
+      case "array":
+        elements.push(ast.elementType);
+        break;
+      case "object":
+        objects.push(ast);
+        break;
+      case "union":
+        ast.types.forEach(collect);
+        break;
     }
-
-    return { kind: "union", types };
   }
+  input.forEach(collect);
 
-  // Handle primitives
-  if (byKind.primitive.length === types.length) {
-    const uniqueTypes = [...new Set(byKind.primitive.map((p) => p.type))];
-    return uniqueTypes.length === 1
-      ? { kind: "primitive", type: uniqueTypes[0] }
-      : {
-          kind: "union",
-          types: uniqueTypes.map((type) => ({ kind: "primitive", type })),
-        };
+  const members: TypeAST[] = Array.from(primitives, (type) => ({
+    kind: "primitive",
+    type,
+  }));
+  if (elements.length) {
+    members.push({ kind: "array", elementType: mergeTypeASTs(elements) });
   }
+  if (objects.length) members.push(mergeObjects(objects));
+  if (members.length > 1) return { kind: "union", types: members };
+  return members[0] ?? { kind: "primitive", type: "never" };
+}
 
-  // Merge arrays
-  if (byKind.array.length === types.length) {
-    return {
-      kind: "array",
-      elementType: mergeTypeASTs(byKind.array.map((a) => a.elementType)),
-    };
+function mergeObjects(objects: ObjectAST[]): ObjectAST {
+  const byKey = new Map<string, ObjectAST["properties"]>();
+  for (const object of objects) {
+    for (const prop of object.properties) {
+      const existing = byKey.get(prop.key);
+      if (existing) existing.push(prop);
+      else byKey.set(prop.key, [prop]);
+    }
   }
-
-  // Merge objects
-  if (byKind.object.length === types.length) {
-    // Get all unique property keys
-    const allKeys = [
-      ...new Set(
-        byKind.object.flatMap((obj) => obj.properties.map((p) => p.key)),
-      ),
-    ];
-
-    // Merge properties with same keys
-    const mergedProperties = allKeys.map((key) => {
-      const props = byKind.object
-        .map((obj) => obj.properties.find((p) => p.key === key))
-        .filter((obj) => !!obj);
-
-      return {
-        key,
-        type: mergeTypeASTs(props.map((p) => p.type)),
-        optional: byKind.object.some(
-          (obj) => !obj.properties.some((p) => p.key === key),
-        ),
-      };
-    });
-
-    return { kind: "object", properties: mergedProperties };
-  }
-
-  // Fallback
-  return { kind: "primitive", type: "any" };
+  return {
+    kind: "object",
+    properties: Array.from(byKey, ([key, properties]) => ({
+      key,
+      type: mergeTypeASTs(properties.map((prop) => prop.type)),
+      optional:
+        properties.length < objects.length ||
+        properties.some((prop) => prop.optional),
+    })),
+  };
 }
 
 // Stringify TypeAST to TypeScript type declaration
-export function stringifyTypeAST(ast: TypeAST, nestLevel = 0): string {
+export function stringifyTypeAST(
+  ast: TypeAST,
+  nestLevel = 0,
+  unknownType = "unknown",
+): string {
   const indent = " ".repeat(nestLevel * 2);
   const nextIndent = " ".repeat((nestLevel + 1) * 2);
 
   switch (ast.kind) {
     case "primitive":
-      return ast.type;
+      return ast.type === "never" || ast.type === "unknown"
+        ? unknownType
+        : ast.type;
 
     case "array":
-      return `(${stringifyTypeAST(ast.elementType, nestLevel)})[]`;
+      return `(${stringifyTypeAST(ast.elementType, nestLevel, unknownType)})[]`;
 
     case "object":
-      if (ast.properties.length === 0) return "{}";
+      if (ast.properties.length === 0) return `Record<string, ${unknownType}>`;
 
       return `{\n${ast.properties
         .map(({ key, optional, type }) => {
           return `${nextIndent}${quoteKey(key)}${optional ? "?" : ""}: ${stringifyTypeAST(
             type,
             nestLevel + 1,
+            unknownType,
           )}`;
         })
         .join(",\n")}\n${indent}}`;
 
     case "union":
-      if (ast.types.length === 0) return "any";
+      if (ast.types.length === 0) return unknownType;
       if (ast.types.length === 1)
-        return stringifyTypeAST(ast.types[0], nestLevel);
+        return stringifyTypeAST(ast.types[0], nestLevel, unknownType);
       return ast.types
-        .map((type) => stringifyTypeAST(type, nestLevel))
+        .map((type) => stringifyTypeAST(type, nestLevel, unknownType))
         .join(" | ");
   }
 }
 
 export function quoteKey(key: string): string {
-  return /[^a-zA-Z0-9_]/.test(key) || /^[0-9]/.test(key) ? `"${key}"` : key;
+  return /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(key) ? key : JSON.stringify(key);
 }
 
 // Convert JSON array to TypeScript type
-export function JSONToType(json: JSONPrimitive[]): string | null {
+export function JSONToType(
+  json: JSONValue[],
+  unknownType = "unknown",
+): string | null {
   if (!json.length) return null;
 
-  return stringifyTypeAST(mergeTypeASTs(json.map((item) => toTypeAST(item))));
+  return stringifyTypeAST(mergeTypeASTs(json.map(toTypeAST)), 0, unknownType);
 }
