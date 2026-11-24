@@ -41,6 +41,8 @@ jobs:
         run: node packages/cli/test/generated-types.mjs
       - name: Build docs
         run: yarn docs
+      - name: Test documentation publication boundaries
+        run: yarn test:docs-publishing
       - id: test
         name: Test the project
         run: yarn test:ci
