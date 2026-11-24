@@ -42,11 +42,14 @@ const isBootstrapped = computed(() => {
     v-else-if="isBootstrapped"
     :publishable-key="publishableKey"
     :flags="{
+      protocolVersion: 2,
       context,
       flags: {
         huddles: {
-          key: 'huddles',
-          isEnabled: true,
+          value: true,
+          resolved: false,
+          ruleResults: [],
+          errors: [],
         },
       },
     }"

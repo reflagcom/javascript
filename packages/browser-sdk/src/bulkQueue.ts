@@ -33,14 +33,15 @@ export type BulkEvent =
     }
   | {
       type: "feature-flag-event";
-      action: "check-is-enabled" | "check-config";
+      action: "check";
       key: string;
-      targetingVersion?: number;
-      evalResult?: boolean | { key: string; payload: any };
+      sourceVersionId?: string;
+      flagStateVersion?: number;
+      evalResult?: string;
+      evalErrors?: CheckEvent["evalErrors"];
       evalContext?: Record<string, any>;
       evalRuleResults?: boolean[];
       evalMissingFields?: string[];
-      evalErrors?: CheckEvent["evaluationErrors"];
     }
   | {
       type: "prompt-event";

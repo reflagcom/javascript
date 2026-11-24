@@ -8,7 +8,7 @@ import worker from "./index";
 
 const sdk = vi.hoisted(() => ({
   initialize: vi.fn().mockResolvedValue(undefined),
-  getFlags: vi.fn().mockReturnValue({ "example-flag": { isEnabled: true } }),
+  getFlags: vi.fn().mockReturnValue({ "example-flag": true }),
   flush: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -33,7 +33,7 @@ it("evaluates flags for the requested context and flushes background work", asyn
   await waitOnExecutionContext(ctx);
 
   expect(response.status).toBe(200);
-  expect(await response.text()).toContain('"example-flag"');
+  expect(await response.text()).toContain('"example-flag": true');
   expect(sdk.initialize).toHaveBeenCalledOnce();
   expect(sdk.getFlags).toHaveBeenCalledWith({
     user: { id: "user42" },

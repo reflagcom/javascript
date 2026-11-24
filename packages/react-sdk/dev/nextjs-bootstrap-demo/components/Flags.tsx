@@ -5,7 +5,7 @@ import React from "react";
 import { useFlag } from "@reflag/react-sdk";
 
 export const Flags = () => {
-  const { isEnabled } = useFlag("huddles");
+  const isEnabled = useFlag("huddles");
   return (
     <div className="border border-gray-300 p-6 rounded-xl dark:border-neutral-800 dark:bg-zinc-800/30">
       <h3 className="text-xl mb-4">Huddles feature enabled:</h3>

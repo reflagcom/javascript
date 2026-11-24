@@ -18,13 +18,7 @@ import {
 // Extending the Flags interface to define the available features
 declare module "../../src" {
   interface Flags {
-    huddles: {
-      config: {
-        payload: {
-          maxParticipants: number;
-        };
-      };
-    };
+    huddles: boolean;
   }
 }
 
@@ -205,7 +199,7 @@ function FeatureOptIn({
 }) {
   const updateUser = useUpdateUser();
   const [sendingUpdate, setSendingUpdate] = useState(false);
-  const { isEnabled } = useFlag(flagKey);
+  const isEnabled = useFlag(flagKey);
 
   return (
     <div>
@@ -230,10 +224,10 @@ function FeatureOptIn({
 
 function CustomToolbar() {
   const client = useClient();
-  const [flags, setFlags] = useState<RawFlags>(client.getFlags() ?? {});
+  const [flags, setFlags] = useState<RawFlags>(client.getFlagResults());
 
   useOnEvent("flagsUpdated", () => {
-    setFlags(client.getFlags() ?? {});
+    setFlags(client.getFlagResults());
   });
 
   return (
@@ -241,33 +235,30 @@ function CustomToolbar() {
       <h2>Custom toolbar</h2>
       <p>This toolbar is static and won't update when flags are fetched.</p>
       <ul>
-        {Object.entries(flags).map(([flagKey, feature]) => (
-          <li key={flagKey}>
-            {flagKey} -
-            {(feature.isEnabledOverride ?? feature.isEnabled)
-              ? "Enabled"
-              : "Disabled"}{" "}
-            {feature.isEnabledOverride !== null && (
-              <button
-                onClick={() => {
-                  client.getFlag(flagKey).setIsEnabledOverride(null);
+        {Object.entries(flags)
+          .filter(([, flag]) => typeof flag.value === "boolean")
+          .map(([flagKey, feature]) => (
+            <li key={flagKey}>
+              {flagKey} -{feature.value === true ? "Enabled" : "Disabled"}{" "}
+              {client.getFlagOverride(flagKey) !== undefined && (
+                <button
+                  onClick={() => {
+                    client.setFlagOverride(flagKey, undefined);
+                  }}
+                >
+                  Reset
+                </button>
+              )}
+              <input
+                checked={feature.value === true}
+                type="checkbox"
+                onChange={(e) => {
+                  // this uses slightly simplified logic compared to the Reflag Toolbar
+                  client.setFlagOverride(flagKey, e.target.checked);
                 }}
-              >
-                Reset
-              </button>
-            )}
-            <input
-              checked={feature.isEnabledOverride ?? feature.isEnabled}
-              type="checkbox"
-              onChange={(e) => {
-                // this uses slightly simplified logic compared to the Reflag Toolbar
-                client
-                  .getFlag(flagKey)
-                  .setIsEnabledOverride(e.target.checked ?? false);
-              }}
-            />
-          </li>
-        ))}
+              />
+            </li>
+          ))}
       </ul>
     </div>
   );
@@ -283,6 +274,7 @@ export function App() {
       <ReflagBootstrappedProvider
         publishableKey={publishableKey}
         flags={{
+          protocolVersion: 2,
           context: {
             user: initialUser,
             company: initialCompany,
@@ -290,8 +282,10 @@ export function App() {
           },
           flags: {
             huddles: {
-              key: "huddles",
-              isEnabled: true,
+              value: true,
+              resolved: false,
+              ruleResults: [],
+              errors: [],
             },
           },
         }}

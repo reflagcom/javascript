@@ -1,12 +1,12 @@
 import { ProviderStatus } from "@openfeature/server-sdk";
 import { beforeEach, describe, expect, it, Mock, vi } from "vitest";
 
-import { ReflagClient } from "@reflag/node-sdk";
+import { ReflagClient } from "@reflag/node-sdk-v1";
 
 import { defaultContextTranslator, ReflagNodeProvider } from "./index";
 
-vi.mock("@reflag/node-sdk", () => {
-  const actualModule = vi.importActual("@reflag/node-sdk");
+vi.mock("@reflag/node-sdk-v1", () => {
+  const actualModule = vi.importActual("@reflag/node-sdk-v1");
 
   return {
     __esModule: true,

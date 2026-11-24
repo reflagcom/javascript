@@ -1,6 +1,7 @@
 import { readFileSync } from "fs";
 
 import { version } from "../package.json";
+import { isFlagValue } from "./flag-definitions";
 import { LOG_LEVELS } from "./types";
 import { isObject, ok } from "./utils";
 
@@ -24,26 +25,7 @@ function parseOverrides(config: object | undefined) {
   if (!config) return {};
   if ("flagOverrides" in config && isObject(config.flagOverrides)) {
     Object.entries(config.flagOverrides).forEach(([key, value]) => {
-      ok(
-        typeof value === "boolean" || isObject(value),
-        `invalid type "${typeof value}" for key ${key}, expected boolean or object`,
-      );
-      if (isObject(value)) {
-        ok(
-          "isEnabled" in value && typeof value.isEnabled === "boolean",
-          `invalid type "${typeof value.isEnabled}" for key ${key}.isEnabled, expected boolean`,
-        );
-        ok(
-          value.config === undefined || isObject(value.config),
-          `invalid type "${typeof value.config}" for key ${key}.config, expected object or undefined`,
-        );
-        if (isObject(value.config)) {
-          ok(
-            "key" in value.config && typeof value.config.key === "string",
-            `invalid type "${typeof value.config.key}" for key ${key}.config.key, expected string`,
-          );
-        }
-      }
+      ok(isFlagValue(value), `invalid JSON flag override for ${key}`);
     });
 
     return config.flagOverrides;

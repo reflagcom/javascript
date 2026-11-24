@@ -15,7 +15,7 @@ import {
   ClientOptions,
   Context as ReflagContext,
   ReflagClient,
-} from "@reflag/node-sdk";
+} from "@reflag/node-sdk-v1";
 
 type ProviderOptions = ClientOptions & {
   contextTranslator?: (context: EvaluationContext) => ReflagContext;

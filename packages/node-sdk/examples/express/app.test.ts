@@ -42,9 +42,9 @@ describe("API Tests", () => {
     expect(response.body).toEqual({ todos });
   });
 
-  it("denies todo creation when the enabled flag has no config payload", async () => {
+  it("denies todo creation when settings are unavailable", async () => {
     const remove = reflag.pushFlagOverrides({
-      "create-todos": { isEnabled: true },
+      "create-todos": null,
     });
     try {
       const response = await request(app)

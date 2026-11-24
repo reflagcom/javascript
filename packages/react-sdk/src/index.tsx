@@ -1,5 +1,6 @@
 "use client";
 
+import { deepEqual } from "fast-equals";
 import React, {
   createContext,
   ReactNode,
@@ -19,7 +20,10 @@ import {
   InitOptions,
   Logger,
   OptInFlag as BrowserOptInFlag,
-  RawFlag,
+  FlagDefaultFor,
+  FlagDefaultValue,
+  FlagValue,
+  FlagValueFromDefault,
   RawFlags as BrowserRawFlags,
   ReflagClient,
   ReflagContext,
@@ -45,96 +49,22 @@ export type {
   UserContext,
 };
 
-export type EmptyFlagRemoteConfig = { key: undefined; payload: undefined };
+export type { FlagDefaultValue, FlagValue, FlagValueFromDefault };
 
-export type FlagType = {
-  config?: {
-    payload: any;
-  };
-};
-
-/**
- * A remotely managed configuration value for a feature.
- */
-export type FlagRemoteConfig =
-  | {
-      /**
-       * The key of the matched configuration value.
-       */
-      key: string;
-
-      /**
-       * The optional user-supplied payload data.
-       */
-      payload: any;
-    }
-  | EmptyFlagRemoteConfig;
-
-/**
- * Describes a feature
- */
-export interface Flag<
-  TConfig extends FlagType["config"] = EmptyFlagRemoteConfig,
-> {
-  /**
-   * The key of the feature.
-   */
-  key: string;
-
-  /**
-   * If the feature is enabled.
-   */
-  isEnabled: boolean;
-
-  /**
-   * If the feature is loading.
-   */
-  isLoading: boolean;
-
-  /*
-   * Optional user-defined configuration.
-   */
-  config:
-    | ({
-        key: string;
-      } & TConfig)
-    | EmptyFlagRemoteConfig;
-
-  /**
-   * Track feature usage in Reflag.
-   */
-  track(): Promise<Response | undefined> | undefined;
-  /**
-   * Request feedback from the user.
-   */
-  requestFeedback: (opts: RequestFeedbackOptions) => void;
-}
-
+/** Optional key/value registration; singular reads infer their type from defaults. */
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface Flags {}
-
-/**
- * Describes a collection of evaluated feature.
- *
- * @remarks
- * This types falls back to a generic Record<string, Flag> if the Flags interface
- * has not been extended.
- *
- */
+export type FlagKey = keyof Flags extends never
+  ? string
+  : Extract<keyof Flags, string>;
 export type TypedFlags = keyof Flags extends never
-  ? Record<string, Flag>
-  : {
-      [TypedFlagKey in keyof Flags]: Flags[TypedFlagKey] extends FlagType
-        ? Flag<Flags[TypedFlagKey]["config"]>
-        : Flag;
-    };
-
-export type FlagKey = keyof TypedFlags;
+  ? Record<string, FlagValue | undefined>
+  : { [Key in keyof Flags]: Flags[Key] | undefined };
 
 /**
  * An opt-in-enabled flag for the generated React SDK flag definitions.
  *
- * Includes all fields from {@link BrowserOptInFlag}: `name`, `description`,
+ * Includes all fields from {@link @reflag/browser-sdk!OptInFlag}: `name`, `description`,
  * `isEnabled`, `userOptedIn`, `companyOptedIn`, and `isOptedIn`.
  * Only `key` is narrowed to the generated {@link FlagKey} type.
  */
@@ -145,7 +75,7 @@ export type OptInFlag = Omit<BrowserOptInFlag, "key"> & {
 /**
  * Describes a collection of evaluated raw flags.
  */
-export type RawFlags = Record<FlagKey, RawFlag>;
+export type RawFlags = BrowserRawFlags;
 
 export type BootstrappedFlags = BrowserBootstrappedState & {
   flags: BrowserRawFlags;
@@ -174,9 +104,8 @@ export type ReflagPropsBase = {
   initialLoading?: boolean;
 
   /**
-   * Set to `true` to make `useFlag` and `useOptInFlags` suspend while their
-   * required flag data is loading. Components that call either hook must be
-   * wrapped in a React `<Suspense>` boundary.
+   * Set to `true` to make `useOptInFlags` suspend while its metadata loads.
+   * Use `useFlagSuspense` for suspending direct-value reads.
    */
   suspense?: boolean;
 
@@ -665,14 +594,6 @@ export type RequestFeedbackOptions = Omit<
   "flagKey" | "featureId"
 >;
 
-export type UseFlagOptions = {
-  /**
-   * Override the provider suspense setting for this `useFlag` call.
-   * When true, `useFlag` throws a promise while flags are loading.
-   */
-  suspense?: boolean;
-};
-
 export type UseOptInFlagsOptions = {
   /**
    * Override the provider suspense setting for this `useOptInFlags` call.
@@ -693,81 +614,87 @@ export type UseOptInFlagsResult = {
   isLoading: boolean;
 };
 
-/**
- * @deprecated use `useFlag` instead
- */
-export function useFeature<TKey extends FlagKey>(
-  key: TKey,
-  options?: UseFlagOptions,
-) {
-  return useFlag(key, options);
+/** Boolean-first, non-suspending reads. Supply a positional default for JSON values. */
+export function useFlag(key: FlagKey, defaultValue?: undefined): boolean;
+export function useFlag<
+  Key extends FlagKey,
+  Default extends FlagDefaultFor<Flags, Key>,
+>(key: Key, defaultValue: Default): FlagValueFromDefault<Default>;
+export function useFlag<Default extends FlagDefaultValue | object>(
+  key: keyof Flags extends never ? string : never,
+  defaultValue: Default,
+): FlagValueFromDefault<Default>;
+export function useFlag(
+  key: FlagKey,
+  defaultValue: FlagDefaultValue = false,
+): FlagValue {
+  return useFlagValue(key, defaultValue, false);
 }
 
-/**
- * Returns the state of a given feature for the current context, e.g.
- *
- * ```ts
- * function HuddleButton() {
- *   const {isEnabled, config: { payload }, track} = useFlag("huddle");
- *   if (isEnabled) {
- *    return <button onClick={() => track()}>{payload?.buttonTitle ?? "Start Huddle"}</button>;
- * }
- * ```
- */
-export function useFlag<TKey extends FlagKey>(
-  key: TKey,
-  options: UseFlagOptions = {},
-): TypedFlags[TKey] {
+/** Wait for initialization, then read once. Missing flags use the default, not an endless suspension. */
+export function useFlagSuspense(
+  key: FlagKey,
+  defaultValue?: undefined,
+): boolean;
+export function useFlagSuspense<
+  Key extends FlagKey,
+  Default extends FlagDefaultFor<Flags, Key>,
+>(key: Key, defaultValue: Default): FlagValueFromDefault<Default>;
+export function useFlagSuspense<Default extends FlagDefaultValue | object>(
+  key: keyof Flags extends never ? string : never,
+  defaultValue: Default,
+): FlagValueFromDefault<Default>;
+export function useFlagSuspense(
+  key: FlagKey,
+  defaultValue: FlagDefaultValue = false,
+): FlagValue {
+  return useFlagValue(key, defaultValue, true);
+}
+
+/** @deprecated Use useFlag. */
+export const useFeature = useFlag;
+
+function useFlagValue(
+  key: FlagKey,
+  defaultValue: FlagDefaultValue,
+  suspend: boolean,
+): FlagValue {
   const context = useSafeContext();
-  const { client, isLoading } = context;
-  const [flag, setFlag] = useState(() => client.getFlag(key));
-
-  const track = () => client.track(key);
-  const requestFeedback = (opts: RequestFeedbackOptions) =>
-    client.requestFeedback({ ...opts, flagKey: key });
-
-  useOnEvent(
-    "flagsUpdated",
-    () => {
-      setFlag(client.getFlag(key));
-    },
-    client,
-  );
-
+  const { client } = context;
+  const [, update] = useState(0);
+  const resolvedValue = useRef<
+    | {
+        client: ReflagClient;
+        key: FlagKey;
+        value: FlagValue;
+      }
+    | undefined
+  >(undefined);
+  useOnEvent("flagsUpdated", () => update((revision) => revision + 1), client);
+  useIsomorphicLayoutEffect(() => {
+    update((revision) => revision + 1);
+  }, [client, key]);
   if (
-    isLoading &&
+    suspend &&
     isClientLoading(client) &&
-    (options.suspense ?? context.suspense)
+    (!client.getConfig().bootstrapped || context.isLoading)
   ) {
     throw context.getLoadingPromise();
   }
-
-  if (isLoading) {
-    return {
-      key,
-      isLoading,
-      isEnabled: false,
-      config: {
-        key: undefined,
-        payload: undefined,
-      } as TypedFlags[TKey]["config"],
-      track,
-      requestFeedback,
-    };
-  }
-
-  return {
-    key,
-    isLoading,
-    track,
-    requestFeedback,
-    get isEnabled() {
-      return flag.isEnabled ?? false;
-    },
-    get config() {
-      return flag.config as TypedFlags[TKey]["config"];
-    },
-  };
+  // Always perform the read for check tracking, even when its value is unchanged.
+  const currentValue = client.getFlag(key, defaultValue);
+  const previous = resolvedValue.current;
+  const value =
+    previous?.client === client &&
+    previous.key === key &&
+    deepEqual(previous.value, currentValue)
+      ? previous.value
+      : currentValue;
+  // Only committed renders replace the cache; abandoned renders must not affect it.
+  useIsomorphicLayoutEffect(() => {
+    resolvedValue.current = { client, key, value };
+  }, [client, key, value]);
+  return value;
 }
 
 /**
@@ -789,7 +716,6 @@ export function useOptInFlags(
   const { client } = context;
   const getOptInFlags = () => client.getOptInFlags() as OptInFlag[];
   const [flags, setFlags] = useState(getOptInFlags);
-  const isBootstrapped = client.getConfig().bootstrapped;
   const [isOptInFlagsLoading, setIsOptInFlagsLoading] = useState(() =>
     client.getIsLoadingOptInFlags(),
   );
@@ -813,7 +739,7 @@ export function useOptInFlags(
     throw context.getLoadingPromise();
   }
 
-  const isLoading = isBootstrapped && isOptInFlagsLoading;
+  const isLoading = context.isLoading || isOptInFlagsLoading;
   if (suspense && isLoading) {
     throw getOptInFlagsLoadingPromise(client);
   }
@@ -827,7 +753,7 @@ export function useOptInFlags(
  * Check the returned Response's `ok` property and catch promise rejections.
  * HTTP failures return a non-OK Response; offline mode, invalid arguments, or
  * missing scoped context return undefined. Confirmation failures can reject
- * after the membership changed remotely. See {@link ReflagClient.setOptIn}.
+ * after the membership changed remotely. See {@link @reflag/browser-sdk!ReflagClient.setOptIn}.
  */
 export function useSetOptIn() {
   const client = useClient();
