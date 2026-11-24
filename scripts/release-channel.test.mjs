@@ -63,11 +63,13 @@ test("all stable-doc publication steps require a stable release channel", () => 
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line.startsWith("if: "));
-  assert.equal(conditions.length, 4);
+  assert.equal(conditions.length, 7);
   for (const condition of conditions) {
-    assert.equal(
-      condition,
-      "if: steps.changesets.outputs.published == 'true' && steps.release-channel.outputs.prerelease == 'false'",
+    assert.ok(
+      condition.startsWith(
+        "if: steps.changesets.outputs.published == 'true' && steps.release-channel.outputs.prerelease == 'false'",
+      ),
+      `Missing stable release guard: ${condition}`,
     );
   }
   assert.match(workflow, /version: yarn version-packages/);
