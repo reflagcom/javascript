@@ -1,65 +1,72 @@
 name: Release packages
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Stable CLI version on maintenance/cli-v1
+        required: true
+        type: string
+      dry_run:
+        description: Build and check without publishing
+        default: true
+        type: boolean
 
-concurrency: ${{ github.workflow }}-${{ github.ref }}
+# Serialize with the release workflow on main while checking and updating latest.
+concurrency: npm-package-release
 
 jobs:
-  release:
+  build-cli-v1:
+    if: github.ref == 'refs/heads/maintenance/cli-v1'
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      id-token: write
-      pull-requests: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
         with:
-          # Use the PAT for git operations so the release PR update can trigger CI.
-          token: ${{ secrets.CHANGESETS_BOT_TOKEN }}
-      - name: Enable corepack
-        run: corepack enable
+          persist-credentials: false
+      - run: corepack enable
       - uses: actions/setup-node@v6
         with:
-          node-version-file: ".nvmrc"
-          cache: "yarn"
-          cache-dependency-path: "**/yarn.lock"
-          registry-url: "https://registry.npmjs.org"
-          scope: "@reflag"
-      - name: Install dependencies
-        run: yarn install --immutable
-      - name: Create release PR or publish packages
-        id: changesets
-        uses: changesets/action@v1
+          node-version-file: .nvmrc
+          cache: yarn
+      - run: yarn install --immutable
+      - run: node --test scripts/cli-v1-release.test.mjs
+      - run: yarn workspace @reflag/cli test
+      - run: yarn workspace @reflag/cli build
+      - run: yarn workspace @reflag/cli pack --out "$RUNNER_TEMP/reflag-cli.tgz"
+      - uses: actions/upload-artifact@v4
         with:
-          version: yarn version-packages
-          publish: yarn release-packages
-          title: Version Packages
-          commit: Version Packages
+          name: reflag-cli
+          path: ${{ runner.temp }}/reflag-cli.tgz
+          if-no-files-found: error
+          overwrite: true
+
+  publish-cli-v1:
+    needs: build-cli-v1
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: reflag-cli
+          path: ${{ runner.temp }}
+      - name: Check the packaged CLI version and npm latest tag
         env:
-          GITHUB_TOKEN: ${{ secrets.CHANGESETS_BOT_TOKEN }}
-      - name: Build docs
-        if: steps.changesets.outputs.published == 'true'
-        run: yarn docs
-      - name: Checkout docs with SSH
-        if: steps.changesets.outputs.published == 'true'
-        uses: actions/checkout@v3
-        with:
-          repository: reflagcom/docs
-          ssh-key: ${{ secrets.DOCS_DEPLOY_KEY }}
-          path: reflag-docs
-      - name: Copy generated docs to docs repo
-        if: steps.changesets.outputs.published == 'true'
+          CLI_VERSION: ${{ inputs.version }}
         run: |
-          rm -rf reflag-docs/sdk
-          cp -R dist/docs reflag-docs/sdk
-      - name: Commit and push changes
-        if: steps.changesets.outputs.published == 'true'
-        run: |
-          cd reflag-docs
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@reflag.com"
-          git add sdk
-          git commit -m "Update documentation" && git push || echo "No docs changes to commit"
+          set -o pipefail
+          tar -xOf "$RUNNER_TEMP/reflag-cli.tgz" package/package.json | node scripts/cli-v1-release.mjs
+      - name: Publish CLI v1 to latest
+        if: ${{ !inputs.dry_run }}
+        run: npm publish "$RUNNER_TEMP/reflag-cli.tgz" --access public --tag latest --ignore-scripts
