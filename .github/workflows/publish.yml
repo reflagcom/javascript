@@ -4,11 +4,26 @@ on:
   push:
     branches:
       - main
+  # GitHub registers manual dispatch from the default branch. The CLI v1 job
+  # lives on maintenance/cli-v1 so npm provenance points to the released source.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Stable CLI version on maintenance/cli-v1
+        required: true
+        type: string
+      dry_run:
+        description: Build and check without publishing
+        default: true
+        type: boolean
 
-concurrency: ${{ github.workflow }}-${{ github.ref }}
+# Share this group with maintenance/cli-v1 so neither release can change npm
+# tags between the other release's version check and publish.
+concurrency: npm-package-release
 
 jobs:
   release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: write

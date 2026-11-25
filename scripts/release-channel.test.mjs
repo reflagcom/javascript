@@ -53,6 +53,16 @@ test("the channel command produces only the GitHub Actions output", () => {
   assert.equal(output, `prerelease=${releaseChannel(state) === "next"}\n`);
 });
 
+test("manual dispatch is registered without enabling the main publish job", () => {
+  const workflow = read(".github/workflows/publish.yml");
+  assert.match(workflow, /workflow_dispatch:\s+inputs:\s+version:/);
+  assert.match(workflow, /concurrency: npm-package-release/);
+  assert.match(
+    workflow,
+    /release:\s+if: github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'/,
+  );
+});
+
 test("all stable-doc publication steps require a stable release channel", () => {
   const workflow = read(".github/workflows/publish.yml");
   assert.match(
@@ -61,8 +71,8 @@ test("all stable-doc publication steps require a stable release channel", () => 
   );
   const conditions = workflow
     .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.startsWith("if: "));
+    .filter((line) => line.startsWith("        if: "))
+    .map((line) => line.trim());
   assert.equal(conditions.length, 7);
   for (const condition of conditions) {
     assert.ok(
