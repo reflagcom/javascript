@@ -5,7 +5,7 @@ import chalk from "chalk";
 import { Command } from "commander";
 import ora, { Ora } from "ora";
 
-import { App, getApp, getOrg } from "../services/bootstrap.js";
+import { App, getApp } from "../services/apps.js";
 import { createFlag, listFlags, listFlagValues } from "../services/flags.js";
 import { configStore } from "../stores/config.js";
 import {
@@ -47,7 +47,7 @@ export const createFlagAction = async (
 
   let app: App;
   try {
-    app = getApp(appId);
+    app = await getApp(appId);
   } catch (error) {
     handleError(error, "Flags Create");
   }
@@ -55,9 +55,8 @@ export const createFlagAction = async (
   const production = app.environments.find((e) => e.isProduction);
 
   try {
-    const org = getOrg();
     console.log(
-      `Creating flag for app ${chalk.cyan(app.name)}${baseUrlSuffix(baseUrl)}.`,
+      `Creating flag for app ${chalk.cyan(app.name)} in ${chalk.cyan(app.org.name)}${baseUrlSuffix(baseUrl)}.`,
     );
 
     if (!name) {
@@ -68,7 +67,7 @@ export const createFlagAction = async (
     }
 
     if (!key) {
-      const keyFormat = org.featureKeyFormat;
+      const keyFormat = app.org.featureKeyFormat;
       const keyValidator = KeyFormatPatterns[keyFormat];
       key = await input({
         message: "New flag key:",
@@ -103,7 +102,7 @@ export const listFlagsAction = async () => {
   }
 
   try {
-    const app = getApp(appId);
+    const app = await getApp(appId);
     const production = app.environments.find((e) => e.isProduction);
     if (!production) {
       handleError(new MissingEnvIdError(), "Flags Types");
@@ -146,7 +145,7 @@ export const generateTypesAction = async () => {
 
   let app: App;
   try {
-    app = getApp(appId);
+    app = await getApp(appId);
   } catch (error) {
     handleError(error, "Flags Types");
   }

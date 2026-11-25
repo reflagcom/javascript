@@ -27,6 +27,11 @@ export const appIdOption = new Option(
   `Reflag App ID. Falls back to appId value in ${CONFIG_FILE_NAME}.`,
 );
 
+export const orgIdOption = new Option(
+  "--org-id <orgId>",
+  `Restrict CLI app discovery and flag commands to an organization. Overrides orgId in ${CONFIG_FILE_NAME}.`,
+);
+
 export const overwriteOption = new Option(
   "--overwrite",
   "Force initialization and overwrite existing configuration.",

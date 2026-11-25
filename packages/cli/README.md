@@ -75,7 +75,8 @@ Here are all the configuration options available in the `reflag.config.json` fil
   "$schema": "https://unpkg.com/@reflag/cli@latest/schema.json",
   "baseUrl": "https://app.reflag.com",
   "apiUrl": "https://app.reflag.com/api",
-  "appId": "ap123456789",
+  "appId": "ap123456789012",
+  "orgId": "or123456789012",
   "typesOutput": [
     {
       "path": "gen/flags.d.ts",
@@ -91,39 +92,35 @@ Here are all the configuration options available in the `reflag.config.json` fil
 | `baseUrl`     | Base URL for Reflag services.                                                                                                                                                | "https://app.reflag.com"                           |
 | `apiUrl`      | API URL for Reflag services (overrides baseUrl for API calls).                                                                                                               | "https://app.reflag.com/api"                       |
 | `appId`       | Your Reflag application ID.                                                                                                                                                  | Required                                           |
+| `orgId`       | Restrict the CLI to one organization. Find the ID with `reflag apps list`.                                                                                                   | Optional                                           |
 | `typesOutput` | Path(s) where TypeScript types will be generated. Can be a string or an array of objects with `path` and `format` properties. Available formats: `react`, `node`, and `vue`. | "gen/flags.ts" with format "react"                 |
 
-You can override these settings using command-line options for individual commands.
+You can override these settings using command-line options. With a personal login and no `orgId`, the CLI finds your configured `appId` across all organizations you can access. With `orgId` set, the CLI rejects apps outside that organization instead of switching to another one. This setting does not scope remote MCP connections.
 
 ## Commands
 
 ### `reflag init`
 
-Initialize a new Reflag configuration in your project. This creates a `reflag.config.json` file with your settings and prompts for any required information not provided via options.
+Initialize a new `reflag.config.json`. If you can access multiple organizations, the CLI asks you to choose an organization and then an app. Pass `--org-id` to pin an organization in the new config, or `--appId` to choose the app directly.
 
 ```bash
-npx reflag init [--overwrite]
+npx reflag init [--overwrite] [--org-id <org-id>] [--appId <app-id>]
 ```
 
-Options:
-
-- `--overwrite`: Overwrite existing configuration file if one exists.
-- `--app-id <id>`: Set the application ID.
-- `--key-format <format>`: Set the key format for flags.
+Use `--overwrite` to replace an existing configuration.
 
 ### `reflag new [flagName]`
 
 All-in-one command to get started quickly. This command combines `init`, flag creation, and type generation in a single step. Use this for the fastest way to get up and running with Reflag.
 
 ```bash
-npx reflag new "My Flag" [--app-id ap123456789] [--key my-flag]  [--key-format custom] [--out gen/flags.ts] [--format react]
+npx reflag new "My Flag" [--appId <app-id>] [--key my-flag] [--out gen/flags.ts] [--format react]
 ```
 
 Options:
 
 - `--key`: Specific key for the flag.
-- `--app-id`: App ID to use.
-- `--key-format`: Format for flag keys (custom, snake, camel, etc.).
+- `--appId`: App ID to use.
 - `--out`: Path to generate TypeScript types.
 - `--format`: Format of the generated types (react, node, or vue).
 
@@ -154,44 +151,47 @@ Manage your Reflag flags with these subcommands:
 Create a new flag in your Reflag app. The command guides you through the flag creation process with interactive prompts if options are not provided.
 
 ```bash
-npx reflag flags create "My Flag" [--app-id ap123456789] [--key my-flag] [--key-format custom]
+npx reflag flags create "My Flag" [--appId <app-id>] [--key my-flag]
 ```
 
 Options:
 
 - `--key`: Specific key for the flag.
-- `--app-id`: App ID to use.
-- `--key-format`: Format for flag keys.
+- `--appId`: App ID to use. The app's organization determines the key format.
 
 #### `reflag flags list`
 
 List all flags for the current app. This helps you visualize what flags are available and their current configurations.
 
 ```bash
-npx reflag flags list [--app-id ap123456789]
+npx reflag flags list [--appId <app-id>]
 ```
 
 Options:
 
-- `--app-id`: App ID to use.
+- `--appId`: App ID to use.
 
 #### `reflag flags types`
 
 Generate TypeScript types for your flags. This ensures type safety when using Reflag flags in your TypeScript/JavaScript applications.
 
 ```bash
-npx reflag flags types [--app-id ap123456789] [--out gen/flags.ts] [--format react]
+npx reflag flags types [--appId <app-id>] [--out gen/flags.ts] [--format react]
 ```
 
 Options:
 
-- `--app-id`: App ID to use.
+- `--appId`: App ID to use.
 - `--out`: Path to generate TypeScript types.
 - `--format`: Format of the generated types (react, node, or vue).
 
-### `reflag apps`
+### `reflag apps list`
 
-Commands for managing Reflag apps.
+List available apps with their organization names and IDs. Without an organization filter, a personal login lists apps across all your organizations. An API key still lists only its own app.
+
+```bash
+npx reflag apps list [--org-id <org-id>]
+```
 
 ## Global Options
 
@@ -201,6 +201,7 @@ These options can be used with any command:
 - `--base-url <url>`: Set the base URL for Reflag API.
 - `--api-url <url>`: Set the API URL directly (overrides base URL).
 - `--api-key <key>`: Reflag API key for non-interactive authentication.
+- `--org-id <org-id>`: Restrict app discovery and commands to one organization. Overrides `orgId` in `reflag.config.json`.
 - `--help`: Display help information for a command.
 
 ## AI-Assisted Development

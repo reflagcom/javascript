@@ -1,8 +1,7 @@
 import { Command } from "commander";
-import { findUp } from "find-up";
 
 import { configStore } from "../stores/config.js";
-import { CONFIG_FILE_NAME } from "../utils/constants.js";
+import type { TypeFormat } from "../utils/constants.js";
 import {
   appIdOption,
   flagKeyOption,
@@ -15,17 +14,23 @@ import { initAction } from "./init.js";
 
 type NewArgs = {
   appId?: string;
-  out: string;
+  out?: string;
+  format?: TypeFormat;
   key?: string;
 };
 
-export const newAction = async (name: string | undefined, { key }: NewArgs) => {
-  if (!(await findUp(CONFIG_FILE_NAME))) {
-    await initAction();
+export const newAction = async (
+  name: string | undefined,
+  { appId, out, format, key }: NewArgs,
+) => {
+  if (!configStore.getConfigPath()) {
+    await initAction({ appId });
   }
-  await createFlagAction(name, {
-    key,
+  configStore.setConfig({
+    appId,
+    typesOutput: out ? [{ path: out, format: format || "react" }] : undefined,
   });
+  await createFlagAction(name, { key });
   await generateTypesAction();
 };
 
@@ -41,13 +46,4 @@ export function registerNewCommand(cli: Command) {
     .addOption(flagKeyOption)
     .addArgument(flagNameArgument)
     .action(newAction);
-
-  // Update the config with the cli override values
-  cli.hook("preAction", (command) => {
-    const { appId, out, format } = command.opts();
-    configStore.setConfig({
-      appId,
-      typesOutput: out ? [{ path: out, format: format || "react" }] : undefined,
-    });
-  });
 }

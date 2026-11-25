@@ -33,6 +33,7 @@ type Config = {
   baseUrl: string;
   apiUrl: string;
   appId: string | undefined;
+  orgId?: string;
   typesOutput: TypesOutput[];
 };
 
