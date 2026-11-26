@@ -16,7 +16,7 @@
     "dev": "lerna run dev --parallel",
     "build": "lerna run build --stream",
     "test:ci": "lerna run test:ci --stream",
-    "test:release": "node --test scripts/release-channel.test.mjs scripts/publish-manifests.test.mjs",
+    "test:release": "node --test scripts/release-channel.test.mjs scripts/publish-manifests.test.mjs scripts/cli-v1-release.test.mjs",
     "check:publish-manifests": "node scripts/publish-manifests.mjs",
     "test": "lerna run test --stream",
     "format": "yarn fmt:fix && yarn lint:fix",

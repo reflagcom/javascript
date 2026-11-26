@@ -53,16 +53,36 @@ test("the channel command produces only the GitHub Actions output", () => {
   assert.equal(output, `prerelease=${releaseChannel(state) === "next"}\n`);
 });
 
-test("all stable-doc publication steps require a stable release channel", () => {
+test("CLI v1 releases use main and require an explicit publish request", () => {
   const workflow = read(".github/workflows/publish.yml");
+  assert.doesNotMatch(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /repository_dispatch:\s+types: \[release-cli-v1\]/);
+  assert.match(
+    workflow,
+    /release:\s+if: github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'/,
+  );
+  assert.match(
+    workflow,
+    /build-cli-v1:\s+if: github\.event_name == 'repository_dispatch' && github\.ref == 'refs\/heads\/main'/,
+  );
+  assert.match(
+    workflow,
+    /publish-cli-v1:\s+needs: build-cli-v1\s+if: \$\{\{ toJSON\(github\.event\.client_payload\.publish\) == 'true' \}\}/,
+  );
+});
+
+test("all stable-doc publication steps require a stable release channel", () => {
+  const workflow = read(".github/workflows/publish.yml").split(
+    "\n  build-cli-v1:",
+  )[0];
   assert.match(
     workflow,
     /id: release-channel\s+run: node scripts\/release-channel\.mjs >> "\$GITHUB_OUTPUT"/,
   );
   const conditions = workflow
     .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.startsWith("if: "));
+    .filter((line) => line.startsWith("        if: "))
+    .map((line) => line.trim());
   assert.equal(conditions.length, 7);
   for (const condition of conditions) {
     assert.ok(

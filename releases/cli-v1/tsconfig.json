@@ -1,0 +1,11 @@
+{
+  "extends": "@reflag/tsconfig/library",
+  "compilerOptions": {
+    "outDir": "./dist/",
+    "target": "ESNext",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext"
+  },
+  "include": ["**/*.ts"],
+  "exclude": ["node_modules", "dist", "**/*.spec.ts"]
+}
