@@ -145,7 +145,8 @@ export function mergeTypeASTs(types: TypeAST[]): TypeAST {
       return {
         key,
         type: mergeTypeASTs(props.map((p) => p.type)),
-        optional: props.length < byKind.object.length,
+        optional:
+          props.length < byKind.object.length || props.some((p) => p.optional),
       };
     });
 

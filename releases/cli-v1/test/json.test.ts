@@ -416,6 +416,12 @@ describe("JSON utilities", () => {
       ).toBe(expected);
     });
 
+    it("should preserve optional properties when merging nested arrays", () => {
+      expect(JSONToType([[[{ a: 1 }, {}], [{ a: 2 }]]])).toBe(
+        "(({\n  a?: number\n})[])[]",
+      );
+    });
+
     it("should merge arrays with nested arrays of mixed element types", () => {
       const expected = "((boolean | number | string | {\n  id: number\n})[])[]";
       expect(JSONToType([[[1, "test"], [true]], [[{ id: 1 }]]])).toBe(expected);
