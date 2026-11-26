@@ -431,6 +431,16 @@ describe("JSON utilities", () => {
       ).toBe(expected);
     });
 
+    it("should escape quoted keys and preserve empty keys in generated types", () => {
+      expect(JSONToType([{ 'a"b': 1, "a\\b": true, "": "empty" }])).toBe(
+        String.raw`{
+  "a\"b": number,
+  "a\\b": boolean,
+  "": string
+}`,
+      );
+    });
+
     it("should handle complex nested structures", () => {
       const expected =
         `{\n  user: {\n    name: string,\n    settings: {\n      theme?: string,` +

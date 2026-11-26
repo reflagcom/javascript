@@ -18,7 +18,7 @@ export type UnionAST = { kind: "union"; types: TypeAST[] };
 export type TypeAST = PrimitiveAST | ArrayAST | ObjectAST | UnionAST;
 
 // Convert JSON value to TypeAST
-export function toTypeAST(value: JSONPrimitive, path: string[] = []): TypeAST {
+export function toTypeAST(value: JSONPrimitive): TypeAST {
   if (value === null) return { kind: "primitive", type: "null" };
 
   if (Array.isArray(value)) {
@@ -29,14 +29,9 @@ export function toTypeAST(value: JSONPrimitive, path: string[] = []): TypeAST {
       };
     }
 
-    // Process all elements in the array instead of just the first one
-    const elementTypes = value.map((item, index) =>
-      toTypeAST(item, [...path, index.toString()]),
-    );
-
     return {
       kind: "array",
-      elementType: mergeTypeASTs(elementTypes),
+      elementType: mergeTypeASTs(value.map(toTypeAST)),
     };
   }
 
@@ -45,7 +40,7 @@ export function toTypeAST(value: JSONPrimitive, path: string[] = []): TypeAST {
       kind: "object",
       properties: Object.entries(value).map(([key, val]) => ({
         key,
-        type: toTypeAST(val, [...path, key]),
+        type: toTypeAST(val),
         optional: false,
       })),
     };
@@ -150,9 +145,7 @@ export function mergeTypeASTs(types: TypeAST[]): TypeAST {
       return {
         key,
         type: mergeTypeASTs(props.map((p) => p.type)),
-        optional: byKind.object.some(
-          (obj) => !obj.properties.some((p) => p.key === key),
-        ),
+        optional: props.length < byKind.object.length,
       };
     });
 
@@ -198,12 +191,12 @@ export function stringifyTypeAST(ast: TypeAST, nestLevel = 0): string {
 }
 
 export function quoteKey(key: string): string {
-  return /[^a-zA-Z0-9_]/.test(key) || /^[0-9]/.test(key) ? `"${key}"` : key;
+  return /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(key) ? key : JSON.stringify(key);
 }
 
 // Convert JSON array to TypeScript type
 export function JSONToType(json: JSONPrimitive[]): string | null {
   if (!json.length) return null;
 
-  return stringifyTypeAST(mergeTypeASTs(json.map((item) => toTypeAST(item))));
+  return stringifyTypeAST(mergeTypeASTs(json.map(toTypeAST)));
 }
