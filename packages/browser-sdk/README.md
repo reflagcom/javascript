@@ -47,18 +47,18 @@ Pass a flag key to check whether the flag is enabled:
 const enabled = reflag.getFlag("huddles"); // true or false
 ```
 
-To read a configuration value, pass a default as the second argument. You get back a value of the same type as the default:
+Pass a default as the second argument to read a configuration value. The default sets the expected JSON type:
 
 ```ts
 const model = reflag.getFlag("model", "quick"); // string
 const settings = reflag.getFlag("assistant-settings", { model: "quick" }); // { model: string }
 ```
 
-If the flag doesn't exist, or its value has a different type, you get `false`, or your default if you passed one. Pass `null` as the default to accept any JSON value and narrow it yourself.
+If the flag is missing or has a different JSON type, such as a string instead of a number, the SDK returns your default. Without a default, it expects a Boolean and falls back to `false`. Pass `null` to allow any JSON value, then check its type before using it.
 
-The SDK checks only the top-level type of a value. If your application depends on nested fields, validate them.
+The SDK doesn't check object fields or fill in missing fields from your default.
 
-`getFlags()` returns all flag values as a record.
+`getFlags()` returns an object mapping flag keys to values.
 
 Each read records a check, which Reflag uses for launch monitoring.
 

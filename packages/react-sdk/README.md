@@ -62,16 +62,16 @@ Pass a flag key to check whether the flag is enabled:
 const enabled = useFlag("huddles"); // true or false
 ```
 
-To read a configuration value, pass a default as the second argument. You get back a value of the same type as the default:
+Pass a default as the second argument to read a configuration value. The default sets the expected JSON type:
 
 ```tsx
 const model = useFlag("model", "quick"); // string
 const settings = useFlag("huddle-settings", { maxParticipants: 10 }); // { maxParticipants: number }
 ```
 
-While flags are loading, if the flag doesn't exist, or if its value has a different type, you get `false`, or your default if you passed one. Pass `null` as the default to accept any JSON value and narrow it yourself.
+While flags load, or if the flag is missing or has a different JSON type, `useFlag()` returns your default. Without a default, it expects a Boolean and falls back to `false`. Pass `null` to allow any JSON value, then check its type before using it.
 
-The SDK checks only the top-level type of a value. If your application depends on nested fields, validate them.
+The SDK doesn't check object fields or fill in missing fields from your default.
 
 Each read records a check, which Reflag uses for launch monitoring.
 
