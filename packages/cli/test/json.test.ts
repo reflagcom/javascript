@@ -416,6 +416,12 @@ describe("JSON utilities", () => {
       ).toBe(expected);
     });
 
+    it("should preserve optional properties when merging nested arrays", () => {
+      expect(JSONToType([[[{ a: 1 }, {}], [{ a: 2 }]]])).toBe(
+        "(({\n  a?: number\n})[])[]",
+      );
+    });
+
     it("should merge arrays with nested arrays of mixed element types", () => {
       const expected = "((boolean | number | string | {\n  id: number\n})[])[]";
       expect(JSONToType([[[1, "test"], [true]], [[{ id: 1 }]]])).toBe(expected);
@@ -429,6 +435,16 @@ describe("JSON utilities", () => {
           { name: "Jane", email: "jane@example.com" },
         ]),
       ).toBe(expected);
+    });
+
+    it("should escape quoted keys and preserve empty keys in generated types", () => {
+      expect(JSONToType([{ 'a"b': 1, "a\\b": true, "": "empty" }])).toBe(
+        String.raw`{
+  "a\"b": number,
+  "a\\b": boolean,
+  "": string
+}`,
+      );
     });
 
     it("should handle complex nested structures", () => {
