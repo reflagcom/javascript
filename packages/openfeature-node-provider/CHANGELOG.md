@@ -1,5 +1,13 @@
 # @reflag/openfeature-node-provider
 
+## 1.2.9
+
+### Patch Changes
+
+- 186fb85: Allow ES modules to import the Node.js OpenFeature provider through its existing CommonJS build. CommonJS imports and TypeScript declarations are unchanged.
+- Updated dependencies [4722aa2]
+  - @reflag/node-sdk@1.8.4
+
 ## 1.2.8
 
 ### Patch Changes
