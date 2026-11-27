@@ -4,16 +4,11 @@ on:
   push:
     branches:
       - main
-  # Repository dispatch always uses the default branch. It cannot select the
-  # workflow or release source from a maintenance branch.
-  repository_dispatch:
-    types: [release-cli-v1]
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
 jobs:
   release:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -86,95 +81,3 @@ jobs:
             git commit -m "Update released SDK documentation"
             git push
           fi
-
-  build-cli-v1:
-    if: github.event_name == 'repository_dispatch' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Require the reviewed main commit
-        env:
-          REVIEWED_SHA: ${{ github.event.client_payload.sha }}
-        run: |
-          if [[ "$REVIEWED_SHA" != "$GITHUB_SHA" ]]; then
-            echo 'The reviewed commit must match the current main commit used by this run.' >&2
-            exit 1
-          fi
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - run: corepack enable
-      - uses: actions/setup-node@v6
-        with:
-          node-version-file: .nvmrc
-          package-manager-cache: false
-      - name: Prepare the reviewed CLI v1 source with its original lockfile
-        run: |
-          base=1adfced0efaf36f5456707d85907ec8fa591a1ec
-          source="$RUNNER_TEMP/cli-v1-source"
-          git merge-base --is-ancestor "$base" HEAD
-          git worktree add --detach "$source" "$base"
-          git -C "$source" rm -rq -- packages/cli
-          cp -R "$GITHUB_WORKSPACE/releases/cli-v1" "$source/packages/cli"
-      - name: Build, test, and pack only the CLI
-        working-directory: ${{ runner.temp }}/cli-v1-source
-        run: |
-          yarn install --immutable
-          yarn workspace @reflag/cli test
-          yarn workspace @reflag/cli build
-          yarn workspace @reflag/cli pack --out "$RUNNER_TEMP/reflag-cli.tgz"
-      - name: Check the packaged CLI version and npm latest tag
-        env:
-          CLI_VERSION: ${{ github.event.client_payload.version }}
-        run: |
-          set -o pipefail
-          tar -xOf "$RUNNER_TEMP/reflag-cli.tgz" package/package.json | node scripts/cli-v1-release.mjs
-      - uses: actions/upload-artifact@v4
-        if: ${{ toJSON(github.event.client_payload.publish) == 'true' }}
-        with:
-          name: reflag-cli-v1
-          path: ${{ runner.temp }}/reflag-cli.tgz
-          if-no-files-found: error
-          overwrite: true
-
-  publish-cli-v1:
-    needs: build-cli-v1
-    if: ${{ toJSON(github.event.client_payload.publish) == 'true' }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - name: Require a repository administrator to publish
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # A rerun can be requested by someone other than the dispatch actor.
-          for actor in "$GITHUB_ACTOR" "$GITHUB_TRIGGERING_ACTOR"; do
-            permission=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$actor/permission" --jq .permission)
-            if [[ "$permission" != admin ]]; then
-              echo 'Publishing CLI v1 requires a repository administrator.' >&2
-              exit 1
-            fi
-          done
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@v6
-        with:
-          node-version-file: .nvmrc
-          registry-url: https://registry.npmjs.org
-          package-manager-cache: false
-      - uses: actions/download-artifact@v4
-        with:
-          name: reflag-cli-v1
-          path: ${{ runner.temp }}
-      - name: Recheck npm latest and publish CLI v1
-        env:
-          CLI_VERSION: ${{ github.event.client_payload.version }}
-        run: |
-          set -o pipefail
-          tar -xOf "$RUNNER_TEMP/reflag-cli.tgz" package/package.json | node scripts/cli-v1-release.mjs
-          npm publish "$RUNNER_TEMP/reflag-cli.tgz" --access public --tag latest --ignore-scripts
