@@ -1,7 +1,7 @@
 import { Fragment, h } from "preact";
 
 import { Switch } from "./Switch";
-import { FlagItem } from "./Toolbar";
+import type { FlagItem } from "./Toolbar";
 
 const isFound = (flagKey: string, searchQuery: string | null) => {
   return flagKey.toLocaleLowerCase().includes(searchQuery ?? "");
@@ -11,12 +11,12 @@ export function FlagsTable({
   flags,
   searchQuery,
   appBaseUrl,
-  setIsEnabledOverride,
+  setOverride,
 }: {
   flags: FlagItem[];
   searchQuery: string | null;
   appBaseUrl: string;
-  setIsEnabledOverride: (key: string, isEnabled: boolean | null) => void;
+  setOverride: (key: string, value: boolean | undefined) => void;
 }) {
   const hasFlags = flags.length > 0;
   const hasShownFlags = flags.some((flag) =>
@@ -70,9 +70,7 @@ export function FlagsTable({
               isNotVisible={
                 searchQuery !== null && !isFound(flag.flagKey, searchQuery)
               }
-              setEnabledOverride={(override) =>
-                setIsEnabledOverride(flag.flagKey, override)
-              }
+              setOverride={(value) => setOverride(flag.flagKey, value)}
             />
           ))}
         </tbody>
@@ -82,7 +80,7 @@ export function FlagsTable({
 }
 
 function FlagRow({
-  setEnabledOverride,
+  setOverride,
   appBaseUrl,
   flag,
   index,
@@ -90,11 +88,10 @@ function FlagRow({
 }: {
   flag: FlagItem;
   appBaseUrl: string;
-  setEnabledOverride: (isEnabled: boolean | null) => void;
+  setOverride: (value: boolean | undefined) => void;
   index: number;
   isNotVisible: boolean;
 }) {
-  const isEnabledOverride = flag.isEnabledOverride !== null;
   return (
     <tr
       key={flag.flagKey}
@@ -112,17 +109,26 @@ function FlagRow({
         </a>
       </td>
       <td class="flag-reset-cell">
-        {isEnabledOverride ? (
-          <Reset setEnabledOverride={setEnabledOverride} tabIndex={index + 1} />
+        {flag.hasOverride ? (
+          <a
+            class="reset"
+            href=""
+            tabIndex={index + 1}
+            onClick={(e) => {
+              e.preventDefault();
+              setOverride(undefined);
+            }}
+          >
+            reset
+          </a>
         ) : null}
       </td>
       <td class="flag-switch-cell">
         <Switch
-          checked={flag.isEnabledOverride ?? flag.isEnabled}
+          checked={flag.value}
           tabIndex={index + 1}
           onChange={(e) => {
-            const isChecked = e.currentTarget.checked;
-            setEnabledOverride(!isEnabledOverride ? isChecked : null);
+            setOverride(flag.hasOverride ? undefined : e.currentTarget.checked);
           }}
         />
       </td>
@@ -140,26 +146,5 @@ export function FlagSearch({ onSearch }: { onSearch: (val: string) => void }) {
       autoFocus
       onInput={(s) => onSearch(s.currentTarget.value)}
     />
-  );
-}
-
-function Reset({
-  setEnabledOverride,
-  ...props
-}: {
-  setEnabledOverride: (isEnabled: boolean | null) => void;
-} & h.JSX.HTMLAttributes<HTMLAnchorElement>) {
-  return (
-    <a
-      class="reset"
-      href=""
-      onClick={(e) => {
-        e.preventDefault();
-        setEnabledOverride(null);
-      }}
-      {...props}
-    >
-      reset
-    </a>
   );
 }
