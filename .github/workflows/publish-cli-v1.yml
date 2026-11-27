@@ -1,0 +1,109 @@
+name: Release CLI v1
+
+on:
+  pull_request:
+    branches: [maintenance/cli-v1]
+    paths:
+      - releases/cli-v1.json
+      - .github/workflows/publish-cli-v1.yml
+      - scripts/cli-v1-release*.mjs
+  push:
+    branches: [maintenance/cli-v1]
+    paths: [releases/cli-v1.json]
+
+concurrency: cli-v1-release-${{ github.ref }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Validate CLI v1 release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.request.outputs.version }}
+      publish: ${{ steps.request.outputs.publish }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - run: corepack enable
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - name: Read the release request
+        id: request
+        run: node scripts/cli-v1-release.mjs request >> "$GITHUB_OUTPUT"
+      - name: Require a changed request on the protected v1 branch for publication
+        if: github.event_name == 'push' && steps.request.outputs.publish == 'true'
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          if [[ "$GITHUB_REF" != refs/heads/maintenance/cli-v1 || "$GITHUB_REF_PROTECTED" != true ]]; then
+            echo 'CLI v1 can only be published from the protected maintenance/cli-v1 branch.' >&2
+            exit 1
+          fi
+          git merge-base --is-ancestor "$BEFORE_SHA" "$GITHUB_SHA"
+          changed=$(git diff --name-only "$BEFORE_SHA" "$GITHUB_SHA" -- releases/cli-v1.json)
+          if [[ "$changed" != releases/cli-v1.json ]]; then
+            echo 'A live release requires a new release request.' >&2
+            exit 1
+          fi
+      - name: Build, test, and pack only the CLI
+        run: |
+          node --test scripts/cli-v1-release.test.mjs
+          yarn install --immutable
+          yarn workspace @reflag/cli test
+          yarn workspace @reflag/cli build
+          yarn workspace @reflag/cli pack --out "$RUNNER_TEMP/reflag-cli.tgz"
+      - name: Check the packed version and npm latest tag
+        env:
+          CLI_VERSION: ${{ steps.request.outputs.version }}
+        run: |
+          set -o pipefail
+          tar -xOf "$RUNNER_TEMP/reflag-cli.tgz" package/package.json | node scripts/cli-v1-release.mjs check
+          npm publish "$RUNNER_TEMP/reflag-cli.tgz" --registry https://registry.npmjs.org --access public --tag latest --ignore-scripts --dry-run
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: github.event_name == 'push' && steps.request.outputs.publish == 'true'
+        with:
+          name: reflag-cli-v1
+          path: ${{ runner.temp }}/reflag-cli.tgz
+          if-no-files-found: error
+          overwrite: true
+
+  publish:
+    name: Publish CLI v1 to npm latest
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/maintenance/cli-v1' && needs.build.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    environment: cli-v1-release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .nvmrc
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: reflag-cli-v1
+          path: ${{ runner.temp }}
+      - name: Recheck the branch and npm latest, then publish the verified tarball
+        env:
+          CLI_VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          set -o pipefail
+          head=$(git ls-remote --exit-code origin refs/heads/maintenance/cli-v1 | cut -f1)
+          if [[ "$GITHUB_REF_PROTECTED" != true || "$head" != "$GITHUB_SHA" ]]; then
+            echo 'The release commit must still be the head of the protected maintenance/cli-v1 branch.' >&2
+            exit 1
+          fi
+          tar -xOf "$RUNNER_TEMP/reflag-cli.tgz" package/package.json | node scripts/cli-v1-release.mjs check
+          npm publish "$RUNNER_TEMP/reflag-cli.tgz" --registry https://registry.npmjs.org --access public --tag latest --ignore-scripts
