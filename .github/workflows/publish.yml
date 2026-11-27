@@ -1,0 +1,102 @@
+name: Release v1 packages
+
+on:
+  push:
+    branches: [maintenance/v1]
+  pull_request:
+    branches: [maintenance/v1]
+    paths:
+      - releases/v1.json
+      - scripts/v1-release*.mjs
+      - .github/workflows/publish.yml
+      - .changeset/config.json
+      - package.json
+
+concurrency: release-v1-${{ github.ref }}
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    name: Open or update the v1 version PR
+    if: github.event_name == 'push' && github.ref == 'refs/heads/maintenance/v1'
+    runs-on: ubuntu-latest
+    outputs:
+      has-changesets: ${{ steps.changesets.outputs.hasChangesets }}
+    steps:
+      - name: Require a protected branch
+        run: test "$GITHUB_REF_PROTECTED" = true
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - run: corepack enable
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .nvmrc
+          cache: yarn
+      - run: test ! -e .changeset/pre.json && yarn install --immutable
+      - uses: changesets/action@3841a0683d3cfa6dae0f9bb335290003010fe3f0 # v1.9.0
+        id: changesets
+        with:
+          version: yarn version-v1-packages
+          title: Version Packages (v1)
+          commit: Version Packages (v1)
+          branch: maintenance/v1
+          commitMode: github-api
+          github-token: ${{ secrets.CHANGESETS_BOT_TOKEN }}
+
+  validate:
+    name: Validate the v1 npm release plan
+    needs: version
+    if: ${{ !cancelled() && (github.event_name == 'pull_request' || (needs.version.result == 'success' && needs.version.outputs.has-changesets == 'false')) }}
+    runs-on: ubuntu-latest
+    outputs:
+      pending: ${{ steps.plan.outputs.pending }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - run: corepack enable
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - run: node --test scripts/v1-release.test.mjs
+      - name: Compare approved versions to unpublished npm versions
+        id: plan
+        run: node scripts/v1-release.mjs check >> "$GITHUB_OUTPUT"
+
+  publish:
+    name: Publish stable v1 packages to npm latest
+    needs: validate
+    if: github.event_name == 'push' && github.ref == 'refs/heads/maintenance/v1' && needs.validate.outputs.pending == 'true' && vars.V1_PUBLISH_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: npm-v1-release
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - run: corepack enable
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .nvmrc
+          registry-url: https://registry.npmjs.org
+          scope: "@reflag"
+          package-manager-cache: false
+      - run: yarn install --immutable
+      - run: yarn build
+      - name: Require the current protected v1 commit
+        shell: bash
+        run: |
+          head=$(git ls-remote --exit-code origin refs/heads/maintenance/v1 | cut -f1)
+          test "$GITHUB_REF_PROTECTED" = true && test "$head" = "$GITHUB_SHA"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+      - uses: changesets/action@3841a0683d3cfa6dae0f9bb335290003010fe3f0 # v1.9.0
+        with:
+          publish: yarn publish-v1-packages
+          commitMode: github-api
