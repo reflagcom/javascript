@@ -23,7 +23,7 @@
     "version-packages": "changeset version && YARN_ENABLE_IMMUTABLE_INSTALLS=false yarn install",
     "version-v1-packages": "yarn version-packages && node scripts/v1-release.mjs plan",
     "release-packages": "yarn build && yarn release",
-    "publish-v1-packages": "node scripts/v1-release.mjs check && yarn release --tag latest",
+    "publish-v1-packages": "node scripts/v1-release.mjs check && yarn release --tag legacy",
     "release": "changeset publish",
     "docs": "./docs.sh",
     "lint:fix": "yarn oxlint --fix .",

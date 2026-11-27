@@ -1,6 +1,7 @@
 name: Release v1 packages
 
 on:
+  workflow_dispatch:
   push:
     branches: [maintenance/v1]
   pull_request:
@@ -68,7 +69,7 @@ jobs:
         run: node scripts/v1-release.mjs check >> "$GITHUB_OUTPUT"
 
   publish:
-    name: Publish stable v1 packages to npm latest
+    name: Publish v1 packages to npm legacy
     needs: validate
     if: github.event_name == 'push' && github.ref == 'refs/heads/maintenance/v1' && needs.validate.outputs.pending == 'true' && vars.V1_PUBLISH_ENABLED == 'true'
     runs-on: ubuntu-latest
@@ -100,3 +101,31 @@ jobs:
         with:
           publish: yarn publish-v1-packages
           commitMode: github-api
+
+  legacy-tags:
+    name: Preserve v1 packages on npm legacy
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/maintenance/v1' && vars.V1_PUBLISH_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: npm-v1-release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - run: corepack enable
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .nvmrc
+          registry-url: https://registry.npmjs.org
+          scope: "@reflag"
+          package-manager-cache: false
+      - run: node --test scripts/v1-release.test.mjs
+      - name: Require the current protected v1 commit
+        shell: bash
+        run: |
+          head=$(git ls-remote --exit-code origin refs/heads/maintenance/v1 | cut -f1)
+          test "$GITHUB_REF_PROTECTED" = true && test "$head" = "$GITHUB_SHA"
+      - name: Add legacy tags without changing latest
+        run: node scripts/v1-release.mjs tag-legacy
