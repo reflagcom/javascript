@@ -5,7 +5,7 @@ import chalk from "chalk";
 import { Command } from "commander";
 import ora, { Ora } from "ora";
 
-import { App, getApp } from "../services/apps.js";
+import { getApp } from "../services/apps.js";
 import { createFlag, Flag, listFlags } from "../services/flags.js";
 import { configStore } from "../stores/config.js";
 import {
@@ -44,16 +44,10 @@ export const createFlagAction = async (
     handleError(new MissingAppIdError(), "Flags Create");
   }
 
-  let app: App;
   try {
-    app = await getApp(appId);
-  } catch (error) {
-    handleError(error, "Flags Create");
-  }
+    const app = await getApp(appId);
+    const production = app.environments.find((e) => e.isProduction);
 
-  const production = app.environments.find((e) => e.isProduction);
-
-  try {
     console.log(
       `Creating flag for app ${chalk.cyan(app.name)} in ${chalk.cyan(app.org.name)}${baseUrlSuffix(baseUrl)}.`,
     );
@@ -143,19 +137,13 @@ export const generateTypesAction = async () => {
     handleError(new MissingAppIdError(), "Flags Types");
   }
 
-  let app: App;
   try {
-    app = await getApp(appId);
-  } catch (error) {
-    handleError(error, "Flags Types");
-  }
+    const app = await getApp(appId);
+    const production = app.environments.find((e) => e.isProduction);
+    if (!production) {
+      throw new MissingEnvIdError();
+    }
 
-  const production = app.environments.find((e) => e.isProduction);
-  if (!production) {
-    handleError(new MissingEnvIdError(), "Flags Types");
-  }
-
-  try {
     spinner = ora(
       `Loading flags of app ${chalk.cyan(app.name)}${baseUrlSuffix(baseUrl)}...`,
     ).start();

@@ -95,6 +95,7 @@ export function genRemoteConfig(remoteConfigs?: RemoteConfig[]) {
 
 export function genTypes(flags: Flag[], format: GenFormat = "react") {
   const configDefs = new Map<string, { name: string; definition: string }>();
+  const aliasCounts = new Map<string, number>();
   flags.forEach(({ key, name, remoteConfigs }) => {
     const definition = genRemoteConfig(remoteConfigs);
 
@@ -102,7 +103,17 @@ export function genTypes(flags: Flag[], format: GenFormat = "react") {
       return;
     }
 
-    const configName = `${pascalCase(name)}ConfigPayload`;
+    const identifier = `${pascalCase(name)}ConfigPayload`.replace(
+      /[^\p{ID_Continue}$]/gu,
+      "_",
+    );
+    const base = /^[$_\p{ID_Start}]/u.test(identifier)
+      ? identifier
+      : `_${identifier}`;
+    const count = (aliasCounts.get(base) ?? 0) + 1;
+    aliasCounts.set(base, count);
+    // A numbered suffix cannot collide with another base ending in ConfigPayload.
+    const configName = count === 1 ? base : `${base}_${count}`;
     configDefs.set(key, { name: configName, definition });
   });
 
