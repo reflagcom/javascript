@@ -235,6 +235,9 @@ export type FlagOverride =
  * Describes a feature definition.
  */
 export type FlagDefinition = {
+  /** Only explicit false authorizes browser bootstrap export. */
+  secret?: boolean;
+
   /**
    * The key of the feature.
    */
@@ -348,6 +351,9 @@ export type FlagConfigVariant = {
  * @internal
  */
 export type FlagAPIResponse = {
+  /** Missing visibility in older responses is not a public declaration. */
+  secret?: boolean;
+
   /**
    * The key of the feature.
    */
