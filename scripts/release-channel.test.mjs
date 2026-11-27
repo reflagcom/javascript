@@ -59,10 +59,15 @@ test("all stable-doc publication steps require a stable release channel", () => 
     workflow,
     /id: release-channel\s+run: node scripts\/release-channel\.mjs >> "\$GITHUB_OUTPUT"/,
   );
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.match(
+    workflow,
+    /release:\s+if: github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'/,
+  );
   const conditions = workflow
     .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.startsWith("if: "));
+    .filter((line) => line.startsWith("        if: "))
+    .map((line) => line.trim());
   assert.equal(conditions.length, 7);
   for (const condition of conditions) {
     assert.ok(
@@ -94,22 +99,27 @@ test("the real Changesets release plan follows the selected channel", async () =
       `Unexpected ${channel} version for ${release.name}`,
     );
   }
-  // The first version PR must cover the complete v2 SDK family, not Node only.
-  // After versioning, consumed changesets need not produce another release.
-  if (channel === "next" && state.changesets.length === 0) {
+  // Both the first prerelease and stable exit must cover the complete v2
+  // toolchain. After versioning, consumed changesets need not release again.
+  if (
+    (channel === "next" && state.changesets.length === 0) ||
+    state?.mode === "exit"
+  ) {
     for (const name of [
       "@reflag/node-sdk",
       "@reflag/browser-sdk",
       "@reflag/react-sdk",
       "@reflag/vue-sdk",
       "@reflag/react-native-sdk",
+      "@reflag/cli",
     ]) {
-      assert.ok(
-        plan.releases.some(
-          (release) => release.name === name && release.type !== "none",
-        ),
-        `Missing initial prerelease for ${name}`,
+      const release = plan.releases.find(
+        (item) => item.name === name && item.type !== "none",
       );
+      assert.ok(release, `Missing ${channel} release for ${name}`);
+      if (state.mode === "exit") {
+        assert.equal(release.newVersion, "2.0.0");
+      }
     }
   }
 });
