@@ -2,13 +2,13 @@ name: Release CLI v1
 
 on:
   pull_request:
-    branches: [maintenance/cli-v1]
+    branches: [maintenance/v1]
     paths:
       - releases/cli-v1.json
       - .github/workflows/publish-cli-v1.yml
       - scripts/cli-v1-release*.mjs
   push:
-    branches: [maintenance/cli-v1]
+    branches: [maintenance/v1]
     paths: [releases/cli-v1.json]
 
 concurrency: cli-v1-release-${{ github.ref }}
@@ -41,8 +41,8 @@ jobs:
         env:
           BEFORE_SHA: ${{ github.event.before }}
         run: |
-          if [[ "$GITHUB_REF" != refs/heads/maintenance/cli-v1 || "$GITHUB_REF_PROTECTED" != true ]]; then
-            echo 'CLI v1 can only be published from the protected maintenance/cli-v1 branch.' >&2
+          if [[ "$GITHUB_REF" != refs/heads/maintenance/v1 || "$GITHUB_REF_PROTECTED" != true ]]; then
+            echo 'CLI v1 can only be published from the protected maintenance/v1 branch.' >&2
             exit 1
           fi
           git merge-base --is-ancestor "$BEFORE_SHA" "$GITHUB_SHA"
@@ -76,7 +76,7 @@ jobs:
   publish:
     name: Publish CLI v1 to npm latest
     needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/maintenance/cli-v1' && needs.build.outputs.publish == 'true'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/maintenance/v1' && needs.build.outputs.publish == 'true'
     runs-on: ubuntu-latest
     environment: cli-v1-release
     permissions:
@@ -100,9 +100,9 @@ jobs:
           CLI_VERSION: ${{ needs.build.outputs.version }}
         run: |
           set -o pipefail
-          head=$(git ls-remote --exit-code origin refs/heads/maintenance/cli-v1 | cut -f1)
+          head=$(git ls-remote --exit-code origin refs/heads/maintenance/v1 | cut -f1)
           if [[ "$GITHUB_REF_PROTECTED" != true || "$head" != "$GITHUB_SHA" ]]; then
-            echo 'The release commit must still be the head of the protected maintenance/cli-v1 branch.' >&2
+            echo 'The release commit must still be the head of the protected maintenance/v1 branch.' >&2
             exit 1
           fi
           tar -xOf "$RUNNER_TEMP/reflag-cli.tgz" package/package.json | node scripts/cli-v1-release.mjs check
