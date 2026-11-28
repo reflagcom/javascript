@@ -120,7 +120,7 @@ import { ReflagBootstrappedProvider } from "@reflag/react-sdk";
 </ReflagBootstrappedProvider>;
 ```
 
-The envelope includes `protocolVersion: 2`, context, evaluated flag results and optional `flagStateVersion`. V1 bootstrap is rejected. Use a snapshot version for live updates; later refreshes use browser-visible context. Do not send secrets/server-only attributes to the browser. Disable live updates if later browser evaluation must not replace server-only results. Requesting missing opt-in metadata still makes a browser-side request even when live updates are disabled.
+The envelope includes `protocolVersion: 2`, context, evaluated flag results and optional `flagStateVersion`. V1 bootstrap is rejected. Use a snapshot version for live updates; later refreshes use browser-visible context. Disable live updates if later browser evaluation must not replace server-only results. Requesting missing opt-in metadata still makes a browser-side request even when live updates are disabled.
 
 For a pre-existing Browser v2 client, use `<ReflagClientProvider client={client}>`. The provider does not own its lifecycle; initialize/stop externally, except that a suspending read can start on-demand initialization.
 

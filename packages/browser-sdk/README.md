@@ -115,7 +115,7 @@ await reflag.initialize();
 const enabled = reflag.getFlag("release");
 ```
 
-The payload includes `protocolVersion: 2`, context, evaluated diagnostics/selections and an optional snapshot version. V1 payloads and the old `bootstrappedFlags` option are rejected. Preserve the entire envelope; do not pass just its `flags` property. A version is required for bootstrapped live updates. Never embed secrets or server-only context in public bootstrap data. Later refreshes use browser-visible context and can differ from server-only evaluation; disable live updates when that is inappropriate. Requesting missing opt-in metadata still makes a browser-side request even when live updates are disabled.
+The payload includes `protocolVersion: 2`, context, evaluated diagnostics/selections and an optional snapshot version. V1 payloads and the old `bootstrappedFlags` option are rejected. Preserve the entire envelope; do not pass just its `flags` property. A version is required for bootstrapped live updates. Later refreshes use browser-visible context and can differ from server-only evaluation; disable live updates when that is inappropriate. Requesting missing opt-in metadata still makes a browser-side request even when live updates are disabled.
 
 ## End-user opt-in
 

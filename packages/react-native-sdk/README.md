@@ -99,7 +99,7 @@ import { ReflagBootstrappedProvider } from "@reflag/react-native-sdk";
 </ReflagBootstrappedProvider>;
 ```
 
-The envelope contains `protocolVersion: 2`, context, evaluated flags and an optional snapshot version. Legacy v1 bootstrap is rejected. Live updates require a snapshot version. Never expose secret keys or server-only attributes in bootstrap data: later refreshes use app-visible context and may differ from server evaluation. Disable live updates when later client evaluation must not replace the server result. Requesting missing opt-in metadata still makes a client-side request even with live updates disabled.
+The envelope contains `protocolVersion: 2`, context, evaluated flags and an optional snapshot version. Legacy v1 bootstrap is rejected. Live updates require a snapshot version. Later refreshes use app-visible context and may differ from server evaluation. Disable live updates when later client evaluation must not replace the server result. Requesting missing opt-in metadata still makes a client-side request even with live updates disabled.
 
 `ReflagClientProvider` accepts an externally initialized matching v2 client. Its lifecycle and platform-adapter configuration belong to your application; the React Native convenience providers do not configure an external client.
 

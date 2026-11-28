@@ -84,7 +84,7 @@ const flags = serverClient.getFlagsForBootstrap(context);
 </ReflagBootstrappedProvider>
 ```
 
-Pass the entire envelope (`protocolVersion: 2`, context, evaluated flags and optional snapshot version). Legacy v1 bootstrap is rejected. A snapshot version is required for live updates. Never expose secret keys/server-only attributes in bootstrap data; later refreshes use browser-visible context, so disable live updates when they must not replace server-only evaluations. Requesting missing opt-in metadata still makes a browser-side request even when live updates are disabled.
+Pass the entire envelope (`protocolVersion: 2`, context, evaluated flags and optional snapshot version). Legacy v1 bootstrap is rejected. A snapshot version is required for live updates. Later refreshes use browser-visible context, so disable live updates when they must not replace server-only evaluations. Requesting missing opt-in metadata still makes a browser-side request even when live updates are disabled.
 
 `ReflagClientProvider` accepts an externally initialized Browser v2 client. Its lifecycle belongs to the application.
 
