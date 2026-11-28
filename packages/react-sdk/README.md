@@ -2,8 +2,6 @@
 
 Direct-value feature flags for React, backed by [Browser SDK v2](../browser-sdk/README.md).
 
-> Bootstrap requires **Node SDK v2**. The v2 CLI generates direct-value declarations; regenerate legacy wrapper-shaped output when migrating. Useful default-based inference does not require generated declarations.
-
 ## Setup
 
 ```tsx
@@ -153,4 +151,4 @@ Metadata arrives with the initial v2 evaluation for regular providers. Bootstrap
 
 ## Migration from v1
 
-Use `const enabled = useFlag(key)` instead of destructuring `.isEnabled`. Replace wrapper config access with an authored multivariate flag and positional default. Move `.track()` and `.requestFeedback()` to separate hooks. Replace `useFlag(key, { suspense: true })` with `useFlagSuspense(key)`, and use `useIsLoading()` instead of a flag wrapper's loading property. Upgrade Browser/server bootstrap together.
+Use `const enabled = useFlag(key)` instead of destructuring `.isEnabled`. Replace wrapper config access with an authored multivariate flag and positional default. Move `.track()` and `.requestFeedback()` to separate hooks. Replace `useFlag(key, { suspense: true })` with `useFlagSuspense(key)`, and use `useIsLoading()` instead of a flag wrapper's loading property. If you bootstrap from the server, upgrade the Node SDK that produces the bootstrap data to v2 at the same time.
