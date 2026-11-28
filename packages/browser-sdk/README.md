@@ -1,6 +1,6 @@
 # Reflag Browser SDK v2
 
-Client-side feature flags and JSON values for [Reflag](https://reflag.com).
+Client-side feature flags for [Reflag](https://reflag.com).
 
 ## Get started
 
