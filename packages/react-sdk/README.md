@@ -100,7 +100,7 @@ declare module "@reflag/react-sdk" {
 }
 ```
 
-Registration constrains keys and checks non-null defaults against the registered value schema, including required and nested properties. Named-interface and readonly defaults are supported. Explicit `null` remains an arbitrary-JSON request; bare/`undefined` reads remain Boolean. The positional default still determines the widened return type, and generated declarations do not add nested runtime validation. The same rules apply to `useFlagSuspense`. The v2 CLI generates direct-value declarations from current production-environment variants; regenerate legacy wrapper declarations when migrating.
+Registered flags get autocompletion for their keys and type checks for the defaults you pass, in both `useFlag()` and `useFlagSuspense()`. The checks happen at compile time only. To generate the declarations, run `npx reflag flags types` with the `react` format.
 
 ## Bootstrap and SSR
 
@@ -151,4 +151,4 @@ Metadata arrives with the initial v2 evaluation for regular providers. Bootstrap
 
 ## Migration from v1
 
-Use `const enabled = useFlag(key)` instead of destructuring `.isEnabled`. Replace wrapper config access with an authored multivariate flag and positional default. Move `.track()` and `.requestFeedback()` to separate hooks. Replace `useFlag(key, { suspense: true })` with `useFlagSuspense(key)`, and use `useIsLoading()` instead of a flag wrapper's loading property. If you bootstrap from the server, upgrade the Node SDK that produces the bootstrap data to v2 at the same time.
+Use `const enabled = useFlag(key)` instead of destructuring `.isEnabled`. Replace wrapper config access with an authored multivariate flag and positional default. Move `.track()` and `.requestFeedback()` to separate hooks. Replace `useFlag(key, { suspense: true })` with `useFlagSuspense(key)`, and use `useIsLoading()` instead of a flag wrapper's loading property. If you bootstrap from the server, upgrade the Node SDK that produces the bootstrap data to v2 at the same time. If you generate type declarations, regenerate them with the v2 CLI.
