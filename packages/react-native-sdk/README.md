@@ -86,7 +86,7 @@ const flags = serverClient.getFlagsForBootstrap({
 });
 ```
 
-Pass the complete serialized envelope to React Native:
+Pass the complete serialized envelope to the React Native provider:
 
 ```tsx
 import { ReflagBootstrappedProvider } from "@reflag/react-native-sdk";
@@ -113,7 +113,7 @@ The toolbar and built-in feedback UI are web-only and disabled by default. Use y
 
 ## Optional key registration
 
-React Native reexports React's hooks and **shares React's `Flags` registry**. Register direct-value schemas in `@reflag/react-sdk`, not a separate React Native registry:
+The React Native SDK reexports React's hooks and **shares React's `Flags` registry**. Register direct-value schemas in `@reflag/react-sdk`, not a separate React Native registry:
 
 ```ts
 import "@reflag/react-native-sdk";
