@@ -2,7 +2,7 @@
 
 React Native providers and hooks for Boolean and multivariate flags. Built on the matching React v2 SDK, with AsyncStorage persistence and a native SSE transport included.
 
-Upgrade Node/bootstrap producers and React Native consumers together. The [React SDK README](../react-sdk/README.md) covers the shared API.
+The [React SDK README](../react-sdk/README.md) covers the shared API.
 
 ## Install and initialize
 
@@ -161,7 +161,7 @@ Mount this listener under a React Native provider. Context prop changes and `use
 - Replace `const { isEnabled, track } = useFlag(key)` with `const enabled = useFlag(key)` and a separate `useTrack()` call.
 - Replace remote-config wrappers with authored multivariate flags and positional JSON defaults.
 - Use `useFlagSuspense`, not `useFlag(key, { suspense: true })`, for readiness-waiting reads.
-- Use direct-value fallback maps for multivariate flags; Boolean string-array shorthand remains supported. Migrate both ends of bootstrap to protocol v2.
+- Use direct-value fallback maps for multivariate flags; Boolean string-array shorthand remains supported. If you bootstrap from the server, upgrade the Node SDK that produces the bootstrap data at the same time as the app.
 - Rebuild against matching React Native/React/Browser v2 packages and regenerate legacy declarations.
 
 The [Expo](https://github.com/reflagcom/javascript/tree/main/packages/react-native-sdk/dev/expo) and [bare React Native](https://github.com/reflagcom/javascript/tree/main/packages/react-native-sdk/dev/bare-rn) examples use the v2 React Native APIs. OpenFeature providers are separate integrations and do not gain v2 support from this migration.
