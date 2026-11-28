@@ -1,62 +1,81 @@
-# Reflag React Native SDK v2
+# Reflag React Native SDK
 
-React Native providers and hooks for Boolean and multivariate flags. Built on the matching React v2 SDK, with AsyncStorage persistence and a native SSE transport included.
+Feature flags, remote configuration and usage tracking for React Native apps. Built on the [React SDK](../react-sdk/README.md), with flag caching and live updates set up for React Native.
 
-This branch targets the v2 toolchain; it does not publish packages. Upgrade Node/bootstrap producers and Native consumers together. The [React SDK README](../react-sdk/README.md) covers the shared API.
+## Get started
 
-## Install and initialize
+### 1. Add the provider
+
+Install the SDK:
 
 ```sh
-npm install @reflag/react-native-sdk@2
+npm install @reflag/react-native-sdk
 ```
 
-Requires React 17 or later (the modern JSX runtime) and a React version supported by your React Native app. Wrap your app with the Native provider, which supplies the platform adapters:
+It requires React 17 or later. Wrap your app in `ReflagProvider` with your **publishable** key and the signed-in user's context:
 
 ```tsx
 import { ReflagProvider } from "@reflag/react-native-sdk";
 
 <ReflagProvider
-  publishableKey="{YOUR_PUBLISHABLE_KEY}"
+  publishableKey="your-publishable-key"
   context={{
-    user: { id: "user_123", name: "John Doe" },
-    company: { id: "company_123", plan: "pro" },
+    user: { id: "alice" },
+    company: { id: "acme", plan: "enterprise" },
   }}
 >
   <App />
 </ReflagProvider>;
 ```
 
-Use only publishable keys in the app, never server secret keys. Native providers default live updates on, persistence to AsyncStorage, and SSE to `react-native-sse` with transport polling disabled. `storage`, `eventSourceFactory`, and `enableLiveFlagUpdates` remain configurable.
+Publishable keys are safe to ship in your app. Keep secret keys on your server.
 
-## Read flags and track usage
+### 2. Create a flag
 
-`useFlag(key)` returns a **Boolean**, with false while initializing or when missing. A positional JSON default requests a matching top-level value category:
+Create a flag with the key `huddles` in the Reflag app.
+
+### 3. Read the flag
+
+Use `useFlag()` in any component:
 
 ```tsx
 import { Button } from "react-native";
 import { useFlag, useTrack } from "@reflag/react-native-sdk";
 
 function StartHuddleButton() {
-  const enabled = useFlag("huddle");
-  const settings = useFlag("huddle-settings", { maxParticipants: 10 });
+  const enabled = useFlag("huddles");
   const track = useTrack();
   if (!enabled) return null;
   return (
-    <Button
-      title={`Start huddle (up to ${settings.maxParticipants})`}
-      onPress={() => void track("Started huddle")}
-    />
+    <Button title="Start huddle" onPress={() => void track("Started huddle")} />
   );
 }
 ```
 
-Defaults infer widened direct-value types without generated declarations. Accepted false, zero, empty strings and null are not replaced by truthy fallbacks. Explicit `null` requests arbitrary JSON; `undefined` retains the Boolean-first behavior. Returned JSON values are independent copies. Defaults check top-level categories, not nested runtime schemas.
+## Read flags
 
-Reading registers root checks immediately; application usage remains separate through `useTrack()`. `useClient().getFlags()` also returns direct values, not v1 flag wrappers. `useIsLoading()` reports readiness separately.
+Pass a flag key to check whether the flag is enabled:
 
-## Suspense
+```tsx
+const enabled = useFlag("huddles"); // true or false
+```
 
-Ordinary `useFlag` never suspends, even inside a provider with `suspense` enabled. Use `useFlagSuspense` to wait for initialization:
+Pass a default as the second argument to read a configuration value. The default sets the expected JSON type:
+
+```tsx
+const model = useFlag("model", "quick"); // string
+const settings = useFlag("huddle-settings", { maxParticipants: 10 }); // { maxParticipants: number }
+```
+
+While flags load, or if the flag is missing or has a different JSON type, `useFlag()` returns your default. Without a default, it expects a Boolean and falls back to `false`. Pass `null` to allow any JSON value, then check its type before using it.
+
+The SDK doesn't check object fields or fill in missing fields from your default.
+
+Each read records a check, which Reflag uses for launch monitoring.
+
+## Loading states and Suspense
+
+`useFlag()` returns immediately and never suspends. To show a loading UI, use `useIsLoading()`. To wait for flags with React Suspense, use `useFlagSuspense()`. It takes the same arguments as `useFlag()`:
 
 ```tsx
 import { Suspense } from "react";
@@ -64,7 +83,7 @@ import { ActivityIndicator } from "react-native";
 import { useFlagSuspense } from "@reflag/react-native-sdk";
 
 function Huddles() {
-  const enabled = useFlagSuspense("huddle");
+  const enabled = useFlagSuspense("huddles");
   return enabled ? <HuddleScreen /> : null;
 }
 
@@ -73,62 +92,23 @@ function Huddles() {
 </Suspense>;
 ```
 
-A missing flag uses its default after initialization rather than suspending forever. Provider `suspense` and `useOptInFlags({ suspense: true })` control opt-in metadata loading, not ordinary flag reads. An object passed as `useFlag`'s second argument is a JSON default, not loading options.
-
-## Bootstrap from Node v2
-
-Produce the envelope on your server using Node SDK v2:
-
-```ts
-const flags = serverClient.getFlagsForBootstrap({
-  user: { id: "user_123" },
-  company: { id: "company_123" },
-});
-```
-
-Pass the complete serialized envelope to Native:
+## Track usage and feedback
 
 ```tsx
-import { ReflagBootstrappedProvider } from "@reflag/react-native-sdk";
+const track = useTrack();
+await track("Started huddle", { button: "cta" });
 
-<ReflagBootstrappedProvider
-  publishableKey="{YOUR_PUBLISHABLE_KEY}"
-  flags={flags}
->
-  <App />
-</ReflagBootstrappedProvider>;
+const sendFeedback = useSendFeedback();
+await sendFeedback({ flagKey: "huddles", score: 5 });
 ```
 
-The envelope contains `protocolVersion: 2`, context, evaluated flags and an optional snapshot version. Legacy v1 bootstrap is rejected. Live updates require a snapshot version. Never expose secret keys or server-only attributes in bootstrap data: later refreshes use app-visible context and may differ from server evaluation. Disable live updates when later client evaluation must not replace the server result. Requesting missing opt-in metadata still makes a client-side request even with live updates disabled.
+Configure your flag's adoption rules to match the event names you send. The built-in feedback UI is web-only, so collect feedback with your own UI and send it with `useSendFeedback()`.
 
-`ReflagClientProvider` accepts an externally initialized matching v2 client. Its lifecycle and platform-adapter configuration belong to your application; the Native convenience providers do not configure an external client.
+## Update context
 
-## Opt-in and feedback
+`useUpdateUser()`, `useUpdateCompany()` and `useUpdateOtherContext()` return functions that merge new attributes into the current context. Changing the provider's `context` prop also updates it. Flag values are refetched for the new context.
 
-`useOptInFlags()` returns metadata and loading state; `useSetOptIn()` changes membership. Metadata arrives with ordinary `/flags/evaluated` responses, or on demand after bootstrap without replacing server-derived values. User/company grants stay independent. Successful mutations confirm versioned evaluation and membership in one refresh. Check the returned `Response.ok` and catch rejections: confirmation can fail after membership changed remotely, and skipped calls return undefined. Failed metadata loading settles without exposing an error; use `useClient().refresh()` to retry.
-
-The toolbar and built-in feedback UI are web-only and disabled by default. Use your own Native feedback UI with `useSendFeedback()` or `client.feedback()`; enabling a web UI option does not make it Native-compatible.
-
-`enableTracking: false` disables checks and ordinary tracking. Offline mode skips HTTP/tracking; use direct-value fallbacks such as `fallbackFlags={{ huddle: true, settings: { mode: "offline" } }}`.
-
-## Optional key registration
-
-Native reexports React's hooks and **shares React's `Flags` registry**. Register direct-value schemas in `@reflag/react-sdk`, not a separate Native registry:
-
-```ts
-import "@reflag/react-native-sdk";
-
-declare module "@reflag/react-sdk" {
-  interface Flags {
-    huddle: boolean;
-    "huddle-settings": { maxParticipants: number };
-  }
-}
-```
-
-Registration constrains keys and checks non-null positional defaults, including required and nested fields. Named-interface and readonly defaults work. It does not restore wrappers or validate nested runtime payloads. The Native package reexports the same registry/types; v2 CLI React-format declarations target this shared interface. Regenerate legacy wrapper declarations before use; CLI v2 is a separate release dependency.
-
-## Refresh when returning to the foreground
+## Refresh when the app returns to the foreground
 
 ```tsx
 import { useEffect, useRef } from "react";
@@ -154,14 +134,75 @@ function AppStateListener() {
 }
 ```
 
-Mount this listener under a Native provider. Context prop changes and `useUpdateUser`/`useUpdateCompany`/`useUpdateOtherContext` also update evaluation context.
+Render this component inside `ReflagProvider`.
 
-## Migrating from v1
+## Bootstrap from the server
 
-- Replace `const { isEnabled, track } = useFlag(key)` with `const enabled = useFlag(key)` and a separate `useTrack()` call.
-- Replace remote-config wrappers with authored multivariate flags and positional JSON defaults.
-- Use `useFlagSuspense`, not `useFlag(key, { suspense: true })`, for readiness-waiting reads.
-- Use direct-value fallback maps for multivariate flags; Boolean string-array shorthand remains supported. Migrate both ends of bootstrap to protocol v2.
-- Rebuild against matching Native/React/Browser v2 packages and regenerate legacy declarations.
+If your backend already sends data to the app, you can include flags evaluated with the **Node.js SDK** so they're available immediately:
 
-The [Expo](https://github.com/reflagcom/javascript/tree/main/packages/react-native-sdk/dev/expo) and [bare React Native](https://github.com/reflagcom/javascript/tree/main/packages/react-native-sdk/dev/bare-rn) examples use the v2 Native APIs. OpenFeature providers are separate integrations and do not gain v2 support from this migration.
+```ts
+const flags = serverClient.getFlagsForBootstrap(context);
+```
+
+Pass the whole result to `ReflagBootstrappedProvider`:
+
+```tsx
+import { ReflagBootstrappedProvider } from "@reflag/react-native-sdk";
+
+<ReflagBootstrappedProvider publishableKey="your-publishable-key" flags={flags}>
+  <App />
+</ReflagBootstrappedProvider>;
+```
+
+Leave secrets and server-only attributes out of the context you bootstrap, because the app can read it. Later refreshes evaluate flags using the app's context. If values that depend on server-only attributes must not change, set `enableLiveFlagUpdates={false}`.
+
+## Let users opt in to flags
+
+```tsx
+const { flags, isLoading } = useOptInFlags();
+const setOptIn = useSetOptIn();
+
+await setOptIn("huddles", { optedIn: true });
+await setOptIn("huddles", { optedIn: false, scope: "company" });
+```
+
+Each entry includes the flag's `key`, `name`, `description` and whether the user or company has opted in. User and company opt-ins are independent. Check `isLoading` before rendering an empty state.
+
+## Overrides
+
+The toolbar is web-only. To override a flag from code, call `useClient().setFlagOverride(key, value)`. Pass `undefined` to remove the override.
+
+## Type safety
+
+Declaring your flags gives you autocompletion for keys and type checks for defaults. Generate the declarations with the Reflag CLI, choosing the `react` format:
+
+```sh
+npm install --save-dev @reflag/cli
+npx reflag init
+npx reflag flags types
+```
+
+The React Native SDK uses the React SDK's types, so the declarations extend `@reflag/react-sdk`:
+
+```ts
+import "@reflag/react-native-sdk";
+
+declare module "@reflag/react-sdk" {
+  interface Flags {
+    huddles: boolean;
+    "huddle-settings": { maxParticipants: number };
+  }
+}
+```
+
+If TypeScript can't resolve `@reflag/react-sdk`, add it as a direct dependency at the same version the React Native SDK uses. Declarations are checked at compile time only. See the [Reflag CLI](https://docs.reflag.com/api/cli) for more options.
+
+## Configuration
+
+The provider accepts the same props as the React SDK's provider, such as `fallbackFlags`, `enableTracking`, `offline` and `logger`. In React Native, live updates are on by default and flags are cached in AsyncStorage. Use `enableLiveFlagUpdates`, `storage` and `eventSourceFactory` to change this.
+
+To use a client you create yourself, pass it to `ReflagClientProvider`. Your app is then responsible for initializing and stopping it, and for configuring its storage and live updates.
+
+## Examples
+
+See the [Expo](https://github.com/reflagcom/javascript/tree/main/packages/react-native-sdk/dev/expo) and [bare React Native](https://github.com/reflagcom/javascript/tree/main/packages/react-native-sdk/dev/bare-rn) example apps.
