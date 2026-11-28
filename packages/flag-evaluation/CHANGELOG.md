@@ -1,5 +1,11 @@
 # @reflag/flag-evaluation
 
+## 2.0.1
+
+### Patch Changes
+
+- a1bd963: Memoize flag and segment results within each evaluation to avoid repeated work in shared dependency graphs. Batch evaluation shares these results across roots, but separate calls and contexts never share cached results. Preserve variant-key matching, rule traces, diagnostic provenance and deduplication, and fail-closed handling of cached dependency errors.
+
 ## 2.0.0
 
 ### Major Changes
