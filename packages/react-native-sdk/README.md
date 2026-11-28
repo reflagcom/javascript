@@ -126,7 +126,7 @@ declare module "@reflag/react-sdk" {
 }
 ```
 
-Registration constrains keys and checks non-null positional defaults, including required and nested fields. Named-interface and readonly defaults work. It does not restore wrappers or validate nested runtime payloads. The React Native package reexports the same registry/types; v2 CLI React-format declarations target this shared interface. Regenerate legacy wrapper declarations before use; CLI v2 is a separate release dependency.
+Registered flags get autocompletion for their keys and type checks for the defaults you pass. The checks happen at compile time only. To generate the declarations, run `npx reflag flags types` with the `react` format.
 
 ## Refresh when returning to the foreground
 
