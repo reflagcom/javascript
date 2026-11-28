@@ -1,6 +1,6 @@
 {
   "name": "@reflag/react-sdk",
-  "version": "2.0.0-next.2",
+  "version": "2.0.0",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -40,7 +40,7 @@
     "fmt:fix": "oxfmt --write ."
   },
   "dependencies": {
-    "@reflag/browser-sdk": "^2.0.0-next.1",
+    "@reflag/browser-sdk": "^2.0.0",
     "fast-equals": "^5.2.2"
   },
   "devDependencies": {
