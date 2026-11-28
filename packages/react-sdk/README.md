@@ -1,6 +1,6 @@
 # Reflag React SDK v2
 
-Direct-value feature flags for React, backed by [Browser SDK v2](../browser-sdk/README.md).
+Feature flags for React, built on the [Browser SDK](../browser-sdk/README.md).
 
 ## Setup
 
@@ -38,7 +38,7 @@ function Huddles() {
 }
 ```
 
-Bare reads return Boolean/false, including while initial data is unavailable. A positional default infers widened direct types, even without generated declarations:
+Bare reads return Boolean/false, including while initial data is unavailable. A default sets the return type, even without generated declarations:
 
 ```ts
 useFlag("model", "quick"); // string
@@ -129,7 +129,7 @@ For a pre-existing Browser v2 client, use `<ReflagClientProvider client={client}
 - `useUpdateUser()`, `useUpdateCompany()` and `useUpdateOtherContext()` return async shallow-update functions. `useClient().setContext(context)` replaces the whole context.
 - Context changes clear old-context values while fetching. Stale/in-flight responses cannot replace a newer context/snapshot.
 - `useIsLoading()` returns provider loading state. `loadingComponent` and `initialLoading` configure initial presentation; they are not getter arguments.
-- `useClient()` returns the underlying Browser client. Its `getFlags()` returns direct values/checks; `getFlagResults()` is diagnostic-only.
+- `useClient()` returns the underlying Browser client. Its `getFlags()` returns all flag values; `getFlagResults()` is diagnostic-only.
 - `useOnEvent(type, handler, client?)` subscribes and unsubscribes on unmount. A supplied external client works without a provider.
 
 ## Opt-in hooks

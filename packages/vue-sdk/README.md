@@ -1,6 +1,6 @@
 # Reflag Vue SDK v2
 
-Reactive direct-value flags for Vue 3, backed by [Browser SDK v2](../browser-sdk/README.md).
+Feature flags for Vue 3, built on the [Browser SDK](../browser-sdk/README.md).
 
 ## Setup
 
@@ -65,7 +65,7 @@ The ref updates when evaluated flags change. A composable read registers the req
 - `useIsLoading()` returns a Boolean ref for provider loading; the `#loading` slot and `initialLoading` control initial presentation.
 - `useUpdateUser()`, `useUpdateCompany()` and `useUpdateOtherContext()` return async shallow-update functions.
 - `useClient()` exposes the Browser client, including `setContext(context)`, `refresh()` and `setFlagOverride(key, value)`. Undefined clears an override; null is a JSON override.
-- `getFlags()` returns direct values and registers returned-root checks. Use `getFlagResults()` for tooling without checks.
+- `getFlags()` returns all flag values and records a check for each. Use `getFlagResults()` for tooling without checks.
 - `useOnEvent(type, handler, client?)` subscribes on mount and unsubscribes on unmount. An external client may be supplied explicitly.
 
 A context change clears old values while fetching. Late responses for previous contexts or lower snapshot versions cannot replace accepted state. V2 cache/override storage is isolated from v1. Browser fetching uses `/flags/evaluated` and never re-evaluates/caches dependencies locally.

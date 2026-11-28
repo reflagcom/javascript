@@ -26,7 +26,7 @@ if (enabled) {
 
 Use only a **publishable** key in a browser. Secret keys belong on your server.
 
-## Direct-value reads
+## Read flags
 
 ```ts
 reflag.getFlag("release"); // boolean; missing/mismatched -> false
@@ -43,7 +43,7 @@ reflag.getFlag("nullable-settings", null); // FlagValue (arbitrary JSON)
 - Object fields and array elements are **not schema-validated**. Validate untrusted/nested payloads in your application.
 - Values and defaults are returned as independent mutable copies. There are no reserved JSON property names.
 
-`getFlags()` returns a direct-value record (entries may be undefined) and registers checks for its returned roots. `getFlagResults()` returns owned evaluated diagnostics **without checks**; it is intended for tooling, not ordinary application reads. `getFlagsForBootstrap()` serializes protocol-v2 evaluated state without checks.
+`getFlags()` returns a record of flag values (entries may be undefined) and registers checks for its returned roots. `getFlagResults()` returns owned evaluated diagnostics **without checks**; it is intended for tooling, not ordinary application reads. `getFlagsForBootstrap()` serializes protocol-v2 evaluated state without checks.
 
 ## Checks and delivery
 

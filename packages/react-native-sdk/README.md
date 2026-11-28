@@ -50,9 +50,9 @@ function StartHuddleButton() {
 }
 ```
 
-Defaults infer widened direct-value types without generated declarations. Accepted false, zero, empty strings and null are not replaced by truthy fallbacks. Explicit `null` requests arbitrary JSON; `undefined` retains the Boolean-first behavior. Returned JSON values are independent copies. Defaults check top-level categories, not nested runtime schemas.
+A default sets the return type, even without generated declarations. Accepted false, zero, empty strings and null are not replaced by truthy fallbacks. Explicit `null` requests arbitrary JSON; `undefined` retains the Boolean-first behavior. Returned JSON values are independent copies. Defaults check top-level categories, not nested runtime schemas.
 
-Reading registers root checks immediately; application usage remains separate through `useTrack()`. `useClient().getFlags()` also returns direct values, not v1 flag wrappers. `useIsLoading()` reports readiness separately.
+Reading registers root checks immediately; application usage remains separate through `useTrack()`. `useClient().getFlags()` returns all flag values. `useIsLoading()` reports readiness separately.
 
 ## Suspense
 
@@ -109,11 +109,11 @@ The envelope contains `protocolVersion: 2`, context, evaluated flags and an opti
 
 The toolbar and built-in feedback UI are web-only and disabled by default. Use your own React Native feedback UI with `useSendFeedback()` or `client.feedback()`; enabling a web UI option does not make it React Native-compatible.
 
-`enableTracking: false` disables checks and ordinary tracking. Offline mode skips HTTP/tracking; use direct-value fallbacks such as `fallbackFlags={{ huddle: true, settings: { mode: "offline" } }}`.
+`enableTracking: false` disables checks and ordinary tracking. Offline mode skips HTTP/tracking; set fallback values such as `fallbackFlags={{ huddle: true, settings: { mode: "offline" } }}`.
 
 ## Optional key registration
 
-The React Native SDK reexports React's hooks and **shares React's `Flags` registry**. Register direct-value schemas in `@reflag/react-sdk`, not a separate React Native registry:
+The React Native SDK reexports React's hooks and **shares React's `Flags` registry**. Register flag types in `@reflag/react-sdk`, not a separate React Native registry:
 
 ```ts
 import "@reflag/react-native-sdk";
