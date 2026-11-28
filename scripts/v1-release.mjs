@@ -6,6 +6,40 @@ import { fileURLToPath } from "node:url";
 const planPath = "releases/v1.json";
 const npmRegistry = "https://registry.npmjs.org";
 const stableVersion = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+const legacyPackages = [
+  "@reflag/browser-sdk",
+  "@reflag/cli",
+  "@reflag/node-sdk",
+  "@reflag/react-native-sdk",
+  "@reflag/react-sdk",
+  "@reflag/vue-sdk",
+];
+
+export async function legacyTagPlan(packages, { isPublished, tags }) {
+  const updates = [];
+  for (const name of legacyPackages) {
+    const pkg = packages.find((item) => item.name === name);
+    if (
+      !pkg ||
+      !stableVersion.test(pkg.version) ||
+      Number(pkg.version.split(".")[0]) > 1 ||
+      !(await isPublished(name, pkg.version))
+    ) {
+      throw new Error(
+        `Expected a published pre-v2 workspace version for ${name}`,
+      );
+    }
+    const current = (await tags(name)).legacy;
+    if (current === pkg.version) continue;
+    if (current !== undefined) {
+      throw new Error(
+        `Refusing to replace existing npm legacy ${name}@${current} with ${pkg.version}`,
+      );
+    }
+    updates.push(`${name}@${pkg.version}`);
+  }
+  return updates;
+}
 
 export function extendReleasePlan(plan, packages, previousVersion) {
   return Object.fromEntries(
@@ -19,11 +53,7 @@ export function extendReleasePlan(plan, packages, previousVersion) {
   );
 }
 
-export async function checkReleasePlan(
-  plan,
-  packages,
-  { isPublished, latest },
-) {
+export async function checkReleasePlan(plan, packages, { isPublished, tags }) {
   const local = new Map(packages.map(({ name, version }) => [name, version]));
   for (const [name, version] of Object.entries(plan)) {
     if (
@@ -43,14 +73,15 @@ export async function checkReleasePlan(
       if (!Object.hasOwn(plan, name)) {
         throw new Error(`Unapproved unpublished version: ${name}@${version}`);
       }
-      const current = await latest(name);
+      const currentTags = await tags(name);
+      const current = currentTags.legacy ?? currentTags.latest;
       const stable = typeof current === "string" && stableVersion.exec(current);
       const expected = stable
         ? `${stable[1]}.${stable[2]}.${BigInt(stable[3]) + 1n}`
         : null;
       if (version !== expected) {
         throw new Error(
-          `Refusing ${name}@${version}: npm latest is ${current}; expected its next stable patch`,
+          `Refusing ${name}@${version}: npm legacy baseline is ${current}; expected its next stable patch`,
         );
       }
       return `${name}@${version}`;
@@ -96,7 +127,7 @@ const registry = {
       `Could not check ${name}@${version} (HTTP ${response.status})`,
     );
   },
-  async latest(name) {
+  async tags(name) {
     const response = await registryGet(
       `-/package/${encodeURIComponent(name)}/dist-tags`,
     );
@@ -104,7 +135,7 @@ const registry = {
       throw new Error(
         `Could not read tags for ${name} (HTTP ${response.status})`,
       );
-    return (await response.json()).latest;
+    return response.json();
   },
 };
 
@@ -139,13 +170,27 @@ if (
       const pending = await checkReleasePlan(plan, packages, registry);
       console.error(
         pending.length
-          ? `Approved npm latest candidates:\n${pending.join("\n")}`
+          ? `Approved npm legacy candidates:\n${pending.join("\n")}`
           : "No unpublished v1 releases",
       );
       console.log(`pending=${pending.length > 0}`);
       break;
     }
+    case "tag-legacy": {
+      const updates = await legacyTagPlan(packages, registry);
+      for (const pkg of updates) {
+        execFileSync("npm", ["dist-tag", "add", pkg, "legacy"], {
+          stdio: "inherit",
+        });
+      }
+      if ((await legacyTagPlan(packages, registry)).length) {
+        throw new Error(
+          "npm legacy tags did not match the v1 workspace versions",
+        );
+      }
+      break;
+    }
     default:
-      throw new Error("Expected plan or check");
+      throw new Error("Expected plan, check, or tag-legacy");
   }
 }
