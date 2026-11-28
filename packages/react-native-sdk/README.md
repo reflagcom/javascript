@@ -2,12 +2,12 @@
 
 React Native providers and hooks for Boolean and multivariate flags. Built on the matching React v2 SDK, with AsyncStorage persistence and a native SSE transport included.
 
-This branch targets the v2 toolchain; it does not publish packages. Upgrade Node/bootstrap producers and Native consumers together. The [React SDK README](../react-sdk/README.md) covers the shared API.
+Upgrade Node/bootstrap producers and Native consumers together. The [React SDK README](../react-sdk/README.md) covers the shared API.
 
 ## Install and initialize
 
 ```sh
-npm install @reflag/react-native-sdk@2
+npm install @reflag/react-native-sdk
 ```
 
 Requires React 17 or later (the modern JSX runtime) and a React version supported by your React Native app. Wrap your app with the Native provider, which supplies the platform adapters:

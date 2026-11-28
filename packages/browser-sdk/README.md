@@ -2,8 +2,6 @@
 
 Client-side feature flags and JSON values for [Reflag](https://reflag.com).
 
-> This is a breaking v2 prerelease. It requires the v2 evaluated-flags/check protocol on the server. Do not switch existing v1 applications or bootstrap consumers without coordinating that upgrade. Nothing in this branch publishes or deploys the SDK/server.
-
 ## Get started
 
 ```ts
