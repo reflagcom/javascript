@@ -1,8 +1,6 @@
 # Reflag Browser SDK v2
 
-Client-side feature flags and JSON values for [Reflag](https://reflag.com).
-
-> This is a breaking v2 prerelease. It requires the v2 evaluated-flags/check protocol on the server. Do not switch existing v1 applications or bootstrap consumers without coordinating that upgrade. Nothing in this branch publishes or deploys the SDK/server.
+Client-side feature flags for [Reflag](https://reflag.com).
 
 ## Get started
 
@@ -28,7 +26,7 @@ if (enabled) {
 
 Use only a **publishable** key in a browser. Secret keys belong on your server.
 
-## Direct-value reads
+## Read flags
 
 ```ts
 reflag.getFlag("release"); // boolean; missing/mismatched -> false
@@ -45,7 +43,7 @@ reflag.getFlag("nullable-settings", null); // FlagValue (arbitrary JSON)
 - Object fields and array elements are **not schema-validated**. Validate untrusted/nested payloads in your application.
 - Values and defaults are returned as independent mutable copies. There are no reserved JSON property names.
 
-`getFlags()` returns a direct-value record (entries may be undefined) and registers checks for its returned roots. `getFlagResults()` returns owned evaluated diagnostics **without checks**; it is intended for tooling, not ordinary application reads. `getFlagsForBootstrap()` serializes protocol-v2 evaluated state without checks.
+`getFlags()` returns a record of flag values (entries may be undefined) and registers checks for its returned roots. `getFlagResults()` returns owned evaluated diagnostics **without checks**; it is intended for tooling, not ordinary application reads. `getFlagsForBootstrap()` serializes protocol-v2 evaluated state without checks.
 
 ## Checks and delivery
 
@@ -117,7 +115,7 @@ await reflag.initialize();
 const enabled = reflag.getFlag("release");
 ```
 
-The payload includes `protocolVersion: 2`, context, evaluated diagnostics/selections and an optional snapshot version. V1 payloads and the old `bootstrappedFlags` option are rejected. Preserve the entire envelope; do not pass just its `flags` property. A version is required for bootstrapped live updates. Never embed secrets or server-only context in public bootstrap data. Later refreshes use browser-visible context and can differ from server-only evaluation; disable live updates when that is inappropriate. Requesting missing opt-in metadata still makes a browser-side request even when live updates are disabled.
+The payload includes `protocolVersion: 2`, context, evaluated diagnostics/selections and an optional snapshot version. V1 payloads and the old `bootstrappedFlags` option are rejected. Preserve the entire envelope; do not pass just its `flags` property. A version is required for bootstrapped live updates. Later refreshes use browser-visible context and can differ from server-only evaluation; disable live updates when that is inappropriate. Requesting missing opt-in metadata still makes a browser-side request even when live updates are disabled.
 
 ## End-user opt-in
 

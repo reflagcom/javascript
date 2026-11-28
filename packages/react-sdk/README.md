@@ -1,8 +1,6 @@
 # Reflag React SDK v2
 
-Direct-value feature flags for React, backed by [Browser SDK v2](../browser-sdk/README.md).
-
-> Breaking prerelease: requires compatible v2 server endpoints and **Node SDK v2** for bootstrap. The v2 CLI generates direct-value declarations; regenerate legacy wrapper-shaped output when migrating. Useful default-based inference does not require generated declarations. React Native remains on published React/Browser v1 in this repository.
+Feature flags for React, built on the [Browser SDK](../browser-sdk/README.md).
 
 ## Setup
 
@@ -40,7 +38,7 @@ function Huddles() {
 }
 ```
 
-Bare reads return Boolean/false, including while initial data is unavailable. A positional default infers widened direct types, even without generated declarations:
+Bare reads return Boolean/false, including while initial data is unavailable. A default sets the return type, even without generated declarations:
 
 ```ts
 useFlag("model", "quick"); // string
@@ -102,7 +100,7 @@ declare module "@reflag/react-sdk" {
 }
 ```
 
-Registration constrains keys and checks non-null defaults against the registered value schema, including required and nested properties. Named-interface and readonly defaults are supported. Explicit `null` remains an arbitrary-JSON request; bare/`undefined` reads remain Boolean. The positional default still determines the widened return type, and generated declarations do not add nested runtime validation. The same rules apply to `useFlagSuspense`. The v2 CLI generates direct-value declarations from current production-environment variants; regenerate legacy wrapper declarations when migrating.
+Registered flags get autocompletion for their keys and type checks for the defaults you pass, in both `useFlag()` and `useFlagSuspense()`. The checks happen at compile time only. To generate the declarations, run `npx reflag flags types` with the `react` format.
 
 ## Bootstrap and SSR
 
@@ -122,7 +120,7 @@ import { ReflagBootstrappedProvider } from "@reflag/react-sdk";
 </ReflagBootstrappedProvider>;
 ```
 
-The envelope includes `protocolVersion: 2`, context, evaluated flag results and optional `flagStateVersion`. V1 bootstrap is rejected. Use a snapshot version for live updates; later refreshes use browser-visible context. Do not send secrets/server-only attributes to the browser. Disable live updates if later browser evaluation must not replace server-only results. Requesting missing opt-in metadata still makes a browser-side request even when live updates are disabled.
+The envelope includes `protocolVersion: 2`, context, evaluated flag results and optional `flagStateVersion`. V1 bootstrap is rejected. Use a snapshot version for live updates; later refreshes use browser-visible context. Disable live updates if later browser evaluation must not replace server-only results. Requesting missing opt-in metadata still makes a browser-side request even when live updates are disabled.
 
 For a pre-existing Browser v2 client, use `<ReflagClientProvider client={client}>`. The provider does not own its lifecycle; initialize/stop externally, except that a suspending read can start on-demand initialization.
 
@@ -131,7 +129,7 @@ For a pre-existing Browser v2 client, use `<ReflagClientProvider client={client}
 - `useUpdateUser()`, `useUpdateCompany()` and `useUpdateOtherContext()` return async shallow-update functions. `useClient().setContext(context)` replaces the whole context.
 - Context changes clear old-context values while fetching. Stale/in-flight responses cannot replace a newer context/snapshot.
 - `useIsLoading()` returns provider loading state. `loadingComponent` and `initialLoading` configure initial presentation; they are not getter arguments.
-- `useClient()` returns the underlying Browser client. Its `getFlags()` returns direct values/checks; `getFlagResults()` is diagnostic-only.
+- `useClient()` returns the underlying Browser client. Its `getFlags()` returns all flag values; `getFlagResults()` is diagnostic-only.
 - `useOnEvent(type, handler, client?)` subscribes and unsubscribes on unmount. A supplied external client works without a provider.
 
 ## Opt-in hooks
@@ -153,4 +151,4 @@ Metadata arrives with the initial v2 evaluation for regular providers. Bootstrap
 
 ## Migration from v1
 
-Use `const enabled = useFlag(key)` instead of destructuring `.isEnabled`. Replace wrapper config access with an authored multivariate flag and positional default. Move `.track()` and `.requestFeedback()` to separate hooks. Replace `useFlag(key, { suspense: true })` with `useFlagSuspense(key)`, and use `useIsLoading()` instead of a flag wrapper's loading property. Upgrade Browser/server bootstrap together. Nothing here publishes the prerelease or deploys its required server changes.
+Use `const enabled = useFlag(key)` instead of destructuring `.isEnabled`. Replace wrapper config access with an authored multivariate flag and positional default. Move `.track()` and `.requestFeedback()` to separate hooks. Replace `useFlag(key, { suspense: true })` with `useFlagSuspense(key)`, and use `useIsLoading()` instead of a flag wrapper's loading property. If you bootstrap from the server, upgrade the Node SDK that produces the bootstrap data to v2 at the same time. If you generate type declarations, regenerate them with the v2 CLI.

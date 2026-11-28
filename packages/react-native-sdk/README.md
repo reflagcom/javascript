@@ -2,15 +2,15 @@
 
 React Native providers and hooks for Boolean and multivariate flags. Built on the matching React v2 SDK, with AsyncStorage persistence and a native SSE transport included.
 
-This branch targets the v2 toolchain; it does not publish packages. Upgrade Node/bootstrap producers and Native consumers together. The [React SDK README](../react-sdk/README.md) covers the shared API.
+The [React SDK README](../react-sdk/README.md) covers the shared API.
 
 ## Install and initialize
 
 ```sh
-npm install @reflag/react-native-sdk@2
+npm install @reflag/react-native-sdk
 ```
 
-Requires React 17 or later (the modern JSX runtime) and a React version supported by your React Native app. Wrap your app with the Native provider, which supplies the platform adapters:
+Requires React 17 or later (the modern JSX runtime) and a React version supported by your React Native app. Wrap your app with the React Native provider, which supplies the platform adapters:
 
 ```tsx
 import { ReflagProvider } from "@reflag/react-native-sdk";
@@ -26,7 +26,7 @@ import { ReflagProvider } from "@reflag/react-native-sdk";
 </ReflagProvider>;
 ```
 
-Use only publishable keys in the app, never server secret keys. Native providers default live updates on, persistence to AsyncStorage, and SSE to `react-native-sse` with transport polling disabled. `storage`, `eventSourceFactory`, and `enableLiveFlagUpdates` remain configurable.
+Use only publishable keys in the app, never server secret keys. React Native providers default live updates on, persistence to AsyncStorage, and SSE to `react-native-sse` with transport polling disabled. `storage`, `eventSourceFactory`, and `enableLiveFlagUpdates` remain configurable.
 
 ## Read flags and track usage
 
@@ -50,9 +50,9 @@ function StartHuddleButton() {
 }
 ```
 
-Defaults infer widened direct-value types without generated declarations. Accepted false, zero, empty strings and null are not replaced by truthy fallbacks. Explicit `null` requests arbitrary JSON; `undefined` retains the Boolean-first behavior. Returned JSON values are independent copies. Defaults check top-level categories, not nested runtime schemas.
+A default sets the return type, even without generated declarations. Accepted false, zero, empty strings and null are not replaced by truthy fallbacks. Explicit `null` requests arbitrary JSON; `undefined` retains the Boolean-first behavior. Returned JSON values are independent copies. Defaults check top-level categories, not nested runtime schemas.
 
-Reading registers root checks immediately; application usage remains separate through `useTrack()`. `useClient().getFlags()` also returns direct values, not v1 flag wrappers. `useIsLoading()` reports readiness separately.
+Reading registers root checks immediately; application usage remains separate through `useTrack()`. `useClient().getFlags()` returns all flag values. `useIsLoading()` reports readiness separately.
 
 ## Suspense
 
@@ -86,7 +86,7 @@ const flags = serverClient.getFlagsForBootstrap({
 });
 ```
 
-Pass the complete serialized envelope to Native:
+Pass the complete serialized envelope to the React Native provider:
 
 ```tsx
 import { ReflagBootstrappedProvider } from "@reflag/react-native-sdk";
@@ -99,21 +99,21 @@ import { ReflagBootstrappedProvider } from "@reflag/react-native-sdk";
 </ReflagBootstrappedProvider>;
 ```
 
-The envelope contains `protocolVersion: 2`, context, evaluated flags and an optional snapshot version. Legacy v1 bootstrap is rejected. Live updates require a snapshot version. Never expose secret keys or server-only attributes in bootstrap data: later refreshes use app-visible context and may differ from server evaluation. Disable live updates when later client evaluation must not replace the server result. Requesting missing opt-in metadata still makes a client-side request even with live updates disabled.
+The envelope contains `protocolVersion: 2`, context, evaluated flags and an optional snapshot version. Legacy v1 bootstrap is rejected. Live updates require a snapshot version. Later refreshes use app-visible context and may differ from server evaluation. Disable live updates when later client evaluation must not replace the server result. Requesting missing opt-in metadata still makes a client-side request even with live updates disabled.
 
-`ReflagClientProvider` accepts an externally initialized matching v2 client. Its lifecycle and platform-adapter configuration belong to your application; the Native convenience providers do not configure an external client.
+`ReflagClientProvider` accepts an externally initialized matching v2 client. Its lifecycle and platform-adapter configuration belong to your application; the React Native convenience providers do not configure an external client.
 
 ## Opt-in and feedback
 
 `useOptInFlags()` returns metadata and loading state; `useSetOptIn()` changes membership. Metadata arrives with ordinary `/flags/evaluated` responses, or on demand after bootstrap without replacing server-derived values. User/company grants stay independent. Successful mutations confirm versioned evaluation and membership in one refresh. Check the returned `Response.ok` and catch rejections: confirmation can fail after membership changed remotely, and skipped calls return undefined. Failed metadata loading settles without exposing an error; use `useClient().refresh()` to retry.
 
-The toolbar and built-in feedback UI are web-only and disabled by default. Use your own Native feedback UI with `useSendFeedback()` or `client.feedback()`; enabling a web UI option does not make it Native-compatible.
+The toolbar and built-in feedback UI are web-only and disabled by default. Use your own React Native feedback UI with `useSendFeedback()` or `client.feedback()`; enabling a web UI option does not make it React Native-compatible.
 
-`enableTracking: false` disables checks and ordinary tracking. Offline mode skips HTTP/tracking; use direct-value fallbacks such as `fallbackFlags={{ huddle: true, settings: { mode: "offline" } }}`.
+`enableTracking: false` disables checks and ordinary tracking. Offline mode skips HTTP/tracking; set fallback values such as `fallbackFlags={{ huddle: true, settings: { mode: "offline" } }}`.
 
 ## Optional key registration
 
-Native reexports React's hooks and **shares React's `Flags` registry**. Register direct-value schemas in `@reflag/react-sdk`, not a separate Native registry:
+The React Native SDK reexports React's hooks and **shares React's `Flags` registry**. Register flag types in `@reflag/react-sdk`, not a separate React Native registry:
 
 ```ts
 import "@reflag/react-native-sdk";
@@ -126,7 +126,7 @@ declare module "@reflag/react-sdk" {
 }
 ```
 
-Registration constrains keys and checks non-null positional defaults, including required and nested fields. Named-interface and readonly defaults work. It does not restore wrappers or validate nested runtime payloads. The Native package reexports the same registry/types; v2 CLI React-format declarations target this shared interface. Regenerate legacy wrapper declarations before use; CLI v2 is a separate release dependency.
+Registered flags get autocompletion for their keys and type checks for the defaults you pass. The checks happen at compile time only. To generate the declarations, run `npx reflag flags types` with the `react` format.
 
 ## Refresh when returning to the foreground
 
@@ -154,14 +154,15 @@ function AppStateListener() {
 }
 ```
 
-Mount this listener under a Native provider. Context prop changes and `useUpdateUser`/`useUpdateCompany`/`useUpdateOtherContext` also update evaluation context.
+Mount this listener under a React Native provider. Context prop changes and `useUpdateUser`/`useUpdateCompany`/`useUpdateOtherContext` also update evaluation context.
 
 ## Migrating from v1
 
 - Replace `const { isEnabled, track } = useFlag(key)` with `const enabled = useFlag(key)` and a separate `useTrack()` call.
 - Replace remote-config wrappers with authored multivariate flags and positional JSON defaults.
 - Use `useFlagSuspense`, not `useFlag(key, { suspense: true })`, for readiness-waiting reads.
-- Use direct-value fallback maps for multivariate flags; Boolean string-array shorthand remains supported. Migrate both ends of bootstrap to protocol v2.
-- Rebuild against matching Native/React/Browser v2 packages and regenerate legacy declarations.
+- In `fallbackFlags`, give each flag its value, such as `{ huddles: true, model: "quick" }`, instead of v1's `{ key, payload }` objects. A list of flag keys still works for Boolean flags.
+- If you bootstrap from the server, upgrade the Node SDK that produces the bootstrap data at the same time as the app.
+- Rebuild against matching React Native/React/Browser v2 packages and regenerate legacy declarations.
 
-The [Expo](https://github.com/reflagcom/javascript/tree/main/packages/react-native-sdk/dev/expo) and [bare React Native](https://github.com/reflagcom/javascript/tree/main/packages/react-native-sdk/dev/bare-rn) examples use the v2 Native APIs. OpenFeature providers are separate integrations and do not gain v2 support from this migration.
+The [Expo](https://github.com/reflagcom/javascript/tree/main/packages/react-native-sdk/dev/expo) and [bare React Native](https://github.com/reflagcom/javascript/tree/main/packages/react-native-sdk/dev/bare-rn) examples use the v2 React Native APIs. OpenFeature providers are separate integrations and do not gain v2 support from this migration.
