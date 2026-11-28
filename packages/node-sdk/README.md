@@ -178,7 +178,9 @@ To render flags in the browser without waiting for a network request, evaluate t
 const bootstrap = reflag.getFlagsForBootstrap(context);
 ```
 
-Pass the whole object, serialized with your framework's usual mechanism. Leave secrets and server-only attributes out of the context you bootstrap, because the browser can read it.
+Pass the whole object, serialized with your framework's usual mechanism.
+
+The result includes the full context you pass in, so every user, company and other attribute in it is visible to the browser. Bootstrap with a context that contains only what the client may see.
 
 ## Remote evaluation
 
