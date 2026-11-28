@@ -72,7 +72,7 @@ If the flag is missing or has a different JSON type, such as a string instead of
 
 The SDK doesn't check object fields or fill in missing fields from your default.
 
-`getFlags(context)` returns an object mapping flag keys to values. Unavailable flags can have an `undefined` value.
+`getFlags(context)` returns an object mapping flag keys to values.
 
 Each read records a check, which Reflag uses for launch monitoring.
 
@@ -172,21 +172,20 @@ Declarations are checked at compile time only. See the [Reflag CLI](https://docs
 
 ## Bootstrap the browser
 
-**Requires a Browser, React or Vue SDK that supports the v2 bootstrap protocol.** V1 consumers expect a different flag shape and cannot use this result.
-
-With a compatible v2 consumer, evaluate flags on the server to render them in the browser without waiting for a network request:
+To render flags in the browser without waiting for a network request, evaluate them on the server and pass the result to the Browser, React or Vue SDK's bootstrap option:
 
 ```ts
 const bootstrap = reflag.getFlagsForBootstrap(context);
 ```
 
-Pass the whole object to the compatible consumer's bootstrap option, serialized with your framework's usual mechanism. Do not pass it to a v1 SDK. Leave secrets and server-only attributes out of the context you bootstrap, because the browser can read it.
+Pass the whole object, serialized with your framework's usual mechanism. Leave secrets and server-only attributes out of the context you bootstrap, because the browser can read it.
 
 ## Remote evaluation
 
 To evaluate flags on Reflag's servers instead of locally, use the remote methods:
 
 ```ts
+// Root client: key, default, user ID, company ID
 const model = await reflag.getFlagRemote("model", "quick", "user-1", "acme");
 const boundModel = await reflag
   .bindClient(context)
@@ -196,7 +195,7 @@ const values = await reflag.getFlagsRemote("user-1", "acme", {
 });
 ```
 
-Unlike `getFlag()`, `getFlagRemote()` on the root client takes the default before the user and company IDs. To read a Boolean, pass `undefined` as the default.
+To read a Boolean with the root client, pass `undefined` as the default.
 
 ## Edge runtimes
 
@@ -239,14 +238,11 @@ Options can be set in the constructor, through environment variables, or in `ref
 | `batchOptions`          |                                                 | Event batching: `maxSize`, `intervalMs` and `flushOnExit`            |
 | `httpClient`            |                                                 | Custom HTTP client                                                   |
 
-To disable checks, automatic user/company updates and bound-client usage tracking for a context, pass `enableTracking: false` to reads or `bindClient()`, not to the constructor:
+To stop sending checks and events for a context, include `enableTracking: false` in it:
 
 ```ts
-reflag.getFlag({ ...context, enableTracking: false }, "new-editor");
 const untracked = reflag.bindClient({ ...context, enableTracking: false });
 ```
-
-Explicit calls to the root client's `track()`, `updateUser()` and `updateCompany()` remain separate operations and still send events.
 
 ## Shutting down
 
