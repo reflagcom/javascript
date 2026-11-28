@@ -161,7 +161,8 @@ Mount this listener under a React Native provider. Context prop changes and `use
 - Replace `const { isEnabled, track } = useFlag(key)` with `const enabled = useFlag(key)` and a separate `useTrack()` call.
 - Replace remote-config wrappers with authored multivariate flags and positional JSON defaults.
 - Use `useFlagSuspense`, not `useFlag(key, { suspense: true })`, for readiness-waiting reads.
-- Use direct-value fallback maps for multivariate flags; Boolean string-array shorthand remains supported. If you bootstrap from the server, upgrade the Node SDK that produces the bootstrap data at the same time as the app.
+- In `fallbackFlags`, give each flag its value, such as `{ huddles: true, model: "quick" }`, instead of v1's `{ key, payload }` objects. A list of flag keys still works for Boolean flags.
+- If you bootstrap from the server, upgrade the Node SDK that produces the bootstrap data at the same time as the app.
 - Rebuild against matching React Native/React/Browser v2 packages and regenerate legacy declarations.
 
 The [Expo](https://github.com/reflagcom/javascript/tree/main/packages/react-native-sdk/dev/expo) and [bare React Native](https://github.com/reflagcom/javascript/tree/main/packages/react-native-sdk/dev/bare-rn) examples use the v2 React Native APIs. OpenFeature providers are separate integrations and do not gain v2 support from this migration.
