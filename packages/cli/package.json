@@ -1,6 +1,6 @@
 {
   "name": "@reflag/cli",
-  "version": "1.0.4",
+  "version": "2.0.0-next.1",
   "description": "CLI for Reflag service",
   "homepage": "https://docs.reflag.com/",
   "license": "MIT",
@@ -28,6 +28,7 @@
     "build": "tsc && shx chmod +x dist/index.js",
     "reflag": "yarn build && ./dist/index.js",
     "test": "vitest run",
+    "test:generated-types": "yarn workspace @reflag/flag-evaluation build && yarn workspace @reflag/node-sdk build && yarn workspace @reflag/browser-sdk build && yarn workspace @reflag/react-sdk build && yarn workspace @reflag/vue-sdk build && yarn build && node test/generated-types.mjs",
     "test:watch": "vitest",
     "test:ci": "yarn test --reporter=default --reporter=junit --outputFile=junit.xml",
     "coverage": "vitest run --coverage",

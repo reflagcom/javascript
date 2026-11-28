@@ -2,7 +2,11 @@ import { deepEqual } from "fast-equals";
 
 import type { BulkEvent } from "../bulkQueue";
 import { FLAG_EVENTS_PER_MIN, FLAGS_EXPIRE_MS } from "../config";
-import { canonicalContextJSONStringify, ReflagContext } from "../context";
+import {
+  canonicalContextJSONStringify,
+  copyContext,
+  ReflagContext,
+} from "../context";
 import { HttpClient } from "../httpClient";
 import { Logger, loggerWithPrefix } from "../logger";
 import RateLimiter from "../rateLimiter";
@@ -11,8 +15,10 @@ import { createAbortController } from "../utils/abortController";
 import { createEventTarget } from "../utils/eventTarget";
 import { logResponseError, parseResponseError } from "../utils/responseError";
 import { retryOnThrow } from "../utils/retry";
+import { isValidBootstrapSnapshot } from "./bootstrap";
 import { FlagCache, isObject, parseAPIFlagsResponse } from "./flagCache";
 import { isValidFlagStateVersion } from "./flagStateVersion";
+import { copyJSON, FlagValue, isFlagValue } from "./values";
 
 const INITIAL_FETCH_RETRY_DELAYS_MS = [0, 5000];
 
@@ -55,109 +61,37 @@ export type OptInFlag = RawFlagOptIn & {
   isEnabled: boolean;
 };
 
-/**
- * A flag fetched from the server.
- */
-export type RawFlag = {
-  /**
-   * Flag key.
-   */
-  key: string;
-
-  /**
-   * Result of flag evaluation.
-   * Note: does not take local overrides into account.
-   */
-  isEnabled: boolean;
-
-  /**
-   * If not null or undefined, the result is being overridden locally
-   */
-  isEnabledOverride?: boolean | null;
-
-  /**
-   * Version of targeting rules.
-   */
-  targetingVersion?: number;
-
-  /**
-   * Rule evaluation results.
-   */
-  ruleEvaluationResults?: boolean[];
-
-  /**
-   * Missing context fields.
-   * @deprecated Use `evaluationErrors` and check for `MISSING_CONTEXT_FIELD`.
-   */
-  missingContextFields?: string[];
-
-  /**
-   * Non-fatal diagnostics produced while evaluating targeting rules.
-   */
-  evaluationErrors?: Array<{
-    code: string;
-    field: string;
-    operator?: string;
-    message: string;
-  }>;
-
-  /**
-   * Whether end-user opt-in is enabled for this flag.
-   */
-  optInEnabled?: boolean;
-
-  /**
-   * Opt-in metadata for this flag and the current context.
-   */
-  optIn?: RawFlagOptIn | null;
-
-  /**
-   * Optional user-defined dynamic configuration.
-   */
-  config?: {
-    /**
-     * The key of the matched configuration value.
-     */
-    key: string;
-
-    /**
-     * The version of the matched configuration value.
-     */
-    version?: number;
-
-    /**
-     * The optional user-supplied payload data.
-     */
-    payload?: any;
-
-    /**
-     * The rule evaluation results.
-     */
-    ruleEvaluationResults?: boolean[];
-
-    /**
-     * The missing context fields.
-     * @deprecated Use `evaluationErrors` and check for `MISSING_CONTEXT_FIELD`.
-     */
-    missingContextFields?: string[];
-
-    /**
-     * Non-fatal diagnostics produced while evaluating targeting rules.
-     */
-    evaluationErrors?: RawFlag["evaluationErrors"];
-  };
+export type EvaluationError = {
+  code: string;
+  message: string;
+  field?: string;
+  operator?: string;
+  source?: { type: "flag" | "segment"; key: string };
 };
-
+export type RuleEvaluationResult = {
+  ruleId: string;
+  matched: boolean;
+  allocationIndex?: number;
+  destination?: { type: "nextRule" } | { type: "variant"; variantKey: string };
+};
+/** Evaluated diagnostics for v2 transport/bootstrap, not a flag wrapper. */
+export type RawFlag = {
+  value: FlagValue | undefined;
+  resolved: boolean;
+  variantKey?: string;
+  sourceVersionId?: string;
+  matchedRuleId?: string;
+  allocationIndex?: number;
+  ruleResults: RuleEvaluationResult[];
+  errors: EvaluationError[];
+  /** Absent in Node bootstrap/older snapshots; null optIn means unavailable. */
+  optInEnabled?: boolean;
+  optIn?: RawFlagOptIn | null;
+};
 export type RawFlags = Record<string, RawFlag>;
-
-export type FallbackFlagOverride =
-  | {
-      key: string;
-      payload: any;
-    }
-  | true;
-
-type FallbackFlags = Record<string, FallbackFlagOverride>;
+export type FlagValues = Record<string, FlagValue | undefined>;
+export type FallbackFlagOverride = FlagValue;
+type FallbackFlags = Record<string, FlagValue>;
 
 type Config = {
   timeoutMs: number;
@@ -181,7 +115,8 @@ export type FetchedFlagsResult = {
 };
 
 export type FlagsFetchResult = FetchedFlagsResult & {
-  success: boolean;
+  success: true;
+  flagStateVersion: number;
 };
 
 export function validateFlagsResponse(
@@ -191,24 +126,24 @@ export function validateFlagsResponse(
     return;
   }
 
-  if (typeof response.success !== "boolean" || !isObject(response.features)) {
+  if (
+    response.success !== true ||
+    response.protocolVersion !== 2 ||
+    !isValidFlagStateVersion(response.flagStateVersion)
+  ) {
     return;
   }
 
-  const flags = parseAPIFlagsResponse(response.features);
+  const flags = parseAPIFlagsResponse(response.flags);
 
   if (!flags) {
     return;
   }
 
-  const flagStateVersion = isValidFlagStateVersion(response.flagStateVersion)
-    ? response.flagStateVersion
-    : undefined;
-
   return {
     success: response.success,
     flags,
-    flagStateVersion,
+    flagStateVersion: response.flagStateVersion,
   };
 }
 
@@ -227,63 +162,33 @@ export function flattenJSON(obj: Record<string, any>): Record<string, any> {
   return result;
 }
 
-/**
- * Event representing checking the flag evaluation result
- */
+/** A root read records selection identity, never its JSON payload. */
 export interface CheckEvent {
-  /**
-   * `check-is-enabled` means `isEnabled` was checked, `check-config` means `config` was checked.
-   */
-  action: "check-is-enabled" | "check-config";
-
-  /**
-   * Flag key.
-   */
+  action: "check";
   key: string;
-
-  /**
-   * Result of flag or configuration evaluation.
-   * If `action` is `check-is-enabled`, this is the result of the flag evaluation and `value` is a boolean.
-   * If `action` is `check-config`, this is the result of the configuration evaluation.
-   */
-  value?: boolean | { key: string; payload: any };
-
-  /**
-   * Version of targeting rules.
-   */
-  version?: number;
-
-  /**
-   * Rule evaluation results.
-   */
-  ruleEvaluationResults?: boolean[];
-
-  /**
-   * Missing context fields.
-   * @deprecated Use `evaluationErrors` and check for `MISSING_CONTEXT_FIELD`.
-   */
-  missingContextFields?: string[];
-
-  /**
-   * Non-fatal diagnostics produced while evaluating the flag.
-   */
-  evaluationErrors?: RawFlag["evaluationErrors"];
+  evalResult?: string;
+  sourceVersionId?: string;
+  flagStateVersion?: number;
+  evalContext?: ReflagContext;
+  evalRuleResults?: boolean[];
+  evalMissingFields?: string[];
+  evalErrors?: EvaluationError[];
 }
 
-const storageOverridesKey = `__reflag_overrides`;
+const storageOverridesKey = `__reflag_overrides_v2`;
 const REFRESH_LIMIT_COUNT = 20;
 const REFRESH_LIMIT_WINDOW_MS = 60 * 1000;
 
-export type FlagOverrides = Record<string, boolean | undefined>;
+export type FlagOverrides = Record<string, FlagValue | undefined>;
 
 type BootstrappedState = {
+  protocolVersion: 2;
   flags: RawFlags;
   flagStateVersion?: number;
 };
 
 type FlagsClientOptions = Partial<Config> & {
   bootstrappedState?: BootstrappedState;
-  bootstrappedFlags?: RawFlags;
   fallbackFlags?: Record<string, FallbackFlagOverride> | string[];
   cache?: FlagCache;
   rateLimiter?: RateLimiter;
@@ -311,6 +216,12 @@ export class FlagsClient {
   private flags: RawFlags = {};
   private fallbackFlags: FallbackFlags = {};
   private contextFetchVersion = 0;
+  private optInMetadata: Record<string, RawFlagOptIn> = Object.create(null);
+  private lastUpdatedOptInMetadata: Record<string, RawFlagOptIn> =
+    Object.create(null);
+  private optInMetadataContextVersion = -1;
+  private optInMetadataFlagStateVersion: number | undefined;
+  private optInMetadataFetchVersion = 0;
   private optInFlagsRequested = false;
   private optInFlagsLoading = false;
   private optInFlagsLoadingGeneration = 0;
@@ -337,7 +248,6 @@ export class FlagsClient {
     logger: Logger,
     {
       bootstrappedState,
-      bootstrappedFlags,
       cache,
       rateLimiter,
       fallbackFlags,
@@ -346,9 +256,12 @@ export class FlagsClient {
       ...config
     }: FlagsClientOptions = {},
   ) {
+    this.context = copyContext(context);
     this.config = {
       ...this.config,
-      ...config,
+      ...Object.fromEntries(
+        Object.entries(config).filter(([, value]) => value !== undefined),
+      ),
     };
 
     this.logger = loggerWithPrefix(logger, "[Flags]");
@@ -361,12 +274,17 @@ export class FlagsClient {
       this.setupCache(this.config.staleTimeMs, this.config.expireTimeMs);
     this.fallbackFlags = this.setupFallbackFlags(fallbackFlags);
 
-    if (bootstrappedState || bootstrappedFlags) {
+    if (bootstrappedState) {
+      if (!isValidBootstrapSnapshot(bootstrappedState)) {
+        throw new Error(
+          "Expected a protocol-v2 bootstrap snapshot; v1 bootstrap is incompatible",
+        );
+      }
       this.bootstrapped = true;
       this.setFetchedFlags(
-        bootstrappedState?.flags ?? bootstrappedFlags ?? {},
+        bootstrappedState.flags,
         false,
-        bootstrappedState?.flagStateVersion,
+        bootstrappedState.flagStateVersion,
       );
     }
   }
@@ -401,7 +319,7 @@ export class FlagsClient {
       this.initializationComplete = true;
 
       if (this.optInFlagsRequested) {
-        if (initializationSucceeded && this.bootstrapped) {
+        if (initializationSucceeded) {
           void this.refreshOptInMetadataIfNeeded();
         } else {
           this.finishOptInFlagsLoading(this.optInFlagsLoadingGeneration);
@@ -415,19 +333,30 @@ export class FlagsClient {
    */
   public stop() {
     this.supersedeOptInFlagsLoading(false);
+    this.contextFetchVersion++;
     this.abortController.abort();
   }
 
+  getFlag(key: string): RawFlag | undefined {
+    return Object.prototype.hasOwnProperty.call(this.flags, key)
+      ? copyJSON(this.flags[key])
+      : undefined;
+  }
+
   getFlags(): RawFlags {
-    return this.flags;
+    return copyJSON(this.flags);
   }
 
   getFetchedFlags(): RawFlags {
-    return this.fetchedFlags;
+    return copyJSON(this.fetchedFlags);
   }
 
   hasFlagState(): boolean {
     return this.flagStateAvailable;
+  }
+
+  getOptInMetadata(): Record<string, RawFlagOptIn> {
+    return copyJSON(this.optInMetadata);
   }
 
   requestOptInFlags() {
@@ -437,14 +366,9 @@ export class FlagsClient {
       !this.initializationComplete ||
       this.fetchedFlagsContextVersion !== this.contextFetchVersion
     ) {
-      if (!this.bootstrapped || !this.hasOptInMetadataForCurrentContext()) {
+      if (!this.hasOptInMetadataForCurrentContext()) {
         this.ensureOptInFlagsLoading();
       }
-      return;
-    }
-
-    if (!this.bootstrapped) {
-      this.finishOptInFlagsLoading(this.optInFlagsLoadingGeneration);
       return;
     }
 
@@ -482,7 +406,7 @@ export class FlagsClient {
   }
 
   async refreshOptInMetadataIfNeeded(): Promise<void> {
-    if (!this.bootstrapped || !this.optInFlagsRequested) return;
+    if (!this.optInFlagsRequested) return;
 
     if (
       !this.initializationComplete ||
@@ -517,7 +441,10 @@ export class FlagsClient {
     const id = {};
     const promise = (async () => {
       try {
-        await this.refreshFlags(this.fetchedFlagStateVersion);
+        await this.fetchOptInMetadata(
+          this.fetchedFlagStateVersion,
+          contextVersion,
+        );
       } catch (error) {
         this.logger.error("error refreshing opt-in flag metadata", error);
       } finally {
@@ -536,13 +463,22 @@ export class FlagsClient {
     context: ReflagContext,
     invalidatePendingFetches = false,
   ) {
-    if (!deepEqual(this.context, context) || invalidatePendingFetches) {
+    const newContext = copyContext(context);
+    const contextChanged = !deepEqual(this.context, newContext);
+    if (contextChanged || invalidatePendingFetches) {
+      const metadataWasCurrent = this.hasOptInMetadataForCurrentContext();
       this.contextFetchVersion += 1;
+      if (contextChanged) {
+        this.clearOptInMetadata();
+      } else if (metadataWasCurrent) {
+        // Invalidating requests must not roll back same-context membership.
+        this.optInMetadataContextVersion = this.contextFetchVersion;
+      }
       if (this.optInFlagsRequested) {
         this.startOptInFlagsLoading();
       }
     }
-    this.context = context;
+    this.context = newContext;
   }
 
   setFetchedFlags(
@@ -550,12 +486,21 @@ export class FlagsClient {
     triggerEvent = true,
     flagStateVersion?: number,
   ) {
-    // Mark the state available before notifying consumers from updateFlags().
+    const validated = parseAPIFlagsResponse(fetchedFlags, true);
+    if (
+      !validated ||
+      (flagStateVersion !== undefined &&
+        !isValidFlagStateVersion(flagStateVersion))
+    )
+      throw new Error("Invalid protocol-v2 evaluated flags");
+    // State is available before update listeners can read flags during initialization.
     this.flagStateAvailable = true;
-    // Create a new fetched flags object making sure to clone the flags
-    this.fetchedFlags = { ...fetchedFlags };
+    this.fetchedFlags = validated;
     this.fetchedFlagStateVersion = flagStateVersion;
     this.fetchedFlagsContextVersion = this.contextFetchVersion;
+    // A newly accepted snapshot supersedes any metadata-only request in flight.
+    this.optInMetadataFetchVersion++;
+    this.setOptInMetadata(validated, flagStateVersion);
     this.warnMissingFlagContextFields(fetchedFlags);
     this.updateFlags(triggerEvent);
   }
@@ -585,31 +530,31 @@ export class FlagsClient {
   }
 
   private applyFetchedFlagsResult(
-    result: FetchedFlagsResult | undefined,
+    result: FetchedFlagsResult,
     triggerEvent = true,
     requestContextVersion = this.contextFetchVersion,
   ) {
     if (
       !this.shouldApplyFetchedFlagsResult(
-        result?.flagStateVersion,
+        result.flagStateVersion,
         requestContextVersion,
       )
     ) {
       return false;
     }
 
-    this.setFetchedFlags(
-      result?.flags ?? {},
-      triggerEvent,
-      result?.flagStateVersion,
-    );
+    this.setFetchedFlags(result.flags, triggerEvent, result.flagStateVersion);
     return true;
   }
 
   async setContext(context: ReflagContext) {
-    this.context = context;
+    this.context = copyContext(context);
     const requestVersion = ++this.contextFetchVersion;
-    this.optInMetadataRefreshAttemptContextVersion = requestVersion;
+    this.fetchedFlags = Object.create(null);
+    this.fetchedFlagStateVersion = undefined;
+    this.clearOptInMetadata();
+    this.updateFlags();
+    this.resetOptInMetadataRefresh();
     const loadingGeneration = this.optInFlagsRequested
       ? this.startOptInFlagsLoading()
       : undefined;
@@ -622,6 +567,7 @@ export class FlagsClient {
       }
 
       this.applyFetchedFlagsResult(fetchedFlags, true, requestVersion);
+      if (this.optInFlagsRequested) await this.refreshOptInMetadataIfNeeded();
       return true;
     } finally {
       if (loadingGeneration !== undefined) {
@@ -632,21 +578,29 @@ export class FlagsClient {
 
   updateFlags(triggerEvent = true) {
     const updatedFlags = this.mergeFlags(this.fetchedFlags, this.flagOverrides);
-    // Nothing has changed, skipping update
-    if (deepEqual(this.flags, updatedFlags)) return;
+    // Overrides hide fetched metadata, but opt-in subscribers still need updates.
+    if (
+      deepEqual(this.flags, updatedFlags) &&
+      deepEqual(this.lastUpdatedOptInMetadata, this.optInMetadata)
+    )
+      return;
     this.flags = updatedFlags;
+    this.lastUpdatedOptInMetadata = this.optInMetadata;
     if (triggerEvent) this.triggerFlagsUpdated();
   }
 
-  setFlagOverride(key: string, isEnabled: boolean | null) {
-    if (!(typeof isEnabled === "boolean" || isEnabled === null)) {
-      throw new Error("setFlagOverride: isEnabled must be boolean or null");
-    }
-
-    if (isEnabled === null) {
+  setFlagOverride(key: string, value: FlagValue | undefined) {
+    if (value !== undefined && !isFlagValue(value))
+      throw new Error("setFlagOverride: value must be JSON or undefined");
+    if (value === undefined) {
       delete this.flagOverrides[key];
     } else {
-      this.flagOverrides[key] = isEnabled;
+      Object.defineProperty(this.flagOverrides, key, {
+        value: copyJSON(value),
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
     }
     // TODO(next major): make this async and await storage persistence.
     void this.setOverridesCache(this.flagOverrides);
@@ -654,8 +608,11 @@ export class FlagsClient {
     this.updateFlags();
   }
 
-  getFlagOverride(key: string): boolean | null {
-    return this.flagOverrides[key] ?? null;
+  getFlagOverride(key: string): FlagValue | undefined {
+    const value = Object.prototype.hasOwnProperty.call(this.flagOverrides, key)
+      ? this.flagOverrides[key]
+      : undefined;
+    return value === undefined ? undefined : copyJSON(value);
   }
 
   /**
@@ -683,18 +640,16 @@ export class FlagsClient {
       return;
     }
 
-    const rateLimitKey = `check-event:${this.fetchParams().toString()}:${checkEvent.key}:${checkEvent.version}:${checkEvent.value}`;
+    const context = copyContext(this.context);
+    const rateLimitKey = JSON.stringify([
+      this.fetchParams().toString(),
+      checkEvent.key,
+      checkEvent.sourceVersionId,
+      checkEvent.flagStateVersion,
+      checkEvent.evalResult,
+    ]);
     await this.rateLimiter.rateLimited(rateLimitKey, async () => {
-      const payload = {
-        action: checkEvent.action,
-        key: checkEvent.key,
-        targetingVersion: checkEvent.version,
-        evalContext: this.context,
-        evalResult: checkEvent.value,
-        evalRuleResults: checkEvent.ruleEvaluationResults,
-        evalMissingFields: checkEvent.missingContextFields,
-        evalErrors: checkEvent.evaluationErrors,
-      };
+      const payload = copyJSON({ ...checkEvent, evalContext: context });
 
       if (this.enqueueBulkEvent) {
         this.enqueueBulkEvent({
@@ -730,7 +685,7 @@ export class FlagsClient {
       cb();
     });
 
-    return checkEvent.value;
+    return checkEvent.evalResult;
   }
 
   getFlagStateVersion(): number | undefined {
@@ -751,7 +706,7 @@ export class FlagsClient {
     try {
       return await retryOnThrow(INITIAL_FETCH_RETRY_DELAYS_MS, async () => {
         const res = await this.httpClient.get({
-          path: "/features/evaluated",
+          path: "/flags/evaluated",
           timeoutMs: this.config.timeoutMs,
           params,
         });
@@ -782,7 +737,7 @@ export class FlagsClient {
         }
 
         const typeRes = validateFlagsResponse(await res.json());
-        if (!typeRes || !typeRes.success) {
+        if (!typeRes) {
           this.logger.error(
             "error fetching flags:",
             new Error("unable to validate response"),
@@ -792,8 +747,7 @@ export class FlagsClient {
 
         if (
           waitForVersion !== undefined &&
-          (typeRes.flagStateVersion === undefined ||
-            typeRes.flagStateVersion < waitForVersion)
+          typeRes.flagStateVersion < waitForVersion
         ) {
           this.logger.warn(
             "ignoring stale flag response for requested flag state version.",
@@ -833,13 +787,28 @@ export class FlagsClient {
     this.refreshEvents.push(now);
 
     const requestContextVersion = this.contextFetchVersion;
+    // Update listeners may change context while the result is being applied.
+    const cacheKey = this.fetchParams().toString();
     const result = await this.fetchFlags(waitForVersion);
-    if (!result || requestContextVersion !== this.contextFetchVersion) {
+    if (
+      !result ||
+      !this.applyFetchedFlagsResult(result, true, requestContextVersion)
+    ) {
       return;
     }
+    await this.persistSnapshot(cacheKey, result);
+    return this.getFetchedFlags();
+  }
 
-    this.applyFetchedFlagsResult(result, true, requestContextVersion);
-    return { ...this.fetchedFlags };
+  private async persistSnapshot(
+    cacheKey: string,
+    snapshot: FetchedFlagsResult,
+  ) {
+    try {
+      await this.cache.set(cacheKey, snapshot);
+    } catch (error) {
+      this.logger.warn("storing flags failed", error);
+    }
   }
 
   private async setOverridesCache(overrides: FlagOverrides) {
@@ -860,8 +829,9 @@ export class FlagsClient {
     try {
       const overridesStored = await this.storage.getItem(storageOverridesKey);
       const overrides = JSON.parse(overridesStored || "{}");
-      if (!isObject(overrides)) throw new Error("invalid overrides");
-      return overrides;
+      if (!isObject(overrides) || !isFlagValue(overrides))
+        throw new Error("invalid overrides");
+      return overrides as FlagOverrides;
     } catch (error) {
       this.logger.warn("getting flag overrides failed", error);
       return {};
@@ -870,10 +840,8 @@ export class FlagsClient {
 
   private async maybeFetchFlags(
     requestContextVersion = this.contextFetchVersion,
-  ): Promise<FetchedFlagsResult | undefined> {
-    if (this.config.offline) {
-      return;
-    }
+  ): Promise<FetchedFlagsResult> {
+    if (this.config.offline) return this.fallbackResult();
 
     const cacheKey = this.fetchParams().toString();
     const cachedItem = await this.cache.get(cacheKey);
@@ -888,11 +856,8 @@ export class FlagsClient {
           .then(async (result) => {
             if (!result) return;
 
-            await this.cache.set(cacheKey, {
-              flags: result.flags,
-              flagStateVersion: result.flagStateVersion,
-            });
             this.applyFetchedFlagsResult(result, true, requestContextVersion);
+            await this.persistSnapshot(cacheKey, result);
           })
           .catch(() => {
             // we don't care about the result, we just want to re-fetch
@@ -906,10 +871,7 @@ export class FlagsClient {
     const fetchedFlags = await this.fetchFlags();
 
     if (fetchedFlags) {
-      await this.cache.set(cacheKey, {
-        flags: fetchedFlags.flags,
-        flagStateVersion: fetchedFlags.flagStateVersion,
-      });
+      await this.persistSnapshot(cacheKey, fetchedFlags);
       return {
         flags: fetchedFlags.flags,
         flagStateVersion: fetchedFlags.flagStateVersion,
@@ -921,42 +883,92 @@ export class FlagsClient {
       return cachedItem;
     }
 
-    // fetch failed, nothing cached => return fallbacks
+    // Retain a known-good in-memory snapshot for the same context.
+    if (
+      this.fetchedFlagsContextVersion === requestContextVersion &&
+      Object.keys(this.fetchedFlags).length
+    )
+      return {
+        flags: this.fetchedFlags,
+        flagStateVersion: this.fetchedFlagStateVersion,
+      };
+    return this.fallbackResult();
+  }
+
+  private fallbackResult(): FetchedFlagsResult {
     return {
-      flags: Object.entries(this.fallbackFlags).reduce(
-        (acc, [key, override]) => {
-          acc[key] = {
-            key,
-            isEnabled: !!override,
-            config:
-              typeof override === "object" && "key" in override
-                ? {
-                    key: override.key,
-                    payload: override.payload,
-                  }
-                : undefined,
-          };
-          return acc;
-        },
-        {} as RawFlags,
+      flags: Object.fromEntries(
+        Object.entries(this.fallbackFlags).map(([key, value]) => [
+          key,
+          {
+            value: copyJSON(value),
+            resolved: false,
+            ruleResults: [],
+            errors: [],
+          },
+        ]),
       ),
     };
   }
 
-  private hasOptInMetadataForCurrentContext() {
-    if (this.fetchedFlagsContextVersion !== this.contextFetchVersion) {
+  /** Bootstrap may omit opt-in metadata. Fetch only the missing metadata without
+   * replacing server-derived values/provenance with browser-context evaluations. */
+  private async fetchOptInMetadata(
+    waitForVersion: number | undefined,
+    contextVersion: number,
+  ) {
+    if (this.config.offline) return false;
+    const request = ++this.optInMetadataFetchVersion;
+    const result = await this.fetchFlags(waitForVersion);
+    if (
+      !result ||
+      contextVersion !== this.contextFetchVersion ||
+      request !== this.optInMetadataFetchVersion ||
+      (this.fetchedFlagStateVersion !== undefined &&
+        (result.flagStateVersion === undefined ||
+          result.flagStateVersion < this.fetchedFlagStateVersion))
+    )
       return false;
-    }
+    if (!this.setOptInMetadata(result.flags, result.flagStateVersion))
+      return false;
+    this.updateFlags(false);
+    this.triggerFlagsUpdated();
+    return true;
+  }
 
-    const fetchedFlags = Object.values(this.fetchedFlags);
-    return (
-      fetchedFlags.length > 0 &&
-      fetchedFlags.every(
-        (flag) =>
-          flag.optInEnabled === false ||
-          (flag.optInEnabled === true && flag.optIn !== undefined),
-      )
-    );
+  private clearOptInMetadata() {
+    this.optInMetadata = Object.create(null);
+    this.optInMetadataContextVersion = -1;
+    this.optInMetadataFlagStateVersion = undefined;
+  }
+
+  private setOptInMetadata(
+    flags: RawFlags,
+    flagStateVersion: number | undefined,
+  ): boolean {
+    // Metadata-only requests can advance membership beyond the value snapshot.
+    if (
+      this.optInMetadataContextVersion === this.contextFetchVersion &&
+      this.optInMetadataFlagStateVersion !== undefined &&
+      (flagStateVersion === undefined ||
+        flagStateVersion < this.optInMetadataFlagStateVersion)
+    )
+      return false;
+    this.clearOptInMetadata();
+    if (Object.values(flags).some((flag) => flag.optInEnabled === undefined))
+      return false;
+    for (const [key, flag] of Object.entries(flags)) {
+      if (flag.optInEnabled && flag.optIn) {
+        this.optInMetadata[key] = copyJSON(flag.optIn);
+      }
+    }
+    this.optInMetadataContextVersion = this.contextFetchVersion;
+    this.optInMetadataFlagStateVersion = flagStateVersion;
+    return true;
+  }
+
+  private hasOptInMetadataForCurrentContext() {
+    return this.optInMetadataContextVersion === this.contextFetchVersion;
   }
 
   private ensureOptInFlagsLoading() {
@@ -990,13 +1002,23 @@ export class FlagsClient {
   }
 
   private mergeFlags(fetchedFlags: RawFlags, overrides: FlagOverrides) {
-    const mergedFlags: RawFlags = {};
-    // merge fetched flags with overrides into `this.flags`
-    for (const key in fetchedFlags) {
-      const fetchedFlag = fetchedFlags[key];
-      if (!fetchedFlag) continue;
-      const isEnabledOverride = overrides[key] ?? null;
-      mergedFlags[key] = { ...fetchedFlag, isEnabledOverride };
+    const mergedFlags: RawFlags = Object.create(null);
+    for (const key of new Set([
+      ...Object.keys(fetchedFlags),
+      ...Object.keys(overrides),
+    ])) {
+      const value = Object.prototype.hasOwnProperty.call(overrides, key)
+        ? overrides[key]
+        : undefined;
+      mergedFlags[key] =
+        value === undefined
+          ? fetchedFlags[key]
+          : {
+              value: copyJSON(value),
+              resolved: false,
+              ruleResults: [],
+              errors: [],
+            };
     }
     return mergedFlags;
   }
@@ -1025,7 +1047,9 @@ export class FlagsClient {
         {} as Record<string, FallbackFlagOverride>,
       );
     } else {
-      return fallbackFlags ?? {};
+      if (fallbackFlags !== undefined && !isFlagValue(fallbackFlags))
+        throw new Error("fallbackFlags must contain JSON values");
+      return copyJSON(fallbackFlags ?? {});
     }
   }
 
@@ -1047,13 +1071,12 @@ export class FlagsClient {
     const report: Record<string, string[]> = {};
     for (const flagKey in flags) {
       const flag = flags[flagKey];
-      if (flag?.missingContextFields?.length) {
-        report[flag.key] = flag.missingContextFields;
-      }
-
-      if (flag?.config?.missingContextFields?.length) {
-        report[`${flag.key}.config`] = flag.config.missingContextFields;
-      }
+      const fields = flag?.errors.flatMap((error) =>
+        error.code === "MISSING_CONTEXT_FIELD" && error.field
+          ? [error.field]
+          : [],
+      );
+      if (fields?.length) report[flagKey] = fields;
     }
 
     if (Object.keys(report).length > 0) {

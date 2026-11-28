@@ -12,7 +12,7 @@ import {
 import { ReflagClient } from "../src";
 import { HttpClient } from "../src/httpClient";
 import * as sseModule from "../src/sse";
-import { getFlags } from "./mocks/handlers";
+import { getFlags, selectedFlag } from "./mocks/handlers";
 import { server } from "./mocks/server";
 
 const KEY = "123";
@@ -56,7 +56,7 @@ describe("init", () => {
 
     server.use(
       http.get(
-        "https://example.com/features/evaluated",
+        "https://example.com/flags/evaluated",
         ({ request }: { request: StrictRequest<DefaultBodyType> }) => {
           usedSpecialHost = true;
           return getFlags({ request });
@@ -192,7 +192,7 @@ describe("init", () => {
       await reflagInstance.initialize();
 
       expect(getSpy).toHaveBeenCalledTimes(1);
-      expect(getSpy.mock.calls[0][0].path).toBe("/features/evaluated");
+      expect(getSpy.mock.calls[0][0].path).toBe("/flags/evaluated");
 
       await reflagInstance.stop();
     });
@@ -295,14 +295,9 @@ describe("init", () => {
         enableLiveFlagUpdates: true,
         feedback: { enableAutoFeedback: false },
         bootstrappedState: {
+          protocolVersion: 2,
           context: { user: { id: "foo" } },
-          flags: {
-            testFlag: {
-              key: "testFlag",
-              isEnabled: true,
-              targetingVersion: 1,
-            },
-          },
+          flags: { testFlag: selectedFlag(true) },
           flagStateVersion: 5,
         },
       });
@@ -328,42 +323,9 @@ describe("init", () => {
         feedback: { enableAutoFeedback: false },
         logger,
         bootstrappedState: {
+          protocolVersion: 2,
           context: { user: { id: "foo" } },
-          flags: {
-            testFlag: {
-              key: "testFlag",
-              isEnabled: true,
-              targetingVersion: 1,
-            },
-          },
-        },
-      });
-      await reflagInstance.initialize();
-
-      expect(logger.warn).toHaveBeenCalledWith(
-        "Live flag updates require `flagStateVersion` when bootstrapping flags. Disabling live flag updates for this client. Upgrade your server SDK (for example `@reflag/node-sdk`) so the bootstrap payload includes `flagStateVersion`, or set `enableLiveFlagUpdates` to `false` when using unversioned bootstrap data.",
-      );
-      expect((reflagInstance as any)["enableLiveFlagUpdates"]).toBe(false);
-      expect(spy).not.toHaveBeenCalled();
-
-      await reflagInstance.stop();
-    });
-
-    test("warns and disables live flag updates when using deprecated bootstrappedFlags", async () => {
-      const spy = vi.spyOn(sseModule, "openAblySSEChannel");
-
-      const reflagInstance = new ReflagClient({
-        publishableKey: KEY,
-        enableLiveFlagUpdates: true,
-        feedback: { enableAutoFeedback: false },
-        logger,
-        user: { id: "foo" },
-        bootstrappedFlags: {
-          testFlag: {
-            key: "testFlag",
-            isEnabled: true,
-            targetingVersion: 1,
-          },
+          flags: { testFlag: selectedFlag(true) },
         },
       });
       await reflagInstance.initialize();

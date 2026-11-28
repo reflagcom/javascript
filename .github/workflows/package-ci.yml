@@ -29,14 +29,20 @@ jobs:
       - name: Restore package.json
         # This step is necessary because the previous step may have updated package.json
         run: git checkout -- package.json packages/*/package.json
+      - name: Check release channel safeguards
+        run: yarn test:release
       - name: Install Playwright Browsers
         run: yarn playwright install --with-deps
         working-directory: ./packages/browser-sdk
       - id: build
         name: Build the project
         run: yarn build
+      - name: Check generated CLI declarations
+        run: node packages/cli/test/generated-types.mjs
       - name: Build docs
         run: yarn docs
+      - name: Test documentation publication boundaries
+        run: yarn test:docs-publishing
       - id: test
         name: Test the project
         run: yarn test:ci
@@ -47,6 +53,10 @@ jobs:
           done
       - name: Report test results
         uses: dorny/test-reporter@v1.6.0
+        # Reporting only. Failing tests already fail the "Test the project"
+        # step; a reporter API error (seen on merge queue commits) shouldn't
+        # fail the required "Build & Test" job.
+        continue-on-error: true
         with:
           name: Build & Test Report
           path: ./packages/*/junit.xml

@@ -20,11 +20,11 @@ export {
 } from "./hooks";
 export type {
   BootstrappedFlags,
-  EmptyFlagRemoteConfig,
-  Flag,
+  FlagValue,
+  FlagDefaultValue,
+  FlagValueFromDefault,
   FlagKey,
   Flags,
-  FlagType,
   OptInFlag,
   ReflagBaseProps,
   ReflagBootstrappedProps,

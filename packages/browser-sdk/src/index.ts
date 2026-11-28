@@ -1,8 +1,6 @@
 export type {
   BootstrappedState,
   Config,
-  Flag,
-  FlagRemoteConfig,
   InitOptions,
   SetOptInOptions,
   ToolbarOptions,
@@ -41,11 +39,20 @@ export type {
   CheckEvent,
   FallbackFlagOverride,
   FlagOverrides,
+  FlagValues,
+  EvaluationError,
+  RuleEvaluationResult,
   OptInFlag,
   RawFlag,
   RawFlagOptIn,
   RawFlags,
 } from "./flag/flags";
+export type {
+  FlagValue,
+  FlagDefaultFor,
+  FlagDefaultValue,
+  FlagValueFromDefault,
+} from "./flag/values";
 export type { HookArgs, State, TrackEvent } from "./hooksManager";
 export type { Logger } from "./logger";
 export type { EventSourceFactory, EventSourceLike } from "./sse";

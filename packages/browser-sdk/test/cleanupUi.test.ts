@@ -39,12 +39,16 @@ function withoutSessionStorage(callback: () => void) {
   }
 }
 
-function mountToolbar() {
-  const client = new ReflagClient({
+function createToolbarClient() {
+  return new ReflagClient({
     publishableKey: "test-key",
     offline: true,
     toolbar: false,
   });
+}
+
+function mountToolbar() {
+  const client = createToolbarClient();
   const unsubscribe = vi.fn();
   const on = vi.spyOn(client, "on").mockReturnValue(unsubscribe);
   showToolbarToggle({ reflagClient: client });
@@ -59,6 +63,60 @@ afterEach(() => {
   options.debounceRendering = originalDebounce;
   vi.restoreAllMocks();
 });
+
+test.each([
+  { override: false, clearControl: "reset link" },
+  { override: true, clearControl: "reset link" },
+  { override: false, clearControl: "switch" },
+  { override: true, clearControl: "switch" },
+])(
+  "shows a $override override as active and clears it with the $clearControl",
+  async ({ override, clearControl }) => {
+    const client = createToolbarClient();
+    client.updateFlags({
+      release: {
+        value: !override,
+        resolved: false,
+        ruleResults: [],
+        errors: [],
+      },
+    });
+    const getOverride = vi.spyOn(client, "getFlagOverride");
+    const getFlag = vi.spyOn(client, "getFlag");
+    const getFlags = vi.spyOn(client, "getFlags");
+
+    showToolbarToggle({ reflagClient: client });
+    drainCallbacks();
+
+    const root = document.getElementById(toolbarContainerId)!.shadowRoot!;
+    const checkbox = root.querySelector<HTMLInputElement>(".switch-input")!;
+    const overrideIndicator = () =>
+      root.querySelector(".override-indicator.show");
+    expect(getOverride).toHaveBeenCalledExactlyOnceWith("release");
+    expect(checkbox.checked).toBe(!override);
+    expect(overrideIndicator()).toBeNull();
+
+    getOverride.mockClear();
+    checkbox.click();
+    drainCallbacks();
+    expect(getOverride).toHaveBeenCalledExactlyOnceWith("release");
+    expect(client.getFlagOverride("release")).toBe(override);
+    expect(checkbox.checked).toBe(override);
+    expect(overrideIndicator()).not.toBeNull();
+
+    const resetLink = root.querySelector<HTMLAnchorElement>(".reset")!;
+    expect(resetLink).not.toBeNull();
+    (clearControl === "reset link" ? resetLink : checkbox).click();
+    drainCallbacks();
+    expect(client.getFlagOverride("release")).toBeUndefined();
+    expect(checkbox.checked).toBe(!override);
+    expect(overrideIndicator()).toBeNull();
+    expect(root.querySelector(".reset")).toBeNull();
+    expect(getFlag).not.toHaveBeenCalled();
+    expect(getFlags).not.toHaveBeenCalled();
+    await client.stop();
+  },
+);
 
 test("unmounts before a delayed toolbar effect can run after jsdom teardown", () => {
   const { on } = mountToolbar();

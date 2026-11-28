@@ -19,6 +19,11 @@
       "maxLength": 14,
       "description": "Mandatory ID for the Reflag app. You can find it by calling reflag apps list."
     },
+    "orgId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional organization ID to restrict app discovery and commands. You can find it with reflag apps list."
+    },
     "typesOutput": {
       "type": "array",
       "description": "List of paths to output the types. The path is relative to the current working directory.",
@@ -26,7 +31,7 @@
         "type": "object",
         "properties": {
           "path": { "type": "string" },
-          "format": { "type": "string", "enum": ["react", "node"] }
+          "format": { "type": "string", "enum": ["react", "node", "vue"] }
         },
         "required": ["path"]
       }

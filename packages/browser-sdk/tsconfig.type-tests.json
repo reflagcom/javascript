@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "baseUrl": ".",
+    "paths": { "@reflag/browser-sdk": ["./src/index.ts"] }
+  },
+  "include": ["src", "type-tests/defaults.ts"]
+}

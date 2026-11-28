@@ -1769,7 +1769,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@changesets/assemble-release-plan@npm:^6.0.9":
+"@changesets/assemble-release-plan@npm:6.0.9":
   version: 6.0.9
   resolution: "@changesets/assemble-release-plan@npm:6.0.9"
   dependencies:
@@ -1780,6 +1780,20 @@ __metadata:
     "@manypkg/get-packages": "npm:^1.1.3"
     semver: "npm:^7.5.3"
   checksum: 10c0/128f87975f65d9ceb2c997df186a5deae8637fd3868098bb4fb9772f35fdd3b47883ccbdc2761d0468e60a83ef4e2c1561a8e58f8052bfe2daf1ea046803fe1a
+  languageName: node
+  linkType: hard
+
+"@changesets/assemble-release-plan@patch:@changesets/assemble-release-plan@npm%3A6.0.9#~/.yarn/patches/@changesets-assemble-release-plan-npm-6.0.9-e01af97ef4.patch":
+  version: 6.0.9
+  resolution: "@changesets/assemble-release-plan@patch:@changesets/assemble-release-plan@npm%3A6.0.9#~/.yarn/patches/@changesets-assemble-release-plan-npm-6.0.9-e01af97ef4.patch::version=6.0.9&hash=c0de35"
+  dependencies:
+    "@changesets/errors": "npm:^0.2.0"
+    "@changesets/get-dependents-graph": "npm:^2.1.3"
+    "@changesets/should-skip-package": "npm:^0.1.2"
+    "@changesets/types": "npm:^6.1.0"
+    "@manypkg/get-packages": "npm:^1.1.3"
+    semver: "npm:^7.5.3"
+  checksum: 10c0/8898084f7128fa38d0c1fd58900e24471cd49dc950352fecb0e79ff0a80d40649f57cbd56cd2a16697feed38a3388fc85926d6e9c42e0ca98718e705a09246e8
   languageName: node
   linkType: hard
 
@@ -4215,6 +4229,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@isaacs/nonrecursive-glob-match@npm:^1.1.0":
+  version: 1.1.0
+  resolution: "@isaacs/nonrecursive-glob-match@npm:1.1.0"
+  checksum: 10c0/89f8535f3d8147649360de992f58fba2b0e97b687e18cdc16c5b34a6c52afff4f474d05c5a0b6411708614f368cf19c41b037d3a1c6c6821e02aee967d888e98
+  languageName: node
+  linkType: hard
+
 "@isaacs/string-locale-compare@npm:^1.1.0":
   version: 1.1.0
   resolution: "@isaacs/string-locale-compare@npm:1.1.0"
@@ -6029,7 +6050,19 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@reflag/browser-sdk@npm:1.7.4, @reflag/browser-sdk@workspace:packages/browser-sdk":
+"@reflag/browser-sdk@npm:1.7.4":
+  version: 1.7.4
+  resolution: "@reflag/browser-sdk@npm:1.7.4"
+  dependencies:
+    "@floating-ui/dom": "npm:^1.6.8"
+    fast-equals: "npm:^5.2.2"
+    js-cookie: "npm:^3.0.5"
+    preact: "npm:^10.22.1"
+  checksum: 10c0/11347fc0bae8e77f9e2207b520ae3e227fb88d050ff23f94614c6b5d5886c731c17634844a653fb6827e47e074a1651a9bd5f92e1f2e5704e29f0b259589d55b
+  languageName: node
+  linkType: hard
+
+"@reflag/browser-sdk@npm:^2.0.0-next.1, @reflag/browser-sdk@workspace:packages/browser-sdk":
   version: 0.0.0-use.local
   resolution: "@reflag/browser-sdk@workspace:packages/browser-sdk"
   dependencies:
@@ -6098,7 +6131,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@reflag/flag-evaluation@workspace:*, @reflag/flag-evaluation@workspace:packages/flag-evaluation":
+"@reflag/flag-evaluation@npm:2.0.0, @reflag/flag-evaluation@workspace:packages/flag-evaluation":
   version: 0.0.0-use.local
   resolution: "@reflag/flag-evaluation@workspace:packages/flag-evaluation"
   dependencies:
@@ -6153,7 +6186,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@reflag/node-sdk@workspace:*, @reflag/node-sdk@workspace:packages/node-sdk":
+"@reflag/node-sdk@npm:2.0.0-next.3, @reflag/node-sdk@workspace:*, @reflag/node-sdk@workspace:^, @reflag/node-sdk@workspace:packages/node-sdk":
   version: 0.0.0-use.local
   resolution: "@reflag/node-sdk@workspace:packages/node-sdk"
   dependencies:
@@ -6161,7 +6194,7 @@ __metadata:
     "@babel/core": "npm:~7.29.6"
     "@googleapis/storage": "npm:21.2.0"
     "@redis/client": "npm:^5.11.0"
-    "@reflag/flag-evaluation": "workspace:*"
+    "@reflag/flag-evaluation": "npm:2.0.0"
     "@reflag/tsconfig": "npm:~0.0.2"
     "@types/node": "npm:^22.12.0"
     "@vitest/coverage-v8": "npm:4.1.12"
@@ -6220,22 +6253,27 @@ __metadata:
   resolution: "@reflag/react-native-sdk@workspace:packages/react-native-sdk"
   dependencies:
     "@react-native-async-storage/async-storage": "npm:^2.2.0"
-    "@reflag/react-sdk": "npm:1.7.4"
+    "@reflag/node-sdk": "npm:2.0.0-next.3"
+    "@reflag/react-sdk": "npm:^2.0.0-next.2"
     "@reflag/tsconfig": "npm:^0.0.2"
+    "@types/node": "npm:^22.12.0"
     "@types/react": "npm:^19.0.12"
+    "@types/react-test-renderer": "npm:^19.0.0"
     react-native-sse: "npm:^1.2.1"
+    react-test-renderer: "npm:19.1.0"
     typescript: "npm:^5.7.3"
+    vitest: "npm:~4.1.12"
   peerDependencies:
-    react: "*"
+    react: ">=17.0.0"
     react-native: "*"
   languageName: unknown
   linkType: soft
 
-"@reflag/react-sdk@npm:1.7.4, @reflag/react-sdk@workspace:^, @reflag/react-sdk@workspace:packages/react-sdk":
+"@reflag/react-sdk@npm:^2.0.0-next.2, @reflag/react-sdk@workspace:^, @reflag/react-sdk@workspace:packages/react-sdk":
   version: 0.0.0-use.local
   resolution: "@reflag/react-sdk@workspace:packages/react-sdk"
   dependencies:
-    "@reflag/browser-sdk": "npm:1.7.4"
+    "@reflag/browser-sdk": "npm:^2.0.0-next.1"
     "@reflag/tsconfig": "npm:^0.0.2"
     "@testing-library/react": "npm:^15.0.7"
     "@types/jsdom": "npm:^21.1.6"
@@ -6243,6 +6281,7 @@ __metadata:
     "@types/react": "npm:^19.0.12"
     "@types/react-dom": "npm:^19.0.5"
     "@types/webpack": "npm:^5.28.5"
+    fast-equals: "npm:^5.2.2"
     jsdom: "npm:^24.1.0"
     msw: "npm:^2.15.0"
     react: "npm:19.1.0"
@@ -6284,7 +6323,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@reflag/vue-sdk@workspace:packages/vue-sdk"
   dependencies:
-    "@reflag/browser-sdk": "npm:1.7.4"
+    "@reflag/browser-sdk": "npm:^2.0.0-next.1"
     "@reflag/tsconfig": "npm:^0.0.2"
     "@types/jsdom": "npm:^21.1.6"
     "@types/node": "npm:^22.12.0"
@@ -7422,6 +7461,15 @@ __metadata:
   peerDependencies:
     "@types/react": ^19.2.0
   checksum: 10c0/b486ebe0f4e2fb35e2e108df1d8fc0927ca5d6002d5771e8a739de11239fe62d0e207c50886185253c99eb9dedfeeb956ea7429e5ba17f6693c7acb4c02f8cd1
+  languageName: node
+  linkType: hard
+
+"@types/react-test-renderer@npm:^19.0.0":
+  version: 19.3.1
+  resolution: "@types/react-test-renderer@npm:19.3.1"
+  dependencies:
+    "@types/react": "npm:*"
+  checksum: 10c0/330305cd5dbefa21233a04e432d06b6d3b8ba6bad83a3e9773eba8b1731d6c9b7bdc634999d590d042e5ca7f3543e04921b963d392fbda2bbd1ba2655851dfa0
   languageName: node
   linkType: hard
 
@@ -8879,10 +8927,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"basic-ftp@npm:^5.3.1":
-  version: 5.3.1
-  resolution: "basic-ftp@npm:5.3.1"
-  checksum: 10c0/03511b488cd292abfa82a8c0ea3b9573b40d12d2f1518d6f41a9461b012b3376d3e6d50679b38d9b2b4f48fd6e8e0418ac196312ee7e2da13cb801169940d1c3
+"basic-ftp@npm:^6.2.4":
+  version: 6.2.6
+  resolution: "basic-ftp@npm:6.2.6"
+  checksum: 10c0/4a31db32ba19a93d87e56150084ac5405815f0311f6a4b2cfbfea178da01c4f534860ec1f037958297ef1b527e3b1e26bf60c1e473e6b9518402a5419dc531a6
   languageName: node
   linkType: hard
 
@@ -9017,7 +9065,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"brace-expansion@npm:5.0.12, brace-expansion@npm:^5.0.2, brace-expansion@npm:^5.0.5, brace-expansion@npm:^5.0.8":
+"brace-expansion@npm:5.0.12, brace-expansion@npm:^5.0.8":
   version: 5.0.12
   resolution: "brace-expansion@npm:5.0.12"
   dependencies:
@@ -9042,6 +9090,15 @@ __metadata:
   dependencies:
     balanced-match: "npm:^1.0.0"
   checksum: 10c0/17ee4194c85b05cde0a7b7c068eeef664440c027116ef42c3d35c13ebabdc9fd3eaf05c5c8a06dd0ca20ae012d652561d8ac2a699daa5cbee1f0510e5134ab4d
+  languageName: node
+  linkType: hard
+
+"brace-expansion@npm:^5.0.12":
+  version: 5.0.13
+  resolution: "brace-expansion@npm:5.0.13"
+  dependencies:
+    balanced-match: "npm:^4.0.2"
+  checksum: 10c0/80420a1d567db7fa3214e2d49cd28ff8aa89dbb9a889bf3e449372dd72cdcec5267b451a5ff6fcaec1dd8819a88fb3d682e01c63812a8220881e305852b07f60
   languageName: node
   linkType: hard
 
@@ -11932,14 +11989,14 @@ __metadata:
   languageName: node
   linkType: hard
 
-"get-uri@npm:8.0.1":
-  version: 8.0.1
-  resolution: "get-uri@npm:8.0.1"
+"get-uri@npm:8.0.2":
+  version: 8.0.2
+  resolution: "get-uri@npm:8.0.2"
   dependencies:
-    basic-ftp: "npm:^5.3.1"
+    basic-ftp: "npm:^6.2.4"
     data-uri-to-buffer: "npm:8.0.0"
     debug: "npm:^4.3.4"
-  checksum: 10c0/d5916692ecaf441e59dd1bee6719a277c418f00cd0944f1f5755113248d49db40f34facba67070f41cac7b4c1e4f738926878b274510da7f9ba831532c9eaecc
+  checksum: 10c0/158f40a21e8c43f9eab1d60bc49dcbe5a21fcc60007a677ed67a77a2904135aea5dbbd1532f0f81b72ffc9867e795475504b805c7f9744c58385f531a437d5f3
   languageName: node
   linkType: hard
 
@@ -11987,14 +12044,14 @@ __metadata:
   languageName: node
   linkType: hard
 
-"glob@npm:13.0.6, glob@npm:^13.0.0, glob@npm:^13.0.6":
-  version: 13.0.6
-  resolution: "glob@npm:13.0.6"
+"glob@npm:14.0.6":
+  version: 14.0.6
+  resolution: "glob@npm:14.0.6"
   dependencies:
-    minimatch: "npm:^10.2.2"
+    minimatch: "npm:^11.0.5"
     minipass: "npm:^7.1.3"
-    path-scurry: "npm:^2.0.2"
-  checksum: 10c0/269c236f11a9b50357fe7a8c6aadac667e01deb5242b19c84975628f05f4438d8ee1354bb62c5d6c10f37fd59911b54d7799730633a2786660d8c69f1d18120a
+    path-scurry: "npm:^3.0.0"
+  checksum: 10c0/5b8621a6a363abc630de0a542f0f8d0a919a0a5e154626b5fdf1e97425e8709783b0b27cc1eb9d65a5ce097db84e904fe50f8f1dc8c0579c49583c0ac30f8ac7
   languageName: node
   linkType: hard
 
@@ -14627,30 +14684,22 @@ __metadata:
   languageName: node
   linkType: hard
 
-"minimatch@npm:10.2.3":
-  version: 10.2.3
-  resolution: "minimatch@npm:10.2.3"
-  dependencies:
-    brace-expansion: "npm:^5.0.2"
-  checksum: 10c0/d9ae5f355e8bb77a42dd8c20b950141cec8773ef8716a2bb6df7a6840cc44a00ed828883884e4f1c7b5cb505fa06a17e3ea9ca2edb18fd1dec865ea7f9fcf0e5
-  languageName: node
-  linkType: hard
-
-"minimatch@npm:10.2.5":
-  version: 10.2.5
-  resolution: "minimatch@npm:10.2.5"
-  dependencies:
-    brace-expansion: "npm:^5.0.5"
-  checksum: 10c0/6bb058bd6324104b9ec2f763476a35386d05079c1f5fe4fbf1f324a25237cd4534d6813ecd71f48208f4e635c1221899bef94c3c89f7df55698fe373aaae20fd
-  languageName: node
-  linkType: hard
-
-"minimatch@npm:10.2.6, minimatch@npm:^10.0.3, minimatch@npm:^10.2.2, minimatch@npm:^10.2.6":
+"minimatch@npm:10.2.6, minimatch@npm:^10.0.3, minimatch@npm:^10.2.6":
   version: 10.2.6
   resolution: "minimatch@npm:10.2.6"
   dependencies:
     brace-expansion: "npm:^5.0.8"
   checksum: 10c0/4559a836243b98bd4d17ea9f7edae698717c76399eea7be374f3737f33164e4907f19e9726891ddeb122f750a5a7fa80d2ac43e851d6e5984dc4ff42ec127d3a
+  languageName: node
+  linkType: hard
+
+"minimatch@npm:11.0.9, minimatch@npm:^11.0.5":
+  version: 11.0.9
+  resolution: "minimatch@npm:11.0.9"
+  dependencies:
+    "@isaacs/nonrecursive-glob-match": "npm:^1.1.0"
+    brace-expansion: "npm:^5.0.12"
+  checksum: 10c0/17c8b5caebaa8c1ecc1c6d58028d192f0e94ebe03976bb9f348920c107cde3185614f74543fe40dfc79ecf0bd74158b816633fc9a8f66da32c0d5327ecbb91e9
   languageName: node
   linkType: hard
 
@@ -15140,7 +15189,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "nextjs-bootstrap-demo@workspace:packages/react-sdk/dev/nextjs-bootstrap-demo"
   dependencies:
-    "@reflag/node-sdk-v1": "npm:@reflag/node-sdk@1.8.3"
+    "@reflag/node-sdk": "workspace:^"
     "@reflag/react-sdk": "workspace:^"
     "@types/node": "npm:^22.12.0"
     "@types/react": "npm:^18"
@@ -16268,13 +16317,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"path-scurry@npm:^2.0.2":
-  version: 2.0.2
-  resolution: "path-scurry@npm:2.0.2"
+"path-scurry@npm:^3.0.0":
+  version: 3.0.0
+  resolution: "path-scurry@npm:3.0.0"
   dependencies:
     lru-cache: "npm:^11.0.0"
     minipass: "npm:^7.1.2"
-  checksum: 10c0/b35ad37cf6557a87fd057121ce2be7695380c9138d93e87ae928609da259ea0a170fac6f3ef1eb3ece8a068e8b7f2f3adf5bb2374cf4d4a57fe484954fcc9482
+  checksum: 10c0/3256223b51952732bc5460f574143d7d9904cd6d68fac3072906162c90e9f27fdf6f3fe812287e65a876f92d73c12a58368b28749ed07a58bdb04dc76f60a938
   languageName: node
   linkType: hard
 
@@ -17288,6 +17337,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"react-is@npm:^19.1.0":
+  version: 19.3.1
+  resolution: "react-is@npm:19.3.1"
+  checksum: 10c0/428e02d986d56f1859c57756084489f6d2900fd686905003c405b32f1168738b78772bfa4bb6c706f5ac821199171522c28bf6434281f524f901459390a19606
+  languageName: node
+  linkType: hard
+
 "react-native-safe-area-context@npm:^5.6.0":
   version: 5.6.2
   resolution: "react-native-safe-area-context@npm:5.6.2"
@@ -17359,6 +17415,18 @@ __metadata:
   version: 0.14.2
   resolution: "react-refresh@npm:0.14.2"
   checksum: 10c0/875b72ef56b147a131e33f2abd6ec059d1989854b3ff438898e4f9310bfcc73acff709445b7ba843318a953cb9424bcc2c05af2b3d80011cee28f25aef3e2ebb
+  languageName: node
+  linkType: hard
+
+"react-test-renderer@npm:19.1.0":
+  version: 19.1.0
+  resolution: "react-test-renderer@npm:19.1.0"
+  dependencies:
+    react-is: "npm:^19.1.0"
+    scheduler: "npm:^0.26.0"
+  peerDependencies:
+    react: ^19.1.0
+  checksum: 10c0/34ed4a37ba8b0beb96c048de6ff28574f018a18dd1042c24f8f46142d48eb5b27f82ff7c2823d082932fd3983c5a3529ab8cc8f15191d4306df0082f9f84678f
   languageName: node
   linkType: hard
 
@@ -17473,10 +17541,12 @@ __metadata:
   dependencies:
     "@react-native-async-storage/async-storage": "npm:^2.2.0"
     "@reflag/react-native-sdk": "workspace:*"
+    "@types/react": "npm:^19.1.0"
     expo: "npm:~54.0.0"
     react: "npm:19.1.0"
     react-native: "npm:0.81.5"
     react-native-safe-area-context: "npm:^5.6.0"
+    typescript: "npm:^5.8.3"
   languageName: unknown
   linkType: soft
 
@@ -20506,6 +20576,7 @@ __metadata:
   resolution: "workspaces@workspace:."
   dependencies:
     "@changesets/cli": "npm:^2.29.6"
+    "@changesets/get-release-plan": "npm:^4.0.15"
     husky: "npm:^9.1.7"
     lerna: "npm:^10.1.1"
     lint-staged: "npm:^16.2.7"

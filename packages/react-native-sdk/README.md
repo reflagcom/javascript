@@ -1,22 +1,16 @@
-# Reflag React Native SDK
+# Reflag React Native SDK v2
 
-A thin React Native wrapper around `@reflag/react-sdk`.
+React Native providers and hooks for Boolean and multivariate flags. Built on the matching React v2 SDK, with AsyncStorage persistence and a native SSE transport included.
 
-For more usage details, see the [React SDK README](../react-sdk/README.md).
+This branch targets the v2 toolchain; it does not publish packages. Upgrade Node/bootstrap producers and Native consumers together. The [React SDK README](../react-sdk/README.md) covers the shared API.
 
-An Expo example app lives in [packages/react-native-sdk/dev/expo](https://github.com/reflagcom/javascript/tree/main/packages/react-native-sdk/dev/expo).
+## Install and initialize
 
-## Get started
-
-### Install
-
-```shell
-npm i @reflag/react-native-sdk
+```sh
+npm install @reflag/react-native-sdk@2
 ```
 
-### 1. Add the ReflagProvider
-
-Wrap your app with the provider from `@reflag/react-native-sdk`:
+Requires React 17 or later (the modern JSX runtime) and a React version supported by your React Native app. Wrap your app with the Native provider, which supplies the platform adapters:
 
 ```tsx
 import { ReflagProvider } from "@reflag/react-native-sdk";
@@ -24,111 +18,150 @@ import { ReflagProvider } from "@reflag/react-native-sdk";
 <ReflagProvider
   publishableKey="{YOUR_PUBLISHABLE_KEY}"
   context={{
-    user: { id: "user_123", name: "John Doe", email: "john@acmeinc.com" },
-    company: { id: "company_123", name: "Acme, Inc", plan: "pro" },
+    user: { id: "user_123", name: "John Doe" },
+    company: { id: "company_123", plan: "pro" },
   }}
 >
-  {/* children here are shown when loading finishes */}
+  <App />
 </ReflagProvider>;
 ```
 
-### 2. Use `useFlag(<flagKey>)`
+Use only publishable keys in the app, never server secret keys. Native providers default live updates on, persistence to AsyncStorage, and SSE to `react-native-sse` with transport polling disabled. `storage`, `eventSourceFactory`, and `enableLiveFlagUpdates` remain configurable.
+
+## Read flags and track usage
+
+`useFlag(key)` returns a **Boolean**, with false while initializing or when missing. A positional JSON default requests a matching top-level value category:
 
 ```tsx
-import { useFlag } from "@reflag/react-native-sdk";
+import { Button } from "react-native";
+import { useFlag, useTrack } from "@reflag/react-native-sdk";
 
 function StartHuddleButton() {
-  const { isEnabled, track } = useFlag("huddle");
-
-  if (!isEnabled) return null;
-
-  return <Button title="Start huddle" onPress={track} />;
-}
-```
-
-See the [React SDK README](../react-sdk/README.md) for more details.
-
-## React Native differences
-
-- The Reflag toolbar is web-only and is not available in React Native.
-- Built-in feedback UI is web-only. In React Native, use your own UI and call `useSendFeedback` or `client.feedback` when you're ready to send feedback.
-- Live flag updates work out of the box. The React Native SDK bundles an SSE transport via `react-native-sse`, so no global `EventSource` shim is required.
-- If you need custom SSE behavior, you can still override the transport by passing `eventSourceFactory` to `ReflagProvider` or `ReflagBootstrappedProvider`.
-
-## Reference
-
-The React Native SDK shares its API with the React SDK. Use the React SDK reference for full types and details:
-
-[React SDK Reference](../react-sdk/README.md)
-
-## Cookbook
-
-### Refresh flags when the app returns to the foreground
-
-Flags are updated if the context passed to `<ReflagProvider>` changes, but you might also want to update them when the app comes to the foreground.
-See this snippet:
-
-```tsx
-import React, { useEffect, useRef } from "react";
-import { AppState } from "react-native";
-import { ReflagProvider, useClient } from "@reflag/react-native-sdk";
-
-function AppStateListener() {
-  const client = useClient();
-  const appState = useRef(AppState.currentState);
-
-  useEffect(() => {
-    const subscription = AppState.addEventListener("change", (nextAppState) => {
-      if (
-        appState.current.match(/inactive|background/) &&
-        nextAppState === "active"
-      ) {
-        void client.refresh();
-      }
-      appState.current = nextAppState;
-    });
-
-    return () => subscription.remove();
-  }, [client]);
-
-  return null;
-}
-
-export function App() {
+  const enabled = useFlag("huddle");
+  const settings = useFlag("huddle-settings", { maxParticipants: 10 });
+  const track = useTrack();
+  if (!enabled) return null;
   return (
-    <ReflagProvider publishableKey="{YOUR_PUBLISHABLE_KEY}">
-      <AppStateListener />
-      <MyApp />
-    </ReflagProvider>
+    <Button
+      title={`Start huddle (up to ${settings.maxParticipants})`}
+      onPress={() => void track("Started huddle")}
+    />
   );
 }
 ```
 
-## Suspense loading
+Defaults infer widened direct-value types without generated declarations. Accepted false, zero, empty strings and null are not replaced by truthy fallbacks. Explicit `null` requests arbitrary JSON; `undefined` retains the Boolean-first behavior. Returned JSON values are independent copies. Defaults check top-level categories, not nested runtime schemas.
 
-Enable `<Suspense>` support by setting the `suspense` prop on the provider and wrap components that call `useFlag` in a Suspense boundary:
+Reading registers root checks immediately; application usage remains separate through `useTrack()`. `useClient().getFlags()` also returns direct values, not v1 flag wrappers. `useIsLoading()` reports readiness separately.
+
+## Suspense
+
+Ordinary `useFlag` never suspends, even inside a provider with `suspense` enabled. Use `useFlagSuspense` to wait for initialization:
 
 ```tsx
 import { Suspense } from "react";
 import { ActivityIndicator } from "react-native";
-import { ReflagProvider } from "@reflag/react-native-sdk";
+import { useFlagSuspense } from "@reflag/react-native-sdk";
 
-<ReflagProvider publishableKey="{YOUR_PUBLISHABLE_KEY}" suspense>
-  <Suspense fallback={<ActivityIndicator />}>
-    <App />
-  </Suspense>
-</ReflagProvider>;
+function Huddles() {
+  const enabled = useFlagSuspense("huddle");
+  return enabled ? <HuddleScreen /> : null;
+}
+
+<Suspense fallback={<ActivityIndicator />}>
+  <Huddles />
+</Suspense>;
 ```
 
-You can also override the behavior for one call with `useFlag("huddle", { suspense: true })`.
+A missing flag uses its default after initialization rather than suspending forever. Provider `suspense` and `useOptInFlags({ suspense: true })` control opt-in metadata loading, not ordinary flag reads. An object passed as `useFlag`'s second argument is a JSON default, not loading options.
 
-## Bootstrapping
+## Bootstrap from Node v2
 
-You can use `<ReflagBootstrappedProvider>` in React Native when you already have pre-fetched flags and want to avoid an initial fetch.
-Pass the full object returned by the Node SDK's `getFlagsForBootstrap()` directly as the provider's `flags` prop; it includes `context`, evaluated `flags`, and an optional `flagStateVersion`.
+Produce the envelope on your server using Node SDK v2:
 
-If you want live flag updates to continue working after bootstrapping, use a recent `@reflag/node-sdk` so `getFlagsForBootstrap()` includes `flagStateVersion`.
+```ts
+const flags = serverClient.getFlagsForBootstrap({
+  user: { id: "user_123" },
+  company: { id: "company_123" },
+});
+```
 
-After bootstrapping, any live flag updates are fetched directly by the client SDK from Reflag using the client-visible context. If your bootstrapped snapshot depends on server-only or secret context that is not available in the app, later live refreshes may differ. In that case, keep `enableLiveFlagUpdates` disabled.
+Pass the complete serialized envelope to Native:
 
-For bootstrap usage patterns and options, see the [React SDK bootstrapping docs](../react-sdk/README.md#server-side-rendering-and-bootstrapping).
+```tsx
+import { ReflagBootstrappedProvider } from "@reflag/react-native-sdk";
+
+<ReflagBootstrappedProvider
+  publishableKey="{YOUR_PUBLISHABLE_KEY}"
+  flags={flags}
+>
+  <App />
+</ReflagBootstrappedProvider>;
+```
+
+The envelope contains `protocolVersion: 2`, context, evaluated flags and an optional snapshot version. Legacy v1 bootstrap is rejected. Live updates require a snapshot version. Never expose secret keys or server-only attributes in bootstrap data: later refreshes use app-visible context and may differ from server evaluation. Disable live updates when later client evaluation must not replace the server result. Requesting missing opt-in metadata still makes a client-side request even with live updates disabled.
+
+`ReflagClientProvider` accepts an externally initialized matching v2 client. Its lifecycle and platform-adapter configuration belong to your application; the Native convenience providers do not configure an external client.
+
+## Opt-in and feedback
+
+`useOptInFlags()` returns metadata and loading state; `useSetOptIn()` changes membership. Metadata arrives with ordinary `/flags/evaluated` responses, or on demand after bootstrap without replacing server-derived values. User/company grants stay independent. Successful mutations confirm versioned evaluation and membership in one refresh. Check the returned `Response.ok` and catch rejections: confirmation can fail after membership changed remotely, and skipped calls return undefined. Failed metadata loading settles without exposing an error; use `useClient().refresh()` to retry.
+
+The toolbar and built-in feedback UI are web-only and disabled by default. Use your own Native feedback UI with `useSendFeedback()` or `client.feedback()`; enabling a web UI option does not make it Native-compatible.
+
+`enableTracking: false` disables checks and ordinary tracking. Offline mode skips HTTP/tracking; use direct-value fallbacks such as `fallbackFlags={{ huddle: true, settings: { mode: "offline" } }}`.
+
+## Optional key registration
+
+Native reexports React's hooks and **shares React's `Flags` registry**. Register direct-value schemas in `@reflag/react-sdk`, not a separate Native registry:
+
+```ts
+import "@reflag/react-native-sdk";
+
+declare module "@reflag/react-sdk" {
+  interface Flags {
+    huddle: boolean;
+    "huddle-settings": { maxParticipants: number };
+  }
+}
+```
+
+Registration constrains keys and checks non-null positional defaults, including required and nested fields. Named-interface and readonly defaults work. It does not restore wrappers or validate nested runtime payloads. The Native package reexports the same registry/types; v2 CLI React-format declarations target this shared interface. Regenerate legacy wrapper declarations before use; CLI v2 is a separate release dependency.
+
+## Refresh when returning to the foreground
+
+```tsx
+import { useEffect, useRef } from "react";
+import { AppState } from "react-native";
+import { useClient } from "@reflag/react-native-sdk";
+
+function AppStateListener() {
+  const client = useClient();
+  const appState = useRef(AppState.currentState);
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (
+        appState.current.match(/inactive|background/) &&
+        nextState === "active"
+      ) {
+        void client.refresh();
+      }
+      appState.current = nextState;
+    });
+    return () => subscription.remove();
+  }, [client]);
+  return null;
+}
+```
+
+Mount this listener under a Native provider. Context prop changes and `useUpdateUser`/`useUpdateCompany`/`useUpdateOtherContext` also update evaluation context.
+
+## Migrating from v1
+
+- Replace `const { isEnabled, track } = useFlag(key)` with `const enabled = useFlag(key)` and a separate `useTrack()` call.
+- Replace remote-config wrappers with authored multivariate flags and positional JSON defaults.
+- Use `useFlagSuspense`, not `useFlag(key, { suspense: true })`, for readiness-waiting reads.
+- Use direct-value fallback maps for multivariate flags; Boolean string-array shorthand remains supported. Migrate both ends of bootstrap to protocol v2.
+- Rebuild against matching Native/React/Browser v2 packages and regenerate legacy declarations.
+
+The [Expo](https://github.com/reflagcom/javascript/tree/main/packages/react-native-sdk/dev/expo) and [bare React Native](https://github.com/reflagcom/javascript/tree/main/packages/react-native-sdk/dev/bare-rn) examples use the v2 Native APIs. OpenFeature providers are separate integrations and do not gain v2 support from this migration.

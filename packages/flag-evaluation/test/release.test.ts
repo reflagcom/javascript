@@ -6,6 +6,7 @@ import * as legacy from "@reflag/flag-evaluation-v1";
 
 import nodeSdk from "../../node-sdk/package.json";
 import openfeature from "../../openfeature-node-provider/package.json";
+import evaluator from "../package.json";
 
 describe("v1/v2 release isolation", () => {
   it("resolves the legacy alias to the published package, not this workspace", () => {
@@ -17,7 +18,12 @@ describe("v1/v2 release isolation", () => {
   });
 
   it("moves the v2 Node SDK onto the collection evaluator", () => {
-    expect(nodeSdk.dependencies["@reflag/flag-evaluation"]).toBe("workspace:*");
+    expect(nodeSdk.dependencies["@reflag/flag-evaluation"]).toBe(
+      evaluator.version,
+    );
+    expect(require.resolve("@reflag/flag-evaluation/package.json")).toBe(
+      resolve(__dirname, "../package.json"),
+    );
     expect(nodeSdk.dependencies).not.toHaveProperty(
       "@reflag/flag-evaluation-v1",
     );

@@ -20,7 +20,6 @@ describe("CLI schemas", () => {
       envId: "env_test",
       sortBy: "key",
       sortOrder: "asc",
-      includeRemoteConfigs: false,
     });
   });
 

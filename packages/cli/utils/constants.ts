@@ -13,6 +13,8 @@ export const SCHEMA_URL = `https://unpkg.com/@reflag/cli@latest/schema.json`;
 export const DEFAULT_BASE_URL = "https://app.reflag.com";
 export const DEFAULT_API_URL = `${DEFAULT_BASE_URL}/api`;
 export const DEFAULT_TYPES_OUTPUT = join("gen", "flags.d.ts");
+export const TYPE_FORMATS = ["react", "node", "vue"] as const;
+export type TypeFormat = (typeof TYPE_FORMATS)[number];
 
 export const DEFAULT_AUTH_TIMEOUT = 60000; // 60 seconds
 

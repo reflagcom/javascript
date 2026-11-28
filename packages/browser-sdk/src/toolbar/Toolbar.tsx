@@ -1,11 +1,5 @@
 import { h } from "preact";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "preact/hooks";
+import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 
 import { ReflagClient } from "../client";
 import { IS_SERVER } from "../config";
@@ -21,14 +15,8 @@ const TOOLBAR_HIDE_KEY = "reflag-toolbar-hidden";
 
 export type FlagItem = {
   flagKey: string;
-  isEnabled: boolean;
-  isEnabledOverride: boolean | null;
-};
-
-type Flag = {
-  flagKey: string;
-  isEnabled: boolean;
-  isEnabledOverride: boolean | null;
+  value: boolean;
+  hasOverride: boolean;
 };
 
 export default function Toolbar({
@@ -40,31 +28,29 @@ export default function Toolbar({
 }) {
   const toggleToolbarRef = useRef<HTMLDivElement>(null);
   const dialogContentRef = useRef<HTMLDivElement>(null);
-  const [flags, setFlags] = useState<Flag[]>([]);
+  const [flags, setFlags] = useState<FlagItem[]>([]);
 
   const wasHidden =
     !IS_SERVER && sessionStorage.getItem(TOOLBAR_HIDE_KEY) === "true";
   const [isHidden, setIsHidden] = useState(wasHidden);
 
   const updateFlags = useCallback(() => {
-    const rawFlags = reflagClient.getFlags();
     setFlags(
-      Object.values(rawFlags)
-        .filter((f) => f !== undefined)
-        .map(
-          (flag) =>
-            ({
-              flagKey: flag.key,
-              isEnabledOverride: flag.isEnabledOverride ?? null,
-              isEnabled: flag.isEnabled,
-            }) satisfies FlagItem,
-        ),
+      Object.entries(reflagClient.getFlagResults()).flatMap(
+        ([key, { value }]) => {
+          if (typeof value !== "boolean") return [];
+          return [
+            {
+              flagKey: key,
+              value,
+              hasOverride:
+                typeof reflagClient.getFlagOverride(key) === "boolean",
+            },
+          ];
+        },
+      ),
     );
   }, [reflagClient]);
-
-  const hasAnyOverrides = useMemo(() => {
-    return flags.some((f) => f.isEnabledOverride !== null);
-  }, [flags]);
 
   useEffect(() => {
     updateFlags();
@@ -100,7 +86,7 @@ export default function Toolbar({
     <div class="toolbar">
       <style dangerouslySetInnerHTML={{ __html: styles }} />
       <ToolbarToggle
-        hasAnyOverrides={hasAnyOverrides}
+        hasAnyOverrides={flags.some((flag) => flag.hasOverride)}
         innerRef={toggleToolbarRef}
         isOpen={isOpen}
         position={position}
@@ -156,8 +142,8 @@ export default function Toolbar({
             appBaseUrl={appBaseUrl}
             flags={sortedFlags}
             searchQuery={search?.toLocaleLowerCase() ?? null}
-            setIsEnabledOverride={(flagKey, isEnabled) =>
-              reflagClient.getFlag(flagKey).setIsEnabledOverride(isEnabled)
+            setOverride={(key, value) =>
+              reflagClient.setFlagOverride(key, value)
             }
           />
         </DialogContent>
